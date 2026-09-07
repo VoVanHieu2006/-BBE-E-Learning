@@ -1,0 +1,515 @@
+{
+  "version": "3.0.0",
+  "darkMode": true,
+  "gridEnabling": false,
+  "currentViewName": null,
+  "defaultView": {
+    "detailLevel": "All",
+    "relationshipMode": "All",
+    "tablePositions": [
+      {
+        "name": "users",
+        "schemaName": "public",
+        "x": 25.646886023904813,
+        "y": 96.69568098308173
+      },
+      {
+        "name": "chapters",
+        "schemaName": "public",
+        "x": -41.29033594853513,
+        "y": -362.7635335413001
+      },
+      {
+        "name": "chapter_members",
+        "schemaName": "public",
+        "x": -534.7997918688952,
+        "y": -90.11707045929805
+      },
+      {
+        "name": "invitations",
+        "schemaName": "public",
+        "x": 499.60731806913935,
+        "y": -609.1370368134644
+      },
+      {
+        "name": "courses",
+        "schemaName": "public",
+        "x": 1199.6380126414538,
+        "y": -367.6182963283968
+      },
+      {
+        "name": "sessions",
+        "schemaName": "public",
+        "x": 1690.2342634442805,
+        "y": -387.5827078988183
+      },
+      {
+        "name": "lessons",
+        "schemaName": "public",
+        "x": 2046.961185650663,
+        "y": -404.0806254265933
+      },
+      {
+        "name": "videos",
+        "schemaName": "public",
+        "x": 2572.509657271246,
+        "y": -711.7729640299044
+      },
+      {
+        "name": "documents",
+        "schemaName": "public",
+        "x": 1978.3341553149007,
+        "y": -762.1858612766571
+      },
+      {
+        "name": "lesson_progress",
+        "schemaName": "public",
+        "x": 2489.755982579614,
+        "y": -301.0129495088658
+      },
+      {
+        "name": "assessments",
+        "schemaName": "public",
+        "x": 163.30617538454527,
+        "y": 1040.9212716813424
+      },
+      {
+        "name": "questions",
+        "schemaName": "public",
+        "x": 889.9953139510384,
+        "y": 890.5021438517947
+      },
+      {
+        "name": "question_options",
+        "schemaName": "public",
+        "x": 1518.9530065040872,
+        "y": 1014.7438298783479
+      },
+      {
+        "name": "attempts",
+        "schemaName": "public",
+        "x": 940.9113840635121,
+        "y": 1286.2294559323643
+      },
+      {
+        "name": "attempt_questions",
+        "schemaName": "public",
+        "x": 1569.2664221233392,
+        "y": 415.6269624999498
+      },
+      {
+        "name": "attempt_answers",
+        "schemaName": "public",
+        "x": 1801.8661903780092,
+        "y": 707.3726516420463
+      },
+      {
+        "name": "password_reset_tokens",
+        "schemaName": "public",
+        "x": -213.36961578238052,
+        "y": 639.8783190115996
+      },
+      {
+        "name": "audit_logs",
+        "schemaName": "public",
+        "x": -589.438927392556,
+        "y": 522.389802447629
+      }
+    ],
+    "tableGroupCollapseStates": [],
+    "stickyNoteLayouts": [],
+    "referencePaths": [
+      {
+        "firstFieldNames": [
+          "user_id"
+        ],
+        "firstTableName": "chapter_members",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "id"
+        ],
+        "secondTableName": "users",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "chapter_id"
+        ],
+        "firstTableName": "chapter_members",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "id"
+        ],
+        "secondTableName": "chapters",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "invited_by"
+        ],
+        "firstTableName": "invitations",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "id"
+        ],
+        "secondTableName": "users",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "chapter_id"
+        ],
+        "firstTableName": "invitations",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "id"
+        ],
+        "secondTableName": "chapters",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "created_by"
+        ],
+        "firstTableName": "courses",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "id"
+        ],
+        "secondTableName": "users",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "course_id"
+        ],
+        "firstTableName": "sessions",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "id"
+        ],
+        "secondTableName": "courses",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "session_id"
+        ],
+        "firstTableName": "lessons",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "id"
+        ],
+        "secondTableName": "sessions",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "lesson_id"
+        ],
+        "firstTableName": "videos",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "id"
+        ],
+        "secondTableName": "lessons",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "lesson_id"
+        ],
+        "firstTableName": "documents",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "id"
+        ],
+        "secondTableName": "lessons",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "user_id"
+        ],
+        "firstTableName": "lesson_progress",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "id"
+        ],
+        "secondTableName": "users",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "lesson_id"
+        ],
+        "firstTableName": "lesson_progress",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "id"
+        ],
+        "secondTableName": "lessons",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "lesson_progress_id"
+        ],
+        "firstTableName": "watch_segments",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "id"
+        ],
+        "secondTableName": "lesson_progress",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "course_id"
+        ],
+        "firstTableName": "assessments",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "id"
+        ],
+        "secondTableName": "courses",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "created_by"
+        ],
+        "firstTableName": "assessments",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "id"
+        ],
+        "secondTableName": "users",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "assessment_id"
+        ],
+        "firstTableName": "questions",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "id"
+        ],
+        "secondTableName": "assessments",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "question_id"
+        ],
+        "firstTableName": "question_options",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "id"
+        ],
+        "secondTableName": "questions",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "assessment_id"
+        ],
+        "firstTableName": "attempts",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "id"
+        ],
+        "secondTableName": "assessments",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "user_id"
+        ],
+        "firstTableName": "attempts",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "id"
+        ],
+        "secondTableName": "users",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "attempt_id"
+        ],
+        "firstTableName": "attempt_questions",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "id"
+        ],
+        "secondTableName": "attempts",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "question_id"
+        ],
+        "firstTableName": "attempt_questions",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "id"
+        ],
+        "secondTableName": "questions",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "attempt_id"
+        ],
+        "firstTableName": "attempt_answers",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "id"
+        ],
+        "secondTableName": "attempts",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "question_id"
+        ],
+        "firstTableName": "attempt_answers",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "id"
+        ],
+        "secondTableName": "questions",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "selected_option_id"
+        ],
+        "firstTableName": "attempt_answers",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "id"
+        ],
+        "secondTableName": "question_options",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "user_id"
+        ],
+        "firstTableName": "password_reset_tokens",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "id"
+        ],
+        "secondTableName": "users",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "actor_user_id"
+        ],
+        "firstTableName": "audit_logs",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "id"
+        ],
+        "secondTableName": "users",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "videos_id"
+        ],
+        "firstTableName": "lesson_progress",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "id"
+        ],
+        "secondTableName": "videos",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      }
+    ]
+  },
+  "views": {}
+}

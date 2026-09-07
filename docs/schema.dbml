@@ -1,0 +1,512 @@
+// ============================================================
+// BBE E-LEARNING SYSTEM
+// PostgreSQL Database Design
+// Docs: https://dbml.dbdiagram.io/docs
+// ============================================================
+
+
+// ============================================================
+// ENUMS
+// ============================================================
+
+Enum user_role {
+  ADMIN
+  CHAPTER_LEADER
+  MEMBER
+}
+
+Enum user_status {
+  ACTIVE
+  INACTIVE
+  LOCKED
+}
+
+Enum chapter_status {
+  ACTIVE
+  INACTIVE
+}
+
+Enum membership_status {
+  ACTIVE
+  LEFT
+}
+
+Enum invitation_role {
+  CHAPTER_LEADER
+  MEMBER
+}
+
+Enum invitation_status {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  CANCELLED
+}
+
+Enum course_status {
+  DRAFT
+  PUBLISHED
+}
+
+Enum course_visibility {
+  PUBLIC
+  PRIVATE
+}
+
+
+
+Enum question_type {
+  SINGLE_CHOICE
+  MULTIPLE_CHOICE
+  TRUE_FALSE
+}
+
+Enum attempt_status {
+  IN_PROGRESS
+  SUBMITTED
+  AUTO_SUBMITTED
+  CANCELLED
+}
+
+
+// ============================================================
+// USERS & AUTHENTICATION
+// ============================================================
+
+Table users {
+  id uuid [primary key]
+  email varchar(255) [not null, unique]
+  password_hash varchar(255) [not null]
+  role user_role [not null]
+  status user_status [not null, default: 'ACTIVE']
+  failed_login_count int [not null, default: 0]
+  locked_until timestamp
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+
+  indexes {
+    email [unique]
+    status
+    role
+  }
+}
+
+
+// ============================================================
+// CHAPTERS
+// ============================================================
+
+Table chapters {
+  id uuid [primary key]
+  name varchar(255) [not null, unique]
+  description text
+  status chapter_status [not null, default: 'ACTIVE']
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+
+  indexes {
+    name [unique]
+    status
+  }
+}
+
+
+// ============================================================
+// CHAPTER MEMBERSHIP
+// ============================================================
+
+Table chapter_members {
+  id uuid [primary key]
+  chapter_id uuid [not null]
+  user_id uuid [not null]
+  joined_at timestamp [not null]
+
+  indexes {
+    (chapter_id, user_id) [unique]
+  }
+}
+
+
+// ============================================================
+// INVITATIONS
+// ============================================================
+
+Table invitations {
+  id uuid [primary key]
+  email varchar(255) [not null]
+  role invitation_role [not null]
+  chapter_id uuid [not null]
+  invited_by uuid [not null]
+  token_hash varchar(255) [not null, unique]
+  status invitation_status [not null, default: 'PENDING']
+  expires_at timestamp [not null]
+  accepted_at timestamp
+  cancelled_at timestamp
+  created_at timestamp [not null]
+
+  indexes {
+    email
+    status
+    expires_at
+    token_hash [unique]
+    (email, status)
+  }
+}
+
+
+// ============================================================
+// COURSES
+// ============================================================
+
+Table courses {
+  id uuid [primary key]
+  title varchar(255) [not null]
+  description text
+  status course_status [not null, default: 'DRAFT']
+  visibility course_visibility [not null, default: 'PRIVATE']
+  created_by uuid [not null]
+  published_at timestamp
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+
+  indexes {
+    (status, visibility)
+    created_by
+  }
+}
+
+
+// ============================================================
+// SESSIONS
+// ============================================================
+
+Table sessions {
+  id uuid [primary key]
+  course_id uuid [not null]
+  title varchar(255) [not null]
+  description text
+  sort_order int [not null]
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+
+  indexes {
+    (course_id, sort_order)
+  }
+}
+
+
+// ============================================================
+// LESSONS
+// ============================================================
+
+Table lessons {
+  id uuid [primary key]
+  session_id uuid [not null]
+  title varchar(255) [not null]
+  description text
+  sort_order int [not null]
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+
+  indexes {
+    (session_id, sort_order)
+  }
+}
+
+
+// ============================================================
+// VIDEOS
+// One Lesson = exactly one Video
+// Enforced by unique lesson_id
+// ============================================================
+
+Table videos {
+  id uuid [primary key]
+  lesson_id uuid [not null, unique]
+  provider video_provider [not null, default: 'YOUTUBE']
+  youtube_video_id varchar(255) [not null]
+  duration_seconds int [not null]
+  title varchar(255)
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+
+  indexes {
+    lesson_id [unique]
+    (provider, youtube_video_id)
+  }
+}
+
+
+// ============================================================
+// DOCUMENTS
+// One Lesson = 0..N Documents
+// ============================================================
+
+Table documents {
+  id uuid [primary key]
+  lesson_id uuid [not null]
+  file_name varchar(255) [not null]
+  storage_key varchar(500) [not null]
+  mime_type varchar(100) [not null]
+  file_size bigint [not null]
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+
+  indexes {
+    lesson_id
+  }
+}
+
+
+// ============================================================
+// LESSON PROGRESS
+// One User + One Lesson = One Progress Record
+// ============================================================
+
+Table lesson_progress {
+  id uuid [primary key]
+  user_id uuid [not null]
+  lesson_id uuid [not null]
+  completed boolean [not null, default: false]
+  completed_at timestamp
+  last_position_seconds int 
+  furthest_watched_position_seconds int 
+  last_watched_at timestamp
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+
+  indexes {
+    (user_id, lesson_id) [unique]
+    user_id
+    lesson_id
+  }
+}
+
+
+
+// ============================================================
+// ASSESSMENTS
+// One Course = maximum one Assessment
+// course_id is UNIQUE
+// ============================================================
+
+Table assessments {
+  id uuid [primary key]
+  course_id uuid [not null, unique]
+  title varchar(255) [not null]
+  description text
+  created_by uuid [not null]
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+
+  indexes {
+    course_id [unique]
+  }
+}
+
+
+// ============================================================
+// QUESTIONS
+// ============================================================
+
+Table questions {
+  id uuid [primary key]
+  assessment_id uuid [not null]
+  question_text text [not null]
+  question_type question_type [not null, default: 'SINGLE_CHOICE']
+  points int [not null, default: 1]
+  duration_seconds int [not null]
+  sort_order int [not null]
+  explanation text
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+
+  indexes {
+    (assessment_id, sort_order)
+  }
+}
+
+
+// ============================================================
+// QUESTION OPTIONS
+// ============================================================
+
+Table question_options {
+  id uuid [primary key]
+  question_id uuid [not null]
+  option_text text [not null]
+  is_correct boolean [not null, default: false]
+  sort_order int [not null]
+  
+
+  indexes {
+    (question_id, sort_order)
+    question_id
+  }
+}
+
+
+// ============================================================
+// ATTEMPTS
+// ============================================================
+
+Table attempts {
+  id uuid [primary key]
+  assessment_id uuid [not null]
+  user_id uuid [not null]
+  attempt_number int [not null]
+  status attempt_status [not null, default: 'IN_PROGRESS']
+  started_at timestamp [not null]
+  expires_at timestamp [not null]
+  submitted_at timestamp
+  score decimal(5,2)
+  passed boolean
+  created_at timestamp [not null]
+
+  indexes {
+    (user_id, assessment_id)
+    (assessment_id, user_id, created_at)
+    status
+  }
+}
+
+
+// ============================================================
+// ATTEMPT QUESTIONS
+// Stores shuffled question order for each attempt
+// ============================================================
+
+Table attempt_questions {
+  id uuid [primary key]
+  attempt_id uuid [not null]
+  question_id uuid [not null]
+  display_order int [not null]
+
+  indexes {
+    (attempt_id, display_order)
+    (attempt_id, question_id) [unique]
+  }
+}
+
+
+// ============================================================
+// ATTEMPT ANSWERS
+// Stores user's answer for each question
+// ============================================================
+
+Table attempt_answers {
+  id uuid [primary key]
+  attempt_id uuid [not null]
+  question_id uuid [not null]
+  selected_option_id uuid
+  answered_at timestamp
+  is_correct boolean
+
+  indexes {
+    (attempt_id, question_id) [unique]
+    attempt_id
+    question_id
+  }
+}
+
+
+// ============================================================
+// PASSWORD RESET
+// ============================================================
+
+Table password_reset_tokens {
+  id uuid [primary key]
+  user_id uuid [not null]
+  token_hash varchar(255) [not null, unique]
+  expires_at timestamp [not null]
+  used_at timestamp
+  created_at timestamp [not null]
+
+  indexes {
+    token_hash [unique]
+    user_id
+    expires_at
+  }
+}
+
+
+// ============================================================
+// AUDIT LOGS
+// ============================================================
+
+Table audit_logs {
+  id uuid [primary key]
+  actor_user_id uuid
+  action varchar(100) [not null]
+  entity_type varchar(100) [not null]
+  entity_id uuid [not null]
+  metadata jsonb
+  created_at timestamp [not null]
+
+  indexes {
+    actor_user_id
+    (entity_type, entity_id)
+    action
+    created_at
+  }
+}
+
+
+// ============================================================
+// RELATIONSHIPS
+// ============================================================
+
+// Users <-> Chapters
+Ref: chapter_members.user_id > users.id
+Ref: chapter_members.chapter_id > chapters.id
+
+// Invitations
+Ref: invitations.invited_by > users.id
+Ref: invitations.chapter_id > chapters.id
+
+// Courses
+Ref: courses.created_by > users.id
+
+// Course -> Sessions -> Lessons
+Ref: sessions.course_id > courses.id
+Ref: lessons.session_id > sessions.id
+
+// Lesson -> Video
+Ref: videos.lesson_id - lessons.id
+
+// Lesson -> Documents
+Ref: documents.lesson_id > lessons.id
+
+// Lesson Progress
+Ref: lesson_progress.user_id > users.id
+Ref: lesson_progress.lesson_id > lessons.id
+
+
+// Watch Segments
+
+// Assessment
+Ref: assessments.course_id - courses.id
+Ref: assessments.created_by > users.id
+
+// Questions
+Ref: questions.assessment_id > assessments.id
+Ref: question_options.question_id > questions.id
+
+// Attempts
+Ref: attempts.assessment_id > assessments.id
+Ref: attempts.user_id > users.id
+
+// Attempt Questions
+Ref: attempt_questions.attempt_id > attempts.id
+Ref: attempt_questions.question_id > questions.id
+
+// Attempt Answers
+Ref: attempt_answers.attempt_id > attempts.id
+Ref: attempt_answers.question_id > questions.id
+Ref: attempt_answers.selected_option_id > question_options.id
+
+// Password Reset
+Ref: password_reset_tokens.user_id > users.id
+
+// Audit Logs
+Ref: audit_logs.actor_user_id > users.id

@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+
+<html lang="vi"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Chapter Manager Dashboard</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@600;700&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "inverse-on-surface": "#eaf1ff",
+                        "on-primary-container": "#eeefff",
+                        "on-primary-fixed": "#00174b",
+                        "background": "#f8f9ff",
+                        "on-primary": "#ffffff",
+                        "surface-container": "#e5eeff",
+                        "primary-container": "#2563eb",
+                        "error": "#ba1a1a",
+                        "tertiary": "#465384",
+                        "on-secondary": "#ffffff",
+                        "on-secondary-fixed-variant": "#783200",
+                        "primary-fixed": "#dbe1ff",
+                        "surface-dim": "#cbdbf5",
+                        "on-secondary-container": "#5c2400",
+                        "primary-fixed-dim": "#b4c5ff",
+                        "secondary": "#9d4300",
+                        "surface-variant": "#d3e4fe",
+                        "surface": "#f8f9ff",
+                        "on-surface-variant": "#434655",
+                        "on-background": "#0b1c30",
+                        "secondary-fixed": "#ffdbca",
+                        "on-secondary-fixed": "#341100",
+                        "tertiary-container": "#5e6b9e",
+                        "secondary-container": "#fd761a",
+                        "surface-container-lowest": "#ffffff",
+                        "inverse-surface": "#213145",
+                        "outline-variant": "#c3c6d7",
+                        "surface-bright": "#f8f9ff",
+                        "on-primary-fixed-variant": "#003ea8",
+                        "surface-tint": "#0053db",
+                        "on-error": "#ffffff",
+                        "surface-container-highest": "#d3e4fe",
+                        "surface-container-low": "#eff4ff",
+                        "secondary-fixed-dim": "#ffb690",
+                        "on-tertiary-fixed": "#071747",
+                        "on-tertiary-container": "#efefff",
+                        "outline": "#737686",
+                        "tertiary-fixed": "#dce1ff",
+                        "primary": "#004ac6",
+                        "error-container": "#ffdad6",
+                        "on-tertiary-fixed-variant": "#374475",
+                        "on-surface": "#0b1c30",
+                        "on-error-container": "#93000a",
+                        "tertiary-fixed-dim": "#b7c4fd",
+                        "inverse-primary": "#b4c5ff",
+                        "on-tertiary": "#ffffff",
+                        "surface-container-high": "#dce9ff"
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    spacing: {
+                        "md": "16px",
+                        "gutter": "24px",
+                        "xl": "32px",
+                        "lg": "24px",
+                        "sm": "8px",
+                        "xxl": "48px",
+                        "container-max": "1440px",
+                        "margin": "64px",
+                        "xs": "4px"
+                    },
+                    fontFamily: {
+                        "headline-lg-mobile": ["Be Vietnam Pro"],
+                        "headline-md": ["Be Vietnam Pro"],
+                        "caption": ["Inter"],
+                        "display-lg": ["Be Vietnam Pro"],
+                        "button": ["Inter"],
+                        "body-md": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "label-sm": ["Inter"],
+                        "headline-lg": ["Be Vietnam Pro"]
+                    },
+                    fontSize: {
+                        "headline-lg-mobile": ["24px", { "lineHeight": "32px", "fontWeight": "700" }],
+                        "headline-md": ["24px", { "lineHeight": "32px", "fontWeight": "600" }],
+                        "caption": ["14px", { "lineHeight": "20px", "fontWeight": "500" }],
+                        "display-lg": ["48px", { "lineHeight": "60px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "button": ["16px", { "lineHeight": "24px", "letterSpacing": "0.01em", "fontWeight": "600" }],
+                        "body-md": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "body-lg": ["18px", { "lineHeight": "28px", "fontWeight": "400" }],
+                        "label-sm": ["12px", { "lineHeight": "16px", "fontWeight": "600" }],
+                        "headline-lg": ["32px", { "lineHeight": "40px", "fontWeight": "700" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .flat-shadow-1 {
+            box-shadow: 0px 4px 12px rgba(23, 37, 84, 0.08);
+        }
+        .flat-shadow-2 {
+            box-shadow: 0px 8px 24px rgba(23, 37, 84, 0.12);
+        }
+        /* Custom scrollbar for webkit */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f8f9ff; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #c3c6d7; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #737686; 
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background font-body-md min-h-screen flex">
+<!-- JSON Component: SideNavBar -->
+<nav class="fixed left-0 top-0 h-screen w-64 bg-surface-container-low border-r border-outline-variant z-50 flex flex-col p-md">
+<!-- Brand -->
+<div class="mb-xl flex items-center gap-3 px-2 pt-4">
+<div class="w-10 h-10 rounded-full bg-primary-container flex items-center justify-center text-on-primary-container font-headline-md text-headline-md">
+                B
+            </div>
+<div>
+<h1 class="font-headline-md text-[18px] leading-tight text-primary">BBE Learning Hub</h1>
+<p class="font-caption text-caption text-on-surface-variant">Hành trình tri thức</p>
+</div>
+</div>
+<!-- Navigation Links -->
+<div class="flex flex-col gap-2 flex-1">
+<!-- Active Tab: Trang chủ (mapped as general dashboard entry) -->
+<a class="flex items-center gap-3 px-4 py-3 bg-secondary-container text-on-secondary-container rounded-xl font-bold scale-[0.97] transition-transform" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">home</span>
+<span class="font-button text-button">Trang chủ</span>
+</a>
+<!-- Inactive Tabs -->
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:bg-surface-variant rounded-xl transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">school</span>
+<span class="font-button text-button">Khóa học</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:bg-surface-variant rounded-xl transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">leaderboard</span>
+<span class="font-button text-button">Tiến độ</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:bg-surface-variant rounded-xl transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">military_tech</span>
+<span class="font-button text-button">Bảng xếp hạng</span>
+</a>
+</div>
+<!-- Footer Tab -->
+<div class="mt-auto pt-4 border-t border-outline-variant">
+<div class="flex items-center gap-3 px-2 py-2 hover:bg-surface-variant rounded-xl cursor-pointer transition-colors duration-200">
+<div class="w-10 h-10 rounded-full border border-outline-variant overflow-hidden shrink-0">
+<img alt="User Avatar" class="w-full h-full object-cover" data-alt="A professional headshot of an Asian male university student in his early 20s. He is wearing a neat, casual navy blue button-down shirt. The lighting is bright and modern studio lighting, casting soft shadows. The background is a slightly blurred, light neutral color to maintain focus on his friendly, approachable expression." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAOOAMFFoRsghg4tHXvDxKutN4x65lu8UXnXZw6UL7WwL3KPiiRgk-8WNP5jzqosI8G9YFehQ3DUUl41hIsERnVTFTlw3kMQsOnpyaB_XjW8Y6zhqdiwPpTpc0D8wKH3Vw-v9aqwuKo0D0Lmm2c9ByURilKbFEjNcpxAsYvwLvhUQNPiFo3pVsvJEdHfu1wSKy8Tu6YVQlywfkp0cn_hHLli6LcKfibkM25oD8tLwnHf9KrUg1y2n7i"/>
+</div>
+<div class="flex-1 min-w-0">
+<p class="font-button text-button text-on-background truncate">Hồ sơ</p>
+<p class="font-caption text-[12px] text-on-surface-variant truncate">Cài đặt tài khoản</p>
+</div>
+</div>
+</div>
+</nav>
+<!-- Main Content Wrapper (offset by sidebar width) -->
+<div class="ml-64 flex-1 flex flex-col min-h-screen relative">
+<!-- Dashboard Canvas -->
+<main class="flex-1 p-xl">
+<!-- Header Row -->
+<div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-xl gap-4">
+<div>
+<h3 class="font-headline-lg text-headline-lg text-on-background">Tổng quan Unit</h3>
+<p class="font-body-md text-body-md text-on-surface-variant mt-1">Quản lý và theo dõi tiến độ học tập của thành viên trong chapter.</p>
+</div>
+<button class="flex items-center gap-2 bg-secondary-container text-white px-6 py-3 rounded-lg font-button text-button hover:bg-secondary transition-colors flat-shadow-1">
+<span class="material-symbols-outlined" style="font-variation-settings: 'wght' 600;">person_add</span>
+                    Mời thành viên
+                </button>
+</div>
+<!-- KPI Grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-gutter mb-xl">
+<!-- Card 1 -->
+<div class="bg-surface-container-lowest border border-surface-container p-md rounded-xl flat-shadow-1 relative overflow-hidden group">
+<div class="absolute -right-6 -top-6 w-24 h-24 bg-primary-container opacity-5 rounded-full group-hover:scale-150 transition-transform duration-500"></div>
+<div class="flex justify-between items-start mb-4">
+<div class="w-12 h-12 rounded-lg bg-surface-container-low flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[28px]">groups</span>
+</div>
+</div>
+<p class="font-caption text-caption text-on-surface-variant">Tổng thành viên</p>
+<h4 class="font-display-lg text-display-lg text-on-background mt-1">48</h4>
+</div>
+<!-- Card 2 -->
+<div class="bg-surface-container-lowest border border-surface-container p-md rounded-xl flat-shadow-1 relative overflow-hidden group">
+<div class="absolute -right-6 -top-6 w-24 h-24 bg-secondary-container opacity-5 rounded-full group-hover:scale-150 transition-transform duration-500"></div>
+<div class="flex justify-between items-start mb-4">
+<div class="w-12 h-12 rounded-lg bg-surface-container-low flex items-center justify-center text-secondary-container">
+<span class="material-symbols-outlined text-[28px]">how_to_reg</span>
+</div>
+</div>
+<p class="font-caption text-caption text-on-surface-variant">Đã kích hoạt</p>
+<h4 class="font-display-lg text-display-lg text-on-background mt-1">42</h4>
+</div>
+<!-- Card 3 -->
+<div class="bg-surface-container-lowest border border-surface-container p-md rounded-xl flat-shadow-1 relative overflow-hidden group">
+<div class="absolute -right-6 -top-6 w-24 h-24 bg-primary-container opacity-5 rounded-full group-hover:scale-150 transition-transform duration-500"></div>
+<div class="flex justify-between items-start mb-4">
+<div class="w-12 h-12 rounded-lg bg-surface-container-low flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[28px]">verified</span>
+</div>
+</div>
+<p class="font-caption text-caption text-on-surface-variant">Hoàn thành ít nhất 1 khóa</p>
+<h4 class="font-display-lg text-display-lg text-on-background mt-1">35</h4>
+</div>
+<!-- Card 4 -->
+<div class="bg-surface-container-lowest border border-surface-container p-md rounded-xl flat-shadow-1 relative overflow-hidden group">
+<div class="absolute -right-6 -top-6 w-24 h-24 bg-secondary-container opacity-5 rounded-full group-hover:scale-150 transition-transform duration-500"></div>
+<div class="flex justify-between items-start mb-4">
+<div class="w-12 h-12 rounded-lg bg-surface-container-low flex items-center justify-center text-secondary-container">
+<span class="material-symbols-outlined text-[28px]">trending_up</span>
+</div>
+</div>
+<p class="font-caption text-caption text-on-surface-variant">Tiến độ trung bình</p>
+<h4 class="font-display-lg text-display-lg text-on-background mt-1">68<span class="text-[24px]">%</span></h4>
+</div>
+</div>
+<!-- Bento Grid: Charts & Support -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-gutter mb-xl">
+<!-- Chart Area (Col 8) -->
+<div class="lg:col-span-8 bg-surface-container-lowest border border-surface-container rounded-xl flat-shadow-1 p-lg flex flex-col">
+<div class="flex justify-between items-center mb-6">
+<h4 class="font-headline-md text-headline-md text-on-background">Tỷ lệ hoàn thành khóa học</h4>
+<button class="p-2 hover:bg-surface-variant rounded-md text-on-surface-variant transition-colors">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</div>
+<!-- Simplified Visual Representation of a Chart using pure CSS/HTML -->
+<div class="flex-1 flex items-end gap-4 h-64 mt-4 border-b border-outline-variant pb-2 relative">
+<!-- Y-axis labels -->
+<div class="absolute left-0 top-0 bottom-0 flex flex-col justify-between text-xs text-outline pr-2 font-caption border-r border-outline-variant w-10 text-right">
+<span>100%</span>
+<span>75%</span>
+<span>50%</span>
+<span>25%</span>
+<span>0%</span>
+</div>
+<div class="flex-1 flex items-end justify-around pl-12 h-full">
+<!-- Bars -->
+<div class="w-12 bg-surface-container-low rounded-t-md relative h-full flex items-end group">
+<div class="w-full bg-primary-container rounded-t-md h-[45%] transition-all duration-500 group-hover:bg-primary"></div>
+<span class="absolute -bottom-6 left-1/2 -translate-x-1/2 font-caption text-[11px] text-on-surface-variant whitespace-nowrap">Tuần 1</span>
+</div>
+<div class="w-12 bg-surface-container-low rounded-t-md relative h-full flex items-end group">
+<div class="w-full bg-primary-container rounded-t-md h-[60%] transition-all duration-500 group-hover:bg-primary"></div>
+<span class="absolute -bottom-6 left-1/2 -translate-x-1/2 font-caption text-[11px] text-on-surface-variant whitespace-nowrap">Tuần 2</span>
+</div>
+<div class="w-12 bg-surface-container-low rounded-t-md relative h-full flex items-end group">
+<div class="w-full bg-secondary-container rounded-t-md h-[55%] transition-all duration-500 group-hover:bg-secondary"></div>
+<span class="absolute -bottom-6 left-1/2 -translate-x-1/2 font-caption text-[11px] text-on-surface-variant whitespace-nowrap">Tuần 3</span>
+</div>
+<div class="w-12 bg-surface-container-low rounded-t-md relative h-full flex items-end group">
+<div class="w-full bg-primary-container rounded-t-md h-[78%] transition-all duration-500 group-hover:bg-primary"></div>
+<span class="absolute -bottom-6 left-1/2 -translate-x-1/2 font-caption text-[11px] text-on-surface-variant whitespace-nowrap">Tuần 4</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Needs Support List (Col 4) -->
+<div class="lg:col-span-4 bg-surface-container-lowest border border-surface-container rounded-xl flat-shadow-1 p-lg flex flex-col">
+<div class="flex justify-between items-center mb-6">
+<h4 class="font-headline-md text-[20px] font-semibold text-on-background">Cần hỗ trợ</h4>
+<span class="bg-error-container text-on-error-container font-label-sm text-[10px] px-2 py-1 rounded-full uppercase tracking-wider">Mới (3)</span>
+</div>
+<div class="flex flex-col gap-4 overflow-y-auto max-h-[300px] pr-2">
+<!-- Support Item 1 -->
+<div class="flex items-center gap-3 p-3 rounded-lg hover:bg-surface-variant transition-colors border border-transparent hover:border-outline-variant cursor-pointer">
+<div class="w-10 h-10 rounded-full overflow-hidden shrink-0">
+<img alt="Student" class="w-full h-full object-cover" data-alt="A portrait of a young Vietnamese female student with glasses, looking slightly stressed or focused. She has dark shoulder-length hair. The background is a softly lit university library environment. Warm, encouraging lighting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuACPthL3PEl8kP7Fpw1EAs99-IICXIRUGobItarvS9JhOJh4V5e1DSqnm1DAivo8lLjEYZt4nZy3AapqoBkLlY1D1BcONOyHS2IdJ4niVQeoAEKhWmxq9JyiUe8MHsHsWRuBViiWUbeMQq7egM1apCS58VufCHsyRBIsf5wi1hdB2YIadUX07Lys5NbkmyP_xrvB6Us2eOUG8-0I0j70zOoVtAD8SFwFvihbBO3RUaSLWi3YiQtJfDj"/>
+</div>
+<div class="flex-1 min-w-0">
+<h5 class="font-button text-[14px] text-on-background truncate">Nguyễn Thị Mai</h5>
+<p class="font-caption text-[12px] text-on-surface-variant truncate">Marketing Căn Bản</p>
+<div class="w-full bg-surface-container h-1.5 rounded-full mt-1.5">
+<div class="bg-error h-1.5 rounded-full" style="width: 15%"></div>
+</div>
+</div>
+<span class="font-label-sm text-[12px] text-error">15%</span>
+</div>
+<!-- Support Item 2 -->
+<div class="flex items-center gap-3 p-3 rounded-lg hover:bg-surface-variant transition-colors border border-transparent hover:border-outline-variant cursor-pointer">
+<div class="w-10 h-10 rounded-full bg-tertiary-container flex items-center justify-center text-on-tertiary-container font-button text-[14px] shrink-0">
+                                TH
+                            </div>
+<div class="flex-1 min-w-0">
+<h5 class="font-button text-[14px] text-on-background truncate">Trần Huy</h5>
+<p class="font-caption text-[12px] text-on-surface-variant truncate">Kỹ năng Lãnh đạo</p>
+<div class="w-full bg-surface-container h-1.5 rounded-full mt-1.5">
+<div class="bg-error h-1.5 rounded-full" style="width: 22%"></div>
+</div>
+</div>
+<span class="font-label-sm text-[12px] text-error">22%</span>
+</div>
+<!-- Support Item 3 -->
+<div class="flex items-center gap-3 p-3 rounded-lg hover:bg-surface-variant transition-colors border border-transparent hover:border-outline-variant cursor-pointer">
+<div class="w-10 h-10 rounded-full overflow-hidden shrink-0">
+<img alt="Student" class="w-full h-full object-cover" data-alt="A casual portrait of a male Southeast Asian university student wearing a light grey hoodie. He is looking at a laptop screen off-camera. The lighting highlights his face against a slightly darker, indistinct indoor background." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAhIsWe3YiIzPWP_XB_zH_A37jk9cR04Avxso08inDgTQ9WVJ5R5WKWvFY68y4hVoyyXUPq2zLC_twaUO_P5elaAUJaQ9sg6_3B14lF24SaAvP6qxPox8RLjbPbsZYCPW9fIF4J7wIpGAgI4ROxtEwM52fG7gNKgZAV4VA0drwu9tEMFVvnPAghIcqo1USZR8ZJnWHp7w4ijzcpdRqEae8hR4DasdpK_3lCT3Isj_xvt6WE8hfT1B6a"/>
+</div>
+<div class="flex-1 min-w-0">
+<h5 class="font-button text-[14px] text-on-background truncate">Lê Văn B</h5>
+<p class="font-caption text-[12px] text-on-surface-variant truncate">Nhập môn AI</p>
+<div class="w-full bg-surface-container h-1.5 rounded-full mt-1.5">
+<div class="bg-secondary-container h-1.5 rounded-full" style="width: 30%"></div>
+</div>
+</div>
+<span class="font-label-sm text-[12px] text-secondary-container">30%</span>
+</div>
+</div>
+<button class="mt-4 w-full py-2 border border-outline-variant rounded-lg font-button text-[14px] text-primary hover:bg-surface-variant transition-colors">
+                        Xem tất cả
+                    </button>
+</div>
+</div>
+<!-- Member Table Section -->
+<div class="bg-surface-container-lowest rounded-xl flat-shadow-1 border border-surface-container overflow-hidden">
+<!-- Table Header Controls -->
+<div class="p-lg border-b border-surface-variant flex flex-col sm:flex-row justify-between items-center gap-4 bg-surface-bright">
+<h4 class="font-headline-md text-[20px] font-semibold text-on-background">Danh sách thành viên</h4>
+<div class="flex items-center gap-3">
+<div class="relative">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-[20px]">search</span>
+<input class="pl-10 pr-4 py-2 w-64 bg-background border border-outline-variant rounded-lg font-body-md text-[14px] focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors" placeholder="Tìm thành viên..." type="text"/>
+</div>
+<button class="p-2 border border-outline-variant rounded-lg text-on-surface-variant hover:bg-surface-variant transition-colors flex items-center justify-center">
+<span class="material-symbols-outlined">filter_list</span>
+</button>
+</div>
+</div>
+<!-- Table -->
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container-low border-b border-outline-variant font-caption text-caption text-on-surface-variant uppercase tracking-wider">
+<th class="px-6 py-4 font-medium">Thành viên</th>
+<th class="px-6 py-4 font-medium">Khóa học đang học</th>
+<th class="px-6 py-4 font-medium min-w-[200px]">Tiến độ</th>
+<th class="px-6 py-4 font-medium">Trạng thái</th>
+<th class="px-6 py-4 font-medium text-right">Thao tác</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-surface-variant">
+<!-- Row 1 -->
+<tr class="hover:bg-surface-bright transition-colors group">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full overflow-hidden shrink-0">
+<img alt="Student" class="w-full h-full object-cover" data-alt="A bright, cheerful portrait of a young Asian woman, a university student, wearing a casual white t-shirt. Studio lighting, soft and professional. The background is a solid pale blue color to match the design system aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBIyTR-CU8cTuf40k9EuThpvBAPEhjQrzdgnmBFAbPJ_KHKqy2agdMqIBw7L-Oi17X1Pk-XpPC4C-LL7Dj8M8TsHkT-CR2xFtwfOuzTmcxdS0JH3fhiWwc6EG9Nx3MTPxbvDyMBB9bTMjAUW5EjGqBBEcZZbO4rFphZeiXeNHFUU-7p4hkLvh145odg8pyw-1rfSMWoagWKRr7D6is7avmB3Q5RjeCE3tL4iXGc1QP2lerNVG3xcTvo"/>
+</div>
+<div>
+<div class="font-button text-[14px] text-on-background group-hover:text-primary transition-colors">Phạm Hoàng Anh</div>
+<div class="font-caption text-[12px] text-on-surface-variant">hoanganh.p@unit.edu.vn</div>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 font-body-md text-[14px] text-on-surface-variant">
+                                    Tư duy Phản biện
+                                </td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="w-full bg-surface-container h-2 rounded-full">
+<div class="bg-primary-container h-2 rounded-full" style="width: 85%"></div>
+</div>
+<span class="font-caption text-[12px] text-on-surface-variant w-8">85%</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-inverse-on-surface text-primary font-label-sm text-[11px] uppercase tracking-wider">
+<span class="w-1.5 h-1.5 rounded-full bg-primary"></span> Active
+                                    </span>
+</td>
+<td class="px-6 py-4 text-right">
+<button class="text-on-surface-variant hover:text-primary transition-colors p-1 rounded-md hover:bg-surface-container-low">
+<span class="material-symbols-outlined text-[20px]">more_horiz</span>
+</button>
+</td>
+</tr>
+<!-- Row 2 -->
+<tr class="hover:bg-surface-bright transition-colors group">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-[#FFF7ED] text-[#F97316] flex items-center justify-center font-button text-[14px] shrink-0 border border-[#fd761a]/20">
+                                            ĐK
+                                        </div>
+<div>
+<div class="font-button text-[14px] text-on-background group-hover:text-primary transition-colors">Đinh Khang</div>
+<div class="font-caption text-[12px] text-on-surface-variant">khang.dinh@unit.edu.vn</div>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 font-body-md text-[14px] text-on-surface-variant">
+                                    -
+                                </td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="w-full bg-surface-container h-2 rounded-full">
+<div class="bg-outline-variant h-2 rounded-full" style="width: 0%"></div>
+</div>
+<span class="font-caption text-[12px] text-on-surface-variant w-8">0%</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-secondary-fixed text-on-secondary-fixed-variant font-label-sm text-[11px] uppercase tracking-wider">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span> Pending
+                                    </span>
+</td>
+<td class="px-6 py-4 text-right">
+<button class="text-on-surface-variant hover:text-primary transition-colors p-1 rounded-md hover:bg-surface-container-low">
+<span class="material-symbols-outlined text-[20px]">more_horiz</span>
+</button>
+</td>
+</tr>
+<!-- Row 3 -->
+<tr class="hover:bg-surface-bright transition-colors group">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full overflow-hidden shrink-0">
+<img alt="Student" class="w-full h-full object-cover" data-alt="A portrait of a male Vietnamese university student with neat short hair, wearing a dark blue polo shirt. The lighting is crisp and clean, creating a professional academic atmosphere. The background is slightly out of focus, showing indistinct shelves." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDpJywvmunDFPcvTQVwHqD8H6cGnnSOfHPcw1j3n12E54bZ_8Gxg_qTPdY0E3LtAIbgd1s6L0RX2E2rqfVvOFly2md2WcYGnnpt6xfPYL8Mttf03JrYPIovvW9mW1Pe752WT5lIcpli2fb8f5G598LK_W4sUeAPTYVFgb3E6_I7JsMjWChZsTxS5OTKoscHxdjI3hznmrmy9SxKPDcnmzqsXqKt5Uf7CEoCrul-ygcJXTBWEfbhUttT"/>
+</div>
+<div>
+<div class="font-button text-[14px] text-on-background group-hover:text-primary transition-colors">Ngô Thành Nam</div>
+<div class="font-caption text-[12px] text-on-surface-variant">nam.ngo@unit.edu.vn</div>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 font-body-md text-[14px] text-on-surface-variant">
+                                    Kỹ năng Giải quyết Vấn đề
+                                </td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="w-full bg-surface-container h-2 rounded-full">
+<div class="bg-outline h-2 rounded-full" style="width: 45%"></div>
+</div>
+<span class="font-caption text-[12px] text-on-surface-variant w-8">45%</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-surface-variant text-on-surface-variant font-label-sm text-[11px] uppercase tracking-wider">
+<span class="w-1.5 h-1.5 rounded-full bg-outline"></span> Inactive
+                                    </span>
+</td>
+<td class="px-6 py-4 text-right">
+<button class="text-on-surface-variant hover:text-primary transition-colors p-1 rounded-md hover:bg-surface-container-low">
+<span class="material-symbols-outlined text-[20px]">more_horiz</span>
+</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Pagination (Simplified) -->
+<div class="p-4 border-t border-surface-variant flex justify-between items-center bg-surface-bright">
+<span class="font-caption text-[12px] text-on-surface-variant">Hiển thị 1-3 của 48 thành viên</span>
+<div class="flex gap-2">
+<button class="w-8 h-8 rounded border border-outline-variant flex items-center justify-center text-on-surface-variant hover:bg-surface-variant disabled:opacity-50">
+<span class="material-symbols-outlined text-[18px]">chevron_left</span>
+</button>
+<button class="w-8 h-8 rounded border border-primary bg-inverse-on-surface flex items-center justify-center text-primary font-button text-[14px]">
+                            1
+                        </button>
+<button class="w-8 h-8 rounded border border-outline-variant flex items-center justify-center text-on-surface-variant hover:bg-surface-variant font-button text-[14px]">
+                            2
+                        </button>
+<button class="w-8 h-8 rounded border border-outline-variant flex items-center justify-center text-on-surface-variant hover:bg-surface-variant">
+<span class="material-symbols-outlined text-[18px]">chevron_right</span>
+</button>
+</div>
+</div>
+</div>
+</main>
+</div>
+</body></html>

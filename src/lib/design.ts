@@ -1,0 +1,30 @@
+export const design = {
+  colors: {
+    primary: '#2563EB',
+    primaryDark: '#004AC6',
+    secondary: '#F97316',
+    navy: '#172554',
+    surface: '#f8f9ff',
+    surfaceDim: '#cbdbf5',
+    surfaceContainerLow: '#eff4ff',
+    surfaceContainer: '#e5eeff',
+    surfaceContainerHigh: '#dce9ff',
+    success: '#16a34a',
+    error: '#ba1a1a',
+    onSurface: '#0b1c30',
+    onSurfaceVariant: '#434655',
+    outline: '#737686',
+    white: '#ffffff',
+    black: '#0b1c30',
+  },
+  fonts: {
+    heading: "'Be Vietnam Pro', 'Inter', sans-serif",
+    body: "'Inter', system-ui, sans-serif",
+  },
+  radius: { sm: 4, md: 8, lg: 16, xl: 24, full: 9999 },
+  shadow: {
+    sm: '0px 1px 3px rgba(23, 37, 84, 0.08)',
+    md: '0px 4px 12px rgba(23, 37, 84, 0.08)',
+    lg: '0px 8px 24px rgba(23, 37, 84, 0.12)',
+  },
+};

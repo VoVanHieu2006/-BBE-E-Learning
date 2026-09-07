@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+
+<html lang="vi"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>BBE Learning Hub - Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "inverse-on-surface": "#eaf1ff",
+                        "on-primary-container": "#eeefff",
+                        "on-primary-fixed": "#00174b",
+                        "background": "#f8f9ff",
+                        "on-primary": "#ffffff",
+                        "surface-container": "#e5eeff",
+                        "primary-container": "#2563eb",
+                        "error": "#ba1a1a",
+                        "tertiary": "#465384",
+                        "on-secondary": "#ffffff",
+                        "on-secondary-fixed-variant": "#783200",
+                        "primary-fixed": "#dbe1ff",
+                        "surface-dim": "#cbdbf5",
+                        "on-secondary-container": "#5c2400",
+                        "primary-fixed-dim": "#b4c5ff",
+                        "secondary": "#9d4300",
+                        "surface-variant": "#d3e4fe",
+                        "surface": "#f8f9ff",
+                        "on-surface-variant": "#434655",
+                        "on-background": "#0b1c30",
+                        "secondary-fixed": "#ffdbca",
+                        "on-secondary-fixed": "#341100",
+                        "tertiary-container": "#5e6b9e",
+                        "secondary-container": "#fd761a",
+                        "surface-container-lowest": "#ffffff",
+                        "inverse-surface": "#213145",
+                        "outline-variant": "#c3c6d7",
+                        "surface-bright": "#f8f9ff",
+                        "on-primary-fixed-variant": "#003ea8",
+                        "surface-tint": "#0053db",
+                        "on-error": "#ffffff",
+                        "surface-container-highest": "#d3e4fe",
+                        "surface-container-low": "#eff4ff",
+                        "secondary-fixed-dim": "#ffb690",
+                        "on-tertiary-fixed": "#071747",
+                        "on-tertiary-container": "#efefff",
+                        "outline": "#737686",
+                        "tertiary-fixed": "#dce1ff",
+                        "primary": "#004ac6",
+                        "error-container": "#ffdad6",
+                        "on-tertiary-fixed-variant": "#374475",
+                        "on-surface": "#0b1c30",
+                        "on-error-container": "#93000a",
+                        "tertiary-fixed-dim": "#b7c4fd",
+                        "inverse-primary": "#b4c5ff",
+                        "on-tertiary": "#ffffff",
+                        "surface-container-high": "#dce9ff"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "md": "16px",
+                        "gutter": "24px",
+                        "xl": "32px",
+                        "lg": "24px",
+                        "sm": "8px",
+                        "xxl": "48px",
+                        "container-max": "1440px",
+                        "margin": "64px",
+                        "xs": "4px"
+                    },
+                    "fontFamily": {
+                        "headline-lg-mobile": ["Be Vietnam Pro"],
+                        "headline-md": ["Be Vietnam Pro"],
+                        "caption": ["Inter"],
+                        "display-lg": ["Be Vietnam Pro"],
+                        "button": ["Inter"],
+                        "body-md": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "label-sm": ["Inter"],
+                        "headline-lg": ["Be Vietnam Pro"]
+                    },
+                    "fontSize": {
+                        "headline-lg-mobile": ["24px", { "lineHeight": "32px", "fontWeight": "700" }],
+                        "headline-md": ["24px", { "lineHeight": "32px", "fontWeight": "600" }],
+                        "caption": ["14px", { "lineHeight": "20px", "fontWeight": "500" }],
+                        "display-lg": ["48px", { "lineHeight": "60px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "button": ["16px", { "lineHeight": "24px", "letterSpacing": "0.01em", "fontWeight": "600" }],
+                        "body-md": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "body-lg": ["18px", { "lineHeight": "28px", "fontWeight": "400" }],
+                        "label-sm": ["12px", { "lineHeight": "16px", "fontWeight": "600" }],
+                        "headline-lg": ["32px", { "lineHeight": "40px", "fontWeight": "700" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .material-symbols-outlined.filled {
+            font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-surface font-body-md min-h-screen flex antialiased">
+<!-- SideNavBar (from JSON) -->
+<nav class="hidden md:flex flex-col h-screen w-64 p-md bg-surface-container-low border-r border-outline-variant fixed left-0 top-0 z-50">
+<div class="mb-xl px-4 pt-4">
+<h1 class="text-headline-md font-headline-lg text-primary">BBE Learning Hub</h1>
+<p class="font-body-md text-body-md text-on-surface-variant mt-sm">Hành trình tri thức</p>
+</div>
+<div class="flex-1 flex flex-col gap-sm">
+<!-- Active Tab: Trang chủ -->
+<a class="flex items-center gap-3 px-4 py-3 bg-secondary-container text-on-secondary-container rounded-xl font-bold transition-transform scale-[0.97]" href="#">
+<span class="material-symbols-outlined" data-icon="home">home</span>
+<span class="font-label-sm text-label-sm">Trang chủ</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:bg-surface-variant rounded-xl transition-colors duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="school">school</span>
+<span class="font-label-sm text-label-sm">Khóa học</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:bg-surface-variant rounded-xl transition-colors duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="leaderboard">leaderboard</span>
+<span class="font-label-sm text-label-sm">Tiến độ của tôi</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:bg-surface-variant rounded-xl transition-colors duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="military_tech">military_tech</span>
+<span class="font-label-sm text-label-sm">Bảng xếp hạng</span>
+<span class="ml-auto bg-surface-variant text-on-surface-variant text-[10px] px-2 py-0.5 rounded-full">Soon</span>
+</a>
+</div>
+<div class="mt-auto pt-md border-t border-outline-variant">
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:bg-surface-variant rounded-xl transition-colors duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="account_circle">account_circle</span>
+<span class="font-label-sm text-label-sm">Hồ sơ</span>
+</a>
+</div>
+</nav>
+<!-- Main Content Area -->
+<main class="flex-1 flex flex-col md:ml-64 w-full">
+<!-- TopAppBar (from JSON) -->
+<header class="flex justify-between items-center px-lg py-md bg-surface border-b border-surface-variant sticky top-0 z-40">
+<div>
+<h2 class="font-headline-md text-headline-md text-primary">Chào Minh Anh! Sẵn sàng chinh phục bài học hôm nay?</h2>
+</div>
+<div class="flex items-center gap-md">
+<button class="p-2 text-on-surface-variant hover:bg-surface-variant rounded-full transition-colors">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+<button class="p-2 text-on-surface-variant hover:bg-surface-variant rounded-full transition-colors">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+</button>
+<img alt="User Avatar" class="w-10 h-10 rounded-full object-cover border-2 border-surface-container-high" data-alt="A stylized digital avatar of a young university student, cheerful expression, wearing casual modern clothing, set against a soft pale blue background. Modern corporate yet expressive digital aesthetic, well-lit, high quality." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAF-AgF0He-BZLx_Biy_zVYWlvhJ_PgkyFK8ui2alGJoCrhii2i7OyTR8NPQqE3FgbZ1y9jPfPVAzQ7by1nTXbWAOKqgS2R-zx7LqLSPO3o2LPd_-7suikxtXFr8Ndo_LQQ7WKvrn1cHD3K3zOGhSIjes6NhM2yRgjJ_Vecg7VYBy3B3XBXXZVJ9DQU5vSExOyG4EfQKptDrkBMB-k3HkAfxUBTZJDqZB_7nc0gXYZXqZFHNnx5Vn7i"/>
+</div>
+</header>
+<!-- Canvas -->
+<div class="p-lg md:p-margin max-w-container-max mx-auto w-full flex-1 flex flex-col gap-xl">
+<!-- Dashboard Top Section: Stats & Featured Course -->
+<section class="grid grid-cols-1 lg:grid-cols-3 gap-lg">
+<!-- Stats Column -->
+<div class="flex flex-col gap-md lg:col-span-1">
+<!-- Streak Card -->
+<div class="bg-surface-container-lowest p-lg rounded-xl border border-surface-container-low shadow-[0px_4px_12px_rgba(23,37,84,0.08)] flex items-center gap-md relative overflow-hidden">
+<div class="absolute -right-4 -top-4 w-24 h-24 bg-secondary-fixed-dim opacity-20 rounded-full blur-xl"></div>
+<div class="w-12 h-12 bg-[#FFF7ED] rounded-full flex items-center justify-center flex-shrink-0">
+<span class="material-symbols-outlined filled text-secondary-container text-2xl">local_fire_department</span>
+</div>
+<div>
+<p class="font-caption text-caption text-on-surface-variant">Lửa học tập</p>
+<p class="font-headline-md text-headline-md text-on-surface">Streak 5 ngày</p>
+</div>
+</div>
+<!-- Overall Progress Card -->
+<div class="bg-surface-container-lowest p-lg rounded-xl border border-surface-container-low shadow-[0px_4px_12px_rgba(23,37,84,0.08)]">
+<p class="font-caption text-caption text-on-surface-variant mb-2">Tiến trình tổng quan</p>
+<p class="font-headline-md text-headline-md text-on-surface mb-4">Bạn đã hoàn thành 42% lộ trình</p>
+<div class="w-full h-2 bg-surface-container rounded-full overflow-hidden">
+<div class="h-full bg-primary-container rounded-full w-[42%]"></div>
+</div>
+</div>
+</div>
+<!-- Featured Course -->
+<div class="lg:col-span-2 bg-surface-container-lowest rounded-xl border border-surface-container-low shadow-[0px_4px_12px_rgba(23,37,84,0.08)] overflow-hidden flex flex-col sm:flex-row relative">
+<div class="w-full sm:w-2/5 h-48 sm:h-auto bg-surface-container relative">
+<img class="absolute inset-0 w-full h-full object-cover" data-alt="A modern, high-energy digital illustration representing orientation and new beginnings. Abstract geometric shapes like circles and triangles in vibrant orange and deep royal blue on a pristine white background. A sense of guided momentum and academic growth, expressive corporate style." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAl25EDMD3-b6JXVooBXhIOmfStuziX9FpQUQ8PtkxjZjIl4ISbLVRM-GL5MYL2bJlpMCSJ5zMAgpt6mqoc2oFxjDy7WAg763UizUn0XgrSEwOi63UxwsP9emTz_PYLYSu2RcknIcux28piwssMxcw1Q-Mt5ewqRHqCqR7WEFkkFBglPNQQbGZvc8ig0rSh5UEaE9DLh4P-eCzWndQm7itxb9stwXuvc55v7tOJzSBagUY98_sKRBsJ"/>
+</div>
+<div class="p-lg flex-1 flex flex-col justify-center">
+<div class="bg-[#FFF7ED] text-[#F97316] px-3 py-1 rounded-full text-xs font-bold self-start mb-4">Tiếp tục học</div>
+<h3 class="font-headline-md text-headline-md text-on-surface mb-2">Orientation BBE - Chào Tân Sinh Viên</h3>
+<p class="font-body-md text-body-md text-on-surface-variant mb-6 line-clamp-2">Khởi đầu hành trình với những kiến thức nền tảng và văn hóa môi trường học tập mới.</p>
+<div class="flex items-center gap-4 mt-auto">
+<div class="flex-1">
+<div class="flex justify-between font-caption text-caption text-on-surface-variant mb-1">
+<span>Tiến độ</span>
+<span>65%</span>
+</div>
+<div class="w-full h-1.5 bg-surface-container rounded-full overflow-hidden">
+<div class="h-full bg-primary-container rounded-full w-[65%]"></div>
+</div>
+</div>
+<button class="bg-[#F97316] text-white px-6 py-3 rounded-lg font-button text-button hover:bg-orange-600 transition-colors shadow-[0px_4px_12px_rgba(23,37,84,0.08)] shrink-0">
+                                Tiếp tục học
+                            </button>
+</div>
+</div>
+</div>
+</section>
+<!-- Course Grid Section -->
+<section class="mt-lg">
+<div class="flex justify-between items-end mb-lg">
+<h3 class="font-headline-md text-headline-md text-on-surface">Lộ trình của bạn</h3>
+<button class="text-[#2563EB] font-button text-button border border-[#2563EB] px-4 py-2 rounded-lg hover:bg-surface-container-low transition-colors">
+                        Xem tất cả
+                    </button>
+</div>
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-gutter">
+<!-- Course Card 1 -->
+<div class="bg-surface-container-lowest rounded-xl border border-[#EFF6FF] shadow-[0px_4px_12px_rgba(23,37,84,0.08)] hover:shadow-[0px_8px_24px_rgba(23,37,84,0.12)] transition-shadow overflow-hidden flex flex-col group cursor-pointer">
+<div class="h-40 bg-surface-container relative overflow-hidden">
+<img class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="Abstract vibrant illustration representing foundation and basics. Clean geometric layout featuring soft curves and intersecting shapes in deep navy and bright orange, on a clean pale blue background. Academic momentum theme." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCNFLRu6pXqgvt2m-KGxez2dDJc-a-o1gN3CjCU1KR3ti9DEcohNui9hpwKuWmDX8aIrHgR5qh5JW2DI4m22kEOf68jbdNNBbM4SWGI24rM_0B_7pHnnsJzSzGjE96aSAB8uYUGeEwFtZu6aL1rwMRkqsPF6q4DMRmhnY4TKXayCCabocpsihCCzLHcowiv2BtTKASnXtd17ykG44t1yjOci0X_cxgXGYgFW5ZWFFWpFIHMEPu6ZWq7"/>
+<div class="absolute top-3 left-3 bg-[#FFF7ED] text-[#F97316] px-2 py-1 rounded-full text-[10px] font-bold">Đang học</div>
+</div>
+<div class="p-md flex flex-col flex-1">
+<h4 class="font-button text-button text-on-primary-fixed mb-2 group-hover:text-primary transition-colors">Orientation BBE</h4>
+<div class="flex items-center gap-1 text-on-surface-variant font-caption text-caption mb-4">
+<span class="material-symbols-outlined text-[16px]">menu_book</span>
+<span>12 Bài học</span>
+</div>
+<div class="mt-auto">
+<div class="flex justify-between font-label-sm text-label-sm text-on-surface-variant mb-1">
+<span>Tiến độ</span>
+<span>65%</span>
+</div>
+<div class="w-full h-1 bg-surface-container rounded-full overflow-hidden">
+<div class="h-full bg-[#2563EB] rounded-full w-[65%]"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Course Card 2 -->
+<div class="bg-surface-container-lowest rounded-xl border border-[#EFF6FF] shadow-[0px_4px_12px_rgba(23,37,84,0.08)] hover:shadow-[0px_8px_24px_rgba(23,37,84,0.12)] transition-shadow overflow-hidden flex flex-col group cursor-pointer">
+<div class="h-40 bg-surface-container relative overflow-hidden">
+<img class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="Abstract digital art illustrating teamwork and collaboration. Interlocking geometric figures and overlapping transparent layers in shades of royal blue, pale blue, and warm orange. Bright, high-energy modern corporate academic aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuASCAw0nwetXGb2x0MRkJ_9QXak2uKtiD8AiL4GOL89QsfltcT6QJOi0w1pzoZkSiqAYkSxYvOJA5yPuyMHobc3cfRCcsdVOBYRuK5cIrakX19y0gfX7Byb0RP0rj7qvJzazcVtXINOmCWvdhEAg_MS14TajwfKQM7c92tkoOTGgu0rPANyIVdpo-NilpjD3C-ZV7_PWyw5dAK6KLgsSy7hjSk2b4u69hZ3h3i_rjUGql2TvGnqBGZ5"/>
+<div class="absolute top-3 left-3 bg-surface-container-high text-on-surface px-2 py-1 rounded-full text-[10px] font-bold">Chưa bắt đầu</div>
+</div>
+<div class="p-md flex flex-col flex-1">
+<h4 class="font-button text-button text-on-primary-fixed mb-2 group-hover:text-primary transition-colors">Kỹ năng làm việc nhóm</h4>
+<div class="flex items-center gap-1 text-on-surface-variant font-caption text-caption mb-4">
+<span class="material-symbols-outlined text-[16px]">menu_book</span>
+<span>8 Bài học</span>
+</div>
+<div class="mt-auto">
+<div class="flex justify-between font-label-sm text-label-sm text-on-surface-variant mb-1">
+<span>Tiến độ</span>
+<span>0%</span>
+</div>
+<div class="w-full h-1 bg-surface-container rounded-full overflow-hidden">
+<div class="h-full bg-[#2563EB] rounded-full w-[0%]"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Course Card 3 -->
+<div class="bg-surface-container-lowest rounded-xl border border-[#EFF6FF] shadow-[0px_4px_12px_rgba(23,37,84,0.08)] hover:shadow-[0px_8px_24px_rgba(23,37,84,0.12)] transition-shadow overflow-hidden flex flex-col group cursor-pointer">
+<div class="h-40 bg-surface-container relative overflow-hidden">
+<img class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="Minimalist modern 3D rendering representing communication. Stylized digital waveforms and dialogue bubbles formed from sleek geometric primitives in deep blue and vibrant orange on a white stage. Dynamic and expressive layout." src="https://lh3.googleusercontent.com/aida-public/AB6AXuA7Lj7wYV7SomWhIsj2O-GqxtsWBAxiGI4vQEGGCkYcQ3vWWWDLDukM_7wGUhQDhxYud0HWlIeq5mslPqeozQSm9p55RsWBTAiXnx247O7VpOunfRwESYhsxaxDb7bgZRHA2jI23O4zSSS6B9rzRT2vitslvff7s-qlLEg0kHaJ1i9XP8uV32P45j6JaCcWlplEAzczBbMo8N__EcKQjCaWYJWQ4cXbD7dF162SmXJepAg1HBxvsSg8"/>
+<div class="absolute top-3 left-3 bg-[#FFF7ED] text-[#F97316] px-2 py-1 rounded-full text-[10px] font-bold">Mới</div>
+</div>
+<div class="p-md flex flex-col flex-1">
+<h4 class="font-button text-button text-on-primary-fixed mb-2 group-hover:text-primary transition-colors">Truyền thông cơ bản</h4>
+<div class="flex items-center gap-1 text-on-surface-variant font-caption text-caption mb-4">
+<span class="material-symbols-outlined text-[16px]">menu_book</span>
+<span>15 Bài học</span>
+</div>
+<div class="mt-auto">
+<div class="flex justify-between font-label-sm text-label-sm text-on-surface-variant mb-1">
+<span>Tiến độ</span>
+<span>5%</span>
+</div>
+<div class="w-full h-1 bg-surface-container rounded-full overflow-hidden">
+<div class="h-full bg-[#2563EB] rounded-full w-[5%]"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Course Card 4 -->
+<div class="bg-surface-container-lowest rounded-xl border border-[#EFF6FF] shadow-[0px_4px_12px_rgba(23,37,84,0.08)] hover:shadow-[0px_8px_24px_rgba(23,37,84,0.12)] transition-shadow overflow-hidden flex flex-col group cursor-pointer">
+<div class="h-40 bg-surface-container relative overflow-hidden">
+<img class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="Abstract graphic representing leadership and foundations. A strong central pillar motif surrounded by dynamic, rising geometric elements in royal blue and bright orange. Soft white background, conveying stable growth and academic progression." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBrmDMjz9I0AFOqxyYbUA-wfn-6SAZ9jNBX_deqX6PrluEVZNEGbug_ZCKOXdScBCQnksKUB3E2cJs-PiXCGp3BSjvrCBCvWyv8iO609NFQuEFCI4b32AYRA_Blfk8hif3fdoVuzm13hUxbUfwGWEKdhBFAeoN8t0fwtYITd8kNWs13BAkOCYnPDaU4G2AHroI-831QEiS78G7Iy_Zm4TZe3uX89JbgpZIcQJZJWXMMCL3JUP1E-kjs"/>
+</div>
+<div class="p-md flex flex-col flex-1">
+<h4 class="font-button text-button text-on-primary-fixed mb-2 group-hover:text-primary transition-colors">Leadership Foundation</h4>
+<div class="flex items-center gap-1 text-on-surface-variant font-caption text-caption mb-4">
+<span class="material-symbols-outlined text-[16px]">menu_book</span>
+<span>20 Bài học</span>
+</div>
+<div class="mt-auto">
+<div class="flex justify-between font-label-sm text-label-sm text-on-surface-variant mb-1">
+<span>Tiến độ</span>
+<span>0%</span>
+</div>
+<div class="w-full h-1 bg-surface-container rounded-full overflow-hidden">
+<div class="h-full bg-[#2563EB] rounded-full w-[0%]"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+</div>
+</main>
+</body></html>

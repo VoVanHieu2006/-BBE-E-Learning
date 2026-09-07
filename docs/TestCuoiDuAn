@@ -1,0 +1,896 @@
+# BBE E-LEARNING SYSTEM — FILE PROMPT KIỂM THỬ
+
+## MỤC ĐÍCH
+File này chứa các prompt hoàn chỉnh để yêu cầu AI tạo, rà soát và thực thi bộ kiểm thử cho hệ thống BBE E-Learning dựa trên BA Working Document, Test Plan, Test Cases, Traceability Matrix, Dashboard và Bug Report Template.
+
+## CÁCH DÙNG
+- Nếu AI hỗ trợ ngữ cảnh dài: nạp toàn bộ file này và các tài liệu dự án liên quan.
+- Nếu AI bị giới hạn ngữ cảnh: chạy lần lượt từng prompt theo module.
+- Ưu tiên chạy các module theo thứ tự: AUTH, CHAP, COURSE, DOC, LRN, ASM, DASH, NFR, Regression, Reporting.
+- Các prompt bên dưới đã được viết sẵn, không có chỗ trống để người dùng phải điền thêm.
+
+---
+
+## QUY TẮC CHUNG CHO TẤT CẢ PROMPT
+
+Bạn là QA Automation Lead kiêm API Tester cho hệ thống BBE E-Learning.
+
+Nguyên tắc làm việc:
+1. Không hỏi lại người dùng về các thông tin đã có trong BA, Test Plan, Test Cases, Traceability Matrix, Dashboard hoặc Bug Report Template.
+2. Nếu thiếu dữ liệu test, hãy tự tạo dữ liệu mẫu hợp lệ để kiểm thử.
+3. Nếu không thể chạy thật vào hệ thống, hãy tạo script giả lập, checklist test thủ công, cURL command, Postman flow hoặc test case có thể thực thi sau.
+4. Không tạo ra các ô trống, placeholder hoặc yêu cầu người dùng điền thêm thông tin.
+5. Ưu tiên kiểm tra các test case Priority High trước.
+6. Mỗi kết quả test phải có các trường tối thiểu: Test Case ID, Module, Requirement Ref, Priority, Type, Precondition, Steps, Test Data, Expected Result, Actual Result, Bug ID nếu có, Status.
+7. Với các bug phát hiện, ghi theo mẫu Bug Report gồm: Bug ID, Test Case ID, Module, Mô tả lỗi, Bước tái hiện, Kết quả thực tế, Kết quả mong đợi, Severity, Status, Người báo, Ngày báo.
+8. Mức severity được dùng: Critical, Major, Minor, Cosmetic.
+9. Mức status được dùng: Open, In Progress, Fixed, Reopened, Closed, Won’t Fix.
+10. Exit criteria của từng module: 100% test case Priority High phải Pass; không còn bug Critical hoặc Major đang Open.
+
+---
+
+# PROMPT 00 — PROMPT TỔNG CHO TOÀN HỆ THỐNG
+
+Hãy đọc toàn bộ tài liệu của dự án BBE E-Learning, bao gồm BA Working Document, Test Plan, Test Cases, Traceability Matrix, Dashboard và Bug Report Template.
+
+Mục tiêu:
+Tạo bộ kiểm thử hoàn chỉnh cho MVP-1 của hệ thống BBE E-Learning.
+
+Phạm vi MVP-1 cần kiểm thử:
+1. Invitation và đăng nhập.
+2. Phân quyền theo role: Admin, BĐHU, Member, Khách.
+3. Quản lý course, session, lesson, video và tài liệu.
+4. Member xem nội dung và tự theo dõi tiến độ.
+5. Bài kiểm tra cuối khóa.
+6. BĐHU xem tiến độ của thành viên trong chapter mình.
+7. Dashboard Admin chỉ kiểm tra trong phạm vi đã được định nghĩa nếu thuộc MVP-2 hoặc phần liên quan.
+
+Ngoài phạm vi:
+- Ứng dụng mobile.
+- Lớp học livestream.
+- Chapter tự tạo bài học nội bộ.
+- Chấm tự luận bằng AI.
+- Tạo chứng chỉ.
+- Tích hợp hệ thống bên ngoài.
+
+Nhiệm vụ của bạn:
+1. Tạo ma trận traceability giữa các yêu cầu nghiệp vụ BR, FR, NFR và Test Case ID.
+2. Tạo danh sách test case cần chạy theo từng module.
+3. Tạo dữ liệu seed tối thiểu để kiểm thử.
+4. Tạo checklist smoke test trước khi chạy chi tiết.
+5. Tạo bộ test API hoặc hướng dẫn test API theo từng module.
+6. Tạo bộ test bảo mật, phân quyền, negative case và boundary case.
+7. Tạo báo cáo kết quả test theo format dashboard.
+8. Tạo bug report nếu phát hiện lỗi.
+
+Dữ liệu seed tối thiểu cần tự tạo:
+- 1 tài khoản Admin.
+- 2 tài khoản BĐHU thuộc 2 chapter khác nhau.
+- 4 đến 5 tài khoản Member phân bố vào 2 chapter.
+- 1 người dùng Khách không có tài khoản.
+- 1 course PUBLISHED + PUBLIC.
+- 1 course PUBLISHED + PRIVATE.
+- 1 course DRAFT.
+- Mỗi course có ít nhất 2 session.
+- Mỗi session có ít nhất 2 lesson.
+- Mỗi lesson có 1 video và tài liệu đính kèm.
+- 1 course có assessment.
+
+Yêu cầu đầu ra:
+1. Bảng tổng hợp phạm vi test.
+2. Bảng ma trận traceability.
+3. Danh sách test case theo module.
+4. Checklist dữ liệu cần chuẩn bị.
+5. Hướng dẫn test API hoặc script test.
+6. Bảng kết quả test theo module.
+7. Danh sách bug nếu có.
+8. Kết luận module nào đủ điều kiện Pass hoặc Fail theo Exit Criteria.
+
+Ràng buộc:
+- Không hỏi lại người dùng nếu thông tin đã có trong tài liệu.
+- Không để trống bất kỳ trường nào bắt buộc trong test case hoặc bug report.
+- Nếu không thể thực thi thật, hãy tạo script và checklist có thể dùng ngay sau khi có môi trường.
+
+---
+
+# PROMPT 01 — MODULE AUTH: INVITATION, LOGIN, PASSWORD RESET
+
+Bạn hãy kiểm thử module AUTH của hệ thống BBE E-Learning.
+
+Module: AUTH
+
+Các Test Case ID cần kế thừa:
+- TC-AUTH-01
+- TC-AUTH-02
+- TC-AUTH-03
+- TC-AUTH-04
+- TC-AUTH-05
+- TC-AUTH-06
+- TC-AUTH-07
+- TC-AUTH-08
+- TC-AUTH-09
+- TC-AUTH-10
+- TC-AUTH-11
+- TC-AUTH-12
+
+Yêu cầu nghiệp vụ cần kiểm tra:
+1. Admin gửi lời mời BĐHU thành công.
+2. Khi Admin mời BĐHU, hệ thống phải đồng thời tạo một chapter mới có trạng thái ACTIVE.
+3. Invitation được tạo có trạng thái PENDING và hết hạn sau 24 giờ.
+4. Email invitation phải được gửi đến email hợp lệ.
+5. Không cho gửi invitation tới email đã gắn với tài khoản Active.
+6. Không cho gửi invitation tới email đã gắn với tài khoản Inactive.
+7. Người nhận invitation có thể tạo mật khẩu thông qua token hợp lệ.
+8. Sau khi tạo mật khẩu thành công, tài khoản chuyển ACTIVE.
+9. Invitation chuyển sang ACCEPTED.
+10. Token invitation chỉ được dùng một lần.
+11. Token đã dùng khi gọi lại phải bị từ chối.
+12. Invitation quá 24 giờ phải hiển thị EXPIRED.
+13. Token hết hạn phải bị từ chối khi accept.
+14. Khi resend invitation đang PENDING, token cũ phải bị vô hiệu.
+15. Token mới sau khi resend phải dùng được.
+16. Thời hạn của invitation sau khi resend phải được gia hạn hợp lệ.
+17. BĐHU chỉ có thể mời member vào chính chapter của mình.
+18. Nếu BĐHU cố truyền chapterId của chapter khác, hệ thống phải chặn hoặc bỏ qua giá trị sai và luôn gắn invitation vào chapter của BĐHU đó.
+19. Người dùng có tài khoản ACTIVE được đăng nhập bằng email và mật khẩu.
+20. Đăng nhập sai email hoặc mật khẩu phải bị từ chối.
+21. Tài khoản INACTIVE không được đăng nhập.
+22. Tài khoản LOCKED không được đăng nhập.
+23. Đăng nhập sai liên tiếp 10 lần phải chuyển tài khoản sang LOCKED.
+24. Lần đăng nhập thứ 11 dù đúng mật khẩu vẫn phải bị từ chối.
+25. Người dùng có thể yêu cầu đặt lại mật khẩu bằng email đã đăng ký.
+26. Token reset password chỉ dùng một lần.
+27. Token reset password hết hạn sau 15 phút.
+28. Sau khi reset password thành công, tài khoản LOCKED phải được đưa về ACTIVE.
+29. failed_login_count phải được reset về 0 sau khi reset password thành công.
+30. Người dùng có thể đăng nhập bằng mật khẩu mới sau khi reset.
+31. API request password reset không được tiết lộ email có tồn tại hay không.
+32. Response giữa email tồn tại và email không tồn tại phải giống nhau.
+33. Gọi API cần xác thực mà không có token phải trả 401 Unauthorized.
+34. API không được trả 500 hoặc lộ dữ liệu khi thiếu token.
+
+Endpoint gợi ý từ tài liệu:
+- POST /invitations/chapter-leader
+- POST /invitations/member
+- POST /invitations/accept
+- GET /invitations
+- POST /login
+- POST /logout
+- POST /password-reset/request
+- POST /password-reset/confirm
+- GET /users/me
+
+Nhiệm vụ:
+1. Tạo bộ test hoàn chỉnh cho module AUTH.
+2. Bổ sung step chi tiết cho từng Test Case ID đã liệt kê.
+3. Tạo dữ liệu test phù hợp cho từng trường hợp.
+4. Tạo expected result rõ ràng.
+5. Tạo negative test, security test và boundary test.
+6. Tạo cURL command hoặc Postman flow nếu có thể.
+7. Tạo bảng kết quả test theo format dashboard.
+8. Tạo bug report nếu phát hiện lỗi.
+
+Yêu cầu đầu ra:
+- Bảng test case AUTH.
+- Checklist thực thi.
+- Dữ liệu test cần seed.
+- API test script hoặc cURL command.
+- Bảng kết quả Pass/Fail.
+- Danh sách bug nếu có.
+
+Ràng buộc:
+- Không hỏi lại người dùng.
+- Không để trống thông tin cần thiết.
+- Ưu tiên Priority High trước.
+
+---
+
+# PROMPT 02 — MODULE CHAP: CHAPTER, MEMBER VÀ PHÂN QUYỀN
+
+Bạn hãy kiểm thử module CHAP của hệ thống BBE E-Learning.
+
+Module: CHAP
+
+Các Test Case ID cần kế thừa:
+- TC-CHAP-01
+- TC-CHAP-02
+- TC-CHAP-03
+- TC-CHAP-04
+- TC-CHAP-05
+- TC-CHAP-06
+
+Yêu cầu nghiệp vụ cần kiểm tra:
+1. BĐHU không được xem member của chapter khác.
+2. BĐHU không được xem dashboard của chapter khác.
+3. Admin có thể xem tất cả chapter.
+4. Admin có thể xem member của bất kỳ chapter nào.
+5. Member khi rời chapter vẫn giữ tài khoản.
+6. Sau khi rời chapter, tài khoản vẫn có thể đăng nhập.
+7. Membership sau khi rời chapter phải chuyển sang trạng thái LEFT hoặc trạng thái tương đương.
+8. Admin hoặc BĐHU có thể đổi trạng thái tài khoản từ ACTIVE sang INACTIVE và ngược lại.
+9. Việc đổi trạng thái tài khoản phải được ghi vào audit_logs.
+10. Tài khoản INACTIVE không được đăng nhập.
+11. BĐHU không được đổi trạng thái tài khoản thuộc chapter khác.
+12. Admin không được dùng API status để khóa hoặc mở khóa tài khoản Admin khác.
+13. API đổi trạng thái tài khoản không được áp dụng cho tài khoản Admin nếu hệ thống đã chặn.
+14. Member không có quyền xem danh sách tài khoản khác.
+15. Khách không có quyền xem chapter, member hoặc dashboard.
+
+Endpoint gợi ý:
+- GET /chapters
+- GET /chapters/{chapterId}/members
+- DELETE /chapters/{chapterId}/members/{userId}
+- PATCH /users/{userId}/status
+- GET /chapters/{chapterId}/dashboard/members
+
+Nhiệm vụ:
+1. Tạo bộ test hoàn chỉnh cho module CHAP.
+2. Kiểm tra ma trận phân quyền giữa Admin, BĐHU, Member và Khách.
+3. Tạo test case cho các hành vi truy cập trái quyền.
+4. Tạo test case cho audit_logs khi đổi trạng thái tài khoản.
+5. Tạo test case cho trường hợp member rời chapter nhưng không bị xóa tài khoản.
+6. Tạo expected result rõ ràng cho từng test case.
+7. Tạo cURL command hoặc Postman flow nếu có thể.
+8. Tạo bảng kết quả test theo format dashboard.
+9. Tạo bug report nếu phát hiện lỗi.
+
+Yêu cầu đầu ra:
+- Bảng test case CHAP.
+- Checklist thực thi.
+- Dữ liệu test cần seed.
+- API test script hoặc cURL command.
+- Bảng kết quả Pass/Fail.
+- Danh sách bug nếu có.
+
+Ràng buộc:
+- Không hỏi lại người dùng.
+- Không để trống thông tin cần thiết.
+- Ưu tiên Priority High và Security test trước.
+
+---
+
+# PROMPT 03 — MODULE COURSE: COURSE, SESSION, LESSON VÀ VISIBILITY
+
+Bạn hãy kiểm thử module COURSE của hệ thống BBE E-Learning.
+
+Module: COURSE
+
+Các Test Case ID cần kế thừa:
+- TC-CRS-01
+- TC-CRS-02
+- TC-CRS-03
+- TC-CRS-04
+- TC-CRS-05
+- TC-CRS-06
+
+Yêu cầu nghiệp vụ cần kiểm tra:
+1. Course có hai trạng thái chính: DRAFT và PUBLISHED.
+2. Course có hai visibility: PUBLIC và PRIVATE.
+3. Course PUBLISHED + PUBLIC có thể được xem bởi người dùng chưa đăng nhập.
+4. Course PUBLISHED + PRIVATE chỉ hiển thị cho Member Active, BĐHU Active và Admin.
+5. Course DRAFT chỉ hiển thị cho Admin.
+6. Không cho publish course không có session nào.
+7. Không cho publish course nếu có session nhưng session không có lesson.
+8. Một lesson bắt buộc phải có đúng 1 video.
+9. Một lesson có thể có 0 hoặc nhiều tài liệu đính kèm.
+10. Không tạo được lesson thiếu video.
+11. Không tạo được lesson không có video.
+12. Nếu course PUBLISHED đã có người học, không cho sửa nội dung trực tiếp.
+13. Nếu cần sửa course PUBLISHED đã có người học, hệ thống phải yêu cầu chuyển về DRAFT trước theo rule đã thống nhất.
+14. Việc chuyển về DRAFT chỉ được thực hiện sau khi kiểm tra có người học hoặc attempt liên quan.
+15. Reorder session phải giữ đúng thứ tự mới sau khi cập nhật.
+16. Khách chỉ thấy course PUBLISHED + PUBLIC.
+17. Member thấy mọi course PUBLISHED, bao gồm PUBLIC và PRIVATE.
+18. Admin thấy cả course PUBLISHED và DRAFT.
+
+Endpoint gợi ý:
+- POST /courses
+- POST /courses/{courseId}/publish
+- POST /courses/{courseId}/sessions
+- POST /sessions/{sessionId}/lessons
+- GET /courses
+- GET /courses/{courseId}
+- PATCH /courses/{courseId}
+- PATCH /courses/{courseId}/sessions/reorder
+
+Nhiệm vụ:
+1. Tạo bộ test hoàn chỉnh cho module COURSE.
+2. Kiểm tra visibility theo từng role: Admin, BĐHU, Member, Khách.
+3. Kiểm tra validation khi publish course, session và lesson.
+4. Kiểm tra rule không sửa trực tiếp course PUBLISHED đã có người học.
+5. Kiểm tra reorder session.
+6. Tạo negative test cho course rỗng, session rỗng, lesson thiếu video.
+7. Tạo dữ liệu test gồm course DRAFT, PUBLISHED + PUBLIC, PUBLISHED + PRIVATE.
+8. Tạo cURL command hoặc Postman flow nếu có thể.
+9. Tạo bảng kết quả test theo format dashboard.
+10. Tạo bug report nếu phát hiện lỗi.
+
+Yêu cầu đầu ra:
+- Bảng test case COURSE.
+- Checklist thực thi.
+- Dữ liệu test cần seed.
+- API test script hoặc cURL command.
+- Bảng kết quả Pass/Fail.
+- Danh sách bug nếu có.
+
+Ràng buộc:
+- Không hỏi lại người dùng.
+- Không để trống thông tin cần thiết.
+- Ưu tiên Priority High trước.
+
+---
+
+# PROMPT 04 — MODULE DOC: TÀI LIỆU VÀ BẢO MẬT FILE
+
+Bạn hãy kiểm thử module DOC của hệ thống BBE E-Learning.
+
+Module: DOC
+
+Các Test Case ID cần kế thừa:
+- TC-DOC-01
+- TC-DOC-02
+- TC-DOC-03
+- TC-DOC-04
+- TC-DOC-05
+
+Yêu cầu nghiệp vụ cần kiểm tra:
+1. Admin có thể upload tài liệu thông qua presigned PUT URL.
+2. Sau khi upload file lên presigned URL, hệ thống phải có bước confirm.
+3. File sau khi upload phải xuất hiện trong bucket lưu trữ.
+4. Record document trong database phải được tạo đúng fileName, size và mimeType.
+5. Tài liệu không được truy cập qua URL trực tiếp nếu bucket không public.
+6. Chỉ được tải tài liệu thông qua endpoint có xác thực và presigned GET URL.
+7. Presigned GET URL phải hết hạn sau một khoảng thời gian ngắn.
+8. Thời hạn gợi ý của presigned GET URL là khoảng 5 phút.
+9. Khi xóa document, record trong database phải bị xóa.
+10. Khi xóa document, object tương ứng trong bucket cũng phải bị xóa.
+11. Không để lại file rác trong bucket sau khi xóa document.
+12. Hệ thống phải từ chối file sai định dạng.
+13. Hệ thống phải từ chối file vượt quá giới hạn kích thước.
+14. Không tạo record document khi upload không hợp lệ.
+
+Endpoint gợi ý:
+- POST /documents/presigned-url
+- PUT {presignedPutUrl}
+- POST /documents/confirm
+- GET /documents/{documentId}/download-url
+- DELETE /documents/{documentId}
+
+Nhiệm vụ:
+1. Tạo bộ test hoàn chỉnh cho module DOC.
+2. Kiểm tra luồng upload tài liệu bằng presigned URL.
+3. Kiểm tra bảo mật truy cập file trực tiếp.
+4. Kiểm tra thời hạn của presigned GET URL.
+5. Kiểm tra xóa document và object trong bucket.
+6. Kiểm tra validation định dạng file và kích thước file.
+7. Tạo negative test cho file .exe hoặc file vượt giới hạn.
+8. Tạo security test cho truy cập URL trực tiếp không có quyền.
+9. Tạo cURL command hoặc Postman flow nếu có thể.
+10. Tạo bảng kết quả test theo format dashboard.
+11. Tạo bug report nếu phát hiện lỗi.
+
+Yêu cầu đầu ra:
+- Bảng test case DOC.
+- Checklist thực thi.
+- Dữ liệu test cần seed.
+- API test script hoặc cURL command.
+- Bảng kết quả Pass/Fail.
+- Danh sách bug nếu có.
+
+Ràng buộc:
+- Không hỏi lại người dùng.
+- Không để trống thông tin cần thiết.
+- Ưu tiên Priority High và Security test trước.
+
+---
+
+# PROMPT 05 — MODULE LRN: TIẾN ĐỘ HỌC VÀ XEM VIDEO
+
+Bạn hãy kiểm thử module LRN của hệ thống BBE E-Learning.
+
+Module: LRN
+
+Các Test Case ID cần kế thừa:
+- TC-LRN-01
+- TC-LRN-02
+- TC-LRN-03
+- TC-LRN-04
+- TC-LRN-05
+- TC-LRN-06
+- TC-LRN-07
+
+Yêu cầu nghiệp vụ cần kiểm tra:
+1. Một lesson video được đánh dấu Completed khi người học xem tối thiểu 85% thời lượng video.
+2. Thời lượng xem được tính theo các đoạn video đã xem.
+3. Không cộng lặp tiến độ khi xem lại cùng một đoạn đã xem.
+4. Thành viên không thể tua tới phần video chưa xem.
+5. Thành viên chỉ có thể tua lại phần đã xem.
+6. Player phải kéo về vị trí furthest watched gần nhất nếu người dùng cố tua tới phần chưa xem.
+7. Hệ thống hỗ trợ tốc độ x1.5 và x2.
+8. Tiến độ vẫn được tính đúng theo thời lượng thực của video, không tính theo thời gian đồng hồ khi tăng tốc.
+9. Tiến độ được đồng bộ giữa hai thiết bị sau khi reload trang.
+10. Thời gian đồng bộ tiến độ sau reload phải khoảng 1 giây.
+11. Tài khoản INACTIVE không được xem course PRIVATE.
+12. Tiến độ course được tính theo số lesson đã hoàn thành.
+13. Progress percentage phải được làm tròn theo rule hiển thị.
+14. Course có 4 lesson, hoàn thành 1 lesson thì tiến độ là 25%.
+15. Mất mạng khi xem video phải lưu lại tiến độ đã xem nếu có cơ chế lưu trữ phù hợp.
+16. Member chỉ xem được nội dung Published mà họ có quyền truy cập.
+
+Endpoint gợi ý:
+- GET /courses
+- GET /courses/{courseId}
+- GET /courses/{courseId}/my-progress
+- GET /lessons/{lessonId}
+- PATCH /lessons/{lessonId}/progress
+
+Nhiệm vụ:
+1. Tạo bộ test hoàn chỉnh cho module LRN.
+2. Kiểm tra điều kiện Completed tại ngưỡng 85%.
+3. Kiểm tra không cộng lặp khi xem lại đoạn đã xem.
+4. Kiểm tra chặn tua tới phần chưa xem ở UI hoặc player logic.
+5. Kiểm tra tốc độ x1.5 và x2.
+6. Kiểm tra đồng bộ tiến độ giữa hai trình duyệt hoặc hai thiết bị sau reload.
+7. Kiểm tra quyền truy cập của tài khoản INACTIVE vào course PRIVATE.
+8. Kiểm tra cách tính progress percentage theo số lesson hoàn thành.
+9. Tạo test case cho trường hợp mất mạng giữa chừng nếu có thể mô phỏng.
+10. Tạo cURL command hoặc Postman flow nếu có thể.
+11. Tạo bảng kết quả test theo format dashboard.
+12. Tạo bug report nếu phát hiện lỗi.
+
+Yêu cầu đầu ra:
+- Bảng test case LRN.
+- Checklist thực thi.
+- Dữ liệu test cần seed.
+- API test script hoặc cURL command.
+- Bảng kết quả Pass/Fail.
+- Danh sách bug nếu có.
+
+Ràng buộc:
+- Không hỏi lại người dùng.
+- Không để trống thông tin cần thiết.
+- Ưu tiên Priority High trước.
+
+---
+
+# PROMPT 06 — MODULE ASM: ASSESSMENT VÀ RETAKE
+
+Bạn hãy kiểm thử module ASM của hệ thống BBE E-Learning.
+
+Module: ASM
+
+Các Test Case ID cần kế thừa:
+- TC-ASM-01
+- TC-ASM-02
+- TC-ASM-03
+- TC-ASM-04
+- TC-ASM-05
+- TC-ASM-06
+- TC-ASM-07
+- TC-ASM-08
+- TC-ASM-09
+- TC-ASM-10
+- TC-ASM-11
+- TC-ASM-12
+
+Yêu cầu nghiệp vụ cần kiểm tra:
+1. Mỗi course có tối đa một bài kiểm tra cuối khóa.
+2. Chỉ Member mới được làm bài kiểm tra.
+3. Admin không làm bài kiểm tra.
+4. BĐHU không làm bài kiểm tra.
+5. Thành viên chỉ được bắt đầu bài kiểm tra khi tất cả lesson trong course đã Completed.
+6. Nếu chưa hoàn thành tất cả lesson, hệ thống phải trả lỗi LessonsNotCompleted.
+7. Câu hỏi và đáp án được xáo trộn trong mỗi attempt.
+8. Thời gian làm bài bằng số câu hỏi nhân 2 phút.
+9. Khi hết giờ, hệ thống tự động nộp bài.
+10. Attempt hết giờ phải chuyển trạng thái AUTO_SUBMITTED.
+11. Câu đã trả lời được chấm bình thường.
+12. Câu chưa trả lời bị tính là sai.
+13. Cron job hoặc endpoint auto-submit phải xử lý attempt hết giờ trong khoảng 1 phút.
+14. Attempt đạt điểm từ 85 trở lên được xem là Pass.
+15. Attempt đạt điểm từ 85 trở lên phải trả về correctOptionId và explanation cho tất cả câu hỏi.
+16. Attempt đạt điểm dưới 85 chỉ trả về trạng thái đúng hoặc sai của từng câu.
+17. Attempt đạt điểm dưới 85 không được trả về correctOptionId.
+18. Attempt đạt điểm dưới 85 không được trả về explanation.
+19. Admin có thể xem đáp án và giải thích.
+20. BĐHU có thể xem đáp án và giải thích.
+21. Member chỉ xem được đáp án và giải thích khi đạt từ 85 điểm trở lên.
+22. Attempt mới chỉ được mở sau 24 giờ kể từ lần nộp trước.
+23. Nếu attempt trước đạt điểm tuyệt đối 100, cooldown 24 giờ có thể được bỏ qua.
+24. Attempt bị hủy giữa chừng không xuất hiện trong lịch sử điểm.
+25. Attempt bị hủy giữa chừng vẫn phải chịu cooldown 24 giờ.
+26. Không được sửa câu trả lời sau khi attempt đã SUBMITTED hoặc AUTO_SUBMITTED.
+27. Course PUBLIC không được sửa assessment khi đang có người học hoặc đang có attempt liên quan.
+28. Nếu cần sửa assessment, hệ thống phải yêu cầu đưa course về DRAFT hoặc chặn theo rule đã thống nhất.
+29. Khi mất mạng trong lúc làm bài, hệ thống vẫn tính giờ theo server.
+30. Người dùng không thể tiếp tục làm bài nếu không load được câu hỏi.
+31. Nếu còn thời gian, người dùng có thể vào lại để tiếp tục.
+32. Các câu đã chọn có thể được lưu phía client theo thiết kế, nhưng kết quả cuối cùng phải dựa trên dữ liệu hợp lệ phía server.
+
+Endpoint gợi ý:
+- POST /assessments
+- PATCH /assessments/{assessmentId}
+- POST /assessments/{assessmentId}/attempts
+- POST /attempts/{attemptId}/answers/{questionId}
+- POST /attempts/{attemptId}/submit
+- POST /attempts/{attemptId}/cancel
+- GET /attempts/history
+- POST /internal/attempts/auto-submit
+
+Nhiệm vụ:
+1. Tạo bộ test hoàn chỉnh cho module ASM.
+2. Kiểm tra điều kiện bắt đầu assessment.
+3. Kiểm tra xáo trộn câu hỏi và đáp án.
+4. Kiểm tra thời gian làm bài.
+5. Kiểm tra auto-submit khi hết giờ.
+6. Kiểm tra cron job hoặc endpoint auto-submit.
+7. Kiểm tra hiển thị đáp án và giải thích theo ngưỡng Pass/Fail.
+8. Kiểm tra cooldown 24 giờ.
+9. Kiểm tra ngoại lệ cooldown khi điểm tuyệt đối.
+10. Kiểm tra attempt canceled.
+11. Kiểm tra không sửa câu trả lời sau khi submit.
+12. Kiểm tra rule chỉnh sửa assessment khi course có người học.
+13. Tạo test case mô phỏng mất mạng nếu có thể.
+14. Tạo cURL command hoặc Postman flow nếu có thể.
+15. Tạo bảng kết quả test theo format dashboard.
+16. Tạo bug report nếu phát hiện lỗi.
+
+Yêu cầu đầu ra:
+- Bảng test case ASM.
+- Checklist thực thi.
+- Dữ liệu test cần seed.
+- API test script hoặc cURL command.
+- Bảng kết quả Pass/Fail.
+- Danh sách bug nếu có.
+
+Ràng buộc:
+- Không hỏi lại người dùng.
+- Không để trống thông tin cần thiết.
+- Ưu tiên Priority High và Security test trước.
+
+---
+
+# PROMPT 07 — MODULE DASH: DASHBOARD CHO BĐHU VÀ ADMIN
+
+Bạn hãy kiểm thử module DASH của hệ thống BBE E-Learning.
+
+Module: DASH
+
+Các Test Case ID cần kế thừa:
+- TC-DASH-01
+- TC-DASH-02
+- TC-DASH-03
+
+Yêu cầu nghiệp vụ cần kiểm tra:
+1. BĐHU chỉ được xem dữ liệu member thuộc chapter của mình.
+2. BĐHU không được xem dữ liệu member của chapter khác.
+3. Khi BĐHU truy cập dashboard của chapter khác, hệ thống phải trả AccessDenied.
+4. BĐHU có thể tìm kiếm member trong chapter.
+5. BĐHU có thể xem mỗi member đã hoàn thành bao nhiêu phần trăm khóa học.
+6. BĐHU có thể xem mỗi khóa học có bao nhiêu member hoàn thành.
+7. Số liệu tiến độ trên dashboard phải khớp với dữ liệu thật.
+8. Admin có thể xem overview tổng hợp toàn hệ thống.
+9. Admin overview phải hiển thị đúng số lượng tài khoản active, inactive và locked.
+10. Số liệu admin overview phải khớp với dữ liệu đếm tay trong database.
+11. Member không có quyền xem dashboard.
+12. Khách không có quyền xem dashboard.
+
+Endpoint gợi ý:
+- GET /chapters/{chapterId}/dashboard/members
+- GET /admin/overview
+
+Nhiệm vụ:
+1. Tạo bộ test hoàn chỉnh cho module DASH.
+2. Kiểm tra phân quyền dashboard theo role.
+3. Kiểm tra BĐHU chỉ truy cập đúng chapter của mình.
+4. Kiểm tra dữ liệu tiến độ member khớp với dữ liệu thật.
+5. Kiểm tra dữ liệu admin overview khớp với database.
+6. Tạo test case với ít nhất 5 member có tiến độ khác nhau.
+7. Tạo test case đếm tay để đối chiếu số liệu.
+8. Tạo cURL command hoặc Postman flow nếu có thể.
+9. Tạo bảng kết quả test theo format dashboard.
+10. Tạo bug report nếu phát hiện lỗi.
+
+Yêu cầu đầu ra:
+- Bảng test case DASH.
+- Checklist thực thi.
+- Dữ liệu test cần seed.
+- API test script hoặc cURL command.
+- Bảng kết quả Pass/Fail.
+- Danh sách bug nếu có.
+
+Ràng buộc:
+- Không hỏi lại người dùng.
+- Không để trống thông tin cần thiết.
+- Ưu tiên Priority High và Security test trước.
+
+---
+
+# PROMPT 08 — NFR, PERFORMANCE VÀ SECURITY
+
+Bạn hãy kiểm thử các yêu cầu phi chức năng của hệ thống BBE E-Learning.
+
+Module: NFR
+
+Các yêu cầu phi chức năng cần kiểm tra:
+1. NFR-PERF-01:
+   - Với tối đa 500 người dùng đồng thời, 95% lần tải trang danh sách khóa học hoàn tất trong 3 giây hoặc ít hơn.
+   - Điều kiện đo: môi trường mạng mục tiêu ổn định.
+
+2. NFR-PERF-02:
+   - Sau khi người dùng hoàn thành bài học, trạng thái phải xuất hiện trên thiết bị khác trong 1 giây nếu thiết bị kia có Internet và đã reload trang.
+
+3. NFR-VID-01:
+   - 95% thao tác seek trong video chất lượng 720p hoặc 1080p bắt đầu phát lại trong 1 giây hoặc ít hơn, nếu điều kiện mạng và hạ tầng đạt chuẩn.
+   - Nếu chưa có kết quả proof-of-concept, hãy tạo test proposal và script đo phù hợp.
+
+4. NFR-SEC-01:
+   - Người dùng không được truy cập video hoặc tài liệu nội bộ bằng URL trực tiếp nếu không có quyền.
+   - Chỉ được truy cập thông qua endpoint có xác thực và presigned URL hợp lệ.
+
+5. Browser support:
+   - Hệ thống hỗ trợ 2 phiên bản gần nhất của Chrome, Edge và Safari.
+   - Tạo checklist kiểm tra giao diện và chức năng cơ bản trên các trình duyệt này.
+
+6. API security:
+   - Mọi API yêu cầu xác thực, trừ các endpoint công khai.
+   - Backend phải kiểm tra role, chapter và quyền truy cập course trước khi trả dữ liệu.
+   - Không được trả 500 hoặc lộ thông tin nhạy cảm khi request sai quyền.
+   - Các lỗi phân quyền nên trả 401 hoặc 403 phù hợp.
+
+Nhiệm vụ:
+1. Tạo bộ test NFR hoàn chỉnh.
+2. Tạo script đề xuất cho performance test nếu không thể chạy thật.
+3. Tạo checklist kiểm tra bảo mật URL trực tiếp.
+4. Tạo checklist kiểm tra seek video.
+5. Tạo checklist kiểm tra đồng bộ tiến độ giữa hai thiết bị.
+6. Tạo checklist kiểm tra trình duyệt hỗ trợ.
+7. Tạo checklist kiểm tra xác thực và phân quyền API.
+8. Tạo bảng kết quả test theo format dashboard.
+9. Tạo bug report nếu phát hiện lỗi.
+
+Yêu cầu đầu ra:
+- Bảng test case NFR.
+- Checklist thực thi.
+- Đề xuất performance test script nếu cần.
+- Checklist bảo mật.
+- Checklist trình duyệt.
+- Bảng kết quả Pass/Fail.
+- Danh sách bug nếu có.
+
+Ràng buộc:
+- Không hỏi lại người dùng.
+- Không để trống thông tin cần thiết.
+- Nếu không thể chạy performance test thật, hãy tạo script và tiêu chí đo rõ ràng.
+
+---
+
+# PROMPT 09 — REGRESSION TEST SAU KHI SỬA CODE
+
+Bạn hãy kiểm thử hồi quy cho hệ thống BBE E-Learning sau khi có thay đổi code.
+
+Mục tiêu:
+Đảm bảo thay đổi code mới không phá vỡ các chức năng đã pass trước đó.
+
+Quy tắc regression:
+1. Khi có thay đổi code trong một module, phải chạy lại toàn bộ test case Priority High của module đó.
+2. Ngoài module bị ảnh hưởng trực tiếp, phải chạy lại các module có phụ thuộc trực tiếp.
+3. Việc xác định module phụ thuộc phải dựa vào cột Requirement Ref trong Test Cases và Traceability Matrix.
+4. Các module có liên quan mật thiết cần được xem xét:
+   - AUTH liên quan đến invitation, login, phân quyền, chapter.
+   - CHAP liên quan đến phân quyền, dashboard, invitation.
+   - COURSE liên quan đến visibility, lesson, document, learning progress.
+   - DOC liên quan đến bảo mật tài liệu, lesson, course.
+   - LRN liên quan đến course, video, progress, assessment.
+   - ASM liên quan đến course, lesson progress, attempt, phân quyền.
+   - DASH liên quan đến chapter, member progress, admin overview.
+   - NFR liên quan đến security, performance và đồng bộ tiến độ.
+
+Nhiệm vụ:
+1. Tạo bảng regression checklist theo module.
+2. Liệt kê các test case Priority High phải chạy lại cho từng module.
+3. Liệt kê các module phụ thuộc cần chạy lại khi một module thay đổi.
+4. Tạo tiêu chí chấp nhận regression.
+5. Tạo báo cáo regression sau khi chạy.
+6. Tạo bug report nếu phát hiện lỗi regression.
+
+Tiêu chí chấp nhận regression:
+1. 100% test case Priority High của module bị ảnh hưởng phải Pass.
+2. 100% test case Priority High của module phụ thuộc trực tiếp phải Pass.
+3. Không còn bug Critical hoặc Major đang Open.
+4. Các bug Minor có thể được ghi nhận và không chặn tiến độ nếu có kế hoạch xử lý sau.
+
+Yêu cầu đầu ra:
+- Bảng regression theo module.
+- Danh sách test case phải chạy lại.
+- Danh sách module phụ thuộc.
+- Báo cáo kết quả regression.
+- Danh sách bug nếu có.
+- Kết luận Pass hoặc Fail.
+
+Ràng buộc:
+- Không hỏi lại người dùng.
+- Không để trống thông tin cần thiết.
+- Nếu chưa có kết quả chạy thật, hãy tạo checklist regression có thể dùng ngay.
+
+---
+
+# PROMPT 10 — BÁO CÁO TEST DASHBOARD VÀ BUG REPORT
+
+Bạn hãy tạo báo cáo test cho hệ thống BBE E-Learning dựa trên kết quả kiểm thử đã có.
+
+Mục tiêu:
+Tổng hợp kết quả test theo module, theo priority và theo bug report.
+
+Nội dung cần tạo:
+1. Bảng tổng hợp kết quả theo module.
+2. Bảng tổng hợp theo Priority High.
+3. Bảng bug report.
+4. Kết luận module nào đủ điều kiện Pass.
+5. Kết luận module nào không đủ điều kiện Pass.
+6. Danh sách blocker nếu có.
+
+Bảng kết quả theo module cần có các cột:
+- Module
+- Tổng số TC
+- Pass
+- Fail
+- Blocked
+- Not Run
+
+Bảng Priority High cần có:
+- Tổng số TC Priority High
+- Số TC Priority High đã Pass
+- Số TC Priority High Fail
+- Số TC Priority High Not Run
+- Phần trăm Pass của Priority High
+- Kết luận đạt hoặc không đạt Exit Criteria
+
+Exit Criteria:
+1. 100% test case Priority High phải Pass.
+2. Không còn bug Critical hoặc Major đang Open.
+3. Bug Minor được ghi nhận lại trong Bug Report và có thể xử lý sau, không chặn tiến độ nếu không ảnh hưởng luồng chính.
+
+Bảng bug report cần có các cột:
+- Bug ID
+- Test Case ID
+- Module
+- Mô tả lỗi
+- Bước tái hiện
+- Kết quả thực tế
+- Kết quả mong đợi
+- Severity
+- Status
+- Người báo
+- Ngày báo
+
+Severity hợp lệ:
+- Critical
+- Major
+- Minor
+- Cosmetic
+
+Status hợp lệ:
+- Open
+- In Progress
+- Fixed
+- Reopened
+- Closed
+- Won’t Fix
+
+Nhiệm vụ:
+1. Nếu đã có kết quả test, hãy tổng hợp chính xác theo kết quả đó.
+2. Nếu chưa có kết quả test, hãy tạo bảng trạng thái mặc định Not Run cho tất cả test case.
+3. Không tự bịa kết quả Pass hoặc Fail nếu không có dữ liệu đầu vào.
+4. Nếu phát hiện lỗi từ các prompt test trước đó, hãy ghi vào Bug Report.
+5. Tạo báo cáo cuối cùng bằng Markdown, rõ ràng, dễ đọc, có thể dùng để báo cáo cho stakeholder.
+
+Yêu cầu đầu ra:
+- Bảng kết quả test theo module.
+- Bảng kết quả Priority High.
+- Bảng bug report.
+- Kết luận tổng thể.
+- Danh sách blocker nếu có.
+
+Ràng buộc:
+- Không hỏi lại người dùng.
+- Không để trống các trường bắt buộc trong báo cáo.
+- Nếu thiếu dữ liệu, ghi rõ Not Run hoặc Unknown theo cách minh bạch, không bịa kết quả.
+
+---
+
+# PROMPT 11 — TẠO BỘ TEST CASE HOÀN CHỈNH TỪ BA NẾU CHƯA ĐỦ
+
+Bạn hãy rà soát lại BA Working Document của hệ thống BBE E-Learning và tạo bộ test case bổ sung nếu còn thiếu.
+
+Mục tiêu:
+Đảm bảo mọi business rule, functional requirement và non-functional requirement quan trọng đều có test case tương ứng.
+
+Nguồn dữ liệu cần dựa vào:
+1. Business Rules BR-01, BR-02, BR-03, BR-04, BR-06, BR-07, BR-08.
+2. Functional Requirements từ 5.1 đến 5.6.
+3. Non-functional Requirements NFR-PERF-01, NFR-PERF-02, NFR-VID-01, NFR-SEC-01.
+4. Permission matrix trong mục 3.2.
+5. Test Plan hiện có.
+6. Test Cases hiện có.
+7. Traceability Matrix hiện có.
+
+Nhiệm vụ:
+1. Kiểm tra xem mỗi BR, FR, NFR đã có test case tương ứng hay chưa.
+2. Nếu có requirement chưa có test case, hãy tạo test case mới.
+3. Nếu test case hiện có chưa đủ negative case, security case hoặc boundary case, hãy tạo thêm.
+4. Không chỉnh sửa hoặc làm mất các test case hiện có.
+5. Các test case mới phải có ID nối tiếp hợp lý theo module nếu cần.
+6. Mỗi test case phải có đầy đủ:
+   - Test Case ID
+   - Module
+   - Requirement Ref
+   - Priority
+   - Type
+   - Status
+   - Tiền điều kiện
+   - Các bước thực hiện
+   - Dữ liệu test
+   - Kết quả mong đợi
+   - Kết quả thực tế
+   - Bug ID
+   - Tester
+   - Ngày test
+
+Yêu cầu đầu ra:
+1. Bảng rà soát coverage: Requirement -> Test Case ID hiện có -> Missing.
+2. Danh sách test case mới bổ sung.
+3. Danh sách test case cần cập nhật.
+4. Bảng traceability cập nhật.
+5. Ghi chú nếu có requirement chưa thể test ngay do thiếu thông tin kỹ thuật.
+
+Ràng buộc:
+- Không hỏi lại người dùng nếu có thể suy luận từ tài liệu.
+- Không tạo placeholder.
+- Nếu cần tạo test case cho MVP-2 như Streak, Leaderboard hoặc Chatbot, hãy đánh dấu rõ là MVP-2 và không đưa vào exit criteria của MVP-1.
+
+---
+
+# PROMPT 12 — PROMPT CHẠY NHANH SMOKE TEST
+
+Bạn hãy tạo và thực thi một bộ smoke test nhanh cho hệ thống BBE E-Learning.
+
+Mục tiêu:
+Xác nhận các luồng quan trọng nhất của hệ thống hoạt động cơ bản trước khi chạy test chi tiết.
+
+Phạm vi smoke test:
+1. Admin đăng nhập thành công.
+2. Admin tạo invitation cho BĐHU.
+3. BĐHU accept invitation và đăng nhập thành công.
+4. BĐHU mời member vào chapter.
+5. Member accept invitation và đăng nhập thành công.
+6. Admin tạo course, session, lesson có video.
+7. Admin publish course.
+8. Member xem course PUBLISHED.
+9. Member xem video và cập nhật tiến độ.
+10. Member hoàn thành đủ lesson và bắt đầu assessment.
+11. Member submit assessment.
+12. BĐHU xem progress của member trong chapter.
+13. Admin xem overview nếu chức năng đã khả dụng.
+14. Kiểm tra một API không có token phải trả 401.
+15. Kiểm tra BĐHU không truy cập chapter khác.
+
+Nhiệm vụ:
+1. Tạo checklist smoke test ngắn gọn.
+2. Tạo dữ liệu seed cần thiết.
+3. Tạo step thực thi cho từng mục.
+4. Tạo expected result cho từng mục.
+5. Tạo bảng kết quả Pass/Fail.
+6. Tạo bug report nếu có lỗi blocker.
+
+Yêu cầu đầu ra:
+- Smoke test checklist.
+- Dữ liệu seed.
+- Kết quả Pass/Fail.
+- Blocker nếu có.
+- Kết luận có nên chạy test chi tiết hay không.
+
+Ràng buộc:
+- Không hỏi lại người dùng.
+- Không để trống thông tin.
+- Nếu một smoke test fail, đánh dấu toàn bộ luồng liên quan là blocked và tạo bug tương ứng.

@@ -1,0 +1,4 @@
+export const config = {
+  project: "bbe-learning",
+  schema: "prisma/schema.prisma",
+};

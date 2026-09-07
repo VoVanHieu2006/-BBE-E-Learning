@@ -1,0 +1,375 @@
+# BBE E-Learning — AI Coding Playbook
+
+## Nguyên tắc dùng file này
+- Đưa **3 file bạn đã có** (BA doc, DBML schema, API design) vào repo ở `/docs/` trước khi bắt đầu Prompt 0.
+- Mỗi prompt bên dưới đều có dòng cuối: *"Nếu chỗ nào chưa rõ, hỏi lại tôi trước khi code, đừng tự đoán."* — giữ nguyên dòng đó, đây chính là điều bạn vừa yêu cầu, áp dụng luôn cho AI code chứ không chỉ cho tôi.
+- Làm đúng thứ tự, mỗi prompt phụ thuộc cái trước. Sau mỗi prompt, chạy phần "Test để tự kiểm tra" trước khi sang bước kế.
+
+---
+
+## 0. Chuẩn bị hạ tầng (làm 1 lần, trước Prompt 0)
+
+### 0.1 Supabase — lấy connection string
+
+1. Vào supabase.com → đăng nhập → **New Project**. Đặt tên, chọn organization, tạo **database password mạnh** (lưu lại chỗ an toàn, sẽ cần dán vào connection string), chọn region **Southeast Asia (Singapore)** cho gần Việt Nam.
+2. Đợi project khởi tạo xong (~2 phút) → vào **Project Settings → Database**.
+3. Ở mục **Connection string**, có 2 loại — lấy cả 2:
+   - **Connection pooling** (Transaction mode, cổng `6543`) → dùng cho `DATABASE_URL` (app runtime dùng cái này qua pgbouncer).
+   - **Direct connection** (cổng `5432`) → dùng cho `DIRECT_URL` (Prisma cần cái này để chạy migration).
+   - Cả hai chuỗi đều có `[YOUR-PASSWORD]` — thay bằng password bạn tạo ở bước 1.
+4. Vào **Database → Extensions**, bật (Enable) 2 extension: `pg_cron` và `pg_net` (dùng ở bước 0.4, cho module Assessment sau này).
+
+### 0.2 Cloudflare R2 — lấy access key
+
+1. Vào dash.cloudflare.com → chọn account → menu **R2 Object Storage** → **Create bucket**. Đặt tên (vd `bbe-elearning-docs`), location tuỳ chọn (Automatic là ổn).
+2. Ở trang tổng quan R2 (sidebar bên phải), copy **Account ID** — dùng để tạo endpoint URL.
+3. Vào **Manage R2 API tokens → Create API token**. Chọn quyền **Object Read & Write**, giới hạn phạm vi vào đúng bucket vừa tạo (Apply to specific bucket). Bấm Create.
+4. Cloudflare chỉ hiện **Access Key ID** và **Secret Access Key** **một lần duy nhất** — copy ngay và lưu vào chỗ an toàn (password manager/notes riêng), đừng đóng tab trước khi lưu.
+5. Endpoint URL có dạng: `https://<ACCOUNT_ID>.r2.cloudflarestorage.com` (thay `<ACCOUNT_ID>` bằng Account ID ở bước 2).
+
+### 0.3 File `.env.local` — dán vào đây, đặt đúng tên biến này để AI hiểu
+
+Tạo file `.env.local` ở gốc project (Next.js tự đọc file này, **không commit lên Git** — thêm vào `.gitignore`):
+
+```env
+# --- Supabase Postgres (Prisma) ---
+DATABASE_URL="postgresql://postgres.xxxx:PASSWORD@aws-pooler-host:6543/postgres?pgbouncer=true"
+DIRECT_URL="postgresql://postgres.xxxx:PASSWORD@aws-direct-host:5432/postgres"
+
+# --- Auth (tự sinh 2 chuỗi random dài, KHÔNG dùng lại chuỗi ví dụ này) ---
+# Tạo bằng lệnh: openssl rand -base64 48
+JWT_ACCESS_SECRET="dan-chuoi-random-o-day"
+JWT_REFRESH_SECRET="dan-chuoi-random-khac-o-day"
+# Dùng để "ướp muối" (pepper) hash của invitation token & password-reset token
+TOKEN_HASH_PEPPER="dan-chuoi-random-thu-3-o-day"
+
+# --- Cloudflare R2 ---
+R2_ACCOUNT_ID="account-id-cua-ban"
+R2_ACCESS_KEY_ID="access-key-id-tu-buoc-0.2"
+R2_SECRET_ACCESS_KEY="secret-access-key-tu-buoc-0.2"
+R2_BUCKET_NAME="bbe-elearning-docs"
+R2_ENDPOINT="https://<ACCOUNT_ID>.r2.cloudflarestorage.com"
+
+# --- Cron xác thực nội bộ (dùng ở module Assessment, mục 0.4) ---
+CRON_SECRET="dan-chuoi-random-thu-4-o-day"
+```
+
+Khi đưa cho AI code, nói rõ: *"đọc các biến trong `.env.local`, dùng đúng tên biến đã có, không tự đặt tên khác."* — vì AI code đôi khi tự bịa tên biến (`DB_URL` thay vì `DATABASE_URL`...) gây lỗi khó nhìn ra.
+
+### 0.4 Vì sao dùng Supabase pg_cron thay vì Vercel Cron cho AutoSubmitAttempt
+
+Vercel Cron ở gói Hobby (miễn phí) chỉ chạy tối đa **1 lần/ngày**, và Pro (20 USD/tháng) mới cho chạy mỗi phút — trong khi AutoSubmitAttempt cần kiểm tra mỗi phút để tự nộp bài đúng lúc hết giờ. Vì bạn chưa cần trả phí hosting ngay, tôi chọn **Supabase `pg_cron` + `pg_net`** (đã bật ở bước 0.1.4) — chạy ngay trong Supabase, độc lập với việc bạn deploy Next.js ở đâu (Vercel/Railway/khác), và miễn phí ở gói free của Supabase.
+
+Sau khi deploy xong endpoint `/api/internal/attempts/auto-submit` (Prompt 7), chạy đoạn SQL này 1 lần trong **Supabase SQL Editor** (thay `your-domain.com` và `CRON_SECRET` bằng giá trị thật):
+
+```sql
+select cron.schedule(
+  'auto-submit-attempts',
+  '* * * * *', -- mỗi phút
+  $$
+  select net.http_post(
+    url := 'https://your-domain.com/api/internal/attempts/auto-submit',
+    headers := jsonb_build_object('Authorization', 'Bearer YOUR_CRON_SECRET_HERE'),
+    body := '{}'::jsonb
+  );
+  $$
+);
+```
+
+---
+LƯU Ý: 
+Trong file docs hiện tại đang có các tài liệu sau đây, promp dùng thuật ngữ có thể sai chuyển lại cho đúng
+API.docx
+BA.docx
+schema.dbml 
+thư mục stitch_bbe_learning_hub_ui_design chứa các giao diện trang web tham khảo
+
+Promp dùng thuật ngữ:
+/docs/db-schema.dbml => schema.dbml
+/docs/ba-document.md => BA.docx
+/docs/api-design.md => thư mục stitch_bbe_learning_hub_ui_design
+
+
+
+## Prompt 0 — Khởi tạo project & schema
+
+```
+Đọc /docs/db-schema.dbml, /docs/ba-document.md, /docs/api-design.md
+
+Khởi tạo project Next.js 14+ (App Router, TypeScript, Tailwind).
+Dùng Prisma làm ORM, đọc DATABASE_URL và DIRECT_URL từ .env.local
+(DIRECT_URL dùng riêng cho migration qua trường `directUrl` trong datasource).
+
+Dịch toàn bộ schema trong db-schema.dbml sang schema.prisma, giữ nguyên tên bảng,
+enum, index và quan hệ (bao gồm cascade behavior hợp lý — ví dụ xoá course thì
+sessions/lessons con không được orphan, dùng onDelete: Cascade ở đúng chỗ).
+
+Tạo migration đầu tiên và một seed script tạo:
+- 1 tài khoản ADMIN mặc định (email/password đọc từ env)
+- 1 chapter mẫu
+
+Không code tính năng nghiệp vụ ở bước này — chỉ hạ tầng project + DB.
+Nếu chỗ nào chưa rõ, hỏi lại tôi trước khi code, đừng tự đoán.
+```
+
+**Test để tự kiểm tra:**
+- `npx prisma migrate dev` chạy không lỗi, mở Prisma Studio thấy đủ bảng đúng như DBML.
+- Chạy seed xong, query `SELECT * FROM users WHERE role='ADMIN'` ra đúng 1 dòng.
+- Cố tình tạo migration sai (vd đổi tên cột), verify AI có `prisma migrate reset` sạch được, không kẹt state.
+
+---
+
+## Prompt 1 — Auth: Invitation & Account Activation
+
+```
+Đọc /docs/api-design.md mục 1.1 - 1.6 và /docs/ba-document.md mục BR-02, FR-AUTH-01.
+
+Code các API route sau bằng Next.js Route Handlers, dùng bcrypt cho password.
+Với invitation token: sinh một chuỗi random (crypto.randomBytes(32).toString('hex')),
+lưu vào DB dạng hash = sha256(token + TOKEN_HASH_PEPPER), gửi chuỗi gốc qua link email
+(chưa cần tích hợp email thật, log ra console là đủ ở bước này).
+
+- POST /api/v1/invitations/chapter-leader (SendChapterLeaderInvitation)
+- POST /api/v1/invitations/member (SendMemberInvitation)
+- POST /api/v1/invitations/[id]/resend (ResendInvitation)
+- DELETE /api/v1/invitations/[id] (CancelInvitation)
+- GET /api/v1/invitations (GetInvitationList)
+- POST /api/v1/invitations/accept (AcceptInvitation — public)
+
+Áp đúng các rule: không tạo invitation nếu email đã Active, invitation hết hạn
+sau 24h, invitation Pending có thể bị vô hiệu khi resend (link cũ không dùng
+được nữa), token dùng đúng 1 lần.
+
+Chưa cần UI — chỉ API. Viết kèm một file test (vitest/jest) hoặc script curl mẫu.
+Nếu chỗ nào chưa rõ, hỏi lại tôi trước khi code, đừng tự đoán.
+```
+
+**Test để tự kiểm tra:**
+- Gửi invite cho 1 email → gọi accept với token đúng → tài khoản chuyển ACTIVE, invitation chuyển ACCEPTED.
+- Gọi accept lần 2 với **cùng token đó** → phải báo lỗi (token đã dùng), không được tạo thêm tài khoản.
+- Gửi invite cho email đã có tài khoản Active → phải bị chặn với lỗi `EmailAlreadyActive`.
+- Resend một invitation Pending → verify token cũ không còn accept được nữa, chỉ token mới mới dùng được.
+
+---
+
+## Prompt 2 — Auth: Login, Logout, Password Reset
+
+```
+Đọc /docs/api-design.md mục 1.7 - 1.11 và BR-02, FR-AUTH-01 phần Login/Password reset.
+
+Dùng JWT_ACCESS_SECRET (access token, hết hạn ngắn ~15 phút) và JWT_REFRESH_SECRET
+(refresh token, hết hạn dài hơn, ~7 ngày) từ .env.local, ký bằng thư viện jose.
+
+Code:
+- POST /api/v1/auth/login (kiểm tra failed_login_count, khoá tài khoản sau 10
+  lần sai liên tiếp — status LOCKED)
+- POST /api/v1/auth/logout (revoke refresh token — cần bảng lưu refresh token
+  đã revoke hoặc whitelist, tự thêm nếu schema Prompt 0 chưa có)
+- POST /api/v1/auth/password-reset/request (dùng lại pattern token+pepper như
+  Prompt 1; luôn trả cùng message dù email tồn tại hay không, chống dò email)
+- POST /api/v1/auth/password-reset/confirm (token hết hạn 15 phút, dùng 1 lần,
+  nếu tài khoản đang LOCKED thì chuyển về ACTIVE và reset failed_login_count)
+- GET /api/v1/users/me
+
+Viết middleware xác thực Bearer token dùng chung cho mọi route cần đăng nhập,
+đính kèm { userId, role, chapterId } vào request context để các module sau dùng lại.
+Nếu chỗ nào chưa rõ, hỏi lại tôi trước khi code, đừng tự đoán.
+```
+
+**Test để tự kiểm tra:**
+- Login sai password 10 lần liên tiếp → lần thứ 11 (kể cả đúng password) phải báo `AccountLocked`.
+- Reset password thành công cho tài khoản đang LOCKED → login lại bằng password mới phải thành công, không còn bị LOCKED.
+- Gọi `GET /users/me` không kèm Bearer token → phải trả 401, không throw lỗi 500.
+
+---
+
+## Prompt 3 — Chapter & Account Management
+
+```
+Đọc /docs/api-design.md Module 2 và bảng permission matrix ở ba-document.md mục 3.2.
+
+Code:
+- GET /api/v1/chapters (Admin)
+- GET /api/v1/chapters/[chapterId]/members (Admin: mọi chapter; BĐHU: chỉ
+  chapter của mình)
+- PATCH /api/v1/users/[userId]/status (kèm ghi audit_logs)
+- DELETE /api/v1/chapters/[chapterId]/members/[userId] (rời chapter nhưng
+  giữ nguyên tài khoản — không xoá, không set Inactive)
+
+Viết một hàm helper permission check dùng chung `assertChapterAccess(actor, chapterId)`
+vì rule "BĐHU không truy cập chapter khác" sẽ lặp lại ở nhiều module sau (dashboard,
+invitation list...).
+Nếu chỗ nào chưa rõ, hỏi lại tôi trước khi code, đừng tự đoán.
+```
+
+**Test để tự kiểm tra:**
+- Đăng nhập là BĐHU chapter A, gọi `GET /chapters/{id-chapter-B}/members` → phải bị `AccessDenied`.
+- Member rời chapter → verify tài khoản user vẫn tồn tại, vẫn login được, chỉ mất liên kết chapter.
+- `PATCH /users/{id}/status` set một Admin khác về INACTIVE (bằng tài khoản Admin) → phải bị chặn theo rule "không set status của chính Admin/Admin khác qua API này" nếu bạn muốn giữ đúng rule đó — xác nhận lại cách hiểu này với tôi nếu AI hỏi.
+
+---
+
+## Prompt 4 — Course / Session / Lesson / Content (Admin)
+
+```
+Đọc /docs/api-design.md Module 3 và ba-document.md mục 5.2, BR "course visibility".
+
+Code toàn bộ CRUD Course/Session/Lesson:
+- POST/PATCH/publish/unpublish course
+- Rule: không publish course/session rỗng
+- Rule: course đã PUBLISHED muốn sửa phải kiểm tra có ai đang học/làm bài chưa,
+  nếu có phải convert về DRAFT trước
+- Session/Lesson CRUD + reorder
+- Lesson bắt buộc đúng 1 video (validate ở service layer, không chỉ ở DB constraint)
+
+CHƯA code upload document ở bước này — để Prompt 5 riêng vì cần R2.
+Nếu chỗ nào chưa rõ, hỏi lại tôi trước khi code, đừng tự đoán.
+```
+
+**Test để tự kiểm tra:**
+- Tạo course rỗng (chưa có session/lesson) → gọi publish → phải bị chặn `EmptyCourse`.
+- Publish 1 course có đủ session/lesson → GET course list bằng tài khoản Khách (không token) → phải thấy course nếu visibility=PUBLIC, không thấy nếu PRIVATE.
+- Tạo lesson không kèm video → phải bị validate chặn ngay, không lưu được lesson "rỗng video".
+
+---
+
+## Prompt 5 — Document Upload (Cloudflare R2)
+
+```
+Đọc /docs/api-design.md mục 3.11, 3.12.
+
+Dùng @aws-sdk/client-s3 (tương thích R2) với endpoint/bucket đọc từ
+R2_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME trong .env.local.
+
+Dùng cách presigned URL (client browser upload thẳng lên R2, KHÔNG proxy file
+qua Next.js server) để tránh giới hạn body size của serverless function:
+
+- POST /api/v1/lessons/[lessonId]/documents/presign — trả về presigned PUT URL
+  + storage_key, client tự PUT file lên URL đó
+- POST /api/v1/lessons/[lessonId]/documents/confirm — sau khi client upload
+  xong, gọi để lưu record vào bảng documents (fileName, storage_key, mimeType, fileSize)
+- DELETE /api/v1/documents/[documentId] — xoá cả record lẫn object trên R2
+- GET /api/v1/documents/[documentId]/download — trả presigned GET URL có thời
+  hạn ngắn (~5 phút), không public link vĩnh viễn (NFR-SEC-01)
+Nếu chỗ nào chưa rõ, hỏi lại tôi trước khi code, đừng tự đoán.
+```
+
+**Test để tự kiểm tra:**
+- Xin presigned PUT URL, PUT file thật lên bằng curl/Postman → file xuất hiện trong R2 bucket dashboard.
+- Xin presigned GET URL, đợi quá 5 phút mới mở link → phải báo lỗi hết hạn.
+- Xoá document → verify object trong R2 dashboard cũng biến mất, không chỉ xoá record DB.
+
+---
+
+## Prompt 6 — Learning Progress (Member) + YouTube tracking
+
+```
+Đọc /docs/api-design.md Module 4 và ba-document.md mục BR-03, NFR-PERF-02.
+
+Code API:
+- GET /api/v1/members/me/courses
+- GET /api/v1/courses/[courseId]/my-progress
+- PATCH /api/v1/lessons/[lessonId]/progress (heartbeat, tính
+  furthest_watched_position_seconds, completed khi >= 85%)
+- GET /api/v1/lessons/[lessonId]/progress (để FE resume đúng vị trí, đồng bộ đa thiết bị)
+
+Sau đó viết một React component player dùng YouTube IFrame Player API:
+- ẩn thanh tua mặc định (controls tối giản), xây control bar riêng
+- gọi API progress mỗi 10-15s (heartbeat)
+- chặn tua tới bằng mọi cách có thể ở phía client: nếu currentTime nhảy vượt
+  quá furthest_watched_position_seconds đã lưu, tự động seekTo() kéo về ngay,
+  vô hiệu hoá cả phím tắt tua (mũi tên phải/trái) và việc kéo thanh progress
+  tự vẽ tới phần chưa xem
+- hỗ trợ đổi tốc độ x1.5/x2 (setPlaybackRate)
+
+Nguồn sự thật về "completed" vẫn là server tính từ heartbeat, phần chặn tua
+ở client chỉ là lớp UX, ghi rõ điều này trong code comment.
+Nếu chỗ nào chưa rõ, hỏi lại tôi trước khi code, đừng tự đoán.
+```
+
+**Test để tự kiểm tra:**
+- Xem hết 85% video → verify `completed=true`, `completed_at` được set.
+- Thử kéo tua tới phần chưa xem trên UI → verify player tự kéo lại vị trí cũ.
+- Xem lại một đoạn đã xem 2 lần → verify `furthest_watched_position_seconds` KHÔNG tăng gấp đôi (không cộng lặp thời lượng theo BR-03).
+- Đăng nhập trên "thiết bị khác" (browser khác) → GET progress → phải thấy đúng vị trí đã xem gần nhất.
+
+---
+
+## Prompt 7 — Assessment: Tạo bài & Attempt lifecycle
+
+```
+Đọc /docs/api-design.md Module 5 và ba-document.md mục BR-04.
+
+Xác nhận trạng thái attempt: khi hết giờ → AUTO_SUBMITTED (được chấm điểm những
+câu đã trả lời, câu chưa trả lời tính sai). Khi member chủ động huỷ giữa chừng
+→ CANCELLED (không tính vào lịch sử điểm, vẫn phải chờ cooldown 24h).
+
+Code:
+- POST /api/v1/courses/[courseId]/assessment (tạo assessment + questions + options,
+  transaction, unique theo courseId)
+- POST /api/v1/assessments/[id]/attempts (StartAttempt — check tất cả lesson đã
+  completed, check cooldown 24h kể từ attempt trước trừ khi đạt điểm tuyệt đối,
+  xáo trộn câu hỏi/đáp án, thời gian = số câu x 2 phút)
+- PUT /api/v1/attempts/[id]/answers/[questionId] (SaveAnswer, upsert, chặn nếu
+  đã SUBMITTED/AUTO_SUBMITTED hoặc hết giờ)
+- POST /api/v1/attempts/[id]/cancel (member chủ động huỷ giữa chừng → CANCELLED)
+- POST /api/v1/attempts/[id]/submit (chấm điểm, passed nếu >= 85, ẩn đáp án
+  đúng nếu không pass)
+- POST /api/v1/internal/attempts/auto-submit (nội bộ, xác thực bằng header
+  Authorization: Bearer CRON_SECRET — xử lý các attempt IN_PROGRESS đã quá
+  expires_at, set AUTO_SUBMITTED, chấm điểm câu đã trả lời)
+- GET attempts history + result
+
+Đây là endpoint sẽ được Supabase pg_cron gọi mỗi phút (đã setup ở tài liệu hạ
+tầng) — nhớ verify đúng CRON_SECRET, trả 401 nếu sai.
+Nếu chỗ nào chưa rõ, hỏi lại tôi trước khi code, đừng tự đoán.
+```
+
+**Test để tự kiểm tra:**
+- Start attempt khi chưa hoàn thành hết lesson → phải bị chặn `LessonsNotCompleted`.
+- Submit đạt >= 85 → response trả kèm đáp án đúng + giải thích tất cả câu. Submit < 85 → chỉ trả đúng/sai từng câu, KHÔNG lộ đáp án đúng.
+- Tạo 1 attempt, không submit, đợi qua `expires_at` rồi gọi thủ công `/internal/attempts/auto-submit` → verify attempt chuyển AUTO_SUBMITTED và có điểm.
+- Huỷ giữa chừng 1 attempt → verify nó không xuất hiện trong lịch sử điểm nhưng vẫn tính cooldown 24h cho attempt kế tiếp.
+- Đạt điểm tuyệt đối (100) → verify KHÔNG bị áp cooldown 24h cho lần làm tiếp theo (nếu được phép làm lại).
+
+---
+
+## Prompt 8 — BĐHU Dashboard & Admin Overview
+
+```
+Đọc /docs/api-design.md Module 6, 7 và ba-document.md mục 5.5.
+
+Code:
+- GET /api/v1/chapters/[chapterId]/dashboard/members (dùng lại
+  assertChapterAccess đã viết ở Prompt 3)
+- GET /api/v1/chapters/[chapterId]/dashboard/courses
+- GET /api/v1/admin/overview
+
+Ưu tiên viết bằng raw aggregate query hoặc Prisma groupBy thay vì load hết
+record rồi tính ở application layer (NFR-PERF-01).
+Nếu chỗ nào chưa rõ, hỏi lại tôi trước khi code, đừng tự đoán.
+```
+
+**Test để tự kiểm tra:**
+- Tạo dữ liệu mẫu 20 member ở 2 chapter khác nhau → verify dashboard chapter A không lẫn số liệu của chapter B.
+- So khớp thủ công 1-2 con số trên `/admin/overview` (vd đếm tay số tài khoản ACTIVE) với kết quả API trả về.
+
+---
+
+## Prompt 9 — Nối UI đã export từ Stitch vào từng module
+
+```
+Đọc toàn bộ UI trong docs/stitch_bbe_learning_hub_ui_design và đối chiếu với BA, schema, API và các module đã implement trước đó.
+
+Thực hiện:
+
+Xác định chính xác mỗi UI thuộc module / feature / screen / role nào và tích hợp vào đúng flow.
+UI Stitch chỉ là reference. Được phép chỉnh sửa, bổ sung hoặc thiết kế lại để phù hợp với requirement và UX thực tế.
+Rà soát toàn bộ project, không bỏ sót screen cần thiết. Những UI chưa có thì tự thiết kế dựa trên theme/design system hiện tại.
+Hoàn thiện UI production-ready: responsive, loading, empty, error, success, validation và permission state phù hợp.
+Đảm bảo navigation và flow giữa các màn hình hoạt động nhất quán, không có UI/component bị bỏ quên hoặc không được sử dụng.
+
+Sau khi hoàn thành, tự rà soát lại toàn bộ module để đảm bảo BA → API → UI được nối đầy đủ.
+
+Nếu chỗ nào chưa rõ, hỏi lại tôi trước khi code, đừng tự đoán.
+```

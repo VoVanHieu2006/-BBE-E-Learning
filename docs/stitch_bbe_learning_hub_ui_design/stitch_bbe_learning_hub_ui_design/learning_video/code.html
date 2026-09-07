@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+
+<html lang="vi"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Learning Video Page - BBE</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Be+Vietnam+Pro:wght@600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "inverse-on-surface": "#eaf1ff",
+                        "on-primary-container": "#eeefff",
+                        "on-primary-fixed": "#00174b",
+                        "background": "#f8f9ff",
+                        "on-primary": "#ffffff",
+                        "surface-container": "#e5eeff",
+                        "primary-container": "#2563eb",
+                        "error": "#ba1a1a",
+                        "tertiary": "#465384",
+                        "on-secondary": "#ffffff",
+                        "on-secondary-fixed-variant": "#783200",
+                        "primary-fixed": "#dbe1ff",
+                        "surface-dim": "#cbdbf5",
+                        "on-secondary-container": "#5c2400",
+                        "primary-fixed-dim": "#b4c5ff",
+                        "secondary": "#9d4300",
+                        "surface-variant": "#d3e4fe",
+                        "surface": "#f8f9ff",
+                        "on-surface-variant": "#434655",
+                        "on-background": "#0b1c30",
+                        "secondary-fixed": "#ffdbca",
+                        "on-secondary-fixed": "#341100",
+                        "tertiary-container": "#5e6b9e",
+                        "secondary-container": "#fd761a",
+                        "surface-container-lowest": "#ffffff",
+                        "inverse-surface": "#213145",
+                        "outline-variant": "#c3c6d7",
+                        "surface-bright": "#f8f9ff",
+                        "on-primary-fixed-variant": "#003ea8",
+                        "surface-tint": "#0053db",
+                        "on-error": "#ffffff",
+                        "surface-container-highest": "#d3e4fe",
+                        "surface-container-low": "#eff4ff",
+                        "secondary-fixed-dim": "#ffb690",
+                        "on-tertiary-fixed": "#071747",
+                        "on-tertiary-container": "#efefff",
+                        "outline": "#737686",
+                        "tertiary-fixed": "#dce1ff",
+                        "primary": "#004ac6",
+                        "error-container": "#ffdad6",
+                        "on-tertiary-fixed-variant": "#374475",
+                        "on-surface": "#0b1c30",
+                        "on-error-container": "#93000a",
+                        "tertiary-fixed-dim": "#b7c4fd",
+                        "inverse-primary": "#b4c5ff",
+                        "on-tertiary": "#ffffff",
+                        "surface-container-high": "#dce9ff"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "md": "16px",
+                        "gutter": "24px",
+                        "xl": "32px",
+                        "lg": "24px",
+                        "sm": "8px",
+                        "xxl": "48px",
+                        "container-max": "1440px",
+                        "margin": "64px",
+                        "xs": "4px"
+                    },
+                    "fontFamily": {
+                        "headline-lg-mobile": ["Be Vietnam Pro"],
+                        "headline-md": ["Be Vietnam Pro"],
+                        "caption": ["Inter"],
+                        "display-lg": ["Be Vietnam Pro"],
+                        "button": ["Inter"],
+                        "body-md": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "label-sm": ["Inter"],
+                        "headline-lg": ["Be Vietnam Pro"]
+                    },
+                    "fontSize": {
+                        "headline-lg-mobile": ["24px", { "lineHeight": "32px", "fontWeight": "700" }],
+                        "headline-md": ["24px", { "lineHeight": "32px", "fontWeight": "600" }],
+                        "caption": ["14px", { "lineHeight": "20px", "fontWeight": "500" }],
+                        "display-lg": ["48px", { "lineHeight": "60px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "button": ["16px", { "lineHeight": "24px", "letterSpacing": "0.01em", "fontWeight": "600" }],
+                        "body-md": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "body-lg": ["18px", { "lineHeight": "28px", "fontWeight": "400" }],
+                        "label-sm": ["12px", { "lineHeight": "16px", "fontWeight": "600" }],
+                        "headline-lg": ["32px", { "lineHeight": "40px", "fontWeight": "700" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        /* Custom scrollbar for the playlist */
+        .playlist-scroll::-webkit-scrollbar {
+            width: 6px;
+        }
+        .playlist-scroll::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .playlist-scroll::-webkit-scrollbar-thumb {
+            background-color: #c3c6d7; /* outline-variant */
+            border-radius: 20px;
+        }
+        
+        /* Video progress bar custom style */
+        .video-progress::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 12px;
+            height: 12px;
+            background: #2563eb; /* primary-container */
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.2);
+        }
+    </style>
+</head>
+<body class="bg-background text-on-surface font-body-md antialiased min-h-screen relative flex">
+<!-- Shared Component: SideNavBar -->
+<aside class="fixed left-0 top-0 h-screen w-64 bg-surface-container-low dark:bg-surface-container-low border-r border-outline-variant flex flex-col p-md z-40">
+<!-- Brand Area -->
+<div class="flex items-center gap-sm mb-xl px-sm">
+<div class="w-10 h-10 rounded-lg bg-primary-container flex items-center justify-center text-on-primary-container font-headline-md">B</div>
+<div>
+<h1 class="text-headline-md font-headline-md text-primary dark:text-primary-fixed-dim leading-tight">BBE Learning Hub</h1>
+<p class="font-caption text-caption text-on-surface-variant">Hành trình tri thức</p>
+</div>
+</div>
+<!-- Navigation Tabs -->
+<nav class="flex-1 space-y-sm">
+<!-- Inactive -->
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:bg-surface-variant rounded-xl hover:bg-surface-variant dark:hover:bg-inverse-surface transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">home</span>
+<span class="font-button text-button">Trang chủ</span>
+</a>
+<!-- Active (Intent matches Learning Video Page) -->
+<a class="flex items-center gap-3 px-4 py-3 bg-secondary-container text-on-secondary-container rounded-xl font-bold scale-[0.97] transition-transform shadow-[0px_4px_12px_rgba(23,37,84,0.08)]" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">school</span>
+<span class="font-button text-button">Khóa học</span>
+</a>
+<!-- Inactive -->
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:bg-surface-variant rounded-xl hover:bg-surface-variant dark:hover:bg-inverse-surface transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">leaderboard</span>
+<span class="font-button text-button">Tiến độ của tôi</span>
+</a>
+<!-- Inactive -->
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:bg-surface-variant rounded-xl hover:bg-surface-variant dark:hover:bg-inverse-surface transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">military_tech</span>
+<span class="font-button text-button">Bảng xếp hạng</span>
+</a>
+</nav>
+<!-- Footer Tab -->
+<div class="mt-auto pt-md border-t border-outline-variant">
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:bg-surface-variant rounded-xl hover:bg-surface-variant dark:hover:bg-inverse-surface transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">account_circle</span>
+<span class="font-button text-button">Hồ sơ</span>
+</a>
+</div>
+</aside>
+<!-- Main Content Wrapper -->
+<div class="flex-1 ml-64 flex flex-col min-h-screen">
+<!-- Shared Component: TopAppBar -->
+<header class="full-width sticky top-0 bg-surface dark:bg-surface border-b border-surface-variant flex justify-between items-center px-lg py-md z-30">
+<div>
+<!-- Headline as per JSON -->
+<h2 class="font-headline-lg text-headline-lg text-primary dark:text-primary-fixed tracking-tight">Chào mừng quay trở lại!</h2>
+</div>
+<div class="flex items-center gap-md">
+<!-- Search bar on right as per JSON config, using a conceptual representation -->
+<div class="relative hidden lg:block">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant">search</span>
+<input class="pl-10 pr-4 py-2 bg-surface-container-low border border-outline-variant rounded-full font-body-md text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors w-64" placeholder="Tìm kiếm khóa học..." type="text"/>
+</div>
+<button class="w-10 h-10 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-variant transition-colors">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="w-10 h-10 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-variant transition-colors">
+<span class="material-symbols-outlined">settings</span>
+</button>
+<div class="w-10 h-10 rounded-full overflow-hidden border-2 border-primary-container shrink-0 ml-sm">
+<img alt="User Avatar" class="w-full h-full object-cover" data-alt="A professional, energetic headshot of a young Vietnamese university student. The lighting is bright and studio-quality, conveying approachability and confidence. The background is a subtle, solid pastel blue to match a clean, modern digital learning platform aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBQv5eaNu7r4KSrVEEZaXsHDhD6t4qax5cuSCRJvSVi7_6sCLeu19AwtgK_0Da4M9LOd092iDjtAyzskeWcr3l68zyi6xm4hN_uc0Kvbm94EyFt7WLrwlEkV1QSedz0XorphVf0NTqxX79VP3QflvdA9Tz5LVBzAJ8Genzr19Bxk-cXWLyrgSXafH3U_R-ku1R0vfBwS-Lxh610NyGtdHsprTiV_i6eMJJZK9oD3nelxESw0btQXlcC"/>
+</div>
+</div>
+</header>
+<!-- Main Canvas -->
+<main class="flex-1 w-full max-w-container-max mx-auto p-gutter lg:p-margin relative z-10 overflow-hidden">
+<!-- Abstract Background Accents (Guided Momentum) -->
+<div class="absolute top-0 right-0 w-[600px] h-[600px] bg-primary-container/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3 pointer-events-none"></div>
+<div class="absolute bottom-0 left-0 w-[400px] h-[400px] bg-secondary-container/5 rounded-full blur-3xl translate-y-1/3 -translate-x-1/4 pointer-events-none"></div>
+<div class="grid grid-cols-1 xl:grid-cols-12 gap-xl relative z-10">
+<!-- Left Column: Video & Details -->
+<div class="xl:col-span-8 flex flex-col gap-lg">
+<!-- Video Player Area -->
+<div class="relative w-full aspect-video bg-inverse-surface rounded-xl overflow-hidden shadow-[0px_8px_24px_rgba(23,37,84,0.12)] group">
+<!-- Video Thumbnail/Poster -->
+<div class="absolute inset-0 bg-cover bg-center transition-opacity duration-300 group-hover:opacity-90" data-alt="A dynamic, high-quality video thumbnail for a corporate onboarding course. The image features a diverse group of modern, professional young adults engaged in a collaborative discussion in a bright, modern office space with large windows. The lighting is cinematic yet natural, emphasizing a positive, high-energy mood. Subtle abstract geometric shapes in vibrant orange and blue overlay the scene, adding a tech-forward, energetic brand identity." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuDwzUiBjdvtilysOqp5nRQ7fDuEIZ0NkZEA0UrE38r9Io6rgAyIRSpDnUTZTShTwXaCuolfwoc0pGeBzm9YkqnkErNz5t9atmfu_z2erepklTmtaVi5QKODZLgxwdUz62Voiy0ndkzgSQQ64CVii0LWqcMYxNu28v5x04YUCBYVWonkRPIZDbdPYbxT-oxkI5cvW3FRucBspp-OLUFwHfhmQbTSUQP3ILw4ZTdey4Q0dbrIEx0EvlDY')">
+<!-- Overlay Gradient for better text legibility -->
+<div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"></div>
+</div>
+<!-- Big Play Button Overlay -->
+<div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+<button class="w-20 h-20 bg-primary-container/90 text-on-primary-container rounded-full flex items-center justify-center backdrop-blur-sm pointer-events-auto hover:bg-primary hover:scale-105 transition-all shadow-[0px_4px_12px_rgba(37,99,235,0.3)]">
+<span class="material-symbols-outlined text-4xl" style="font-variation-settings: 'FILL' 1;">play_arrow</span>
+</button>
+</div>
+<!-- Video Controls (Mockup) -->
+<div class="absolute bottom-0 left-0 w-full p-4 bg-gradient-to-t from-black/90 to-transparent flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+<!-- Timeline -->
+<div class="w-full flex items-center gap-3">
+<input class="w-full h-1 bg-surface-variant/50 rounded-full appearance-none video-progress outline-none" max="100" min="0" type="range" value="45"/>
+</div>
+<!-- Controls Row -->
+<div class="flex items-center justify-between text-on-primary">
+<div class="flex items-center gap-4">
+<button class="hover:text-primary-fixed transition-colors"><span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">pause</span></button>
+<button class="hover:text-primary-fixed transition-colors"><span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">volume_up</span></button>
+<span class="font-caption text-caption text-on-primary/90">04:12 / 09:35</span>
+</div>
+<div class="flex items-center gap-4">
+<button class="hover:text-primary-fixed transition-colors"><span class="material-symbols-outlined">closed_caption</span></button>
+<button class="hover:text-primary-fixed transition-colors"><span class="material-symbols-outlined">settings</span></button>
+<button class="hover:text-primary-fixed transition-colors"><span class="material-symbols-outlined">fullscreen</span></button>
+</div>
+</div>
+</div>
+</div>
+<!-- Lesson Details -->
+<div class="flex flex-col gap-md">
+<!-- Title Row & Status -->
+<div class="flex items-start justify-between gap-4">
+<h1 class="font-headline-lg text-headline-lg text-on-surface">1. Văn hóa và cách BBE hoạt động</h1>
+<!-- Achievement Chips / Status -->
+<div class="flex items-center gap-sm shrink-0 mt-2">
+<div class="px-3 py-1 rounded-full bg-secondary-fixed text-on-secondary-fixed flex items-center gap-1 shadow-sm">
+<span class="material-symbols-outlined text-[18px]">verified</span>
+<span class="font-label-sm text-label-sm">Đã hoàn thành</span>
+</div>
+<div class="px-3 py-1 rounded-full bg-surface-container-highest text-on-surface-variant flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px]">cloud_done</span>
+<span class="font-label-sm text-label-sm">Đã lưu tự động</span>
+</div>
+</div>
+</div>
+<!-- Progress Requirement Message Box -->
+<div class="bg-surface-container-low border border-outline-variant/50 rounded-lg p-md flex items-start gap-3 shadow-[0px_4px_12px_rgba(23,37,84,0.04)]">
+<span class="material-symbols-outlined text-primary-container shrink-0 mt-0.5">info</span>
+<p class="font-body-md text-body-md text-on-surface-variant leading-relaxed">
+<strong class="text-on-surface font-semibold">Lưu ý:</strong> Bạn cần xem ít nhất 85% video để hoàn thành bài học. Tiến trình được lưu tự động.
+                            </p>
+</div>
+<!-- Description -->
+<div class="prose max-w-none font-body-lg text-body-lg text-on-surface-variant mt-sm">
+<p>Chào mừng bạn đến với BBE! Trong bài học đầu tiên này, chúng ta sẽ cùng nhau tìm hiểu về lịch sử hình thành, sứ mệnh cốt lõi và những giá trị văn hóa độc đáo làm nên môi trường làm việc tại đây. Hiểu rõ văn hóa BBE là bước đệm vững chắc giúp bạn hòa nhập nhanh chóng và phát triển cùng tổ chức.</p>
+</div>
+<!-- Attached Documents (Bento-style grid) -->
+<div class="mt-lg">
+<h3 class="font-headline-md text-headline-md text-on-surface mb-md flex items-center gap-2">
+<span class="material-symbols-outlined text-tertiary">folder_zip</span>
+                                Tài liệu đính kèm
+                            </h3>
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+<!-- Document Card 1 -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl p-md flex items-center gap-4 hover:shadow-[0px_8px_24px_rgba(23,37,84,0.12)] hover:border-primary/30 transition-all cursor-pointer group">
+<div class="w-12 h-12 rounded-lg bg-error-container text-on-error-container flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">picture_as_pdf</span>
+</div>
+<div class="flex-1 min-w-0">
+<h4 class="font-button text-button text-on-surface truncate group-hover:text-primary transition-colors">BBE_Culture_Deck_2023.pdf</h4>
+<p class="font-caption text-caption text-on-surface-variant">PDF • 2.4 MB</p>
+</div>
+<span class="material-symbols-outlined text-outline group-hover:text-primary">download</span>
+</div>
+<!-- Document Card 2 -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl p-md flex items-center gap-4 hover:shadow-[0px_8px_24px_rgba(23,37,84,0.12)] hover:border-primary/30 transition-all cursor-pointer group">
+<div class="w-12 h-12 rounded-lg bg-error-container text-on-error-container flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">picture_as_pdf</span>
+</div>
+<div class="flex-1 min-w-0">
+<h4 class="font-button text-button text-on-surface truncate group-hover:text-primary transition-colors">Employee_Handbook_VN.pdf</h4>
+<p class="font-caption text-caption text-on-surface-variant">PDF • 1.8 MB</p>
+</div>
+<span class="material-symbols-outlined text-outline group-hover:text-primary">download</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Right Column: Course Content Panel -->
+<div class="xl:col-span-4">
+<!-- Sticky Container for smooth scrolling -->
+<div class="sticky top-[104px] flex flex-col h-[calc(100vh-140px)] bg-surface-container-lowest border border-surface-variant rounded-2xl shadow-[0px_4px_12px_rgba(23,37,84,0.08)] overflow-hidden">
+<!-- Panel Header -->
+<div class="p-lg bg-surface border-b border-surface-variant shrink-0">
+<h3 class="font-headline-md text-headline-md text-on-surface mb-4">Nội dung khóa học</h3>
+<!-- Course Progress -->
+<div class="space-y-2">
+<div class="flex justify-between items-end">
+<span class="font-caption text-caption text-on-surface-variant">Tiến độ hoàn thành</span>
+<span class="font-button text-button text-primary-container">33%</span>
+</div>
+<div class="w-full h-2 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-primary-container rounded-full w-1/3 transition-all duration-1000"></div>
+</div>
+</div>
+</div>
+<!-- Lesson List (Scrollable) -->
+<div class="flex-1 overflow-y-auto playlist-scroll p-sm space-y-1 bg-surface-container-lowest">
+<!-- Section Title -->
+<div class="px-3 py-2 mt-2">
+<span class="font-label-sm text-label-sm text-tertiary uppercase tracking-wider">Chương 1: Khởi động</span>
+</div>
+<!-- Lesson Item: Active/Playing -->
+<button class="w-full text-left bg-surface-container-high rounded-xl p-3 flex gap-3 items-start border-l-4 border-primary-container transition-colors shadow-sm">
+<div class="mt-0.5 shrink-0 w-6 h-6 rounded-full bg-primary-container text-on-primary flex items-center justify-center">
+<span class="material-symbols-outlined text-[14px]" style="font-variation-settings: 'FILL' 1;">play_arrow</span>
+</div>
+<div class="flex-1">
+<h4 class="font-button text-button text-on-surface leading-snug">1. Văn hóa và cách BBE hoạt động</h4>
+<div class="flex items-center gap-2 mt-1">
+<span class="font-caption text-caption text-primary">Đang học</span>
+<span class="w-1 h-1 bg-outline rounded-full"></span>
+<span class="font-caption text-caption text-on-surface-variant">09:35</span>
+</div>
+</div>
+</button>
+<!-- Lesson Item: Completed -->
+<button class="w-full text-left hover:bg-surface-container-low rounded-xl p-3 flex gap-3 items-start transition-colors group border-l-4 border-transparent">
+<div class="mt-0.5 shrink-0 w-6 h-6 rounded-full bg-secondary-fixed text-on-secondary-fixed flex items-center justify-center">
+<span class="material-symbols-outlined text-[14px]" style="font-variation-settings: 'FILL' 1;">check</span>
+</div>
+<div class="flex-1">
+<h4 class="font-body-md text-body-md text-on-surface group-hover:text-primary transition-colors leading-snug">2. Quy định làm việc &amp; Quyền lợi</h4>
+<div class="flex items-center gap-2 mt-1">
+<span class="font-caption text-caption text-on-surface-variant">15:20</span>
+</div>
+</div>
+</button>
+<!-- Section Title -->
+<div class="px-3 py-2 mt-4 border-t border-surface-variant/50 pt-4">
+<span class="font-label-sm text-label-sm text-tertiary uppercase tracking-wider">Chương 2: Công cụ làm việc</span>
+</div>
+<!-- Lesson Item: Locked -->
+<button class="w-full text-left hover:bg-surface-container-low rounded-xl p-3 flex gap-3 items-start transition-colors group border-l-4 border-transparent opacity-75">
+<div class="mt-0.5 shrink-0 w-6 h-6 rounded-full bg-surface-container-highest text-outline flex items-center justify-center">
+<span class="material-symbols-outlined text-[14px]">lock</span>
+</div>
+<div class="flex-1">
+<h4 class="font-body-md text-body-md text-on-surface-variant leading-snug">3. Hướng dẫn sử dụng hệ thống nội bộ ERP</h4>
+<div class="flex items-center gap-2 mt-1">
+<span class="font-caption text-caption text-outline">Yêu cầu hoàn thành bài 2</span>
+</div>
+</div>
+</button>
+<!-- Lesson Item: Locked -->
+<button class="w-full text-left hover:bg-surface-container-low rounded-xl p-3 flex gap-3 items-start transition-colors group border-l-4 border-transparent opacity-75">
+<div class="mt-0.5 shrink-0 w-6 h-6 rounded-full bg-surface-container-highest text-outline flex items-center justify-center">
+<span class="material-symbols-outlined text-[14px]">lock</span>
+</div>
+<div class="flex-1">
+<h4 class="font-body-md text-body-md text-on-surface-variant leading-snug">4. Quy trình báo cáo và đánh giá KPI</h4>
+<div class="flex items-center gap-2 mt-1">
+<span class="font-caption text-caption text-outline">Bài kiểm tra (15p)</span>
+</div>
+</div>
+</button>
+</div>
+<!-- Panel Footer Action -->
+<div class="p-4 bg-surface border-t border-surface-variant shrink-0 flex justify-center">
+<button class="w-full py-3 px-6 bg-surface-container-highest text-on-surface font-button text-button rounded-xl hover:bg-surface-variant transition-colors flex items-center justify-center gap-2 border border-outline-variant">
+<span class="material-symbols-outlined text-[18px]">menu_book</span>
+                                Trở về trang tổng quan
+                            </button>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+</body></html>
