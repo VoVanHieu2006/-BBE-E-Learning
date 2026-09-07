@@ -264,6 +264,41 @@ export async function cancelInvitation(
   return { ok: true, invitationId, status: 'CANCELLED' }
 }
 
+/** Validate an invitation token (public — used by the accept-invitation page) */
+export async function validateInvitationToken(
+  token: string
+): Promise<
+  | { ok: true; email: string; role: InvitationRole; chapterName: string; expiresAt: Date }
+  | SendInvitationError
+> {
+  const tokenHash = hashToken(token)
+  const invitation = await prisma.invitation.findUnique({
+    where: { token_hash: tokenHash },
+    include: { chapter: { select: { name: true } } },
+  })
+
+  if (!invitation) {
+    return { ok: false, code: 'InvitationNotFound', message: 'Link không hợp lệ hoặc đã bị thay thế bằng lời mời mới' }
+  }
+  if (invitation.status === 'ACCEPTED') {
+    return { ok: false, code: 'TokenAlreadyUsed', message: 'Lời mời này đã được sử dụng' }
+  }
+  if (invitation.status === 'CANCELLED') {
+    return { ok: false, code: 'InvalidState', message: 'Lời mời này đã bị hủy' }
+  }
+  if (invitation.status === 'EXPIRED' || new Date() > invitation.expires_at) {
+    return { ok: false, code: 'TokenExpired', message: 'Lời mời đã hết hạn' }
+  }
+
+  return {
+    ok: true,
+    email: invitation.email,
+    role: invitation.role as InvitationRole,
+    chapterName: invitation.chapter.name,
+    expiresAt: invitation.expires_at,
+  }
+}
+
 /** Accept invitation — create user account and activate */
 export async function acceptInvitation(
   token: string,

@@ -13,6 +13,7 @@ export default function AdminInvitationsPage() {
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<ToastMessage | null>(null);
+  const [busyAction, setBusyAction] = useState<string | null>(null);
 
   const showToast = (type: 'success' | 'error' | 'info', message: string) => {
     setToast({ type, message });
@@ -80,29 +81,39 @@ export default function AdminInvitationsPage() {
   }
 
   async function handleResend(invitationId: string) {
+    setBusyAction(`${invitationId}:resend`);
     clearApiCache('/api/v1/invitations');
-    const res = await apiFetch(`/api/v1/invitations/${invitationId}/resend`, { method: 'POST' });
-    if (res.ok) {
-      if (res.data?.emailSent === false) {
-        showToast('info', `Lời mời đã được làm mới nhưng GỬI EMAIL THẤT BẠI: ${res.data.emailError || 'không rõ lý do'}`);
+    try {
+      const res = await apiFetch(`/api/v1/invitations/${invitationId}/resend`, { method: 'POST' });
+      if (res.ok) {
+        if (res.data?.emailSent === false) {
+          showToast('info', `Lời mời đã được làm mới nhưng GỬI EMAIL THẤT BẠI: ${res.data.emailError || 'không rõ lý do'}`);
+        } else {
+          showToast('success', 'Đã gửi lại lời mời thành công!');
+        }
+        loadInvitations();
       } else {
-        showToast('success', 'Đã gửi lại lời mời thành công!');
+        showToast('error', res.error?.message || 'Lỗi gửi lại lời mời');
       }
-      loadInvitations();
-    } else {
-      showToast('error', res.error?.message || 'Lỗi gửi lại lời mời');
+    } finally {
+      setBusyAction(null);
     }
   }
 
   async function handleCancel(invitationId: string) {
     if (!window.confirm('Bạn có chắc chắn muốn hủy lời mời này?')) return;
+    setBusyAction(`${invitationId}:cancel`);
     clearApiCache('/api/v1/invitations');
-    const res = await apiFetch(`/api/v1/invitations/${invitationId}`, { method: 'DELETE' });
-    if (res.ok) {
-      showToast('success', 'Đã hủy lời mời thành công.');
-      loadInvitations();
-    } else {
-      showToast('error', res.error?.message || 'Lỗi hủy lời mời');
+    try {
+      const res = await apiFetch(`/api/v1/invitations/${invitationId}`, { method: 'DELETE' });
+      if (res.ok) {
+        showToast('success', 'Đã hủy lời mời thành công.');
+        loadInvitations();
+      } else {
+        showToast('error', res.error?.message || 'Lỗi hủy lời mời');
+      }
+    } finally {
+      setBusyAction(null);
     }
   }
 
@@ -196,16 +207,18 @@ export default function AdminInvitationsPage() {
                             <div className="flex items-center justify-end gap-2">
                               <button
                                 onClick={() => handleResend(inv.id)}
-                                className="text-xs font-semibold text-[#2563EB] hover:underline"
+                                disabled={busyAction !== null}
+                                className="text-xs font-semibold text-[#2563EB] hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
                               >
-                                Gửi lại
+                                {busyAction === `${inv.id}:resend` ? 'Đang gửi...' : 'Gửi lại'}
                               </button>
                               <span className="text-slate-300">|</span>
                               <button
                                 onClick={() => handleCancel(inv.id)}
-                                className="text-xs font-semibold text-red-600 hover:underline"
+                                disabled={busyAction !== null}
+                                className="text-xs font-semibold text-red-600 hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
                               >
-                                Hủy
+                                {busyAction === `${inv.id}:cancel` ? 'Đang hủy...' : 'Hủy'}
                               </button>
                             </div>
                           )}

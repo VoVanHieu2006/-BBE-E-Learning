@@ -44,9 +44,7 @@ export async function sendInvitationEmail(params: SendInvitationEmailParams): Pr
           <!-- Header -->
           <tr>
             <td style="background: linear-gradient(135deg, #172554 0%, #2563EB 100%); padding: 36px 32px; text-align: center;">
-              <div style="width: 48px; height: 48px; background: #ffffff; border-radius: 12px; margin: 0 auto 12px auto; display: inline-flex; align-items: center; justify-content: center;">
-                <span style="font-size: 24px; font-weight: 800; color: #2563EB; line-height: 48px;">B</span>
-              </div>
+              <img src="${appUrl}/images/logo-white.png" width="48" height="48" alt="BBE E-Learning" style="width: 48px; height: 48px; border-radius: 12px; margin: 0 auto 12px auto; display: block; object-fit: contain;" />
               <h1 style="color: #ffffff; font-size: 24px; font-weight: 700; margin: 0;">BBE E-Learning Platform</h1>
               <p style="color: #cbdbf5; font-size: 14px; margin: 6px 0 0 0;">Nền tảng đào tạo & phát triển nội bộ BBE</p>
             </td>
