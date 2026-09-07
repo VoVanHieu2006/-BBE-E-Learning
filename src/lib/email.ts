@@ -1,3 +1,5 @@
+import fs from 'fs'
+import path from 'path'
 import { Resend } from 'resend'
 
 const resendApiKey = process.env.RESEND_API_KEY
@@ -5,6 +7,20 @@ const emailFrom = process.env.EMAIL_FROM || 'onboarding@resend.dev'
 const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
 
 const resend = resendApiKey ? new Resend(resendApiKey) : null
+
+let logoBase64Cache: string | null | undefined
+
+/** Logo nhúng base64 để gửi inline qua CID (hiển thị được ở mọi mail client) */
+function getLogoBase64(): string | null {
+  if (logoBase64Cache !== undefined) return logoBase64Cache
+  try {
+    const logoPath = path.join(process.cwd(), 'public', 'images', 'logo-white.png')
+    logoBase64Cache = fs.readFileSync(logoPath).toString('base64')
+  } catch {
+    logoBase64Cache = null
+  }
+  return logoBase64Cache
+}
 
 export interface SendInvitationEmailParams {
   to: string
@@ -28,6 +44,9 @@ export async function sendInvitationEmail(params: SendInvitationEmailParams): Pr
   const inviteUrl = `${appUrl}/accept-invitation?token=${token}`
   const roleName = role === 'CHAPTER_LEADER' ? 'Trưởng Chapter (BĐHU)' : 'Thành viên học tập'
 
+  const logoBase64 = getLogoBase64()
+  const logoSrc = logoBase64 ? 'cid:bbe-logo-white' : `${appUrl}/images/logo-white.png`
+
   const html = `
 <!DOCTYPE html>
 <html>
@@ -44,7 +63,7 @@ export async function sendInvitationEmail(params: SendInvitationEmailParams): Pr
           <!-- Header -->
           <tr>
             <td style="background: linear-gradient(135deg, #172554 0%, #2563EB 100%); padding: 36px 32px; text-align: center;">
-              <img src="${appUrl}/images/logo-white.png" width="48" height="48" alt="BBE E-Learning" style="width: 48px; height: 48px; border-radius: 12px; margin: 0 auto 12px auto; display: block; object-fit: contain;" />
+              <img src="${logoSrc}" width="48" height="48" alt="BBE E-Learning" style="width: 48px; height: 48px; border-radius: 12px; margin: 0 auto 12px auto; display: block; object-fit: contain;" />
               <h1 style="color: #ffffff; font-size: 24px; font-weight: 700; margin: 0;">BBE E-Learning Platform</h1>
               <p style="color: #cbdbf5; font-size: 14px; margin: 6px 0 0 0;">Nền tảng đào tạo & phát triển nội bộ BBE</p>
             </td>
@@ -112,6 +131,9 @@ export async function sendInvitationEmail(params: SendInvitationEmailParams): Pr
       to: [to],
       subject: `[BBE E-Learning] Lời mời tham gia với vai trò ${roleName}`,
       html,
+      attachments: logoBase64
+        ? [{ filename: 'logo-white.png', content: logoBase64, contentType: 'image/png', contentId: 'bbe-logo-white' }]
+        : undefined,
     })
 
     if (error) {

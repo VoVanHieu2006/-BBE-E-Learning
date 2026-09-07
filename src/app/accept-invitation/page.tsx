@@ -105,7 +105,7 @@ function AcceptInvitationContent() {
 
   if (!token || invalidReason) {
     return (
-      <div className="bg-white rounded-3xl p-8 border border-[#eff4ff] shadow-lg text-center py-10 space-y-4">
+      <div className="bg-white rounded-3xl p-8 border border-[#eff4ff] shadow-lg text-center py-10 space-y-5">
         <div className="w-14 h-14 bg-red-50 border border-red-200 rounded-2xl flex items-center justify-center mx-auto text-2xl">
           ✕
         </div>
@@ -116,9 +116,11 @@ function AcceptInvitationContent() {
             Vui lòng liên hệ người gửi để nhận liên kết mời mới.
           </p>
         </div>
-        <Link href="/login">
-          <Button variant="outline">Về trang đăng nhập</Button>
-        </Link>
+        <div className="pt-3">
+          <Link href="/login">
+            <Button variant="outline">Về trang đăng nhập</Button>
+          </Link>
+        </div>
       </div>
     );
   }
