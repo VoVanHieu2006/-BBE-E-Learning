@@ -156,6 +156,9 @@ export async function sendPasswordResetEmail(params: SendPasswordResetEmailParam
   const { to, token, expiresAt } = params
   const resetUrl = `${appUrl}/reset-password?token=${token}`
 
+  const logoBase64 = getLogoBase64()
+  const logoSrc = logoBase64 ? 'cid:bbe-logo-white' : `${appUrl}/images/logo-white.png`
+
   const html = `
 <!DOCTYPE html>
 <html>
@@ -172,9 +175,7 @@ export async function sendPasswordResetEmail(params: SendPasswordResetEmailParam
           <!-- Header -->
           <tr>
             <td style="background: linear-gradient(135deg, #172554 0%, #2563EB 100%); padding: 36px 32px; text-align: center;">
-              <div style="width: 48px; height: 48px; background: #ffffff; border-radius: 12px; margin: 0 auto 12px auto; display: inline-flex; align-items: center; justify-content: center;">
-                <span style="font-size: 24px; font-weight: 800; color: #2563EB; line-height: 48px;">B</span>
-              </div>
+              <img src="${logoSrc}" width="48" height="48" alt="BBE E-Learning" style="width: 48px; height: 48px; border-radius: 12px; margin: 0 auto 12px auto; display: block; object-fit: contain;" />
               <h1 style="color: #ffffff; font-size: 24px; font-weight: 700; margin: 0;">Đặt lại mật khẩu</h1>
               <p style="color: #cbdbf5; font-size: 14px; margin: 6px 0 0 0;">BBE E-Learning Platform</p>
             </td>
@@ -237,6 +238,9 @@ export async function sendPasswordResetEmail(params: SendPasswordResetEmailParam
       to: [to],
       subject: '[BBE E-Learning] Yêu cầu đặt lại mật khẩu',
       html,
+      attachments: logoBase64
+        ? [{ filename: 'logo-white.png', content: logoBase64, contentType: 'image/png', contentId: 'bbe-logo-white' }]
+        : undefined,
     })
 
     if (error) {
