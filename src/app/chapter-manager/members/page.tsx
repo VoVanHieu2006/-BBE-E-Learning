@@ -8,9 +8,50 @@ import Modal from '@/components/ui/Modal';
 import { apiFetch, getCachedApiData, clearApiCache } from '@/lib/api/client';
 
 export default function ChapterManagerMembersPage() {
-  const [user, setUser] = useState<any>(null);
-  const [members, setMembers] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<any>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const u = localStorage.getItem('user');
+        return u ? JSON.parse(u) : null;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  });
+
+  const [members, setMembers] = useState<any[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const u = localStorage.getItem('user');
+        const parsed = u ? JSON.parse(u) : null;
+        const targetChapter = parsed?.chapterId || 'me';
+        const url = `/api/v1/chapters/${targetChapter}/dashboard/members?search=&includeInactive=1`;
+        const cached = getCachedApiData<any>(url);
+        return cached?.items || [];
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  });
+
+  const [loading, setLoading] = useState(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const u = localStorage.getItem('user');
+        const parsed = u ? JSON.parse(u) : null;
+        const targetChapter = parsed?.chapterId || 'me';
+        const url = `/api/v1/chapters/${targetChapter}/dashboard/members?search=&includeInactive=1`;
+        const cached = getCachedApiData<any>(url);
+        return !cached?.items;
+      } catch {
+        return true;
+      }
+    }
+    return true;
+  });
+
   const [search, setSearch] = useState('');
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
@@ -24,16 +65,18 @@ export default function ChapterManagerMembersPage() {
   };
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
+    let currentChapter = user?.chapterId;
+    if (!currentChapter && typeof window !== 'undefined') {
       const u = localStorage.getItem('user');
       if (u) {
         try {
           const parsed = JSON.parse(u);
           setUser(parsed);
-          loadMembers(parsed.chapterId, '');
+          currentChapter = parsed?.chapterId;
         } catch {}
       }
     }
+    loadMembers(currentChapter, search);
   }, []);
 
   async function loadMembers(chapterId?: string, query?: string, noCache = false) {
@@ -265,10 +308,13 @@ export default function ChapterManagerMembersPage() {
                           {m.completedCourses || 0} / {m.totalCourses || 0} khóa
                         </td>
                         <td className="px-6 py-4 text-center">
-                          <div className="flex items-center justify-center gap-2">
+                          <div className="flex flex-col items-center justify-center">
                             <span className="font-bold text-[#2563EB]">{m.avgProgress || 0}%</span>
+                            <span className="text-[11px] text-[#737686] mt-0.5">
+                              Đã học {m.completedLessons || 0} / {m.totalLessons || 0} bài
+                            </span>
                           </div>
-                          <div className="w-20 bg-slate-100 h-1.5 rounded-full mx-auto mt-1 overflow-hidden">
+                          <div className="w-20 bg-slate-100 h-1.5 rounded-full mx-auto mt-1.5 overflow-hidden">
                             <div
                               className="bg-[#2563EB] h-full rounded-full"
                               style={{ width: `${m.avgProgress || 0}%` }}

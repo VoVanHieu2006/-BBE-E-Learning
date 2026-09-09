@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { getPublishedSystemData, calculateBatchUsersProgress } from '@/lib/progress/calculator'
 import {
   getUserQueryCache,
   setUserQueryCache,
@@ -135,95 +136,20 @@ export async function GET(request: NextRequest) {
     getGlobalMetadata(),
   ])
 
-  const userIds = users.map((u) => u.id)
-  const totalPublishedCourses = publishedCourses.length
-
-  // Parallel fetch progress and quiz scores only for the current page of users
-  const [progressRecords, attempts] = await Promise.all([
-    userIds.length > 0
-      ? prisma.lessonProgress.findMany({
-          where: {
-            user_id: { in: userIds },
-            completed: true,
-          },
-          select: {
-            user_id: true,
-            lesson_id: true,
-          },
-        })
-      : [],
-    userIds.length > 0
-      ? prisma.attempt.findMany({
-          where: {
-            user_id: { in: userIds },
-            status: { in: ['SUBMITTED', 'AUTO_SUBMITTED'] },
-          },
-          select: {
-            user_id: true,
-            score: true,
-          },
-        })
-      : [],
-  ])
-
-  const completedSet = new Set(progressRecords.map((p) => `${p.user_id}:${p.lesson_id}`))
-
-  const userScoresMap = new Map<string, { total: number; count: number }>()
-  for (const a of attempts) {
-    const cur = userScoresMap.get(a.user_id) || { total: 0, count: 0 }
-    cur.total += Number(a.score || 0) * 100
-    cur.count += 1
-    userScoresMap.set(a.user_id, cur)
-  }
+  const sys = await getPublishedSystemData()
+  const memberUserIds = users.filter((u) => u.role !== 'CHAPTER_LEADER').map((u) => u.id)
+  const progressMap = await calculateBatchUsersProgress(memberUserIds, sys)
 
   const items = users.map((u) => {
     const isLeader = u.role === 'CHAPTER_LEADER'
-    let completedCoursesCount = 0
-    let totalProgressSum = 0
-    let completedLessonsCount = 0
+    const p = progressMap.get(u.id)
 
-    if (isLeader) {
-      // BĐHU has full progress (100%) to view all content and guide members
-      completedCoursesCount = totalPublishedCourses
-      totalProgressSum = totalPublishedCourses * 100
-      completedLessonsCount = publishedCourses.reduce(
-        (acc, c) => acc + c.sessions.reduce((sAcc: number, s: any) => sAcc + s.lessons.length, 0),
-        0
-      )
-    } else {
-      for (const course of publishedCourses) {
-        const lessonIds = course.sessions.flatMap((s: any) => s.lessons.map((l: any) => l.id))
-        if (lessonIds.length === 0) continue
-
-        let courseDoneLessons = 0
-        for (const lId of lessonIds) {
-          if (completedSet.has(`${u.id}:${lId}`)) {
-            courseDoneLessons++
-            completedLessonsCount++
-          }
-        }
-
-        const courseProgress = (courseDoneLessons / lessonIds.length) * 100
-        totalProgressSum += courseProgress
-
-        if (courseDoneLessons === lessonIds.length) {
-          completedCoursesCount++
-        }
-      }
-    }
-
-    const avgProgress = isLeader
-      ? 100
-      : totalPublishedCourses > 0
-      ? Math.round(totalProgressSum / totalPublishedCourses)
-      : 0
-
-    const scoreInfo = userScoresMap.get(u.id)
-    const avgScore = isLeader
-      ? 100
-      : scoreInfo && scoreInfo.count > 0
-      ? Math.round(scoreInfo.total / scoreInfo.count)
-      : 0
+    const completedCoursesCount = isLeader ? sys.totalCourses : (p?.completedCourses || 0)
+    const completedLessonsCount = isLeader ? sys.totalLessons : (p?.completedLessons || 0)
+    const avgProgress = isLeader ? 100 : (p?.overallProgressPercent || 0)
+    const avgCourseProgress = isLeader ? 100 : (p?.avgCourseProgressPercent || 0)
+    const avgScore = isLeader ? 100 : (p?.avgQuizScore || 0)
+    const leaderboardPoint = isLeader ? 100 : (p?.leaderboardPoint || 0)
 
     const primaryChapter = u.chapter_members?.[0]?.chapter
 
@@ -238,10 +164,13 @@ export async function GET(request: NextRequest) {
         ? { chapterId: primaryChapter.id, id: primaryChapter.id, name: primaryChapter.name }
         : null,
       completedCourses: completedCoursesCount,
-      totalCourses: totalPublishedCourses,
+      totalCourses: sys.totalCourses,
       completedLessons: completedLessonsCount,
+      totalLessons: sys.totalLessons,
       avgProgress,
+      avgCourseProgress,
       avgQuizScore: avgScore,
+      leaderboardPoint,
     }
   })
 
@@ -252,6 +181,8 @@ export async function GET(request: NextRequest) {
     page,
     limit,
     stats,
+    totalLessonsSystem: sys.totalLessons,
+    totalCoursesSystem: sys.totalCourses,
   }
 
   setUserQueryCache(cacheKey, responsePayload)

@@ -92,7 +92,7 @@ export async function POST(request: NextRequest) {
       .setIssuedAt()
       .sign(accessSecret)
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       accessToken,
       user: {
         id: user.id,
@@ -103,6 +103,19 @@ export async function POST(request: NextRequest) {
         chapterName: user.chapter_members?.[0]?.chapter?.name || null,
       },
     }, { status: 200 })
+
+    response.cookies.set('accessToken', accessToken, {
+      path: '/',
+      sameSite: 'lax',
+      maxAge: 15 * 60,
+    })
+    response.cookies.set('userRole', user.role, {
+      path: '/',
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60,
+    })
+
+    return response
   } catch (err: any) {
     return NextResponse.json(
       { error: { code: 'ServerError', message: err.message || 'Lỗi xử lý refresh token' } },

@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
     },
   })
 
-  return NextResponse.json({
+  const response = NextResponse.json({
     accessToken,
     refreshToken,
     user: {
@@ -102,4 +102,23 @@ export async function POST(request: NextRequest) {
       chapterName: user.chapter_members?.[0]?.chapter?.name || null,
     },
   }, { status: 200 })
+
+  // Set cookies for server middleware access
+  response.cookies.set('accessToken', accessToken, {
+    path: '/',
+    sameSite: 'lax',
+    maxAge: 15 * 60, // 15 minutes
+  })
+  response.cookies.set('userRole', user.role, {
+    path: '/',
+    sameSite: 'lax',
+    maxAge: 7 * 24 * 60 * 60,
+  })
+  response.cookies.set('refreshToken', refreshToken, {
+    path: '/',
+    sameSite: 'lax',
+    maxAge: 7 * 24 * 60 * 60,
+  })
+
+  return response
 }

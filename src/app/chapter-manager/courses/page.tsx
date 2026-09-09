@@ -13,9 +13,25 @@ const STATE_META: Record<string, { label: string; badge: string; bar: string }> 
 };
 
 export default function ChapterManagerCoursesPage() {
-  const [user, setUser] = useState<any>(null);
-  const [courses, setCourses] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<any>(() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      return JSON.parse(localStorage.getItem('user') || 'null');
+    } catch {
+      return null;
+    }
+  });
+
+  const [courses, setCourses] = useState<any[]>(() => {
+    if (typeof window === 'undefined') return [];
+    const u = (() => { try { return JSON.parse(localStorage.getItem('user') || 'null') } catch { return null } })();
+    const chapter = u?.chapterId || 'me';
+    const cached = getCachedApiData<any>(`/api/v1/chapters/${chapter}/dashboard/courses`) ||
+                   getCachedApiData<any>('/api/v1/chapters/me/dashboard/courses');
+    return cached?.items || [];
+  });
+
+  const [loading, setLoading] = useState(() => courses.length === 0);
 
   // Modal: Học viên của khóa
   const [studentsModal, setStudentsModal] = useState<any | null>(null);
@@ -46,14 +62,14 @@ export default function ChapterManagerCoursesPage() {
   }, []);
 
   async function loadCourses(noCache = false) {
-    setLoading(true);
-    const targetChapter = user?.chapterId || 'me';
+    const targetChapter = user?.chapterId || (typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user') || 'null')?.chapterId : null) || 'me';
     const url = `/api/v1/chapters/${targetChapter}/dashboard/courses`;
 
     const cached = noCache ? null : getCachedApiData<any>(url);
     if (cached?.items) {
       setCourses(cached.items);
-      setLoading(false);
+    } else {
+      setLoading(true);
     }
 
     const res = await apiFetch(url, { noCache });

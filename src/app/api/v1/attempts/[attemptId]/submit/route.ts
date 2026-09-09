@@ -17,15 +17,43 @@ export async function POST(request: NextRequest, { params }: { params: { attempt
   if (attempt.user_id !== userId) return NextResponse.json({ error: { code: 'AccessDenied' } }, { status: 403 })
   if (attempt.status !== 'IN_PROGRESS') return NextResponse.json({ error: { code: 'AttemptNotInProgress' } }, { status: 400 })
 
+  const body = await request.json().catch(() => ({}))
+  const clientAnswers = body?.answers || {}
+
+  // Upsert any answers submitted in body
+  if (clientAnswers && typeof clientAnswers === 'object') {
+    for (const [qId, optId] of Object.entries(clientAnswers)) {
+      if (optId && typeof optId === 'string') {
+        const opt = await prisma.questionOption.findUnique({ where: { id: optId } })
+        await prisma.attemptAnswer.upsert({
+          where: { attempt_id_question_id: { attempt_id: params.attemptId, question_id: qId } },
+          create: {
+            attempt_id: params.attemptId,
+            question_id: qId,
+            selected_option_id: optId,
+            is_correct: opt?.is_correct || false,
+            answered_at: new Date(),
+          },
+          update: {
+            selected_option_id: optId,
+            is_correct: opt?.is_correct || false,
+            answered_at: new Date(),
+          },
+        })
+      }
+    }
+  }
+
   // Calculate score
   const answers = await prisma.attemptAnswer.findMany({
     where: { attempt_id: params.attemptId },
-    include: { question: true },
+    include: { question: true, selected_option: true },
   })
 
   const allQuestions = await prisma.attemptQuestion.findMany({
     where: { attempt_id: params.attemptId },
-    include: { question: true },
+    include: { question: { include: { options: true } } },
+    orderBy: { display_order: 'asc' },
   })
 
   let totalPoints = 0
@@ -35,42 +63,48 @@ export async function POST(request: NextRequest, { params }: { params: { attempt
   }
 
   for (const ans of answers) {
-    const option = await prisma.questionOption.findUnique({ where: { id: ans.selected_option_id || '' } })
-    if (option && option.is_correct) {
+    const isCorrect = ans.selected_option?.is_correct || false
+    if (isCorrect) {
       score += Number(ans.question.points || 1)
+    }
+    // Update is_correct on attemptAnswer if not set
+    if (ans.is_correct !== isCorrect) {
+      await prisma.attemptAnswer.update({
+        where: { id: ans.id },
+        data: { is_correct: isCorrect },
+      })
     }
   }
 
-  const passed = totalPoints > 0 ? (score / totalPoints) >= 0.85 : false
+  const scoreRatio = totalPoints > 0 ? score / totalPoints : 0
+  const passed = scoreRatio >= 0.85
 
   await prisma.attempt.update({
     where: { id: params.attemptId },
-    data: { status: 'SUBMITTED', submitted_at: new Date(), score: score / totalPoints, passed },
+    data: { status: 'SUBMITTED', submitted_at: new Date(), score: scoreRatio, passed },
   })
 
-  // For response: always return isCorrect per question
-  // If passed=false, we still return isCorrect but NO explanation (BR-04: không lộ đáp án đúng)
-  const resultAnswers = await Promise.all(
-    answers.map(async (a) => {
-      const option = await prisma.questionOption.findUnique({ where: { id: a.selected_option_id || '' }, include: { question: { include: { options: true } } } })
-      const isCorrect = option?.is_correct || false
-      const correctOption = option?.question.options.find(o => o.is_correct) || null
-      return {
-        questionId: a.question_id,
-        isCorrect,
-        selectedOptionId: a.selected_option_id,
-        ...(passed ? {
-          correctOptionId: correctOption?.id || null,
-          // Ưu tiên explanation do Admin nhập cho từng câu hỏi (BR-04: chỉ hiện khi passed)
-          explanation: option?.question?.explanation || (correctOption ? `Đáp án đúng: ${correctOption.option_text}` : null),
-        } : {}),
-      }
-    })
-  )
+  // For response: return all attempt questions in order
+  const resultAnswers = allQuestions.map((aq) => {
+    const ans = answers.find((a) => a.question_id === aq.question_id)
+    const isCorrect = ans?.selected_option?.is_correct || false
+    const correctOption = aq.question.options.find((o) => o.is_correct) || null
+
+    return {
+      questionId: aq.question_id,
+      isCorrect,
+      selectedOptionId: ans?.selected_option_id || null,
+      ...(passed ? {
+        correctOptionId: correctOption?.id || null,
+        explanation: aq.question.explanation || (correctOption ? `Đáp án đúng: ${correctOption.option_text}` : null),
+      } : {}),
+    }
+  })
 
   return NextResponse.json({
     attemptId: attempt.id,
     score: Math.round(score),
+    scorePercent: Math.round(scoreRatio * 100),
     totalPoints,
     passed,
     answers: resultAnswers,

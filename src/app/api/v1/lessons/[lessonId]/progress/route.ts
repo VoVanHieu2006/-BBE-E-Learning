@@ -13,7 +13,6 @@ export async function PATCH(request: NextRequest, { params }: { params: { lesson
   const body = await request.json().catch(() => ({}))
   const positionSeconds = body.positionSeconds ?? body.currentPositionSeconds ?? body.position ?? 0
   const furthestWatchedPositionSeconds = body.furthestWatchedPositionSeconds ?? body.furthest ?? positionSeconds
-  const explicitCompleted = body.completed
 
   const lesson = await prisma.lesson.findUnique({
     where: { id: params.lessonId },
@@ -32,29 +31,34 @@ export async function PATCH(request: NextRequest, { params }: { params: { lesson
     where: { user_id_lesson_id: { user_id: (auth as any).context!.userId, lesson_id: params.lessonId } },
   })
 
-  // Prevent seeking ahead past the furthest watched point (exempt admins or small deltas)
+  // Anti-cheat tỉ lệ theo thời gian thực: furthest chỉ được tăng tối đa (25s + 2× thời gian thực trôi qua kể từ
+  // lần lưu trước). Người xem thật luôn pass — kể cả heartbeat thưa do Chrome throttle timer khi tab ẩn, kể cả
+  // tốc độ 2x; còn gọi API trực tiếp để nhảy cóc thì không thể nhanh hơn thời gian đã chờ (≈ thời gian xem).
+  // `completed` chỉ được bật khi tiến độ sau kẹp (clamp) thực sự ≥ 85% (hoặc đã hoàn thành từ trước).
   const currentFurthest = existing?.furthest_watched_position_seconds || 0
-  const isAdmin = (auth as any).context!.role === 'ADMIN'
-  if (!isAdmin && existing && (positionSeconds > currentFurthest + 25 || furthestWatchedPositionSeconds > currentFurthest + 30)) {
-    return NextResponse.json({
-      error: { code: 'SeekAheadNotAllowed', message: 'Không được tua tới phần chưa xem' },
-    }, { status: 400 })
-  }
-
-  const newFurthest = Math.max(currentFurthest, Number(furthestWatchedPositionSeconds), Number(positionSeconds))
-
+  const role = (auth as any).context!.role
+  const seekExempt = role === 'ADMIN' || role === 'CHAPTER_LEADER'
   const duration = lesson.video.duration_seconds || 1
+
+  const elapsedSec = existing?.last_watched_at
+    ? Math.min(Math.max((Date.now() - new Date(existing.last_watched_at).getTime()) / 1000, 0), 3600)
+    : 0
+  const cap = seekExempt ? Number.MAX_SAFE_INTEGER : currentFurthest + 25 + 2 * elapsedSec
+  const requestedFurthest = Math.max(Number(positionSeconds) || 0, Number(furthestWatchedPositionSeconds) || 0)
+  const newFurthest = Math.max(currentFurthest, Math.min(requestedFurthest, cap))
+  const clampedPosition = Math.min(Number(positionSeconds) || 0, newFurthest)
+
   const progressPercentage = duration > 0
     ? Math.min(100, (newFurthest / duration) * 100)
     : 0
 
-  const completed = explicitCompleted === true || progressPercentage >= 85 || (existing?.completed ?? false)
+  const completed = progressPercentage >= 85 || (existing?.completed ?? false)
   const completed_at = completed ? (existing?.completed_at || new Date()) : null
 
   const updated = await prisma.lessonProgress.upsert({
     where: { user_id_lesson_id: { user_id: (auth as any).context!.userId, lesson_id: params.lessonId } },
     update: {
-      last_position_seconds: Math.floor(positionSeconds),
+      last_position_seconds: Math.floor(clampedPosition),
       furthest_watched_position_seconds: Math.floor(newFurthest),
       last_watched_at: new Date(),
       completed,
@@ -63,7 +67,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { lesson
     create: {
       user_id: (auth as any).context!.userId,
       lesson_id: params.lessonId,
-      last_position_seconds: Math.floor(positionSeconds),
+      last_position_seconds: Math.floor(clampedPosition),
       furthest_watched_position_seconds: Math.floor(newFurthest),
       last_watched_at: new Date(),
       completed,

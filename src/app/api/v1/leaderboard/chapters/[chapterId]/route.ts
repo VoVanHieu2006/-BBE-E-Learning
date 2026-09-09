@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { getPublishedSystemData, calculateBatchUsersProgress } from '@/lib/progress/calculator'
 
 /**
  * GET /api/v1/leaderboard/chapters/[chapterId]
@@ -31,38 +32,23 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
   })
 
   const memberIds = members.map((m) => m.id)
+  const sys = await getPublishedSystemData()
+  const progressMap = await calculateBatchUsersProgress(memberIds, sys)
 
-  const [totalLessonsCount, completedGroups] = await Promise.all([
-    prisma.lesson.count({ where: { session: { course: { status: 'PUBLISHED' } } } }),
-    prisma.lessonProgress.groupBy({
-      by: ['user_id'],
-      where: { user_id: { in: memberIds }, completed: true },
-      _count: { _all: true },
-    }),
-  ])
-
-  const totalLessons = totalLessonsCount || 1
-  const completedMap = new Map(completedGroups.map((g) => [g.user_id, g._count._all]))
-
-  // Cùng công thức với global: 40% tiến độ khóa học + 60% điểm quiz trung bình
   const results = members.map((m) => {
-    const completedLessons = completedMap.get(m.id) || 0
-    const courseProgress = Math.min(100, Math.round((completedLessons / totalLessons) * 100))
-
-    let totalScore = 0
-    let attemptCount = 0
-    for (const attempt of m.attempts) {
-      totalScore += Number(attempt.score || 0) * 100
-      attemptCount++
-    }
-    const avgScore = attemptCount > 0 ? Math.round(totalScore / attemptCount) : 0
-
-    const leaderboardPoint = Math.round(courseProgress * 0.4 + avgScore * 0.6)
+    const p = progressMap.get(m.id)
+    const completedLessons = p?.completedLessons || 0
+    const courseProgress = p?.overallProgressPercent || 0
+    const avgScore = p?.avgQuizScore || 0
+    const leaderboardPoint = p?.leaderboardPoint || 0
 
     return {
       userId: m.id,
       email: m.email,
       completedLessons,
+      totalLessons: sys.totalLessons,
+      completedCourses: p?.completedCourses || 0,
+      totalCourses: sys.totalCourses,
       courseProgress,
       avgScore,
       leaderboardPoint,

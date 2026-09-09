@@ -13,6 +13,12 @@ export async function GET(request: NextRequest, { params }: { params: { attemptI
   const status = attempt.status
   if (status !== 'SUBMITTED' && status !== 'AUTO_SUBMITTED') return NextResponse.json({ error: { code: 'AttemptNotSubmitted', message: 'Chưa nộp bài' } }, { status: 400 })
 
+  const allAttemptQuestions = await prisma.attemptQuestion.findMany({
+    where: { attempt_id: params.attemptId },
+    include: { question: { include: { options: true } } },
+    orderBy: { display_order: 'asc' },
+  })
+
   const answers = await prisma.attemptAnswer.findMany({
     where: { attempt_id: params.attemptId },
     include: { question: true, selected_option: true },
@@ -20,20 +26,21 @@ export async function GET(request: NextRequest, { params }: { params: { attemptI
 
   const passed = attempt.passed || false
 
-  const answerResults = await Promise.all(
-    answers.map(async (ans) => {
-      const isCorrect = ans.is_correct || (ans.selected_option?.is_correct || false)
-      return {
-        questionId: ans.question_id,
-        isCorrect,
-        selectedOptionId: ans.selected_option_id,
-        ...(passed ? {
-          correctOptionId: (await prisma.questionOption.findFirst({ where: { question_id: ans.question_id, is_correct: true } }))?.id || null,
-          explanation: ans.question.explanation || null,
-        } : {}),
-      }
-    })
-  )
+  const answerResults = allAttemptQuestions.map((aq) => {
+    const ans = answers.find((a) => a.question_id === aq.question_id)
+    const isCorrect = ans?.is_correct || (ans?.selected_option?.is_correct || false)
+    const correctOption = aq.question.options.find((o) => o.is_correct) || null
+
+    return {
+      questionId: aq.question_id,
+      isCorrect,
+      selectedOptionId: ans?.selected_option_id || null,
+      ...(passed ? {
+        correctOptionId: correctOption?.id || null,
+        explanation: aq.question.explanation || (correctOption ? `Đáp án đúng: ${correctOption.option_text}` : null),
+      } : {}),
+    }
+  })
 
   return NextResponse.json({
     attemptId: attempt.id,

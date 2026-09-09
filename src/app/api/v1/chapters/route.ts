@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
   const [items, totalItems] = await Promise.all([
     prisma.chapter.findMany({
       include: {
-        _count: { select: { chapter_members: { where: { user: { status: 'ACTIVE' } } } } },
+        _count: { select: { chapter_members: { where: { user: { status: 'ACTIVE', role: 'MEMBER' } } } } },
       },
       orderBy: { created_at: 'desc' },
       skip, take: limit,

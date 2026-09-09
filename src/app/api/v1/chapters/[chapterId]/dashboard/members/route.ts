@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { getPublishedSystemData, calculateBatchUsersProgress } from '@/lib/progress/calculator'
 
 /**
  * GET /api/v1/chapters/[chapterId]/dashboard/members
@@ -42,15 +43,17 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
     ...(includeInactive ? {} : { status: 'ACTIVE' }),
     ...(search ? { email: { contains: search, mode: 'insensitive' } } : {}),
   }
-  // Chỉ tính thành viên học tập (MEMBER); tài khoản BĐHU không tính vào số thành viên chapter
-  if ((auth as any).context!.role !== 'ADMIN') userFilter.role = 'MEMBER'
+  // Chỉ tính thành viên học tập (MEMBER); tài khoản BĐHU (CHAPTER_LEADER / ADMIN) không tính vào tiến trình thành viên chapter
+  userFilter.role = 'MEMBER'
 
   const where: any = {
     chapter_id: chapterId,
     user: userFilter,
   }
 
-  const [members, totalItems, publishedCourses] = await Promise.all([
+  const sys = await getPublishedSystemData()
+
+  const [members, totalItems] = await Promise.all([
     prisma.chapterMember.findMany({
       where,
       include: {
@@ -69,66 +72,13 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
       take: limit,
     }),
     prisma.chapterMember.count({ where }),
-    prisma.course.findMany({
-      where: { status: 'PUBLISHED' },
-      select: {
-        id: true,
-        sessions: {
-          select: {
-            lessons: { select: { id: true } },
-          },
-        },
-      },
-    }),
   ])
 
   const memberUserIds = members.map((m) => m.user.id)
-  const totalPublishedCourses = publishedCourses.length
-
-  // Batch query all completed progresses for these members in ONE query
-  const allCompletedProgress = memberUserIds.length > 0
-    ? await prisma.lessonProgress.findMany({
-        where: {
-          user_id: { in: memberUserIds },
-          completed: true,
-        },
-        select: {
-          user_id: true,
-          lesson_id: true,
-        },
-      })
-    : []
-
-  // Build lookup set: "userId:lessonId"
-  const completedSet = new Set(allCompletedProgress.map((p) => `${p.user_id}:${p.lesson_id}`))
+  const progressMap = await calculateBatchUsersProgress(memberUserIds, sys)
 
   const items = members.map((m) => {
-    const userId = m.user.id
-    let completedCoursesCount = 0
-    let completedLessonsTotal = 0
-    let totalProgressSum = 0
-
-    for (const course of publishedCourses) {
-      const lessonIds = course.sessions.flatMap((s) => s.lessons.map((l) => l.id))
-      if (lessonIds.length === 0) continue
-
-      let completedLessonsCount = 0
-      for (const lId of lessonIds) {
-        if (completedSet.has(`${userId}:${lId}`)) {
-          completedLessonsCount++
-        }
-      }
-
-      const progressPercent = (completedLessonsCount / lessonIds.length) * 100
-      totalProgressSum += progressPercent
-      completedLessonsTotal += completedLessonsCount
-
-      if (completedLessonsCount === lessonIds.length) {
-        completedCoursesCount++
-      }
-    }
-
-    const avgProgress = totalPublishedCourses > 0 ? Math.round(totalProgressSum / totalPublishedCourses) : 0
+    const p = progressMap.get(m.user.id)
 
     return {
       userId: m.user.id,
@@ -137,10 +87,14 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
       role: m.user.role,
       status: m.user.status,
       joinedAt: m.joined_at,
-      completedCourses: completedCoursesCount,
-      totalCourses: totalPublishedCourses,
-      completedLessons: completedLessonsTotal,
-      avgProgress,
+      completedCourses: p?.completedCourses || 0,
+      totalCourses: sys.totalCourses,
+      completedLessons: p?.completedLessons || 0,
+      totalLessons: sys.totalLessons,
+      avgProgress: p?.overallProgressPercent || 0,
+      avgCourseProgress: p?.avgCourseProgressPercent || 0,
+      avgQuizScore: p?.avgQuizScore || 0,
+      leaderboardPoint: p?.leaderboardPoint || 0,
     }
   })
 
@@ -150,5 +104,7 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
     totalPages: Math.ceil(totalItems / limit),
     page,
     limit,
+    totalLessonsSystem: sys.totalLessons,
+    totalCoursesSystem: sys.totalCourses,
   }, { status: 200 })
 }

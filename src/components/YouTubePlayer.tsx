@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { apiFetch } from '@/lib/api/client';
 
 declare global {
   interface Window {
@@ -69,17 +70,27 @@ export default function YouTubePlayer({
   const [isCompleted, setIsCompleted] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [videoError, setVideoError] = useState('');
+  const [chromeFlash, setChromeFlash] = useState(true);
 
   const furthestRef = useRef(initialFurthest);
   const durationRef = useRef(durationSeconds || 0);
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const uiTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const controlsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const chromeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const completedFiredRef = useRef(false);
+
+  // Giữ lớp che chrome YouTube trong 5s sau khi play/seek (chrome loé lên rồi tự ẩn)
+  const flashChrome = () => {
+    setChromeFlash(true);
+    if (chromeTimerRef.current) clearTimeout(chromeTimerRef.current);
+    chromeTimerRef.current = setTimeout(() => setChromeFlash(false), 5000);
+  };
 
   const isGuest = !accessToken;
 
   // Send heartbeat progress update to server (only for logged-in members)
+  // Dùng apiFetch để tự refresh token khi 401 — tránh mất tiến trình khi access token hết hạn (15 phút)
   const sendProgress = useCallback(
     async (ct: number, ft: number, forceCompleted: boolean = false) => {
       if (!accessToken) return;
@@ -87,12 +98,8 @@ export default function YouTubePlayer({
         const d = durationRef.current || duration || 1;
         const isDone = forceCompleted || (d > 0 && ft / d >= 0.85);
 
-        await fetch(`/api/v1/lessons/${lessonId}/progress`, {
+        await apiFetch(`/api/v1/lessons/${lessonId}/progress`, {
           method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${accessToken}`,
-          },
           body: JSON.stringify({
             positionSeconds: Math.round(ct),
             furthestWatchedPositionSeconds: Math.round(ft),
@@ -148,6 +155,7 @@ export default function YouTubePlayer({
             modestbranding: 1,
             rel: 0,
             iv_load_policy: 3,
+            cc_load_policy: 0,
             fs: 0,
             playsinline: 1,
             enablejsapi: 1,
@@ -157,6 +165,11 @@ export default function YouTubePlayer({
             onReady: (e: any) => {
               if (unmounted) return;
               setIsReady(true);
+              // Tắt phụ đề mặc định (cc_load_policy=0 không đủ với một số video)
+              try {
+                e.target.unloadModule?.('captions');
+                e.target.setOption?.('captions', 'track', {});
+              } catch {}
               const d = e.target.getDuration() || durationSeconds;
               if (d > 0) {
                 setDuration(d);
@@ -164,6 +177,7 @@ export default function YouTubePlayer({
               }
               if (initialPosition > 0) {
                 e.target.seekTo(initialPosition, true);
+                flashChrome();
               }
               if (pendingPlayRef.current) {
                 pendingPlayRef.current = false;
@@ -176,12 +190,22 @@ export default function YouTubePlayer({
               if (unmounted) return;
               if (e.data === YT_PLAYING) {
                 setIsPlaying(true);
+                flashChrome();
+                // Đảm bảo phụ đề không tự bật khi phát
+                try {
+                  e.target.unloadModule?.('captions');
+                } catch {}
                 startUiTimer();
                 startHeartbeat();
               } else if (e.data === YT_PAUSED) {
                 setIsPlaying(false);
                 stopUiTimer();
                 stopHeartbeat();
+                if (chromeTimerRef.current) clearTimeout(chromeTimerRef.current);
+                // Phòng phụ đề bật lại khi tạm dừng
+                try {
+                  e.target.unloadModule?.('captions');
+                } catch {}
                 const ct = playerRef.current?.getCurrentTime?.() || 0;
                 sendProgress(ct, furthestRef.current);
               } else if (e.data === YT_ENDED) {
@@ -197,6 +221,12 @@ export default function YouTubePlayer({
                   sendProgress(d, d, true);
                   onComplete?.();
                 }
+                // Quay về đầu thay vì hiện màn hình đề xuất video của YouTube
+                try {
+                  playerRef.current?.seekTo?.(0, true);
+                  playerRef.current?.pauseVideo?.();
+                } catch {}
+                setCurrentTime(0);
               }
             },
             onError: (e: any) => {
@@ -255,6 +285,7 @@ export default function YouTubePlayer({
       if (poller) clearInterval(poller);
       stopHeartbeat();
       stopUiTimer();
+      if (chromeTimerRef.current) clearTimeout(chromeTimerRef.current);
       try {
         playerRef.current?.destroy?.();
       } catch {}
@@ -324,9 +355,11 @@ export default function YouTubePlayer({
     const guard = setInterval(() => {
       try {
         const ct = playerRef.current?.getCurrentTime?.() || 0;
-        if (ct > furthestRef.current + 6) {
+        // BR-03: Client seek-lock: buffer 5s (tránh kích hoạt YouTube OSD/logo khi xem tốc độ 2x)
+        if (ct > furthestRef.current + 5) {
           playerRef.current?.seekTo?.(furthestRef.current, true);
           setCurrentTime(furthestRef.current);
+          flashChrome();
         }
       } catch {}
     }, 500);
@@ -357,10 +390,11 @@ export default function YouTubePlayer({
     const targetTime = pos * duration;
 
     // BR-03: Member can only seek backwards or up to furthest watched position, UNLESS allowFreeSeek or isGuest
-    if (allowFreeSeek || isGuest || targetTime <= furthestRef.current + 3) {
+    if (allowFreeSeek || isGuest || targetTime <= furthestRef.current) {
       try {
         playerRef.current.seekTo(targetTime, true);
         setCurrentTime(targetTime);
+        flashChrome();
       } catch {}
     }
   };
@@ -402,8 +436,8 @@ export default function YouTubePlayer({
         isFullscreen ? 'rounded-none max-h-screen' : 'rounded-3xl'
       }`}
     >
-      {/* YouTube Player Native Container */}
-      <div ref={containerRef} className="w-full h-full pointer-events-none" />
+      {/* YouTube Player Native Container (phóng nhẹ 1.05 để đưa dải watermark/logo sát mép ngoài vùng hiển thị) */}
+      <div ref={containerRef} className="w-full h-full pointer-events-none scale-[1.05] origin-center" />
 
       {/* Loading Skeleton */}
       {!isReady && !videoError && (
@@ -434,6 +468,29 @@ export default function YouTubePlayer({
         <div onClick={togglePlay} className="absolute inset-0 cursor-pointer z-10" />
       )}
 
+      {/* Khi video dừng: phủ kín toàn bộ khung — che sạch tiêu đề/share/chi tiết/logo/đề xuất/phụ đề */}
+      {!videoError && isReady && !isPlaying && (
+        <div className="absolute inset-0 z-[6] pointer-events-none bg-black flex flex-col items-center justify-center gap-3">
+          <span className="w-16 h-16 rounded-full bg-[#2563EB] text-white text-2xl flex items-center justify-center shadow-2xl border-2 border-white/30">
+            ▶
+          </span>
+          <span className="text-white text-xs font-semibold opacity-90">Bấm để phát</span>
+        </div>
+      )}
+
+      {/* Khi đang phát: che chrome YouTube loé lên trong 5s đầu sau khi play/seek */}
+      {!videoError && isReady && isPlaying && chromeFlash && (
+        <>
+          <div className="absolute top-0 inset-x-0 h-20 z-[5] pointer-events-none bg-gradient-to-b from-black from-50% via-black/80 via-78% to-transparent" />
+          <div className="absolute bottom-0 inset-x-0 h-16 z-[5] pointer-events-none bg-gradient-to-t from-black from-65% via-black/90 via-82% to-transparent" />
+        </>
+      )}
+
+      {/* Sau 5s: dải che đáy cố định (h-14, gradient đen đậm) — che sạch logo YouTube/teaser gợi ý khi đang phát */}
+      {!videoError && isReady && isPlaying && !chromeFlash && (
+        <div className="absolute bottom-0 inset-x-0 h-14 z-[5] pointer-events-none bg-gradient-to-t from-black from-60% via-black/90 via-80% to-transparent" />
+      )}
+
       {/* Completion Banner (only for logged-in accounts) */}
       {!isGuest && isCompleted && (
         <div className="absolute top-4 left-4 z-20 bg-green-900/90 border border-green-500/40 text-white px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-lg backdrop-blur-sm animate-fade-in">
@@ -444,7 +501,7 @@ export default function YouTubePlayer({
       {/* Custom Video Controls Bar */}
       {!videoError && isReady && (
         <div
-          className={`absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/95 via-black/60 to-transparent p-4 z-30 transition-opacity duration-300 ${
+          className={`absolute bottom-0 inset-x-0 bg-gradient-to-t from-black from-65% via-black/90 via-85% to-transparent p-4 z-30 transition-opacity duration-300 ${
             showControls || !isPlaying ? 'opacity-100' : 'opacity-0 pointer-events-none'
           }`}
         >
@@ -452,7 +509,7 @@ export default function YouTubePlayer({
           <div
             onClick={handleSeek}
             className="relative h-2 bg-white/20 rounded-full cursor-pointer mb-3 group/timeline overflow-hidden"
-            title={canSeekFree ? 'Bấm để tua video' : 'Thành viên chỉ được tua trong đoạn đã xem (BR-03)'}
+            title={canSeekFree ? 'Bấm để tua video' : 'Chỉ có thể tua trong đoạn đã xem'}
           >
             {/* Furthest Watched Bar (Allowed Seek Range for Members) */}
             <div
@@ -483,11 +540,11 @@ export default function YouTubePlayer({
 
               {canSeekFree ? (
                 <span className="text-[10px] text-amber-300 font-normal px-2 py-0.5 bg-amber-900/40 rounded-full">
-                  {isGuest ? 'Khách (Tự do tua)' : 'Quản trị (Tự do tua)'}
+                  Có thể tua
                 </span>
               ) : (
                 <span className="text-[10px] text-slate-400 font-normal px-2 py-0.5 bg-slate-800/60 rounded-full hidden sm:inline">
-                  Chống tua gian lận (BR-03)
+                  Không thể tua
                 </span>
               )}
             </div>

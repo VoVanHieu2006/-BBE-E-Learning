@@ -57,8 +57,8 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
       if (courseId) {
         const [courseRes, progListRes, lessonProgRes] = await Promise.all([
           apiFetch(`/api/v1/courses/${courseId}`),
-          activeToken ? apiFetch(`/api/v1/courses/${courseId}/my-progress`) : Promise.resolve<ApiResponse<any>>({ ok: false, status: 0 }),
-          activeToken ? apiFetch(`/api/v1/lessons/${lessonId}/progress`) : Promise.resolve<ApiResponse<any>>({ ok: false, status: 0 }),
+          activeToken ? apiFetch(`/api/v1/courses/${courseId}/my-progress`, { noCache: true }) : Promise.resolve<ApiResponse<any>>({ ok: false, status: 0 }),
+          activeToken ? apiFetch(`/api/v1/lessons/${lessonId}/progress`, { noCache: true }) : Promise.resolve<ApiResponse<any>>({ ok: false, status: 0 }),
         ]);
 
         if (courseRes.ok && courseRes.data) {
@@ -100,7 +100,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
     const activeToken = token || (typeof window !== 'undefined' ? localStorage.getItem('accessToken') : '') || '';
     const [lessonRes, lessonProgRes] = await Promise.all([
       apiFetch(`/api/v1/lessons/${newLessonId}`),
-      activeToken ? apiFetch(`/api/v1/lessons/${newLessonId}/progress`) : Promise.resolve<ApiResponse<any>>({ ok: false, status: 0 }),
+      activeToken ? apiFetch(`/api/v1/lessons/${newLessonId}/progress`, { noCache: true }) : Promise.resolve<ApiResponse<any>>({ ok: false, status: 0 }),
     ]);
 
     if (lessonRes.ok && lessonRes.data) {
@@ -134,12 +134,25 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
         watchedUntil: furthest,
       }));
 
+      // Đánh dấu bài hiện tại hoàn thành ngay trong courseProgress (chỉ tăng đếm 1 lần duy nhất)
       if (res.data.completed) {
         setCourseProgress((prev: any) => {
           if (!prev) return prev;
+          let wasDone = false;
+          const sessions = (prev.sessions || []).map((ps: any) => ({
+            ...ps,
+            lessons: (ps.lessons || []).map((pl: any) => {
+              if (pl.lessonId !== currentLessonId) return pl;
+              wasDone = Boolean(pl.completed);
+              return { ...pl, completed: true };
+            }),
+          }));
           return {
             ...prev,
-            completedLessons: Math.min((prev.completedLessons || 0) + 1, prev.totalLessons || 1),
+            sessions,
+            completedLessons: wasDone
+              ? prev.completedLessons
+              : Math.min((prev.completedLessons || 0) + 1, prev.totalLessons || (prev.completedLessons || 0) + 1),
           };
         });
       }
@@ -148,20 +161,43 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
 
   async function handleDownload(documentId: string, fileName: string) {
     setDownloadLoading(documentId);
-    const res = await apiFetch(`/api/v1/documents/${documentId}/download`);
-    if (res.ok && res.data?.downloadUrl) {
-      const link = document.createElement('a');
-      link.href = res.data.downloadUrl;
-      link.download = fileName;
-      link.target = '_blank';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      showToast('success', `Đang tải xuống tài liệu "${fileName}"`);
-    } else {
-      showToast('error', res.error?.message || 'Không thể tải xuống tài liệu.');
+    try {
+      const res = await apiFetch(`/api/v1/documents/${documentId}/download`);
+      if (!res.ok || !res.data?.downloadUrl) {
+        throw new Error(res.error?.message || 'Không thể tải xuống tài liệu.');
+      }
+
+      try {
+        // Ưu tiên tải dạng blob cùng nguồn để xác nhận được kết quả thật
+        // (tránh trình duyệt chặn tab mới / bỏ qua thuộc tính download cross-origin).
+        const fileRes = await fetch(res.data.downloadUrl);
+        if (!fileRes.ok) throw new Error('fetch-failed');
+        const blob = await fileRes.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
+        showToast('success', `Đã tải xuống tài liệu "${fileName}"`);
+      } catch {
+        // Bucket R2 chưa cấu hình CORS → fetch bị chặn. Dùng điều hướng tải trực tiếp
+        // (top-level navigation không chịu CORS, dựa vào Content-Disposition của R2).
+        const link = document.createElement('a');
+        link.href = res.data.downloadUrl;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        showToast('info', `Đang tải xuống tài liệu "${fileName}"`);
+      }
+    } catch (e: any) {
+      showToast('error', e?.message || 'Không thể tải xuống tài liệu.');
+    } finally {
+      setDownloadLoading(null);
     }
-    setDownloadLoading(null);
   }
 
   const toggleSession = (sessionId: string) => {
@@ -292,7 +328,11 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                 youtubeVideoId={lesson.video.youtubeVideoId}
                 accessToken={token}
                 allowFreeSeek={allowFreeSeek}
-                initialPosition={progress?.lastPosition || 0}
+                initialPosition={
+                  progress?.completed && (progress?.lastPosition || 0) >= (lesson.video.durationSeconds || 0) - 5
+                    ? 0
+                    : progress?.lastPosition || 0
+                }
                 initialFurthest={progress?.watchedUntil || progress?.furthestWatchedPositionSeconds || 0}
                 durationSeconds={lesson.video.durationSeconds || 120}
                 onProgress={(p) => handleProgress(p.currentTime, p.furthest)}
@@ -499,11 +539,11 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                               }`}
                             >
                               {/* Status Icon */}
-                              <span className="mt-0.5 shrink-0 text-sm">
+                              <span className="mt-0.5 shrink-0 text-sm" title={isLessonDone ? 'Đã hoàn thành' : undefined}>
                                 {isCurrent ? (
-                                  <span className="text-[#2563EB] font-bold">▶</span>
+                                  <span className={`font-bold ${isLessonDone ? 'text-emerald-600' : 'text-[#2563EB]'}`}>▶</span>
                                 ) : isLessonDone ? (
-                                  <span className="text-emerald-600 font-bold">✓</span>
+                                  <span className="w-4 h-4 rounded-full bg-emerald-500 text-white text-[10px] font-bold flex items-center justify-center">✓</span>
                                 ) : (
                                   <span className="text-slate-300">○</span>
                                 )}

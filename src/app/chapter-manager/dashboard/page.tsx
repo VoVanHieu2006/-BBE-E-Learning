@@ -5,10 +5,32 @@ import Card from '@/components/ui/Card';
 import { apiFetch, getCachedApiData } from '@/lib/api/client';
 
 export default function ChapterManagerDashboard() {
-  const [user, setUser] = useState<any>(null);
-  const [membersData, setMembersData] = useState<any>(null);
-  const [coursesData, setCoursesData] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<any>(() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      return JSON.parse(localStorage.getItem('user') || 'null');
+    } catch {
+      return null;
+    }
+  });
+
+  const [membersData, setMembersData] = useState<any>(() => {
+    if (typeof window === 'undefined') return null;
+    const u = (() => { try { return JSON.parse(localStorage.getItem('user') || 'null') } catch { return null } })();
+    const chapter = u?.chapterId || 'me';
+    return getCachedApiData<any>(`/api/v1/chapters/${chapter}/dashboard/members`) ||
+           getCachedApiData<any>('/api/v1/chapters/me/dashboard/members');
+  });
+
+  const [coursesData, setCoursesData] = useState<any>(() => {
+    if (typeof window === 'undefined') return null;
+    const u = (() => { try { return JSON.parse(localStorage.getItem('user') || 'null') } catch { return null } })();
+    const chapter = u?.chapterId || 'me';
+    return getCachedApiData<any>(`/api/v1/chapters/${chapter}/dashboard/courses`) ||
+           getCachedApiData<any>('/api/v1/chapters/me/dashboard/courses');
+  });
+
+  const [loading, setLoading] = useState(() => !membersData && !coursesData);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -24,8 +46,7 @@ export default function ChapterManagerDashboard() {
   }, []);
 
   async function loadDashboard(chapterId?: string, noCache = false) {
-    setLoading(true);
-    const targetChapter = chapterId || 'me';
+    const targetChapter = chapterId || user?.chapterId || 'me';
     const membersUrl = `/api/v1/chapters/${targetChapter}/dashboard/members`;
     const coursesUrl = `/api/v1/chapters/${targetChapter}/dashboard/courses`;
 
@@ -35,7 +56,8 @@ export default function ChapterManagerDashboard() {
       const cachedCourses = getCachedApiData<any>(coursesUrl);
       if (cachedMembers) setMembersData(cachedMembers);
       if (cachedCourses) setCoursesData(cachedCourses);
-      if (cachedMembers || cachedCourses) setLoading(false);
+    } else {
+      setLoading(true);
     }
 
     const [membersRes, coursesRes] = await Promise.all([

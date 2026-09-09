@@ -1,16 +1,27 @@
 'use client';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import Sidebar from '@/components/layout/Sidebar';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
-import { apiFetch } from '@/lib/api/client';
+import { apiFetch, getCachedApiData } from '@/lib/api/client';
 
 export default function StudentCoursesPage() {
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<any>(() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      return JSON.parse(localStorage.getItem('user') || 'null');
+    } catch {
+      return null;
+    }
+  });
+
+  const [courses, setCourses] = useState<any[]>(() => {
+    const cached = getCachedApiData<any>('/api/v1/courses');
+    return cached?.items || [];
+  });
+
+  const [loading, setLoading] = useState(() => courses.length === 0);
   const [mounted, setMounted] = useState(false);
-  const [courses, setCourses] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     setMounted(true);
@@ -34,18 +45,16 @@ export default function StudentCoursesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f8f9ff] flex flex-col">
-      {/* If logged in: Show Sidebar */}
+    <div className="w-full">
+      {/* If logged in: content fits in StudentLayout */}
       {mounted && user ? (
-        <div className="flex flex-1">
-          <Sidebar role={user.role} user={{ email: user.email, chapterName: user.chapterName }} />
-          <main className="ml-64 flex-1 max-w-5xl mx-auto px-8 py-10">
-            <div className="mb-8">
-              <h1 className="text-3xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
-                Danh mục khóa học
-              </h1>
-              <p className="text-[#737686] mt-1">Các khóa học được thiết kế dành cho thành viên BBE</p>
-            </div>
+        <div className="w-full">
+          <div className="mb-8">
+            <h1 className="text-3xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
+              Danh mục khóa học
+            </h1>
+            <p className="text-[#737686] mt-1">Các khóa học được thiết kế dành cho thành viên BBE</p>
+          </div>
 
             {!mounted || (loading && courses.length === 0) ? (
               <div className="grid md:grid-cols-2 gap-6 animate-pulse">
@@ -97,7 +106,6 @@ export default function StudentCoursesPage() {
                 ))}
               </div>
             )}
-          </main>
         </div>
       ) : (
         /* Guest View */

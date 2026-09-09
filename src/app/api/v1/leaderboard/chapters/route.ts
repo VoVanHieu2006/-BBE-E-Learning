@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { getPublishedSystemData, calculateBatchUsersProgress } from '@/lib/progress/calculator'
 
 interface LeaderboardCache {
   data: any
@@ -31,46 +32,28 @@ export async function GET(request: NextRequest) {
     })
   }
 
-  // Optimized: fetch chapters with member counts, then aggregate scores separately
-  const [chapters, lessonCounts, scoreSums] = await Promise.all([
-    // 1. Get chapters with active member user IDs
-    prisma.chapter.findMany({
-      where: { status: 'ACTIVE' },
-      include: {
-        chapter_members: {
-          where: {
-            user: { status: 'ACTIVE', role: 'MEMBER' },
-          },
-          select: {
-            user_id: true,
-          },
+  const sys = await getPublishedSystemData()
+
+  // 1. Get chapters with active member user IDs
+  const chapters = await prisma.chapter.findMany({
+    where: { status: 'ACTIVE' },
+    include: {
+      chapter_members: {
+        where: {
+          user: { status: 'ACTIVE', role: 'MEMBER' },
+        },
+        select: {
+          user_id: true,
         },
       },
-    }),
-    // 2. Aggregate completed lessons per user (single query)
-    prisma.lessonProgress.groupBy({
-      by: ['user_id'],
-      where: { completed: true },
-      _count: { id: true },
-    }),
-    // 3. Aggregate attempt scores per user (single query)
-    prisma.attempt.groupBy({
-      by: ['user_id'],
-      where: { status: { in: ['SUBMITTED', 'AUTO_SUBMITTED'] } },
-      _avg: { score: true },
-    }),
-  ])
+    },
+  })
 
-  // Build lookup maps for O(1) access
-  const lessonCountMap = new Map<string, number>()
-  for (const lc of lessonCounts) {
-    lessonCountMap.set(lc.user_id, lc._count.id)
-  }
-
-  const scoreMap = new Map<string, number>()
-  for (const s of scoreSums) {
-    scoreMap.set(s.user_id, Math.round(Number(s._avg.score || 0) * 100))
-  }
+  // 2. Batch calculate all members progress
+  const allMemberUserIds = Array.from(
+    new Set(chapters.flatMap((ch) => ch.chapter_members.map((cm) => cm.user_id)))
+  )
+  const progressMap = await calculateBatchUsersProgress(allMemberUserIds, sys)
 
   const results = chapters.map((ch) => {
     const memberUserIds = ch.chapter_members.map((cm) => cm.user_id)
@@ -80,12 +63,10 @@ export async function GET(request: NextRequest) {
     let totalCompletedLessons = 0
 
     for (const userId of memberUserIds) {
-      const completed = lessonCountMap.get(userId) || 0
+      const p = progressMap.get(userId)
+      const completed = p?.completedLessons || 0
       totalCompletedLessons += completed
-
-      const avgScore = scoreMap.get(userId) || 0
-      const point = Math.round(Math.min(100, completed * 10) * 0.4 + avgScore * 0.6)
-      totalPoints += point
+      totalPoints += p?.leaderboardPoint || 0
     }
 
     const avgPoints = memberCount > 0 ? Math.round(totalPoints / memberCount) : 0
@@ -97,6 +78,7 @@ export async function GET(request: NextRequest) {
       description: ch.description,
       memberCount,
       totalCompletedLessons,
+      totalLessons: sys.totalLessons,
       avgPoints,
       leaderboardPoint: avgPoints,
     }

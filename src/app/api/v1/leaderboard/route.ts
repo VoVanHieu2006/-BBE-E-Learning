@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { getPublishedSystemData, calculateBatchUsersProgress } from '@/lib/progress/calculator'
 
 /**
  * GET /api/v1/leaderboard
@@ -14,42 +15,35 @@ export async function GET(request: NextRequest) {
   const page = Math.max(parseInt(url.searchParams.get('page') || '1', 10), 1)
   const skip = (page - 1) * limit
 
-  // 1. Fetch total published lessons count ONCE
-  const totalLessonsCount = await prisma.lesson.count({
-    where: { session: { course: { status: 'PUBLISHED' } } },
-  })
-  const totalLessons = totalLessonsCount || 1
+  const sys = await getPublishedSystemData()
 
-  // 2. Fetch ACTIVE members
+  // 1. Fetch ACTIVE members
   const members = await prisma.user.findMany({
     where: { status: 'ACTIVE', role: 'MEMBER' },
-    include: {
-      chapter_members: { include: { chapter: true } },
-      lessonProgress: { where: { completed: true }, select: { lesson_id: true } },
-      attempts: {
-        where: { status: { in: ['SUBMITTED', 'AUTO_SUBMITTED'] } },
-        select: { score: true },
+    select: {
+      id: true,
+      email: true,
+      chapter_members: {
+        include: { chapter: true },
       },
     },
     take: limit,
     skip,
   })
 
-  // 3. Compute score in memory (0ms)
+  const memberUserIds = members.map((m) => m.id)
+  const progressMap = await calculateBatchUsersProgress(memberUserIds, sys)
+
+  // 2. Format results
   const results = members.map((m) => {
-    const completedLessons = m.lessonProgress.length
-    const courseProgress = Math.min(100, Math.round((completedLessons / totalLessons) * 100))
-
-    let totalScore = 0
-    let attemptCount = 0
-    for (const attempt of m.attempts) {
-      totalScore += Number(attempt.score || 0) * 100
-      attemptCount++
-    }
-    const avgScore = attemptCount > 0 ? Math.round(totalScore / attemptCount) : 0
-
-    // Leaderboard formula: 40% course progress + 60% quiz score
-    const leaderboardPoint = Math.round(courseProgress * 0.4 + avgScore * 0.6)
+    const p = progressMap.get(m.id)
+    const completedLessons = p?.completedLessons || 0
+    const totalLessons = sys.totalLessons
+    const courseProgress = p?.overallProgressPercent || 0
+    const avgScore = p?.avgQuizScore || 0
+    const leaderboardPoint = p?.leaderboardPoint || 0
+    const completedCourses = p?.completedCourses || 0
+    const totalCourses = sys.totalCourses
     const chapterName = m.chapter_members[0]?.chapter?.name || 'BBE Core'
 
     return {
@@ -61,6 +55,8 @@ export async function GET(request: NextRequest) {
       leaderboardPoint,
       completedLessons,
       totalLessons,
+      completedCourses,
+      totalCourses,
     }
   })
 
@@ -68,3 +64,4 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({ items: results, page, limit })
 }
+

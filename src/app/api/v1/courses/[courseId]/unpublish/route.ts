@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { invalidateSystemDataCache } from '@/lib/progress/calculator'
 
 export async function POST(request: NextRequest, { params }: { params: { courseId: string } }) {
   const auth = await authenticate(request)
@@ -42,6 +43,7 @@ export async function POST(request: NextRequest, { params }: { params: { courseI
     where: { id: courseId },
     data: { status: 'DRAFT', published_at: null },
   })
+  invalidateSystemDataCache()
 
   return NextResponse.json({
     courseId: updated.id,

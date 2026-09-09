@@ -21,7 +21,18 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
 
   const assessment = await prisma.assessment.findUnique({
     where: { id: assessmentId },
-    include: { course: { include: { sessions: { include: { lessons: true } } } } },
+    select: {
+      id: true,
+      course: {
+        select: {
+          sessions: {
+            select: {
+              lessons: { select: { id: true } },
+            },
+          },
+        },
+      },
+    },
   })
   if (!assessment) return NextResponse.json({ error: { code: 'AssessmentNotFound' } }, { status: 404 })
 
@@ -31,6 +42,7 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
     if (allLessonIds.length > 0) {
       const completed = await prisma.lessonProgress.findMany({
         where: { user_id: userId, lesson_id: { in: allLessonIds }, completed: true },
+        select: { id: true },
       })
       if (completed.length < allLessonIds.length) {
         return NextResponse.json({ error: { code: 'LessonsNotCompleted', message: 'Chưa hoàn thành tất cả bài học' } }, { status: 403 })
@@ -41,11 +53,13 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
     const lastSubmitted = await prisma.attempt.findFirst({
       where: { assessment_id: assessmentId, user_id: userId, status: { in: ['SUBMITTED', 'AUTO_SUBMITTED', 'CANCELLED'] } },
       orderBy: { submitted_at: 'desc' },
+      select: { score: true, submitted_at: true },
     })
     if (lastSubmitted && lastSubmitted.submitted_at) {
       const hours = (Date.now() - lastSubmitted.submitted_at.getTime()) / (1000 * 60 * 60)
       if (hours < 24) {
-        const perfect = lastSubmitted.score != null && Number(lastSubmitted.score) >= 100
+        const scoreVal = lastSubmitted.score != null ? Number(lastSubmitted.score) : 0
+        const perfect = scoreVal >= 1 || scoreVal >= 100
         if (!perfect) {
           return NextResponse.json({ error: { code: 'CooldownActive', message: 'Còn thời gian chờ 24h kể từ lần nộp/hủy gần nhất' } }, { status: 403 })
         }
@@ -110,16 +124,13 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
     })
 
     const shuffledQuestions = [...questions].sort(() => Math.random() - 0.5)
-    for (let idx = 0; idx < shuffledQuestions.length; idx++) {
-      const q = shuffledQuestions[idx]
-      await tx.attemptQuestion.create({
-        data: {
-          attempt_id: a.id,
-          question_id: q.id,
-          display_order: idx,
-        },
-      })
-    }
+    await tx.attemptQuestion.createMany({
+      data: shuffledQuestions.map((q, idx) => ({
+        attempt_id: a.id,
+        question_id: q.id,
+        display_order: idx,
+      })),
+    })
 
     return a
   })

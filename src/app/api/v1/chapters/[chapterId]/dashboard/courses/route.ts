@@ -35,11 +35,11 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
   const limit = Math.min(Math.max(parseInt(url.searchParams.get('limit') || '20', 10), 1), 100)
   const skip = (page - 1) * limit
 
-  // Get active members in this chapter
+  // Get active student members in this chapter (EXCLUDING BĐHU and Admin)
   const chapterMembers = await prisma.chapterMember.findMany({
     where: {
       chapter_id: chapterId,
-      user: { status: 'ACTIVE' },
+      user: { status: 'ACTIVE', role: 'MEMBER' },
     },
     select: { user_id: true },
   })
@@ -56,6 +56,7 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
             lessons: { select: { id: true } },
           },
         },
+        assessment: { select: { id: true } },
       },
       orderBy: { created_at: 'desc' },
       skip,
@@ -67,7 +68,10 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
   // Collect all lessonIds for the current page courses
   const allLessonIds = courses.flatMap((c) => c.sessions.flatMap((s) => s.lessons.map((l) => l.id)))
 
-  // Batch query all completed progresses for chapter members
+  // Collect all assessmentIds for the current page courses
+  const assessmentIds = courses.map((c) => c.assessment?.id).filter(Boolean) as string[]
+
+  // Batch query all completed progresses for chapter student members
   const allCompletedProgress = (totalMembers > 0 && allLessonIds.length > 0)
     ? await prisma.lessonProgress.findMany({
         where: {
@@ -84,6 +88,24 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
 
   const completedSet = new Set(allCompletedProgress.map((p) => `${p.user_id}:${p.lesson_id}`))
 
+  // Batch query passed attempts for assessments in current page
+  const passedAttempts = (totalMembers > 0 && assessmentIds.length > 0)
+    ? await prisma.attempt.findMany({
+        where: {
+          user_id: { in: memberUserIds },
+          assessment_id: { in: assessmentIds },
+          status: { in: ['SUBMITTED', 'AUTO_SUBMITTED'] },
+          passed: true,
+        },
+        select: {
+          user_id: true,
+          assessment_id: true,
+        },
+      })
+    : []
+
+  const passedSet = new Set(passedAttempts.map((a) => `${a.user_id}:${a.assessment_id}`))
+
   const items = courses.map((course) => {
     const lessonIds = course.sessions.flatMap((s) => s.lessons.map((l) => l.id))
     const totalLessons = lessonIds.length
@@ -91,14 +113,9 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
     let completedCount = 0
     if (totalLessons > 0 && totalMembers > 0) {
       for (const userId of memberUserIds) {
-        let isDone = true
-        for (const lId of lessonIds) {
-          if (!completedSet.has(`${userId}:${lId}`)) {
-            isDone = false
-            break
-          }
-        }
-        if (isDone) {
+        const allVideosDone = lessonIds.every((lId) => completedSet.has(`${userId}:${lId}`))
+        const passedAssessment = course.assessment ? passedSet.has(`${userId}:${course.assessment.id}`) : true
+        if (allVideosDone && passedAssessment) {
           completedCount++
         }
       }

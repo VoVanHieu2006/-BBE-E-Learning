@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma'
 
 /**
  * GET /api/v1/streak
- * Personal activity streak — BR-08: watch at least 1 video or take at least 1 assessment per day
+ * Personal activity streak — BR-08: complete at least 1 lesson OR submit at least 1 assessment per day
  */
 export async function GET(request: NextRequest) {
   const auth = await authenticate(request)
@@ -13,25 +13,28 @@ export async function GET(request: NextRequest) {
   const userId = (auth as any).context!.userId
 
   try {
+    // Chỉ tính các bài học ĐÃ HOÀN THÀNH (không tính lần xem thường)
     const progresses = await prisma.lessonProgress.findMany({
-      where: { user_id: userId },
-      select: { last_watched_at: true },
+      where: { user_id: userId, completed: true },
+      select: { completed_at: true, last_watched_at: true },
     })
 
+    // Chỉ tính các bài kiểm tra ĐÃ NỘP
     const attempts = await prisma.attempt.findMany({
-      where: { user_id: userId },
-      select: { started_at: true },
+      where: { user_id: userId, status: { in: ['SUBMITTED', 'AUTO_SUBMITTED'] } },
+      select: { submitted_at: true },
     })
 
     const daySet = new Set<string>()
     for (const p of progresses) {
-      if (p.last_watched_at) {
-        daySet.add(new Date(p.last_watched_at).toISOString().substring(0, 10))
+      const day = p.completed_at || p.last_watched_at
+      if (day) {
+        daySet.add(new Date(day).toISOString().substring(0, 10))
       }
     }
     for (const a of attempts) {
-      if (a.started_at) {
-        daySet.add(new Date(a.started_at).toISOString().substring(0, 10))
+      if (a.submitted_at) {
+        daySet.add(new Date(a.submitted_at).toISOString().substring(0, 10))
       }
     }
 

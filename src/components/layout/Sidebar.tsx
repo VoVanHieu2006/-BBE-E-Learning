@@ -11,12 +11,34 @@ interface NavItem {
   prefetchUrls?: string[];
 }
 
-const studentNav: NavItem[] = [
-  { label: 'Trang chủ', href: '/student/dashboard', icon: '🏠' },
-  { label: 'Khóa học', href: '/student/courses', icon: '📚' },
-  { label: 'Tiến độ', href: '/student/progress', icon: '📈' },
-  { label: 'Bảng xếp hạng', href: '/leaderboard', icon: '🏆' },
-];
+function getStudentNav(chapterId?: string | null): NavItem[] {
+  return [
+    {
+      label: 'Trang chủ',
+      href: '/student/dashboard',
+      icon: '🏠',
+      prefetchUrls: ['/api/v1/members/me/courses', '/api/v1/streak'],
+    },
+    {
+      label: 'Khóa học',
+      href: '/student/courses',
+      icon: '📚',
+      prefetchUrls: ['/api/v1/courses'],
+    },
+    {
+      label: 'Tiến độ',
+      href: '/student/progress',
+      icon: '📈',
+      prefetchUrls: ['/api/v1/members/me/courses'],
+    },
+    {
+      label: 'Bảng xếp hạng',
+      href: '/leaderboard',
+      icon: '🏆',
+      prefetchUrls: chapterId ? [`/api/v1/leaderboard/chapters/${chapterId}`] : ['/api/v1/leaderboard'],
+    },
+  ];
+}
 
 const adminNav: NavItem[] = [
   { label: 'Tổng quan', href: '/admin/dashboard', icon: '📊', prefetchUrls: ['/api/v1/admin/overview'] },
@@ -75,7 +97,7 @@ function getNav(role: string, chapterId?: string | null) {
       },
     ];
   }
-  return studentNav;
+  return getStudentNav(chapterId);
 }
 
 function isActive(href: string, pathname: string) {
@@ -95,7 +117,15 @@ export default function Sidebar({
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
-  const [chapterId, setChapterId] = useState<string | null>(null);
+  const [chapterId, setChapterId] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const u = JSON.parse(localStorage.getItem('user') || 'null');
+      return u?.chapterId || null;
+    } catch {
+      return null;
+    }
+  });
 
   useEffect(() => {
     setMounted(true);
@@ -128,6 +158,9 @@ export default function Sidebar({
       localStorage.removeItem('accessToken');
       localStorage.removeItem('refreshToken');
       localStorage.removeItem('user');
+      document.cookie = 'accessToken=; path=/; max-age=0; SameSite=Lax';
+      document.cookie = 'userRole=; path=/; max-age=0; SameSite=Lax';
+      document.cookie = 'refreshToken=; path=/; max-age=0; SameSite=Lax';
     }
     router.replace('/login');
   };

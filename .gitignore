@@ -38,3 +38,4 @@ nul
 # temp verification artifacts
 *-tmp.mjs
 *-tmp.html
+scratch/

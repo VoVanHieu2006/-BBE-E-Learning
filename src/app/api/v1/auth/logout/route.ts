@@ -27,5 +27,9 @@ export async function POST(request: NextRequest) {
     data: { revoked_at: new Date() },
   })
 
-  return NextResponse.json({ success: true, revoked: updated.count > 0 }, { status: 200 })
+  const response = NextResponse.json({ success: true, revoked: updated.count > 0 }, { status: 200 })
+  response.cookies.delete('accessToken')
+  response.cookies.delete('refreshToken')
+  response.cookies.delete('userRole')
+  return response
 }

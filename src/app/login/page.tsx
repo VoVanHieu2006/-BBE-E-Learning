@@ -57,7 +57,29 @@ export default function LoginPage() {
         localStorage.setItem('refreshToken', data.refreshToken || '');
         localStorage.setItem('user', JSON.stringify(data.user));
 
+        // Sync cookies for server-side middleware
+        document.cookie = `accessToken=${data.accessToken}; path=/; max-age=900; SameSite=Lax`;
+        document.cookie = `userRole=${data.user.role}; path=/; max-age=604800; SameSite=Lax`;
+
         const role = data.user.role;
+        const params = new URLSearchParams(window.location.search);
+        const callbackUrl = params.get('callbackUrl');
+
+        if (callbackUrl && callbackUrl.startsWith('/') && !callbackUrl.startsWith('//')) {
+          if (callbackUrl.startsWith('/admin') && role === 'ADMIN') {
+            router.replace(callbackUrl);
+            return;
+          }
+          if (callbackUrl.startsWith('/chapter-manager') && (role === 'CHAPTER_LEADER' || role === 'ADMIN')) {
+            router.replace(callbackUrl);
+            return;
+          }
+          if (callbackUrl.startsWith('/student')) {
+            router.replace(callbackUrl);
+            return;
+          }
+        }
+
         if (role === 'ADMIN') router.replace('/admin/dashboard');
         else if (role === 'CHAPTER_LEADER') router.replace('/chapter-manager/dashboard');
         else router.replace('/student/dashboard');

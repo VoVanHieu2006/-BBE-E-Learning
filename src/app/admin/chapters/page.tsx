@@ -43,9 +43,12 @@ export default function AdminChaptersProgressPage() {
     setSelectedChapter(chapter);
     setMembersLoading(true);
     const chapterId = chapter.chapterId || chapter.id;
-    const res = await apiFetch(`/api/v1/chapters/${chapterId}/dashboard/members`);
+    const res = await apiFetch(`/api/v1/chapters/${chapterId}/dashboard/members`, { noCache: true });
     if (res.ok && res.data) {
-      setChapterMembers(res.data.items || []);
+      const items = (res.data.items || []).filter(
+        (m: any) => m.role === 'MEMBER' || (!m.role && m.role !== 'CHAPTER_LEADER')
+      );
+      setChapterMembers(items);
     } else {
       setChapterMembers([]);
       showToast('error', 'Không thể tải danh sách thành viên chapter.');
@@ -249,8 +252,10 @@ export default function AdminChaptersProgressPage() {
                               {isActive ? 'Active' : 'Inactive'}
                             </span>
                           </div>
-                          <div className="text-xs text-[#737686] flex items-center gap-3">
-                            <span>Hoàn thành: {m.completedCourses || 0} / {m.totalCourses || 0} khóa</span>
+                          <div className="text-xs text-[#737686] flex flex-wrap items-center gap-x-3 gap-y-1">
+                            <span>Khóa học: <strong className="text-[#172554]">{m.completedCourses || 0} / {m.totalCourses || 0}</strong></span>
+                            <span>•</span>
+                            <span>Bài học: <strong className="text-[#2563EB]">{m.completedLessons || 0} / {m.totalLessons || 0}</strong> bài</span>
                             <span>•</span>
                             <span suppressHydrationWarning>Tham gia: {m.joinedAt ? new Date(m.joinedAt).toLocaleDateString('vi-VN') : 'Mới'}</span>
                           </div>

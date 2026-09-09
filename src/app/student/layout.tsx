@@ -2,14 +2,20 @@
 import Sidebar from '@/components/layout/Sidebar';
 import { apiFetch } from '@/lib/api/client';
 import { useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 
 /**
- * Layout dùng chung cho các trang BĐHU: Sidebar cố định (không remount khi chuyển tab)
- * + bảo vệ quyền truy cập vai trò BĐHU + idle prefetch dữ liệu.
+ * Layout dùng chung cho phân hệ Học viên (/student/*):
+ * - Sidebar cố định (không unmount/remount khi chuyển giữa Trang chủ, Khóa học, Tiến độ)
+ * - Xác thực vai trò tức thì (0ms flash)
+ * - Hỗ trợ khách vãng lai xem danh mục khóa học public
+ * - Idle-time prefetch cho các tab học viên
  */
-function ChapterManagerLayoutInner({ children }: { children: React.ReactNode }) {
+export default function StudentLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
+  const isPublicRoute = pathname.startsWith('/student/courses') && !pathname.includes('/quiz');
+
   const [user, setUser] = useState<any>(() => {
     if (typeof window === 'undefined') return null;
     try {
@@ -26,7 +32,7 @@ function ChapterManagerLayoutInner({ children }: { children: React.ReactNode }) 
     if (!token || !uRaw) return false;
     try {
       const u = JSON.parse(uRaw);
-      return u.role === 'CHAPTER_LEADER' || u.role === 'ADMIN';
+      return Boolean(u.role);
     } catch {
       return false;
     }
@@ -34,7 +40,6 @@ function ChapterManagerLayoutInner({ children }: { children: React.ReactNode }) 
 
   const prefetched = useRef(false);
 
-  // Client-side authentication and role authorization guard
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const token = localStorage.getItem('accessToken');
@@ -48,30 +53,27 @@ function ChapterManagerLayoutInner({ children }: { children: React.ReactNode }) 
       }
 
       if (!token || !u) {
-        router.replace('/login?callbackUrl=' + encodeURIComponent(window.location.pathname));
-        return;
-      }
-
-      if (u.role !== 'CHAPTER_LEADER' && u.role !== 'ADMIN') {
-        router.replace('/student/dashboard');
+        if (!isPublicRoute) {
+          router.replace('/login?callbackUrl=' + encodeURIComponent(window.location.pathname));
+        }
         return;
       }
 
       setIsAuthorized(true);
     }
-  }, [router]);
+  }, [router, isPublicRoute]);
 
-  // Idle-time prefetch: sau khi xác thực hợp lệ, lấy sẵn dữ liệu các tab khác
+  // Idle-time prefetch for sibling student tabs
   useEffect(() => {
-    if (!isAuthorized || prefetched.current || !user?.chapterId) return;
+    if (!isAuthorized || prefetched.current) return;
     prefetched.current = true;
 
-    const chapterId = user.chapterId;
+    const chapterId = user?.chapterId;
     const PREFETCH_URLS = [
-      `/api/v1/chapters/${chapterId}/dashboard/members`,
-      `/api/v1/chapters/${chapterId}/dashboard/members?search=&includeInactive=1`,
-      `/api/v1/chapters/${chapterId}/dashboard/courses`,
-      `/api/v1/invitations?chapterId=${chapterId}`,
+      '/api/v1/members/me/courses',
+      '/api/v1/streak',
+      '/api/v1/courses',
+      ...(chapterId ? [`/api/v1/leaderboard/chapters/${chapterId}`] : []),
     ];
 
     const prefetchAll = () => {
@@ -83,16 +85,19 @@ function ChapterManagerLayoutInner({ children }: { children: React.ReactNode }) 
     if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
       (window as any).requestIdleCallback(prefetchAll, { timeout: 3000 });
     } else {
-      setTimeout(prefetchAll, 1500);
+      setTimeout(prefetchAll, 1200);
     }
   }, [isAuthorized, user?.chapterId]);
 
   if (!isAuthorized) {
+    if (isPublicRoute) {
+      return <>{children}</>;
+    }
     return (
       <div className="min-h-screen bg-[#f8f9ff] flex items-center justify-center">
         <div className="text-center space-y-3">
           <div className="w-10 h-10 border-4 border-[#2563EB] border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-sm font-semibold text-[#737686]">Đang xác thực quyền Ban Điều Hành...</p>
+          <p className="text-sm font-semibold text-[#737686]">Đang xác thực...</p>
         </div>
       </div>
     );
@@ -100,12 +105,8 @@ function ChapterManagerLayoutInner({ children }: { children: React.ReactNode }) 
 
   return (
     <div className="min-h-screen bg-[#f8f9ff] flex">
-      <Sidebar role="CHAPTER_LEADER" user={{ email: user?.email, chapterName: user?.chapterName }} />
-      <main className="ml-64 flex-1 px-8 py-10 w-full min-w-0">{children}</main>
+      <Sidebar role={user?.role || 'MEMBER'} user={{ email: user?.email, chapterName: user?.chapterName }} />
+      <main className="ml-64 flex-1 max-w-5xl mx-auto px-8 py-10 w-full min-w-0">{children}</main>
     </div>
   );
-}
-
-export default function ChapterManagerLayout({ children }: { children: React.ReactNode }) {
-  return <ChapterManagerLayoutInner>{children}</ChapterManagerLayoutInner>;
 }

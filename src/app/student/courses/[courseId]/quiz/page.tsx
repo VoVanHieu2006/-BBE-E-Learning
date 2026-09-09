@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
@@ -8,6 +8,9 @@ import { apiFetch } from '@/lib/api/client';
 
 export default function StudentQuizPage({ params }: { params: { courseId: string } }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const directAssessmentId = searchParams.get('assessmentId');
+
   const [assessment, setAssessment] = useState<any>(null);
   const [attempt, setAttempt] = useState<any>(null);
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, string>>({});
@@ -24,20 +27,22 @@ export default function StudentQuizPage({ params }: { params: { courseId: string
     setLoading(true);
     setError('');
 
-    // 1. Fetch course assessment
-    const assessRes = await apiFetch(`/api/v1/courses/${params.courseId}/assessment`);
-    if (!assessRes.ok || !assessRes.data) {
-      setError(assessRes.error?.message || 'Không tìm thấy bài kiểm tra cho khóa học này.');
-      setLoading(false);
-      return;
+    let assessmentId = directAssessmentId;
+
+    // 1. If assessmentId is not provided, fetch course assessment
+    if (!assessmentId) {
+      const assessRes = await apiFetch(`/api/v1/courses/${params.courseId}/assessment`);
+      if (!assessRes.ok || !assessRes.data) {
+        setError(assessRes.error?.message || 'Không tìm thấy bài kiểm tra cho khóa học này.');
+        setLoading(false);
+        return;
+      }
+      const assessData = assessRes.data;
+      setAssessment(assessData);
+      assessmentId = assessData.assessmentId || assessData.id;
     }
 
-    const assessData = assessRes.data;
-    setAssessment(assessData);
-
-    const assessmentId = assessData.assessmentId || assessData.id;
-
-    // 2. Start new attempt
+    // 2. Start new attempt (or resume active) directly
     const attemptRes = await apiFetch(`/api/v1/assessments/${assessmentId}/attempts`, {
       method: 'POST',
     });
@@ -64,7 +69,7 @@ export default function StudentQuizPage({ params }: { params: { courseId: string
     }
 
     // 4. Calculate timer
-    const questionCount = attemptData.questions?.length || assessData.questions?.length || 1;
+    const questionCount = attemptData.questions?.length || 1;
     const totalMinutes = questionCount * 2;
     let initialSecs = totalMinutes * 60;
 
@@ -105,11 +110,13 @@ export default function StudentQuizPage({ params }: { params: { courseId: string
       } catch {}
     }
 
-    // Send answer to server in background
-    apiFetch(`/api/v1/attempts/${attemptId}/answers`, {
-      method: 'POST',
-      body: JSON.stringify({ questionId, selectedOptionId: optionId }),
-    }).catch(() => null);
+    // Send answer to server in background (both endpoints supported for safety)
+    if (attemptId) {
+      apiFetch(`/api/v1/attempts/${attemptId}/answers`, {
+        method: 'POST',
+        body: JSON.stringify({ questionId, selectedOptionId: optionId }),
+      }).catch(() => null);
+    }
   };
 
   const handleAutoSubmit = async () => {
@@ -118,7 +125,7 @@ export default function StudentQuizPage({ params }: { params: { courseId: string
 
     await apiFetch(`/api/v1/attempts/${attemptId}/submit`, {
       method: 'POST',
-      body: JSON.stringify({ autoSubmitted: true }),
+      body: JSON.stringify({ autoSubmitted: true, answers: selectedAnswers }),
     }).catch(() => null);
 
     if (typeof window !== 'undefined') {
@@ -146,6 +153,7 @@ export default function StudentQuizPage({ params }: { params: { courseId: string
     setSubmitting(true);
     const res = await apiFetch(`/api/v1/attempts/${attemptId}/submit`, {
       method: 'POST',
+      body: JSON.stringify({ answers: selectedAnswers }),
     });
 
     if (res.ok) {
@@ -200,7 +208,18 @@ export default function StudentQuizPage({ params }: { params: { courseId: string
         )}
 
         {loading ? (
-          <div className="text-center py-20 text-[#737686]">Đang tải bài kiểm tra...</div>
+          <div className="space-y-6 animate-pulse">
+            {[1, 2].map((n) => (
+              <Card key={n} className="p-6 border border-[#eff4ff]">
+                <div className="h-6 bg-slate-200 rounded-md w-3/4 mb-6"></div>
+                <div className="space-y-3">
+                  {[1, 2, 3, 4].map((i) => (
+                    <div key={i} className="h-12 bg-slate-100 rounded-xl border border-slate-200/50"></div>
+                  ))}
+                </div>
+              </Card>
+            ))}
+          </div>
         ) : !error && (
           <div className="space-y-6">
             {questions.map((q: any, qIdx: number) => {

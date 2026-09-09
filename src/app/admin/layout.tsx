@@ -2,7 +2,8 @@
 import { AdminProvider, useAdmin } from './AdminContext';
 import Sidebar from '@/components/layout/Sidebar';
 import { apiFetch } from '@/lib/api/client';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 
 /**
  * Prefetch API data for sibling admin tabs during browser idle time.
@@ -19,17 +20,59 @@ const PREFETCH_URLS = [
 ];
 
 function AdminLayoutInner({ children }: { children: React.ReactNode }) {
-  const { user } = useAdmin();
+  const router = useRouter();
+  const { user, mounted } = useAdmin();
+  const [isAuthorized, setIsAuthorized] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    const token = localStorage.getItem('accessToken');
+    const storedUserRaw = localStorage.getItem('user');
+    if (!token || !storedUserRaw) return false;
+    try {
+      const u = JSON.parse(storedUserRaw);
+      return u.role === 'ADMIN';
+    } catch {
+      return false;
+    }
+  });
   const prefetched = useRef(false);
 
-  // Idle-time prefetch: after current page loads, prefetch other tabs' data
+  // Client-side authentication and role authorization guard
   useEffect(() => {
-    if (prefetched.current) return;
+    if (!mounted) return;
+
+    const token = localStorage.getItem('accessToken');
+    const storedUserRaw = localStorage.getItem('user');
+    let storedUser: any = null;
+    if (storedUserRaw) {
+      try {
+        storedUser = JSON.parse(storedUserRaw);
+      } catch {}
+    }
+
+    if (!token || !storedUser) {
+      router.replace('/login?callbackUrl=' + encodeURIComponent(window.location.pathname));
+      return;
+    }
+
+    if (storedUser.role !== 'ADMIN') {
+      if (storedUser.role === 'CHAPTER_LEADER') {
+        router.replace('/chapter-manager/dashboard');
+      } else {
+        router.replace('/student/dashboard');
+      }
+      return;
+    }
+
+    setIsAuthorized(true);
+  }, [mounted, router]);
+
+  // Idle-time prefetch: after current page loads and is authorized, prefetch other tabs' data
+  useEffect(() => {
+    if (!isAuthorized || prefetched.current) return;
     prefetched.current = true;
 
     const prefetchAll = () => {
       PREFETCH_URLS.forEach((url) => {
-        // apiFetch will dedupe + cache automatically
         apiFetch(url).catch(() => {});
       });
     };
@@ -39,7 +82,18 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
     } else {
       setTimeout(prefetchAll, 1500);
     }
-  }, []);
+  }, [isAuthorized]);
+
+  if (!isAuthorized) {
+    return (
+      <div className="min-h-screen bg-[#f8f9ff] flex items-center justify-center">
+        <div className="text-center space-y-3">
+          <div className="w-10 h-10 border-4 border-[#2563EB] border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm font-semibold text-[#737686]">Đang xác thực quyền Quản trị viên...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#f8f9ff] flex">

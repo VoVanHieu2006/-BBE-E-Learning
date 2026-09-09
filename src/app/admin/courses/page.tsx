@@ -42,8 +42,13 @@ export default function AdminCoursesPage() {
 
     setActionLoadingId(courseId);
     clearApiCache('/api/v1/courses');
+    clearApiCache(`/api/v1/courses/${courseId}`);
 
     const res = await apiFetch(`/api/v1/courses/${courseId}/${action}`, { method: 'POST' });
+
+    // Always clear cache after mutation completes so subsequent reads get fresh state
+    clearApiCache('/api/v1/courses');
+    clearApiCache(`/api/v1/courses/${courseId}`);
 
     if (res.ok) {
       setCourses((prev) =>
@@ -151,13 +156,7 @@ export default function AdminCoursesPage() {
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
-                    <Link
-                      href={`/admin/courses/${cId}/edit`}
-                      onMouseEnter={() => {
-                        apiFetch(`/api/v1/courses/${cId}`);
-                        apiFetch(`/api/v1/courses/${cId}/assessment`);
-                      }}
-                    >
+                    <Link href={`/admin/courses/${cId}/edit`}>
                       <Button variant="outline" size="sm">
                         ✏️ Chỉnh sửa nội dung
                       </Button>

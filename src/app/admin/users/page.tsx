@@ -468,6 +468,9 @@ export default function AdminUsersPage() {
                                   ({u.completedCourses || 0}/{u.totalCourses || 0} khóa)
                                 </span>
                               </div>
+                              <div className="text-[11px] text-[#737686] mt-0.5">
+                                Đã học {u.completedLessons || 0} / {u.totalLessons || 0} bài
+                              </div>
                               <div className="w-24 bg-slate-100 h-1.5 rounded-full mx-auto mt-1 overflow-hidden">
                                 <div
                                   className="bg-[#2563EB] h-full rounded-full transition-all duration-300"
@@ -710,8 +713,16 @@ export default function AdminUsersPage() {
                     <span className="text-[#737686]">Khóa học hoàn thành:</span>
                     <span className="font-semibold text-[#2563EB]">
                       {selectedUserDetail.role === 'CHAPTER_LEADER'
-                        ? `${selectedUserDetail.totalCourses || 0} / ${selectedUserDetail.totalCourses || 0}`
-                        : `${selectedUserDetail.completedCourses || 0} / ${selectedUserDetail.totalCourses || 0}`}
+                        ? `${selectedUserDetail.totalCourses || 0} / ${selectedUserDetail.totalCourses || 0} khóa`
+                        : `${selectedUserDetail.completedCourses || 0} / ${selectedUserDetail.totalCourses || 0} khóa`}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-[#737686]">Bài học đã hoàn thành:</span>
+                    <span className="font-semibold text-[#172554]">
+                      {selectedUserDetail.role === 'CHAPTER_LEADER'
+                        ? `${selectedUserDetail.totalLessons || 0} / ${selectedUserDetail.totalLessons || 0} bài`
+                        : `${selectedUserDetail.completedLessons || 0} / ${selectedUserDetail.totalLessons || 0} bài`}
                     </span>
                   </div>
                   <div className="flex justify-between text-sm">

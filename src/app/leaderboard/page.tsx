@@ -8,44 +8,124 @@ import Modal from '@/components/ui/Modal';
 import { apiFetch, getCachedApiData } from '@/lib/api/client';
 
 export default function LeaderboardPage() {
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<any>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const u = localStorage.getItem('user');
+        return u ? JSON.parse(u) : null;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  });
   const [mounted, setMounted] = useState(false);
 
   const [activeTab, setActiveTab] = useState<'members' | 'chapters'>('members');
-  const [members, setMembers] = useState<any[]>([]);
-  const [chapters, setChapters] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+
+  const [members, setMembers] = useState<any[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const u = localStorage.getItem('user');
+        const parsed = u ? JSON.parse(u) : null;
+        const isScopedRole = parsed?.role === 'CHAPTER_LEADER' || parsed?.role === 'MEMBER';
+        if (isScopedRole && parsed?.chapterId) {
+          const cached = getCachedApiData<any>(`/api/v1/leaderboard/chapters/${parsed.chapterId}`);
+          return cached?.items || [];
+        }
+        if (parsed?.role !== 'MEMBER') {
+          const cached = getCachedApiData<any>('/api/v1/leaderboard');
+          return cached?.items || [];
+        }
+      } catch {}
+    }
+    return [];
+  });
+
+  const [chapters, setChapters] = useState<any[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const u = localStorage.getItem('user');
+        const parsed = u ? JSON.parse(u) : null;
+        if (parsed?.role === 'ADMIN' || parsed?.role === 'SUPER_ADMIN') {
+          const cached = getCachedApiData<any>('/api/v1/leaderboard/chapters');
+          return cached?.items || [];
+        }
+      } catch {}
+    }
+    return [];
+  });
+
+  const [loading, setLoading] = useState(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const u = localStorage.getItem('user');
+        const parsed = u ? JSON.parse(u) : null;
+        const isScopedRole = parsed?.role === 'CHAPTER_LEADER' || parsed?.role === 'MEMBER';
+        if (isScopedRole && parsed?.chapterId) {
+          const cached = getCachedApiData<any>(`/api/v1/leaderboard/chapters/${parsed.chapterId}`);
+          return !cached?.items;
+        }
+        if (parsed?.role === 'MEMBER' && !parsed?.chapterId) {
+          return false;
+        }
+        const cached = getCachedApiData<any>('/api/v1/leaderboard');
+        return !cached?.items;
+      } catch {}
+    }
+    return true;
+  });
 
   // Chapter Drill-down Modal
   const [selectedChapter, setSelectedChapter] = useState<any | null>(null);
   const [chapterMembers, setChapterMembers] = useState<any[]>([]);
   const [chapterMembersLoading, setChapterMembersLoading] = useState(false);
+  const [showExplainModal, setShowExplainModal] = useState(false);
 
   useEffect(() => {
     setMounted(true);
-    let parsed: any = null;
-    if (typeof window !== 'undefined') {
+    let currentUser = user;
+    if (!currentUser && typeof window !== 'undefined') {
       const u = localStorage.getItem('user');
       if (u) {
         try {
-          parsed = JSON.parse(u);
-          setUser(parsed);
+          currentUser = JSON.parse(u);
+          setUser(currentUser);
         } catch {}
       }
     }
-    loadData(parsed);
+    loadData(currentUser);
   }, []);
 
   async function loadData(currentUser?: any) {
-    // BĐHU chỉ xem bảng xếp hạng thành viên chapter mình (bảng global dùng cho khách/member)
-    if (currentUser?.role === 'CHAPTER_LEADER' && currentUser?.chapterId) {
-      const res = await apiFetch(`/api/v1/leaderboard/chapters/${currentUser.chapterId}`);
+    // BĐHU & Thành viên chỉ xem bảng xếp hạng thành viên trong chapter của mình (không global)
+    const isScopedRole = currentUser?.role === 'CHAPTER_LEADER' || currentUser?.role === 'MEMBER';
+    if (isScopedRole && currentUser?.chapterId) {
+      const url = `/api/v1/leaderboard/chapters/${currentUser.chapterId}`;
+      const cached = getCachedApiData<any>(url);
+      if (cached?.items) {
+        setMembers(cached.items);
+        setLoading(false);
+      }
+      const res = await apiFetch(url);
       if (res.ok && res.data) {
         setMembers(res.data.items || []);
       }
       setLoading(false);
       return;
     }
+
+    // Thành viên chưa có chapter: không hiện bảng global, chỉ hiện hướng dẫn
+    if (currentUser?.role === 'MEMBER') {
+      setLoading(false);
+      return;
+    }
+
+    const cachedMembers = getCachedApiData<any>('/api/v1/leaderboard');
+    const cachedChapters = getCachedApiData<any>('/api/v1/leaderboard/chapters');
+    if (cachedMembers?.items) setMembers(cachedMembers.items);
+    if (cachedChapters?.items) setChapters(cachedChapters.items);
+    if (cachedMembers?.items && cachedChapters?.items) setLoading(false);
 
     const [membersRes, chaptersRes] = await Promise.all([
       apiFetch('/api/v1/leaderboard'),
@@ -82,7 +162,8 @@ export default function LeaderboardPage() {
   };
 
   const topThree = members.slice(0, 3);
-  const isLeaderView = Boolean(mounted && user?.role === 'CHAPTER_LEADER');
+  const isScopedView = Boolean(mounted && (user?.role === 'CHAPTER_LEADER' || user?.role === 'MEMBER'));
+  const memberWithoutChapter = Boolean(mounted && user?.role === 'MEMBER' && !user?.chapterId);
 
   const content = (
     <div className="max-w-5xl mx-auto px-6 py-10 flex-1 w-full space-y-8">
@@ -92,17 +173,26 @@ export default function LeaderboardPage() {
           🏆 Vinh danh học tập BBE
         </span>
         <h1 className="text-3xl md:text-4xl font-extrabold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
-          {isLeaderView ? 'Bảng Xếp Hạng Chapter' : 'Bảng Xếp Hạng'}
+          {isScopedView ? 'Bảng Xếp Hạng Chapter' : 'Bảng Xếp Hạng'}
         </h1>
         <p className="text-sm text-[#737686]">
-          {isLeaderView
+          {isScopedView
             ? `Thành viên xuất sắc của ${user?.chapterName || 'chapter của bạn'} — theo tiến độ khóa học và điểm bài kiểm tra`
             : 'Ghi nhận nỗ lực học tập, tiến độ khóa học và điểm số bài kiểm tra của các thành viên BBE'}
         </p>
+        <div className="pt-1">
+          <button
+            type="button"
+            onClick={() => setShowExplainModal(true)}
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#2563EB] bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-full transition cursor-pointer"
+          >
+            <span>💡</span> Điểm thi đua được tính như thế nào?
+          </button>
+        </div>
       </div>
 
       {/* Tabs Switcher (ẩn với BĐHU — chỉ hiện bảng xếp hạng chapter của mình) */}
-      {!isLeaderView && (
+      {!isScopedView && (
         <div className="flex justify-center">
           <div className="bg-[#eff4ff] p-1.5 rounded-2xl flex gap-1 border border-[#cbdbf5]">
             <button
@@ -131,7 +221,16 @@ export default function LeaderboardPage() {
 
       {!mounted || (loading && members.length === 0) ? (
         <div className="text-center py-20 text-[#737686]">Đang tải bảng xếp hạng...</div>
+      ) : memberWithoutChapter ? (
+        <Card className="p-10 text-center space-y-2">
+          <div className="text-4xl mb-2">🏛️</div>
+          <p className="text-base font-bold text-[#172554]">Bạn chưa được thêm vào chapter nào</p>
+          <p className="text-sm text-[#737686]">Vui lòng liên hệ Ban Điều Hành để được thêm vào chapter và tham gia bảng xếp hạng.</p>
+        </Card>
       ) : activeTab === 'members' ? (
+        members.length === 0 ? (
+          <Card className="p-10 text-center text-sm text-[#737686]">Chưa có dữ liệu xếp hạng trong chapter của bạn</Card>
+        ) : (
         <div className="space-y-8">
           {/* Top 3 Podium */}
           {topThree.length >= 3 && (
@@ -140,7 +239,7 @@ export default function LeaderboardPage() {
               <Card className="text-center p-4 bg-gradient-to-b from-slate-50 to-slate-100 border-slate-200 order-1 shadow-sm">
                 <div className="text-3xl mb-1">🥈</div>
                 <div className="font-bold text-sm text-[#172554] truncate">{topThree[1].email?.split('@')[0]}</div>
-                {!isLeaderView && (
+                {!isScopedView && (
                   <div className="text-[11px] text-[#737686] truncate mb-2">{topThree[1].chapterName || 'BBE Club'}</div>
                 )}
                 <div className="text-base font-extrabold text-[#2563EB]">{topThree[1].points || topThree[1].leaderboardPoint || 0} đ</div>
@@ -153,7 +252,7 @@ export default function LeaderboardPage() {
                 </div>
                 <div className="text-4xl mb-1">👑</div>
                 <div className="font-bold text-base text-[#172554] truncate">{topThree[0].email?.split('@')[0]}</div>
-                {!isLeaderView && (
+                {!isScopedView && (
                   <div className="text-xs text-[#737686] truncate mb-2">{topThree[0].chapterName || 'BBE Club'}</div>
                 )}
                 <div className="text-xl font-extrabold text-amber-600">{topThree[0].points || topThree[0].leaderboardPoint || 0} đ</div>
@@ -163,7 +262,7 @@ export default function LeaderboardPage() {
               <Card className="text-center p-4 bg-gradient-to-b from-orange-50/50 to-orange-100/40 border-orange-200 order-3 shadow-sm">
                 <div className="text-3xl mb-1">🥉</div>
                 <div className="font-bold text-sm text-[#172554] truncate">{topThree[2].email?.split('@')[0]}</div>
-                {!isLeaderView && (
+                {!isScopedView && (
                   <div className="text-[11px] text-[#737686] truncate mb-2">{topThree[2].chapterName || 'BBE Club'}</div>
                 )}
                 <div className="text-base font-extrabold text-[#2563EB]">{topThree[2].points || topThree[2].leaderboardPoint || 0} đ</div>
@@ -178,7 +277,7 @@ export default function LeaderboardPage() {
                 <tr>
                   <th className="px-6 py-4 w-16 text-center">Hạng</th>
                   <th className="px-6 py-4">Thành viên</th>
-                  {!isLeaderView && <th className="px-6 py-4">Chapter</th>}
+                  {!isScopedView && <th className="px-6 py-4">Chapter</th>}
                   <th className="px-6 py-4 text-center">Bài học</th>
                   <th className="px-6 py-4 text-center">Điểm Quiz TB</th>
                   <th className="px-6 py-4 text-right">Điểm thi đua</th>
@@ -193,13 +292,13 @@ export default function LeaderboardPage() {
                     <td className="px-6 py-4 font-semibold text-[#172554]">
                       {m.email}
                     </td>
-                    {!isLeaderView && (
+                    {!isScopedView && (
                       <td className="px-6 py-4 text-[#434655]">
                         {m.chapterName || '—'}
                       </td>
                     )}
                     <td className="px-6 py-4 text-center text-[#434655] font-medium">
-                      {m.completedLessons || 0} bài
+                      {m.completedLessons || 0} / {m.totalLessons || 0} bài
                     </td>
                     <td className="px-6 py-4 text-center font-semibold text-[#172554]">
                       {m.avgScore ? `${m.avgScore}%` : '—'}
@@ -213,6 +312,7 @@ export default function LeaderboardPage() {
             </table>
           </Card>
         </div>
+        )
       ) : (
         /* Chapter Standings Table */
         <Card className="p-0 overflow-hidden border border-[#eff4ff]">
@@ -305,7 +405,7 @@ export default function LeaderboardPage() {
                       <div>
                         <div className="font-semibold text-[#172554]">{m.email}</div>
                         <div className="text-xs text-[#737686]">
-                          Đã hoàn thành: {m.completedLessons || 0} bài học • Điểm Quiz: {m.avgScore || 0}%
+                          Đã học: {m.completedLessons || 0} / {m.totalLessons || 0} bài • Điểm Quiz: {m.avgScore || 0}%
                         </div>
                       </div>
                     </div>
@@ -326,12 +426,72 @@ export default function LeaderboardPage() {
           </div>
         )}
       </Modal>
+
+      {/* Modal: Giải thích cách tính điểm thi đua */}
+      <Modal
+        isOpen={showExplainModal}
+        onClose={() => setShowExplainModal(false)}
+        maxWidth="max-w-lg"
+      >
+        <div className="p-6 space-y-4">
+          <div className="flex justify-between items-center border-b border-[#eff4ff] pb-3">
+            <div className="flex items-center gap-2">
+              <span className="text-xl">💡</span>
+              <h3 className="text-lg font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
+                Cách tính điểm thi đua BBE
+              </h3>
+            </div>
+            <button
+              onClick={() => setShowExplainModal(false)}
+              className="text-[#737686] hover:text-[#172554] text-xl font-bold p-1 rounded-lg hover:bg-slate-100 transition"
+            >
+              ✕
+            </button>
+          </div>
+
+          <div className="space-y-3 text-sm text-[#434655]">
+            <p className="leading-relaxed">
+              Điểm thi đua được tính dựa trên 2 yếu tố: <strong>Tiến độ hoàn thành bài học</strong> và <strong>Kết quả làm bài kiểm tra</strong>.
+            </p>
+
+            <div className="p-3.5 sm:p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-2xl space-y-2">
+              <div className="font-bold text-[#2563EB] text-xs uppercase tracking-wide">Công thức chuẩn hóa:</div>
+              <div className="text-xs sm:text-sm md:text-base font-extrabold text-[#172554] bg-white p-3 sm:p-3.5 rounded-xl border border-blue-200 text-center leading-relaxed break-words shadow-xs">
+                Điểm thi đua = (Tiến độ bài học × 40%) + (Điểm Quiz TB × 60%)
+              </div>
+            </div>
+
+            <div className="space-y-2 text-xs">
+              <div className="flex gap-2">
+                <span className="font-bold text-[#2563EB] shrink-0">1. Tiến độ bài học (40% trọng số):</span>
+                <span>Tỷ lệ số bài học bạn đã xem xong trên tổng số bài học hiện có trong toàn bộ khóa học công khai của hệ thống (Ví dụ: 9 / 23 bài = 39%).</span>
+              </div>
+              <div className="flex gap-2">
+                <span className="font-bold text-[#2563EB] shrink-0">2. Điểm Quiz TB (60% trọng số):</span>
+                <span>Điểm số cao nhất bạn đạt được trong các bài kiểm tra đánh giá của các khóa học đã tham gia.</span>
+              </div>
+              <div className="flex gap-2">
+                <span className="font-bold text-[#2563EB] shrink-0">3. Điểm Chapter:</span>
+                <span>Điểm trung bình cộng điểm thi đua của tất cả thành viên trong Chapter đó.</span>
+              </div>
+            </div>
+
+            <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-900">
+              📌 <strong>Quy tắc hoàn thành khóa học:</strong> Khóa học chỉ được tính là &quot;Hoàn thành&quot; khi thành viên xem đủ 100% video bài giảng VÀ đạt bài kiểm tra.
+            </div>
+          </div>
+
+          <div className="flex justify-end pt-2 border-t border-[#eff4ff]">
+            <Button onClick={() => setShowExplainModal(false)}>Đã hiểu</Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 
   return (
     <div className="min-h-screen bg-[#f8f9ff] flex">
-      {mounted && user ? (
+      {user ? (
         <>
           <Sidebar role={user.role} user={{ email: user.email, chapterName: user.chapterName }} />
           <main className="ml-64 flex-1 flex flex-col">{content}</main>

@@ -44,8 +44,19 @@ export async function GET(request: NextRequest) {
       _count: true,
     }),
     prisma.lesson.count({ where: { session: { course: { status: 'PUBLISHED' } } } }),
-    prisma.lessonProgress.count({ where: { completed: true } }),
-    prisma.lessonProgress.count(),
+    prisma.lessonProgress.count({
+      where: {
+        completed: true,
+        user: { role: 'MEMBER' },
+        lesson: { session: { course: { status: 'PUBLISHED' } } },
+      },
+    }),
+    prisma.lessonProgress.count({
+      where: {
+        user: { role: 'MEMBER' },
+        lesson: { session: { course: { status: 'PUBLISHED' } } },
+      },
+    }),
   ])
 
   let activeUsers = 0

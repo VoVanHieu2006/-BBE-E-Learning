@@ -1,27 +1,49 @@
 'use client';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import Sidebar from '@/components/layout/Sidebar';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
-import { apiFetch } from '@/lib/api/client';
+import { apiFetch, getCachedApiData } from '@/lib/api/client';
+import { useRouter } from 'next/navigation';
 
 export default function StudentDashboard() {
-  const [user, setUser] = useState<any>(null);
-  const [courses, setCourses] = useState<any[]>([]);
-  const [streak, setStreak] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const router = useRouter();
+  const [user, setUser] = useState<any>(() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      return JSON.parse(localStorage.getItem('user') || 'null');
+    } catch {
+      return null;
+    }
+  });
+
+  const [courses, setCourses] = useState<any[]>(() => {
+    const cached = getCachedApiData<any>('/api/v1/members/me/courses');
+    return cached?.items || [];
+  });
+
+  const [streak, setStreak] = useState<any>(() => {
+    return getCachedApiData<any>('/api/v1/streak') || null;
+  });
+
+  const [loading, setLoading] = useState(() => courses.length === 0);
 
   useEffect(() => {
-    const u = localStorage.getItem('user');
-    if (u) {
-      setUser(JSON.parse(u));
+    if (typeof window !== 'undefined') {
+      const token = localStorage.getItem('accessToken');
+      const u = localStorage.getItem('user');
+      if (!token || !u) {
+        router.replace('/login?callbackUrl=' + encodeURIComponent(window.location.pathname));
+        return;
+      }
+      try {
+        setUser(JSON.parse(u));
+      } catch {}
     }
     loadData();
-  }, []);
+  }, [router]);
 
   async function loadData() {
-    setLoading(true);
     const [coursesRes, streakRes] = await Promise.all([
       apiFetch('/api/v1/members/me/courses'),
       apiFetch('/api/v1/streak'),
@@ -36,31 +58,32 @@ export default function StudentDashboard() {
     setLoading(false);
   }
 
-  if (!user) return <div className="min-h-screen flex items-center justify-center text-[#737686]">Đang tải...</div>;
-
   const totalCourses = courses.length;
-  const completedCourses = courses.filter((c) => (c.progressPercentage || 0) >= 100).length;
+  const completedCourses = courses.filter((c) => {
+    const allVideosDone =
+      (c.totalLessons > 0 && (c.completedLessons || 0) >= c.totalLessons) ||
+      (c.progressPercentage || 0) >= 100;
+    return c.hasAssessment ? allVideosDone && c.latestAttempt?.passed : allVideosDone;
+  }).length;
   const avgProgress = totalCourses > 0
     ? Math.round(courses.reduce((sum, c) => sum + (c.progressPercentage || 0), 0) / totalCourses)
     : 0;
 
   return (
-    <div className="min-h-screen bg-[#f8f9ff] flex">
-      <Sidebar role={user.role} user={{ email: user.email, chapterName: user.chapterName }} />
-      <main className="ml-64 flex-1 max-w-5xl mx-auto px-8 py-10">
-        <div className="flex justify-between items-start mb-8">
-          <div>
-            <h1 className="text-4xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
-              Chào mừng, {user.email?.split('@')[0]}
-            </h1>
-            <p className="text-[#737686] mt-1">
-              Chapter: <span className="font-semibold text-[#172554]">{user.chapterName || 'BBE Core'}</span> • Tiếp tục học tập hôm nay
-            </p>
-          </div>
-          <Link href="/student/courses">
-            <Button>Khám phá khóa học</Button>
-          </Link>
+    <div>
+      <div className="flex justify-between items-start mb-8">
+        <div>
+          <h1 className="text-4xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
+            Chào mừng, {user?.email?.split('@')[0] || 'bạn'}
+          </h1>
+          <p className="text-[#737686] mt-1">
+            Chapter: <span className="font-semibold text-[#172554]">{user?.chapterName || 'BBE Core'}</span> • Tiếp tục học tập hôm nay
+          </p>
         </div>
+        <Link href="/student/courses">
+          <Button>Khám phá khóa học</Button>
+        </Link>
+      </div>
 
         {/* Stats Grid */}
         <div className="grid md:grid-cols-3 gap-6 mb-10">
@@ -124,7 +147,19 @@ export default function StudentDashboard() {
                   <div className="space-y-1.5">
                     <div className="flex justify-between text-xs text-[#737686]">
                       <span>Đã học {c.completedLessons || 0} / {c.totalLessons || 0} bài</span>
-                      <span>{c.progressPercentage >= 100 ? '✓ Đã hoàn thành' : 'Đang học'}</span>
+                      <span className="font-medium">
+                        {c.hasAssessment
+                          ? c.latestAttempt?.passed
+                            ? '✓ Hoàn thành'
+                            : (c.completedLessons >= c.totalLessons || c.progressPercentage >= 100)
+                            ? c.latestAttempt
+                              ? 'Chưa pass test'
+                              : 'Cần làm test'
+                            : 'Đang học'
+                          : c.progressPercentage >= 100
+                          ? '✓ Hoàn thành'
+                          : 'Đang học'}
+                      </span>
                     </div>
                     <div className="h-2 bg-[#eff4ff] rounded-full overflow-hidden">
                       <div
@@ -138,7 +173,6 @@ export default function StudentDashboard() {
             ))}
           </div>
         )}
-      </main>
     </div>
   );
 }

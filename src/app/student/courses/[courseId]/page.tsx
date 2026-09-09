@@ -36,7 +36,7 @@ export default function CourseDetailPage({ params }: { params: { courseId: strin
     }
 
     if (token || (typeof window !== 'undefined' && localStorage.getItem('accessToken'))) {
-      const progressRes = await apiFetch(`/api/v1/courses/${params.courseId}/my-progress`);
+      const progressRes = await apiFetch(`/api/v1/courses/${params.courseId}/my-progress`, { noCache: true });
       if (progressRes.ok && progressRes.data) {
         setProgressData(progressRes.data);
       }
@@ -78,6 +78,17 @@ export default function CourseDetailPage({ params }: { params: { courseId: strin
         </Card>
       ) : (
         <div className="space-y-8">
+          {/* Banner hoàn thành khóa học */}
+          {user && !isLeaderOrAdmin && progressPercentage >= 100 && (
+            <div className="rounded-2xl border-2 border-emerald-300 bg-emerald-50 px-5 py-4 flex items-center gap-3 shadow-sm">
+              <span className="text-2xl">🎉</span>
+              <div>
+                <p className="font-bold text-emerald-800 text-sm">Chúc mừng! Bạn đã hoàn thành khóa học này</p>
+                <p className="text-xs text-emerald-700">Hãy làm bài kiểm tra cuối khóa để nhận chứng nhận nhé.</p>
+              </div>
+            </div>
+          )}
+
           {/* Header Card */}
           <div className="bg-white rounded-3xl p-8 border border-[#eff4ff] shadow-md">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -214,7 +225,7 @@ export default function CourseDetailPage({ params }: { params: { courseId: strin
             <div>
               {user ? (
                 allLessonsDone || isLeaderOrAdmin ? (
-                  <Link href={`/student/courses/${params.courseId}/quiz`}>
+                  <Link href={`/student/courses/${params.courseId}/quiz${course?.assessment?.id ? `?assessmentId=${course.assessment.id}` : ''}`}>
                     <Button size="lg" className="shadow-lg whitespace-nowrap">
                       📝 Bắt đầu làm bài kiểm tra
                     </Button>

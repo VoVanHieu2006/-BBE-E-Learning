@@ -97,8 +97,8 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
 
   async function loadCourse() {
     const [courseRes, assessRes] = await Promise.all([
-      apiFetch(`/api/v1/courses/${params.courseId}`),
-      apiFetch(`/api/v1/courses/${params.courseId}/assessment`),
+      apiFetch(`/api/v1/courses/${params.courseId}`, { noCache: true }),
+      apiFetch(`/api/v1/courses/${params.courseId}/assessment`, { noCache: true }),
     ]);
 
     if (courseRes.ok && courseRes.data) {
@@ -173,6 +173,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
 
     setSavingInfo(true);
     clearApiCache('/api/v1/courses');
+    clearApiCache(`/api/v1/courses/${params.courseId}`);
 
     const res = await apiFetch(`/api/v1/courses/${params.courseId}`, {
       method: 'PATCH',
@@ -182,6 +183,9 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
         visibility: form.visibility,
       }),
     });
+
+    clearApiCache('/api/v1/courses');
+    clearApiCache(`/api/v1/courses/${params.courseId}`);
 
     if (res.ok) {
       showToast('success', 'Đã cập nhật thông tin khóa học thành công!');
@@ -195,12 +199,20 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
   const handlePublish = async () => {
     setPublishLoading(true);
     clearApiCache('/api/v1/courses');
+    clearApiCache(`/api/v1/courses/${params.courseId}`);
 
     const res = await apiFetch(`/api/v1/courses/${params.courseId}/publish`, { method: 'POST' });
+    clearApiCache('/api/v1/courses');
+    clearApiCache(`/api/v1/courses/${params.courseId}`);
+
     if (res.ok) {
       setForm((prev) => ({ ...prev, status: 'PUBLISHED' }));
       setCourse((prev: any) => ({ ...prev, status: 'PUBLISHED' }));
       showToast('success', 'Đã công khai khóa học thành công!');
+    } else if (res.error?.code === 'AlreadyPublished') {
+      setForm((prev) => ({ ...prev, status: 'PUBLISHED' }));
+      setCourse((prev: any) => ({ ...prev, status: 'PUBLISHED' }));
+      showToast('info', 'Khóa học đã ở trạng thái công khai.');
     } else {
       showToast('error', res.error?.message || 'Khóa học cần ít nhất 1 buổi học và mỗi buổi học có 1 bài học.');
     }
@@ -210,12 +222,20 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
   const handleUnpublish = async () => {
     setPublishLoading(true);
     clearApiCache('/api/v1/courses');
+    clearApiCache(`/api/v1/courses/${params.courseId}`);
 
     const res = await apiFetch(`/api/v1/courses/${params.courseId}/unpublish`, { method: 'POST' });
+    clearApiCache('/api/v1/courses');
+    clearApiCache(`/api/v1/courses/${params.courseId}`);
+
     if (res.ok) {
       setForm((prev) => ({ ...prev, status: 'DRAFT' }));
       setCourse((prev: any) => ({ ...prev, status: 'DRAFT' }));
       showToast('info', 'Đã chuyển khóa học về bản nháp. Bạn có thể chỉnh sửa nội dung.');
+    } else if (res.error?.code === 'AlreadyDraft') {
+      setForm((prev) => ({ ...prev, status: 'DRAFT' }));
+      setCourse((prev: any) => ({ ...prev, status: 'DRAFT' }));
+      showToast('info', 'Khóa học đã ở trạng thái bản nháp.');
     } else {
       showToast('error', res.error?.message || 'Không thể bỏ công khai khóa học.');
     }
