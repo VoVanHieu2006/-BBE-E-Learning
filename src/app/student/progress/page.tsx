@@ -8,26 +8,10 @@ import { useRouter } from 'next/navigation';
 
 export default function StudentProgressPage() {
   const router = useRouter();
-  const [user, setUser] = useState<any>(() => {
-    if (typeof window === 'undefined') return null;
-    try {
-      return JSON.parse(localStorage.getItem('user') || 'null');
-    } catch {
-      return null;
-    }
-  });
-
-  const [courses, setCourses] = useState<any[]>(() => {
-    const cached = getCachedApiData<any>('/api/v1/members/me/courses');
-    return cached?.items || [];
-  });
-
-  const [summary, setSummary] = useState<any>(() => {
-    const cached = getCachedApiData<any>('/api/v1/members/me/courses');
-    return cached?.summary || null;
-  });
-
-  const [loading, setLoading] = useState(() => courses.length === 0);
+  const [user, setUser] = useState<any>(null);
+  const [courses, setCourses] = useState<any[]>([]);
+  const [summary, setSummary] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -40,6 +24,14 @@ export default function StudentProgressPage() {
       try {
         setUser(JSON.parse(u));
       } catch {}
+
+      // Read cache immediately on client mount
+      const cached = getCachedApiData<any>('/api/v1/members/me/courses');
+      if (cached?.items) {
+        setCourses(cached.items);
+        setSummary(cached.summary || null);
+        setLoading(false);
+      }
     }
     loadProgress();
   }, [router]);

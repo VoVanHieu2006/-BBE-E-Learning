@@ -8,6 +8,7 @@ import { apiFetch, clearApiCache, getCachedApiData } from '@/lib/api/client';
 
 export default function ChapterManagerInvitationsPage() {
   const [user, setUser] = useState<any>(null);
+  const [mounted, setMounted] = useState(false);
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
@@ -22,6 +23,7 @@ export default function ChapterManagerInvitationsPage() {
   };
 
   useEffect(() => {
+    setMounted(true);
     if (typeof window !== 'undefined') {
       const u = localStorage.getItem('user');
       if (u) {
@@ -170,7 +172,7 @@ export default function ChapterManagerInvitationsPage() {
               Quản lý lời mời thành viên
             </h1>
             <p className="text-[#737686] mt-1 text-sm">
-              Chapter: <span className="font-semibold text-[#172554]">{user?.chapterName || 'Chapter của bạn'}</span> • Mời thành viên mới và theo dõi trạng thái kích hoạt
+              Chapter: <span suppressHydrationWarning className="font-semibold text-[#172554]">{mounted && user?.chapterName ? user.chapterName : 'Chapter của bạn'}</span> • Mời thành viên mới và theo dõi trạng thái kích hoạt
             </p>
           </div>
           <Button onClick={() => setShowInviteModal(true)}>
@@ -276,7 +278,7 @@ export default function ChapterManagerInvitationsPage() {
               Mời thành viên mới
             </h3>
             <p className="text-xs text-[#737686]">
-              Gửi email lời mời tham gia Chapter {user?.chapterName || ''}. Lời mời có hiệu lực trong 24 giờ.
+              Gửi email lời mời tham gia Chapter <span suppressHydrationWarning>{mounted && user?.chapterName ? user.chapterName : ''}</span>. Lời mời có hiệu lực trong 24 giờ.
             </p>
             <form onSubmit={handleSendInvite} className="space-y-4">
               <div>

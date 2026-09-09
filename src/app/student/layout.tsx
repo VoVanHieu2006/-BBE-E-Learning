@@ -16,31 +16,12 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
   const pathname = usePathname();
   const isPublicRoute = pathname.startsWith('/student/courses') && !pathname.includes('/quiz');
 
-  const [user, setUser] = useState<any>(() => {
-    if (typeof window === 'undefined') return null;
-    try {
-      return JSON.parse(localStorage.getItem('user') || 'null');
-    } catch {
-      return null;
-    }
-  });
-
-  const [isAuthorized, setIsAuthorized] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false;
-    const token = localStorage.getItem('accessToken');
-    const uRaw = localStorage.getItem('user');
-    if (!token || !uRaw) return false;
-    try {
-      const u = JSON.parse(uRaw);
-      return Boolean(u.role);
-    } catch {
-      return false;
-    }
-  });
-
+  const [user, setUser] = useState<any>(null);
+  const [mounted, setMounted] = useState(false);
   const prefetched = useRef(false);
 
   useEffect(() => {
+    setMounted(true);
     if (typeof window !== 'undefined') {
       const token = localStorage.getItem('accessToken');
       const uRaw = localStorage.getItem('user');
@@ -56,16 +37,13 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
         if (!isPublicRoute) {
           router.replace('/login?callbackUrl=' + encodeURIComponent(window.location.pathname));
         }
-        return;
       }
-
-      setIsAuthorized(true);
     }
   }, [router, isPublicRoute]);
 
   // Idle-time prefetch for sibling student tabs
   useEffect(() => {
-    if (!isAuthorized || prefetched.current) return;
+    if (!user || prefetched.current) return;
     prefetched.current = true;
 
     const chapterId = user?.chapterId;
@@ -87,20 +65,11 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
     } else {
       setTimeout(prefetchAll, 1200);
     }
-  }, [isAuthorized, user?.chapterId]);
+  }, [user]);
 
-  if (!isAuthorized) {
-    if (isPublicRoute) {
-      return <>{children}</>;
-    }
-    return (
-      <div className="min-h-screen bg-[#f8f9ff] flex items-center justify-center">
-        <div className="text-center space-y-3">
-          <div className="w-10 h-10 border-4 border-[#2563EB] border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-sm font-semibold text-[#737686]">Đang xác thực...</p>
-        </div>
-      </div>
-    );
+  // For public courses route, if user is not logged in after hydration, render without sidebar
+  if (isPublicRoute && mounted && !user) {
+    return <>{children}</>;
   }
 
   return (

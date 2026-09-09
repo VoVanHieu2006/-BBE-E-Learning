@@ -8,73 +8,14 @@ import Modal from '@/components/ui/Modal';
 import { apiFetch, getCachedApiData } from '@/lib/api/client';
 
 export default function LeaderboardPage() {
-  const [user, setUser] = useState<any>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const u = localStorage.getItem('user');
-        return u ? JSON.parse(u) : null;
-      } catch {
-        return null;
-      }
-    }
-    return null;
-  });
+  const [user, setUser] = useState<any>(null);
   const [mounted, setMounted] = useState(false);
 
   const [activeTab, setActiveTab] = useState<'members' | 'chapters'>('members');
 
-  const [members, setMembers] = useState<any[]>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const u = localStorage.getItem('user');
-        const parsed = u ? JSON.parse(u) : null;
-        const isScopedRole = parsed?.role === 'CHAPTER_LEADER' || parsed?.role === 'MEMBER';
-        if (isScopedRole && parsed?.chapterId) {
-          const cached = getCachedApiData<any>(`/api/v1/leaderboard/chapters/${parsed.chapterId}`);
-          return cached?.items || [];
-        }
-        if (parsed?.role !== 'MEMBER') {
-          const cached = getCachedApiData<any>('/api/v1/leaderboard');
-          return cached?.items || [];
-        }
-      } catch {}
-    }
-    return [];
-  });
-
-  const [chapters, setChapters] = useState<any[]>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const u = localStorage.getItem('user');
-        const parsed = u ? JSON.parse(u) : null;
-        if (parsed?.role === 'ADMIN' || parsed?.role === 'SUPER_ADMIN') {
-          const cached = getCachedApiData<any>('/api/v1/leaderboard/chapters');
-          return cached?.items || [];
-        }
-      } catch {}
-    }
-    return [];
-  });
-
-  const [loading, setLoading] = useState(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const u = localStorage.getItem('user');
-        const parsed = u ? JSON.parse(u) : null;
-        const isScopedRole = parsed?.role === 'CHAPTER_LEADER' || parsed?.role === 'MEMBER';
-        if (isScopedRole && parsed?.chapterId) {
-          const cached = getCachedApiData<any>(`/api/v1/leaderboard/chapters/${parsed.chapterId}`);
-          return !cached?.items;
-        }
-        if (parsed?.role === 'MEMBER' && !parsed?.chapterId) {
-          return false;
-        }
-        const cached = getCachedApiData<any>('/api/v1/leaderboard');
-        return !cached?.items;
-      } catch {}
-    }
-    return true;
-  });
+  const [members, setMembers] = useState<any[]>([]);
+  const [chapters, setChapters] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
   // Chapter Drill-down Modal
   const [selectedChapter, setSelectedChapter] = useState<any | null>(null);
@@ -491,7 +432,7 @@ export default function LeaderboardPage() {
 
   return (
     <div className="min-h-screen bg-[#f8f9ff] flex">
-      {user ? (
+      {mounted && user ? (
         <>
           <Sidebar role={user.role} user={{ email: user.email, chapterName: user.chapterName }} />
           <main className="ml-64 flex-1 flex flex-col">{content}</main>

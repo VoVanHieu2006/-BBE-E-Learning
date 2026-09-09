@@ -5,44 +5,35 @@ import Card from '@/components/ui/Card';
 import { apiFetch, getCachedApiData } from '@/lib/api/client';
 
 export default function ChapterManagerDashboard() {
-  const [user, setUser] = useState<any>(() => {
-    if (typeof window === 'undefined') return null;
-    try {
-      return JSON.parse(localStorage.getItem('user') || 'null');
-    } catch {
-      return null;
-    }
-  });
-
-  const [membersData, setMembersData] = useState<any>(() => {
-    if (typeof window === 'undefined') return null;
-    const u = (() => { try { return JSON.parse(localStorage.getItem('user') || 'null') } catch { return null } })();
-    const chapter = u?.chapterId || 'me';
-    return getCachedApiData<any>(`/api/v1/chapters/${chapter}/dashboard/members`) ||
-           getCachedApiData<any>('/api/v1/chapters/me/dashboard/members');
-  });
-
-  const [coursesData, setCoursesData] = useState<any>(() => {
-    if (typeof window === 'undefined') return null;
-    const u = (() => { try { return JSON.parse(localStorage.getItem('user') || 'null') } catch { return null } })();
-    const chapter = u?.chapterId || 'me';
-    return getCachedApiData<any>(`/api/v1/chapters/${chapter}/dashboard/courses`) ||
-           getCachedApiData<any>('/api/v1/chapters/me/dashboard/courses');
-  });
-
-  const [loading, setLoading] = useState(() => !membersData && !coursesData);
+  const [user, setUser] = useState<any>(null);
+  const [membersData, setMembersData] = useState<any>(null);
+  const [coursesData, setCoursesData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
+    let currentChapter = 'me';
     if (typeof window !== 'undefined') {
       const u = localStorage.getItem('user');
       if (u) {
         try {
           const parsed = JSON.parse(u);
           setUser(parsed);
-          loadDashboard(parsed.chapterId);
+          currentChapter = parsed.chapterId || 'me';
         } catch {}
       }
+
+      // Read cache immediately on client mount
+      const cachedMembers = getCachedApiData<any>(`/api/v1/chapters/${currentChapter}/dashboard/members`) ||
+                            getCachedApiData<any>('/api/v1/chapters/me/dashboard/members');
+      const cachedCourses = getCachedApiData<any>(`/api/v1/chapters/${currentChapter}/dashboard/courses`) ||
+                            getCachedApiData<any>('/api/v1/chapters/me/dashboard/courses');
+      if (cachedMembers) setMembersData(cachedMembers);
+      if (cachedCourses) setCoursesData(cachedCourses);
+      if (cachedMembers || cachedCourses) setLoading(false);
     }
+    loadDashboard(currentChapter);
   }, []);
 
   async function loadDashboard(chapterId?: string, noCache = false) {
@@ -90,7 +81,7 @@ export default function ChapterManagerDashboard() {
         <div className="flex justify-between items-center mb-8">
           <div>
             <h1 className="text-3xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
-              Dashboard BĐHU — {user?.chapterName || 'Chapter của bạn'}
+              Dashboard BĐHU — <span suppressHydrationWarning>{mounted && user?.chapterName ? user.chapterName : 'Chapter của bạn'}</span>
             </h1>
             <p className="text-[#737686] mt-1 text-sm">
               Theo dõi tiến độ học tập và quản lý học viên trong Chapter trực thuộc

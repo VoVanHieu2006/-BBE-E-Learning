@@ -8,27 +8,14 @@ import { useRouter } from 'next/navigation';
 
 export default function StudentDashboard() {
   const router = useRouter();
-  const [user, setUser] = useState<any>(() => {
-    if (typeof window === 'undefined') return null;
-    try {
-      return JSON.parse(localStorage.getItem('user') || 'null');
-    } catch {
-      return null;
-    }
-  });
-
-  const [courses, setCourses] = useState<any[]>(() => {
-    const cached = getCachedApiData<any>('/api/v1/members/me/courses');
-    return cached?.items || [];
-  });
-
-  const [streak, setStreak] = useState<any>(() => {
-    return getCachedApiData<any>('/api/v1/streak') || null;
-  });
-
-  const [loading, setLoading] = useState(() => courses.length === 0);
+  const [user, setUser] = useState<any>(null);
+  const [courses, setCourses] = useState<any[]>([]);
+  const [streak, setStreak] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
     if (typeof window !== 'undefined') {
       const token = localStorage.getItem('accessToken');
       const u = localStorage.getItem('user');
@@ -39,6 +26,17 @@ export default function StudentDashboard() {
       try {
         setUser(JSON.parse(u));
       } catch {}
+
+      // Read cache immediately on client mount
+      const cachedCourses = getCachedApiData<any>('/api/v1/members/me/courses');
+      const cachedStreak = getCachedApiData<any>('/api/v1/streak');
+      if (cachedCourses?.items) {
+        setCourses(cachedCourses.items);
+        setLoading(false);
+      }
+      if (cachedStreak) {
+        setStreak(cachedStreak);
+      }
     }
     loadData();
   }, [router]);
@@ -74,10 +72,10 @@ export default function StudentDashboard() {
       <div className="flex justify-between items-start mb-8">
         <div>
           <h1 className="text-4xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
-            Chào mừng, {user?.email?.split('@')[0] || 'bạn'}
+            Chào mừng, <span suppressHydrationWarning>{mounted && user?.email ? user.email.split('@')[0] : 'bạn'}</span>
           </h1>
           <p className="text-[#737686] mt-1">
-            Chapter: <span className="font-semibold text-[#172554]">{user?.chapterName || 'BBE Core'}</span> • Tiếp tục học tập hôm nay
+            Chapter: <span suppressHydrationWarning className="font-semibold text-[#172554]">{mounted && user?.chapterName ? user.chapterName : 'BBE Core'}</span> • Tiếp tục học tập hôm nay
           </p>
         </div>
         <Link href="/student/courses">

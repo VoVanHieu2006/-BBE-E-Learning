@@ -87,16 +87,7 @@ function ChapterManagerLayoutInner({ children }: { children: React.ReactNode }) 
     }
   }, [isAuthorized, user?.chapterId]);
 
-  if (!isAuthorized) {
-    return (
-      <div className="min-h-screen bg-[#f8f9ff] flex items-center justify-center">
-        <div className="text-center space-y-3">
-          <div className="w-10 h-10 border-4 border-[#2563EB] border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-sm font-semibold text-[#737686]">Đang xác thực quyền Ban Điều Hành...</p>
-        </div>
-      </div>
-    );
-  }
+
 
   return (
     <div className="min-h-screen bg-[#f8f9ff] flex">

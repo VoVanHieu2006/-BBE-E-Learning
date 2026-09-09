@@ -6,21 +6,9 @@ import Button from '@/components/ui/Button';
 import { apiFetch, getCachedApiData } from '@/lib/api/client';
 
 export default function StudentCoursesPage() {
-  const [user, setUser] = useState<any>(() => {
-    if (typeof window === 'undefined') return null;
-    try {
-      return JSON.parse(localStorage.getItem('user') || 'null');
-    } catch {
-      return null;
-    }
-  });
-
-  const [courses, setCourses] = useState<any[]>(() => {
-    const cached = getCachedApiData<any>('/api/v1/courses');
-    return cached?.items || [];
-  });
-
-  const [loading, setLoading] = useState(() => courses.length === 0);
+  const [user, setUser] = useState<any>(null);
+  const [courses, setCourses] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -31,6 +19,13 @@ export default function StudentCoursesPage() {
         try {
           setUser(JSON.parse(u));
         } catch {}
+      }
+
+      // Read cache immediately on client mount
+      const cached = getCachedApiData<any>('/api/v1/courses');
+      if (cached?.items) {
+        setCourses(cached.items);
+        setLoading(false);
       }
     }
     loadCourses();

@@ -8,51 +8,11 @@ import Modal from '@/components/ui/Modal';
 import { apiFetch, getCachedApiData, clearApiCache } from '@/lib/api/client';
 
 export default function ChapterManagerMembersPage() {
-  const [user, setUser] = useState<any>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const u = localStorage.getItem('user');
-        return u ? JSON.parse(u) : null;
-      } catch {
-        return null;
-      }
-    }
-    return null;
-  });
-
-  const [members, setMembers] = useState<any[]>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const u = localStorage.getItem('user');
-        const parsed = u ? JSON.parse(u) : null;
-        const targetChapter = parsed?.chapterId || 'me';
-        const url = `/api/v1/chapters/${targetChapter}/dashboard/members?search=&includeInactive=1`;
-        const cached = getCachedApiData<any>(url);
-        return cached?.items || [];
-      } catch {
-        return [];
-      }
-    }
-    return [];
-  });
-
-  const [loading, setLoading] = useState(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const u = localStorage.getItem('user');
-        const parsed = u ? JSON.parse(u) : null;
-        const targetChapter = parsed?.chapterId || 'me';
-        const url = `/api/v1/chapters/${targetChapter}/dashboard/members?search=&includeInactive=1`;
-        const cached = getCachedApiData<any>(url);
-        return !cached?.items;
-      } catch {
-        return true;
-      }
-    }
-    return true;
-  });
-
+  const [user, setUser] = useState<any>(null);
+  const [members, setMembers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [mounted, setMounted] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [sendingInvite, setSendingInvite] = useState(false);
@@ -65,15 +25,24 @@ export default function ChapterManagerMembersPage() {
   };
 
   useEffect(() => {
-    let currentChapter = user?.chapterId;
-    if (!currentChapter && typeof window !== 'undefined') {
+    setMounted(true);
+    let currentChapter = 'me';
+    if (typeof window !== 'undefined') {
       const u = localStorage.getItem('user');
       if (u) {
         try {
           const parsed = JSON.parse(u);
           setUser(parsed);
-          currentChapter = parsed?.chapterId;
+          currentChapter = parsed?.chapterId || 'me';
         } catch {}
+      }
+
+      // Read cache immediately on client mount
+      const url = `/api/v1/chapters/${currentChapter}/dashboard/members?search=${encodeURIComponent(search)}&includeInactive=1`;
+      const cached = getCachedApiData<any>(url);
+      if (cached?.items) {
+        setMembers(cached.items);
+        setLoading(false);
       }
     }
     loadMembers(currentChapter, search);
@@ -213,7 +182,7 @@ export default function ChapterManagerMembersPage() {
               Thành viên & Tiến trình Chapter
             </h1>
             <p className="text-[#737686] mt-1 text-sm">
-              Chapter: <span className="font-semibold text-[#172554]">{user?.chapterName || 'Chapter của bạn'}</span> • Quản lý học viên và theo dõi kết quả học tập
+              Chapter: <span suppressHydrationWarning className="font-semibold text-[#172554]">{mounted && user?.chapterName ? user.chapterName : 'Chapter của bạn'}</span> • Quản lý học viên và theo dõi kết quả học tập
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -386,7 +355,7 @@ export default function ChapterManagerMembersPage() {
               Mời thành viên tham gia Chapter
             </h3>
             <p className="text-xs text-[#737686]">
-              Gửi lời mời tham gia Chapter {user?.chapterName || ''} qua email.
+              Gửi lời mời tham gia Chapter <span suppressHydrationWarning>{mounted && user?.chapterName ? user.chapterName : ''}</span> qua email.
             </p>
             <form onSubmit={handleInvite} className="space-y-4">
               <div>
