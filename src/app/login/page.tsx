@@ -44,6 +44,8 @@ export default function LoginPage() {
         setError(
           res.status === 423
             ? 'Tài khoản bị tạm khóa do đăng nhập sai quá nhiều lần. Vui lòng dùng tính năng quên mật khẩu.'
+            : res.status >= 500
+            ? (data.error?.message || 'Lỗi máy chủ nội bộ (500). Vui lòng thử lại sau hoặc kiểm tra cấu hình Vercel.')
             : data.error?.message || 'Tài khoản hoặc mật khẩu không đúng.'
         );
         setLoading(false);

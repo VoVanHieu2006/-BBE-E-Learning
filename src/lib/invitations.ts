@@ -4,7 +4,7 @@ import { sendInvitationEmail } from './email'
 type UserRole = 'ADMIN' | 'CHAPTER_LEADER' | 'MEMBER';
 type InvitationRole = 'CHAPTER_LEADER' | 'MEMBER';
 type InvitationStatus = 'PENDING' | 'ACCEPTED' | 'EXPIRED' | 'CANCELLED';
-import bcrypt from 'bcrypt'
+import bcrypt from 'bcryptjs'
 
 export interface SendInvitationOptions {
   email: string
