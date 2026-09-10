@@ -7,6 +7,9 @@ import crypto from 'crypto'
  * POST /api/v1/auth/password-reset/confirm
  * Confirm password reset with token.
  */
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}))

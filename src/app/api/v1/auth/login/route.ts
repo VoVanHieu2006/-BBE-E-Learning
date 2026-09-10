@@ -7,6 +7,9 @@ import crypto from 'crypto'
 const JWT_ACCESS_SECRET = process.env.JWT_ACCESS_SECRET || ''
 const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || ''
 
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}))

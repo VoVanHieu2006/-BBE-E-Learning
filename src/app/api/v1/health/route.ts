@@ -29,7 +29,10 @@ export async function GET() {
   }
 
   checks.auth = !!process.env.ADMIN_EMAIL && !!process.env.ADMIN_PASSWORD
+  ;(checks as any).jwtAccessSecret = !!process.env.JWT_ACCESS_SECRET
+  ;(checks as any).jwtRefreshSecret = !!process.env.JWT_REFRESH_SECRET
+  ;(checks as any).tokenHashPepper = !!process.env.TOKEN_HASH_PEPPER
 
-  const healthy = checks.database && checks.r2 && checks.auth
+  const healthy = checks.database && checks.r2 && checks.auth && (checks as any).jwtAccessSecret && (checks as any).jwtRefreshSecret
   return NextResponse.json({ status: healthy ? 'healthy' : 'degraded', checks, healthy }, { status: healthy ? 200 : 503 })
 }
