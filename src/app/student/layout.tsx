@@ -86,11 +86,23 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
     return <>{children}</>;
   }
 
-  // Đối với route xem khóa học public (/student/courses), nếu là khách chưa đăng nhập thì không render Sidebar
-  if (isPublicRoute && mounted && !user) {
+  // Đối với route xem khóa học public (/student/courses), nếu là khách chưa đăng nhập thì không render Sidebar.
+  // QUAN TRỌNG: SSR và lần render đầu tiên phải là guest layout (không Sidebar).
+  // Nếu để điều kiện "mounted && !user" thì khi !mounted (SSR/hydrate) sẽ rơi vào nhánh Sidebar MEMBER,
+  // khiến khách vãng lai thấy flash giao diện thành viên khi reload trang.
+  if (isPublicRoute) {
+    if (mounted && user) {
+      return (
+        <div className="min-h-screen bg-[#f8f9ff] flex">
+          <Sidebar role={user?.role || 'MEMBER'} user={{ email: user?.email, chapterName: user?.chapterName }} />
+          <main className="ml-64 flex-1 max-w-5xl mx-auto px-8 py-10 w-full min-w-0">{children}</main>
+        </div>
+      );
+    }
     return <>{children}</>;
   }
 
+  // Route student riêng tư (/student/* khác): cần đăng nhập — hiệu ứng auth check phía effect sẽ redirect khách về /login
   return (
     <div className="min-h-screen bg-[#f8f9ff] flex">
       <Sidebar role={user?.role || 'MEMBER'} user={{ email: user?.email, chapterName: user?.chapterName }} />
