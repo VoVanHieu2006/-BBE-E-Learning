@@ -12,34 +12,42 @@ const s3 = new S3Client({
   },
 })
 
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
+
 export async function POST(request: NextRequest, { params }: { params: { lessonId: string } }) {
-  const auth = await authenticate(request)
-  if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: 401 })
-  if ((auth as any).context!.role !== 'ADMIN') return NextResponse.json({ error: { code: 'AccessDenied', message: 'Chỉ Admin' } }, { status: 403 })
+  try {
+    const auth = await authenticate(request)
+    if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: 401 })
+    if ((auth as any).context!.role !== 'ADMIN') return NextResponse.json({ error: { code: 'AccessDenied', message: 'Chỉ Admin' } }, { status: 403 })
 
-  const body = await request.json()
-  const { fileName, mimeType, fileSize } = body || {}
+    const body = await request.json().catch(() => ({}))
+    const { fileName, mimeType, fileSize } = body || {}
 
-  if (!fileName || fileName.trim().length < 1) {
-    return NextResponse.json({ error: { code: 'ValidationError', message: 'fileName bắt buộc' } }, { status: 400 })
+    if (!fileName || fileName.trim().length < 1) {
+      return NextResponse.json({ error: { code: 'ValidationError', message: 'fileName bắt buộc' } }, { status: 400 })
+    }
+
+    const storageKey = `docs/${params.lessonId}/${Date.now()}-${fileName.replace(/[^a-zA-Z0-9.]/g, '-')}`
+
+    const command = new PutObjectCommand({
+      Bucket: process.env.R2_BUCKET_NAME!,
+      Key: storageKey,
+      ContentType: mimeType || 'application/octet-stream',
+    })
+
+    const url = await getSignedUrl(s3, command, { expiresIn: 600 }) // 10 min
+
+    return NextResponse.json({
+      storageKey,
+      fileName: fileName.trim(),
+      mimeType: mimeType || 'application/octet-stream',
+      fileSize: fileSize || null,
+      uploadUrl: url,
+      expiresIn: 600,
+    })
+  } catch (err: any) {
+    console.error('[PRESIGN ERROR]:', err)
+    return NextResponse.json({ error: { code: 'ServerError', message: err.message || 'Lỗi tạo link upload' } }, { status: 500 })
   }
-
-  const storageKey = `docs/${params.lessonId}/${Date.now()}-${fileName.replace(/[^a-zA-Z0-9.]/g, '-')}`
-
-  const command = new PutObjectCommand({
-    Bucket: process.env.R2_BUCKET_NAME!,
-    Key: storageKey,
-    ContentType: mimeType || 'application/octet-stream',
-  })
-
-  const url = await getSignedUrl(s3, command, { expiresIn: 300 }) // 5 min
-
-  return NextResponse.json({
-    storageKey,
-    fileName: fileName.trim(),
-    mimeType: mimeType || 'application/octet-stream',
-    fileSize: fileSize || null,
-    uploadUrl: url,
-    expiresIn: 300,
-  })
 }

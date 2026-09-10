@@ -721,20 +721,21 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
     }
   };
 
-  // ─── Document Upload (Max 25MB with clear validation) ─────────────────────────
+  // ─── Document Upload (Direct R2 Presigned + Multi-file + Max 100MB) ────────────
   const handleDirectUploadDoc = async (
     sessionId: string,
     lessonId: string,
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
 
-    const MAX_DOC_SIZE_MB = 25;
+    const MAX_DOC_SIZE_MB = 100;
     const MAX_DOC_BYTES = MAX_DOC_SIZE_MB * 1024 * 1024;
 
-    if (file.size > MAX_DOC_BYTES) {
-      showToast('error', `Tài liệu vượt quá dung lượng cho phép (tối đa ${MAX_DOC_SIZE_MB}MB). Vui lòng chọn file nhỏ hơn.`);
+    const oversized = files.filter((f) => f.size > MAX_DOC_BYTES);
+    if (oversized.length > 0) {
+      showToast('error', `Tài liệu "${oversized[0].name}" vượt quá dung lượng tối đa (${MAX_DOC_SIZE_MB}MB). Vui lòng chọn file nhỏ hơn.`);
       e.target.value = '';
       return;
     }
@@ -742,21 +743,113 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
     setUploadingDocForLessonId(lessonId);
     clearApiCache('/api/v1/courses');
 
-    const formData = new FormData();
-    formData.append('file', file);
-
     const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : '';
-    const res = await fetch(`/api/v1/lessons/${lessonId}/documents/upload`, {
-      method: 'POST',
-      headers: {
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: formData,
-    });
+    const addedDocs: any[] = [];
+    let successCount = 0;
 
-    const data = await res.json().catch(() => null);
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      let uploadedDoc: any = null;
 
-    if (res.ok && data) {
+      try {
+        // 1. Try Direct R2 Presigned Upload (Bypasses Vercel's 4.5MB limit entirely!)
+        const presignRes = await fetch(`/api/v1/lessons/${lessonId}/documents/presign`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            fileName: file.name,
+            mimeType: file.type || 'application/octet-stream',
+            fileSize: file.size,
+          }),
+        });
+        const presignData = await presignRes.json().catch(() => null);
+
+        if (presignRes.ok && presignData?.uploadUrl) {
+          try {
+            const r2Res = await fetch(presignData.uploadUrl, {
+              method: 'PUT',
+              headers: {
+                'Content-Type': file.type || 'application/octet-stream',
+              },
+              body: file,
+            });
+
+            if (r2Res.ok) {
+              const confirmRes = await fetch(`/api/v1/lessons/${lessonId}/documents/confirm`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                },
+                body: JSON.stringify({
+                  fileName: file.name,
+                  storageKey: presignData.storageKey,
+                  mimeType: file.type || 'application/octet-stream',
+                  fileSize: file.size,
+                }),
+              });
+              const confirmData = await confirmRes.json().catch(() => null);
+              if (confirmRes.ok && confirmData) {
+                uploadedDoc = {
+                  documentId: confirmData.documentId || confirmData.id,
+                  id: confirmData.documentId || confirmData.id,
+                  fileName: confirmData.fileName || file.name,
+                  fileSize: confirmData.fileSize || file.size,
+                  mimeType: confirmData.mimeType || file.type,
+                };
+              }
+            }
+          } catch (r2Err) {
+            console.warn(`Direct R2 upload failed for ${file.name}, trying server fallback...`, r2Err);
+          }
+        }
+
+        // 2. Fallback: If direct R2 upload failed and file <= 4.2MB, try server upload
+        if (!uploadedDoc && file.size <= 4.2 * 1024 * 1024) {
+          const formData = new FormData();
+          formData.append('file', file);
+          const res = await fetch(`/api/v1/lessons/${lessonId}/documents/upload`, {
+            method: 'POST',
+            headers: {
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: formData,
+          });
+          const data = await res.json().catch(() => null);
+          if (res.ok && data) {
+            uploadedDoc = {
+              documentId: data.documentId || data.id,
+              id: data.documentId || data.id,
+              fileName: data.fileName || file.name,
+              fileSize: data.fileSize || file.size,
+              mimeType: data.mimeType || file.type,
+            };
+          }
+        }
+      } catch (err) {
+        console.error(`Upload error for ${file.name}:`, err);
+      }
+
+      if (uploadedDoc) {
+        addedDocs.push(uploadedDoc);
+        successCount++;
+      } else {
+        const sizeMb = (file.size / 1024 / 1024).toFixed(1);
+        if (file.size > 4.2 * 1024 * 1024) {
+          showToast(
+            'error',
+            `Không thể tải "${file.name}" (${sizeMb}MB). Nếu file lớn hơn 4.5MB, hãy đảm bảo Cloudflare R2 bucket đã được bật CORS Policy.`
+          );
+        } else {
+          showToast('error', `Tải lên file "${file.name}" thất bại.`);
+        }
+      }
+    }
+
+    if (addedDocs.length > 0) {
       setCourse((prev: any) => ({
         ...prev,
         sessions: prev.sessions.map((s: any) =>
@@ -767,16 +860,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
                   (l.lessonId || l.id) === lessonId
                     ? {
                         ...l,
-                        documents: [
-                          ...(l.documents || []),
-                          {
-                            documentId: data.documentId || data.id,
-                            id: data.documentId || data.id,
-                            fileName: data.fileName || file.name,
-                            fileSize: data.fileSize || file.size,
-                            mimeType: data.mimeType || file.type,
-                          },
-                        ],
+                        documents: [...(l.documents || []), ...addedDocs],
                       }
                     : l
                 ),
@@ -784,10 +868,14 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
             : s
         ),
       }));
-      showToast('success', `Đã tải lên tài liệu "${file.name}" (${(file.size / 1024 / 1024).toFixed(1)}MB) thành công!`);
-    } else {
-      showToast('error', data?.error?.message || 'Lỗi khi tải tài liệu lên');
+
+      if (files.length === 1) {
+        showToast('success', `Đã tải lên tài liệu "${files[0].name}" thành công!`);
+      } else {
+        showToast('success', `Đã tải lên thành công ${successCount}/${files.length} tài liệu!`);
+      }
     }
+
     setUploadingDocForLessonId(null);
     e.target.value = '';
   };
@@ -1335,11 +1423,12 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
                                         <label className="cursor-pointer">
                                           <input
                                             type="file"
+                                            multiple
                                             className="hidden"
                                             onChange={(e) => handleDirectUploadDoc(sId, lId, e)}
                                           />
                                           <span className="px-2.5 py-1 bg-white border border-[#cbdbf5] hover:bg-[#eff4ff] text-[#2563EB] rounded-lg text-xs font-semibold inline-block transition">
-                                            {uploadingDocForLessonId === lId ? '⏳ Đang tải...' : '📎 Thêm tài liệu (max 25MB)'}
+                                            {uploadingDocForLessonId === lId ? '⏳ Đang tải tài liệu...' : '📎 Thêm tài liệu (nhiều file, max 100MB)'}
                                           </span>
                                         </label>
 
