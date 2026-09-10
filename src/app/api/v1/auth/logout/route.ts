@@ -1,35 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import crypto from 'crypto'
 
 /**
  * POST /api/v1/auth/logout
- * Revoke refresh token.
+ * Revoke refresh token and clear all auth cookies unconditionally.
  */
 export async function POST(request: NextRequest) {
-  const auth = await authenticate(request)
-  if (!auth.ok) {
-    return NextResponse.json({ error: auth.error }, { status: 401 })
-  }
-
   const body = await request.json().catch(() => ({}))
-  const { refreshToken } = body
+  const refreshToken = body?.refreshToken || request.cookies.get('refreshToken')?.value
 
-  if (!refreshToken) {
-    return NextResponse.json({ error: { code: 'ValidationError', message: 'refreshToken là bắt buộc' } }, { status: 400 })
+  if (refreshToken) {
+    try {
+      const hash = crypto.createHash('sha256').update(refreshToken + (process.env.TOKEN_HASH_PEPPER || '')).digest('hex')
+      await prisma.refreshToken.updateMany({
+        where: { token_hash: hash, revoked_at: null },
+        data: { revoked_at: new Date() },
+      })
+    } catch {}
   }
 
-  // Hash and revoke
-  const hash = crypto.createHash('sha256').update(refreshToken + (process.env.TOKEN_HASH_PEPPER || '')).digest('hex')
-  const updated = await prisma.refreshToken.updateMany({
-    where: { token_hash: hash, user_id: (auth as any).context!.userId, revoked_at: null },
-    data: { revoked_at: new Date() },
-  })
-
-  const response = NextResponse.json({ success: true, revoked: updated.count > 0 }, { status: 200 })
-  response.cookies.delete('accessToken')
-  response.cookies.delete('refreshToken')
-  response.cookies.delete('userRole')
+  const response = NextResponse.json({ success: true }, { status: 200 })
+  response.cookies.set('accessToken', '', { path: '/', maxAge: 0, sameSite: 'lax', httpOnly: true })
+  response.cookies.set('refreshToken', '', { path: '/', maxAge: 0, sameSite: 'lax', httpOnly: true })
+  response.cookies.set('userRole', '', { path: '/', maxAge: 0, sameSite: 'lax', httpOnly: true })
   return response
 }

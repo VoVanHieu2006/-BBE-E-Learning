@@ -14,7 +14,8 @@ import { usePathname, useRouter } from 'next/navigation';
 export default function StudentLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const isPublicRoute = pathname.startsWith('/student/courses') && !pathname.includes('/quiz');
+  const isPublicRoute = (pathname.startsWith('/student/courses') || pathname.startsWith('/student/learning')) && !pathname.includes('/quiz');
+  const isLearningRoute = pathname.startsWith('/student/learning');
 
   const [user, setUser] = useState<any>(null);
   const [mounted, setMounted] = useState(false);
@@ -35,7 +36,20 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
 
       if (!token || !u) {
         if (!isPublicRoute) {
-          router.replace('/login?callbackUrl=' + encodeURIComponent(window.location.pathname));
+          fetch('/api/v1/auth/refresh', { method: 'POST' })
+            .then((res) => res.json())
+            .then((data) => {
+              if (data?.accessToken && data?.user) {
+                localStorage.setItem('accessToken', data.accessToken);
+                localStorage.setItem('user', JSON.stringify(data.user));
+                setUser(data.user);
+                return;
+              }
+              router.replace('/login?callbackUrl=' + encodeURIComponent(window.location.pathname));
+            })
+            .catch(() => {
+              router.replace('/login?callbackUrl=' + encodeURIComponent(window.location.pathname));
+            });
         }
       }
     }
@@ -67,7 +81,12 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
     }
   }, [user]);
 
-  // For public courses route, if user is not logged in after hydration, render without sidebar
+  // Trang học video (/student/learning) có giao diện rạp chiếu & header riêng, không bọc Sidebar học viên
+  if (isLearningRoute) {
+    return <>{children}</>;
+  }
+
+  // Đối với route xem khóa học public (/student/courses), nếu là khách chưa đăng nhập thì không render Sidebar
   if (isPublicRoute && mounted && !user) {
     return <>{children}</>;
   }

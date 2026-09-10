@@ -6,6 +6,9 @@ import { getPublishedSystemData, calculateBatchUsersProgress } from '@/lib/progr
 /**
  * GET /api/v1/leaderboard
  * Global leaderboard — ranking active members by course completion % and quiz score
+ *
+ * FIX (POTENTIAL-01): Fetch ALL active members first, compute scores, sort globally,
+ * THEN slice for pagination. Prevents top-scorer on DB page 2 from missing page 1.
  */
 export async function GET(request: NextRequest) {
   await authenticate(request).catch(() => null)
@@ -17,8 +20,8 @@ export async function GET(request: NextRequest) {
 
   const sys = await getPublishedSystemData()
 
-  // 1. Fetch ACTIVE members
-  const members = await prisma.user.findMany({
+  // 1. Fetch ALL active members (no pagination here — sort must happen globally first)
+  const allMembers = await prisma.user.findMany({
     where: { status: 'ACTIVE', role: 'MEMBER' },
     select: {
       id: true,
@@ -27,15 +30,13 @@ export async function GET(request: NextRequest) {
         include: { chapter: true },
       },
     },
-    take: limit,
-    skip,
   })
 
-  const memberUserIds = members.map((m) => m.id)
+  const memberUserIds = allMembers.map((m) => m.id)
   const progressMap = await calculateBatchUsersProgress(memberUserIds, sys)
 
-  // 2. Format results
-  const results = members.map((m) => {
+  // 2. Format and compute leaderboard points for ALL members
+  const allResults = allMembers.map((m) => {
     const p = progressMap.get(m.id)
     const completedLessons = p?.completedLessons || 0
     const totalLessons = sys.totalLessons
@@ -60,8 +61,13 @@ export async function GET(request: NextRequest) {
     }
   })
 
-  results.sort((a, b) => b.leaderboardPoint - a.leaderboardPoint)
+  // 3. Sort globally by leaderboard points FIRST
+  allResults.sort((a, b) => b.leaderboardPoint - a.leaderboardPoint)
 
-  return NextResponse.json({ items: results, page, limit })
+  // 4. THEN paginate by slicing the globally-sorted array
+  const totalCount = allResults.length
+  const items = allResults.slice(skip, skip + limit)
+
+  return NextResponse.json({ items, page, limit, totalCount })
 }
 

@@ -145,24 +145,24 @@ export default function Sidebar({
     setIsLoggingOut(true);
 
     const refreshToken = typeof window !== 'undefined' ? localStorage.getItem('refreshToken') : null;
-    if (refreshToken) {
-      try {
-        await apiFetch('/api/v1/auth/logout', {
-          method: 'POST',
-          body: JSON.stringify({ refreshToken }),
-        });
-      } catch {}
-    }
+    try {
+      await fetch('/api/v1/auth/logout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken }),
+      });
+    } catch {}
 
     if (typeof window !== 'undefined') {
       localStorage.removeItem('accessToken');
       localStorage.removeItem('refreshToken');
       localStorage.removeItem('user');
+      sessionStorage.clear();
       document.cookie = 'accessToken=; path=/; max-age=0; SameSite=Lax';
       document.cookie = 'userRole=; path=/; max-age=0; SameSite=Lax';
       document.cookie = 'refreshToken=; path=/; max-age=0; SameSite=Lax';
     }
-    router.replace('/login');
+    window.location.href = '/login';
   };
 
   const roleLabel =

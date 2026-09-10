@@ -87,6 +87,21 @@ export default function YouTubePlayer({
     chromeTimerRef.current = setTimeout(() => setChromeFlash(false), 5000);
   };
 
+  // Hẹn giờ tự ẩn thanh điều khiển (thanh tua) sau 3s khi đang phát.
+  // Được gọi từ handleMouseMove VÀ từ onStateChange(YT_PLAYING) —
+  // tránh việc thanh tua kẹt hiện mãi khi user bấm play mà không rê chuột sau đó.
+  const scheduleHideControls = () => {
+    if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current);
+    controlsTimerRef.current = setTimeout(() => setShowControls(false), 3000);
+  };
+
+  const clearHideControls = () => {
+    if (controlsTimerRef.current) {
+      clearTimeout(controlsTimerRef.current);
+      controlsTimerRef.current = null;
+    }
+  };
+
   const isGuest = !accessToken;
 
   // Send heartbeat progress update to server (only for logged-in members)
@@ -191,6 +206,8 @@ export default function YouTubePlayer({
               if (e.data === YT_PLAYING) {
                 setIsPlaying(true);
                 flashChrome();
+                setShowControls(true);
+                scheduleHideControls();
                 // Đảm bảo phụ đề không tự bật khi phát
                 try {
                   e.target.unloadModule?.('captions');
@@ -202,6 +219,8 @@ export default function YouTubePlayer({
                 stopUiTimer();
                 stopHeartbeat();
                 if (chromeTimerRef.current) clearTimeout(chromeTimerRef.current);
+                clearHideControls();
+                setShowControls(true);
                 // Phòng phụ đề bật lại khi tạm dừng
                 try {
                   e.target.unloadModule?.('captions');
@@ -285,6 +304,7 @@ export default function YouTubePlayer({
       if (poller) clearInterval(poller);
       stopHeartbeat();
       stopUiTimer();
+      clearHideControls();
       if (chromeTimerRef.current) clearTimeout(chromeTimerRef.current);
       try {
         playerRef.current?.destroy?.();
@@ -418,9 +438,10 @@ export default function YouTubePlayer({
 
   const handleMouseMove = () => {
     setShowControls(true);
-    if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current);
     if (isPlaying) {
-      controlsTimerRef.current = setTimeout(() => setShowControls(false), 3000);
+      scheduleHideControls();
+    } else {
+      clearHideControls();
     }
   };
 
@@ -432,6 +453,7 @@ export default function YouTubePlayer({
     <div
       ref={wrapperRef}
       onMouseMove={handleMouseMove}
+      onTouchStart={handleMouseMove}
       className={`relative w-full aspect-video bg-black overflow-hidden select-none group ${
         isFullscreen ? 'rounded-none max-h-screen' : 'rounded-3xl'
       }`}
@@ -481,15 +503,15 @@ export default function YouTubePlayer({
       {/* Khi đang phát: che chrome YouTube loé lên trong 5s đầu sau khi play/seek */}
       {!videoError && isReady && isPlaying && chromeFlash && (
         <>
-          <div className="absolute top-0 inset-x-0 h-20 z-[5] pointer-events-none bg-gradient-to-b from-black from-50% via-black/80 via-78% to-transparent" />
+          <div className="absolute top-0 inset-x-0 h-16 z-[5] pointer-events-none bg-gradient-to-b from-black from-50% via-black/80 via-78% to-transparent" />
           <div className="absolute bottom-0 inset-x-0 h-16 z-[5] pointer-events-none bg-gradient-to-t from-black from-65% via-black/90 via-82% to-transparent" />
         </>
       )}
 
-      {/* Sau 5s: dải che đáy cố định (h-14, gradient đen đậm) — che sạch logo YouTube/teaser gợi ý khi đang phát */}
+      {/* Sau 5s: dải che đáy cố định (h-14, gradient đen đậm) — che sạch logo YouTube/teaser gợi ý khi đang phát
       {!videoError && isReady && isPlaying && !chromeFlash && (
         <div className="absolute bottom-0 inset-x-0 h-14 z-[5] pointer-events-none bg-gradient-to-t from-black from-60% via-black/90 via-80% to-transparent" />
-      )}
+      )} */}
 
       {/* Completion Banner (only for logged-in accounts) */}
       {!isGuest && isCompleted && (

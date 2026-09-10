@@ -181,6 +181,9 @@ export default function CourseDetailPage({ params }: { params: { courseId: strin
                                 <h4 className="font-semibold text-sm text-[#172554] group-hover:text-[#2563EB] transition">
                                   {lesson.title}
                                 </h4>
+                                {lesson.description && (
+                                  <p className="text-xs text-[#434655] mt-0.5 line-clamp-1">{lesson.description}</p>
+                                )}
                                 <div className="flex items-center gap-3 text-xs text-[#737686] mt-0.5">
                                   <span>📹 Video bài giảng</span>
                                   {lesson.documents?.length > 0 && (

@@ -12,21 +12,19 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    // If already logged in, redirect away
-    const raw = localStorage.getItem('user');
-    const token = localStorage.getItem('accessToken');
-    if (raw && token) {
-      try {
-        const u = JSON.parse(raw);
-        if (u.role === 'ADMIN') router.replace('/admin/dashboard');
-        else if (u.role === 'CHAPTER_LEADER') router.replace('/chapter-manager/dashboard');
-        else router.replace('/student/dashboard');
-      } catch {
-        localStorage.removeItem('user');
-        localStorage.removeItem('accessToken');
-      }
+    if (typeof window === 'undefined') return;
+
+    const params = new URLSearchParams(window.location.search);
+    const callbackUrl = params.get('callbackUrl');
+
+    if (callbackUrl) {
+      // User was redirected to login because their session expired or was unauthorized.
+      // Clear stale credentials to prevent infinite redirect loops.
+      localStorage.removeItem('user');
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
     }
-  }, [router]);
+  }, []);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();

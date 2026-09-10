@@ -3,6 +3,8 @@ import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getPublishedSystemData, calculateBatchUsersProgress } from '@/lib/progress/calculator'
 
+export const dynamic = 'force-dynamic'
+
 interface LeaderboardCache {
   data: any
   timestamp: number

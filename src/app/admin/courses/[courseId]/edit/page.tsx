@@ -35,6 +35,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
   const [loading, setLoading] = useState(true);
   const [savingInfo, setSavingInfo] = useState(false);
   const [publishLoading, setPublishLoading] = useState(false);
+  const [showUnpublishConfirm, setShowUnpublishConfirm] = useState(false);
 
   // Toast
   const [toast, setToast] = useState<ToastMessage | null>(null);
@@ -43,13 +44,16 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
     setToast({ type, message, title });
   };
 
-  // Session Modal
+  // Session Modal (Add & Edit)
   const [showSessionModal, setShowSessionModal] = useState(false);
-  const [newSessionTitle, setNewSessionTitle] = useState('');
+  const [sessionModalMode, setSessionModalMode] = useState<'create' | 'edit'>('create');
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [sessionForm, setSessionForm] = useState({ title: '', description: '' });
   const [sessionSaving, setSessionSaving] = useState(false);
 
-  // Lesson Modal
+  // Lesson Modal (Add & Edit)
   const [showLessonModal, setShowLessonModal] = useState<string | null>(null);
+  const [editingLessonId, setEditingLessonId] = useState<string | null>(null);
   const [lessonForm, setLessonForm] = useState({
     title: '',
     description: '',
@@ -220,6 +224,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
   };
 
   const handleUnpublish = async () => {
+    setShowUnpublishConfirm(false);
     setPublishLoading(true);
     clearApiCache('/api/v1/courses');
     clearApiCache(`/api/v1/courses/${params.courseId}`);
@@ -243,50 +248,101 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
   };
 
   // ─── Session Management ───────────────────────────────────────────────────────
-  const handleAddSession = async () => {
-    if (!newSessionTitle.trim()) return;
+  const openAddSessionModal = () => {
+    setSessionModalMode('create');
+    setEditingSessionId(null);
+    setSessionForm({ title: '', description: '' });
+    setShowSessionModal(true);
+  };
+
+  const openEditSessionModal = (session: any) => {
+    setSessionModalMode('edit');
+    setEditingSessionId(session.sessionId || session.id);
+    setSessionForm({
+      title: session.title || '',
+      description: session.description || '',
+    });
+    setShowSessionModal(true);
+  };
+
+  const handleSaveSession = async () => {
+    const titleToSave = sessionForm.title.trim();
+    if (!titleToSave) {
+      showToast('error', 'Vui lòng nhập tiêu đề buổi học');
+      return;
+    }
+
     setSessionSaving(true);
     clearApiCache('/api/v1/courses');
 
-    const titleToAdd = newSessionTitle.trim();
-    const tempId = 'temp-' + Date.now();
-    const newSessionObj = {
-      sessionId: tempId,
-      id: tempId,
-      title: titleToAdd,
-      sortOrder: course?.sessions?.length || 0,
-      lessons: [],
-    };
-
-    setCourse((prev: any) => ({
-      ...prev,
-      sessions: [...(prev?.sessions || []), newSessionObj],
-    }));
-    setNewSessionTitle('');
-    setShowSessionModal(false);
-
-    showToast('success', `Đã thêm buổi học "${titleToAdd}" thành công!`);
-
-    const res = await apiFetch(`/api/v1/courses/${params.courseId}/sessions`, {
-      method: 'POST',
-      body: JSON.stringify({
-        title: titleToAdd,
+    if (sessionModalMode === 'create') {
+      const tempId = 'temp-' + Date.now();
+      const newSessionObj = {
+        sessionId: tempId,
+        id: tempId,
+        title: titleToSave,
+        description: sessionForm.description.trim() || null,
         sortOrder: course?.sessions?.length || 0,
-      }),
-    });
+        lessons: [],
+      };
 
-    if (res.ok && res.data) {
-      const realSessionId = res.data.sessionId || res.data.id;
+      setCourse((prev: any) => ({
+        ...prev,
+        sessions: [...(prev?.sessions || []), newSessionObj],
+      }));
+      setShowSessionModal(false);
+      showToast('success', `Đã thêm buổi học "${titleToSave}" thành công!`);
+
+      const res = await apiFetch(`/api/v1/courses/${params.courseId}/sessions`, {
+        method: 'POST',
+        body: JSON.stringify({
+          title: titleToSave,
+          description: sessionForm.description.trim() || undefined,
+          sortOrder: course?.sessions?.length || 0,
+        }),
+      });
+
+      if (res.ok && res.data) {
+        const realSessionId = res.data.sessionId || res.data.id;
+        setCourse((prev: any) => ({
+          ...prev,
+          sessions: prev.sessions.map((s: any) =>
+            s.sessionId === tempId ? { ...s, sessionId: realSessionId, id: realSessionId, description: res.data.description || s.description } : s
+          ),
+        }));
+      } else {
+        showToast('error', res.error?.message || 'Lỗi thêm buổi học');
+        loadCourse();
+      }
+    } else if (editingSessionId) {
+      const targetSessionId = editingSessionId;
+      const updatedDesc = sessionForm.description.trim() || null;
+
       setCourse((prev: any) => ({
         ...prev,
         sessions: prev.sessions.map((s: any) =>
-          s.sessionId === tempId ? { ...s, sessionId: realSessionId, id: realSessionId } : s
+          (s.sessionId || s.id) === targetSessionId
+            ? { ...s, title: titleToSave, description: updatedDesc }
+            : s
         ),
       }));
-    } else {
-      showToast('error', res.error?.message || 'Lỗi thêm buổi học');
-      loadCourse();
+      setShowSessionModal(false);
+      showToast('success', `Đã cập nhật buổi học "${titleToSave}" thành công!`);
+
+      const res = await apiFetch(`/api/v1/sessions/${targetSessionId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          title: titleToSave,
+          description: updatedDesc,
+        }),
+      });
+
+      if (!res.ok) {
+        showToast('error', res.error?.message || 'Lỗi cập nhật buổi học');
+        loadCourse();
+      }
     }
+
     setSessionSaving(false);
   };
 
@@ -366,6 +422,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
   };
 
   const openAddLessonModal = (sessionId: string) => {
+    setEditingLessonId(null);
     setShowLessonModal(sessionId);
     setLessonForm({ title: '', description: '', youtubeVideoId: '', durationSeconds: 0, durationFormatted: '' });
     setVideoPreviewTitle('');
@@ -374,8 +431,32 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
     setIsVideoVerified(false);
   };
 
+  const openEditLessonModal = (sessionId: string, lesson: any) => {
+    const lId = lesson.lessonId || lesson.id;
+    const vidId = lesson.video?.youtubeVideoId || lesson.youtubeVideoId || '';
+    const durSec = lesson.video?.durationSeconds || lesson.durationSeconds || 0;
+    const durMin = Math.floor(durSec / 60);
+    const durRemSec = durSec % 60;
+    const formatted = durSec > 0 ? `${durMin}:${durRemSec.toString().padStart(2, '0')}` : '';
+
+    setEditingLessonId(lId);
+    setShowLessonModal(sessionId);
+    setLessonForm({
+      title: lesson.title || '',
+      description: lesson.description || '',
+      youtubeVideoId: vidId,
+      durationSeconds: durSec,
+      durationFormatted: formatted,
+    });
+    setVideoPreviewTitle(lesson.video?.title || lesson.title || '');
+    setDurationFetchError('');
+    setFetchingDuration(false);
+    setIsVideoVerified(Boolean(vidId));
+  };
+
   const closeLessonModal = () => {
     setShowLessonModal(null);
+    setEditingLessonId(null);
     setLessonForm({ title: '', description: '', youtubeVideoId: '', durationSeconds: 0, durationFormatted: '' });
     setVideoPreviewTitle('');
     setDurationFetchError('');
@@ -446,7 +527,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
     }, 400);
   };
 
-  const handleAddLesson = async () => {
+  const handleSaveLesson = async () => {
     if (!showLessonModal) return;
     if (!lessonForm.title.trim()) {
       showToast('error', 'Vui lòng nhập tiêu đề bài học');
@@ -473,15 +554,91 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
     clearApiCache('/api/v1/courses');
 
     const targetSessionId = showLessonModal;
-    const tempLessonId = 'temp-lesson-' + Date.now();
     const lessonTitle = lessonForm.title.trim();
     const durationSec = Math.max(1, Number(lessonForm.durationSeconds) || 180);
 
+    if (editingLessonId) {
+      const targetLessonId = editingLessonId;
+      const updatedDesc = lessonForm.description.trim() || null;
+
+      setCourse((prev: any) => ({
+        ...prev,
+        sessions: (prev?.sessions || []).map((s: any) =>
+          (s.sessionId || s.id) === targetSessionId
+            ? {
+                ...s,
+                lessons: (s.lessons || []).map((l: any) =>
+                  (l.lessonId || l.id) === targetLessonId
+                    ? {
+                        ...l,
+                        title: lessonTitle,
+                        description: updatedDesc,
+                        youtubeVideoId: cleanVidId,
+                        video: {
+                          ...(l.video || {}),
+                          youtubeVideoId: cleanVidId,
+                          durationSeconds: durationSec,
+                          title: videoPreviewTitle || lessonTitle,
+                        },
+                      }
+                    : l
+                ),
+              }
+            : s
+        ),
+      }));
+
+      closeLessonModal();
+      showToast('success', `Đã cập nhật bài học "${lessonTitle}" thành công!`);
+
+      const res = await apiFetch(`/api/v1/lessons/${targetLessonId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          title: lessonTitle,
+          description: updatedDesc,
+          video: {
+            youtubeVideoId: cleanVidId,
+            durationSeconds: durationSec,
+            title: videoPreviewTitle || lessonTitle,
+          },
+        }),
+      });
+
+      if (res.ok && res.data) {
+        setCourse((prev: any) => ({
+          ...prev,
+          sessions: (prev?.sessions || []).map((s: any) =>
+            (s.sessionId || s.id) === targetSessionId
+              ? {
+                  ...s,
+                  lessons: (s.lessons || []).map((l: any) =>
+                    (l.lessonId || l.id) === targetLessonId
+                      ? {
+                          ...l,
+                          title: res.data.title || lessonTitle,
+                          description: res.data.description,
+                          video: res.data.video || l.video,
+                        }
+                      : l
+                  ),
+                }
+              : s
+          ),
+        }));
+      } else {
+        showToast('error', res.error?.message || 'Lỗi cập nhật bài học');
+        loadCourse();
+      }
+      setLessonSaving(false);
+      return;
+    }
+
+    const tempLessonId = 'temp-lesson-' + Date.now();
     const tempLessonObj = {
       lessonId: tempLessonId,
       id: tempLessonId,
       title: lessonTitle,
-      description: lessonForm.description.trim(),
+      description: lessonForm.description.trim() || null,
       youtubeVideoId: cleanVidId,
       video: {
         youtubeVideoId: cleanVidId,
@@ -527,6 +684,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
                         ...l,
                         lessonId: realLessonId,
                         id: realLessonId,
+                        description: res.data.description || l.description,
                         video: res.data.video || l.video,
                       }
                     : l
@@ -868,7 +1026,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
             </span>
 
             {isPublished ? (
-              <Button variant="secondary" loading={publishLoading} onClick={handleUnpublish}>
+              <Button variant="secondary" loading={publishLoading} onClick={() => setShowUnpublishConfirm(true)}>
                 Hạ về bản nháp
               </Button>
             ) : (
@@ -878,6 +1036,47 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
             )}
           </div>
         </div>
+
+        {/* IMP-03: Unpublish Confirmation Modal */}
+        <Modal
+          isOpen={showUnpublishConfirm}
+          onClose={() => setShowUnpublishConfirm(false)}
+          maxWidth="max-w-md"
+        >
+          <div className="p-6 space-y-4">
+            <div className="flex items-center gap-3 mb-2">
+              <span className="text-2xl">⚠️</span>
+              <h2 className="text-lg font-bold text-[#172554]">Xác nhận hạ xuất bản</h2>
+            </div>
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+              <p className="text-amber-800 font-semibold text-sm mb-1">Hành động này sẽ ảnh hưởng đến toàn bộ học viên!</p>
+              <p className="text-amber-700 text-sm">
+                Việc hạ về bản nháp sẽ <strong>tạm thời ẩn khóa học này</strong> khỏi danh sách học viên đang theo dõi.
+                Học viên sẽ không thể truy cập bài học hay làm bài kiểm tra cho đến khi khóa học được xuất bản trở lại.
+              </p>
+            </div>
+            <p className="text-[#434655] text-sm">
+              Dữ liệu tiến trình và điểm thi của học viên sẽ <strong>không bị mất</strong>. Bạn có thể xuất bản lại bất cứ lúc nào.
+            </p>
+            <div className="flex gap-3 pt-2">
+              <Button
+                variant="secondary"
+                className="flex-1"
+                onClick={() => setShowUnpublishConfirm(false)}
+              >
+                Hủy bỏ
+              </Button>
+              <button
+                onClick={handleUnpublish}
+                disabled={publishLoading}
+                className="flex-1 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl transition-colors disabled:opacity-50"
+              >
+                {publishLoading ? 'Đang xử lý...' : 'Xác nhận hạ xuất bản'}
+              </button>
+            </div>
+          </div>
+        </Modal>
+
 
         {loading && !course ? (
           <div className="space-y-6 animate-pulse">
@@ -972,7 +1171,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
                 <Button
                   size="sm"
                   disabled={isPublished}
-                  onClick={() => setShowSessionModal(true)}
+                  onClick={openAddSessionModal}
                 >
                   ＋ Thêm buổi học
                 </Button>
@@ -982,7 +1181,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
                 <Card className="text-center py-12 border-dashed border-2 border-slate-200">
                   <p className="text-base font-semibold text-[#172554] mb-2">Chưa có buổi học nào</p>
                   <p className="text-xs text-[#737686] mb-4">Khóa học cần ít nhất 1 buổi học trước khi có thể công khai.</p>
-                  <Button size="sm" disabled={isPublished} onClick={() => setShowSessionModal(true)}>
+                  <Button size="sm" disabled={isPublished} onClick={openAddSessionModal}>
                     ＋ Tạo buổi học đầu tiên
                   </Button>
                 </Card>
@@ -993,18 +1192,24 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
 
                     return (
                       <Card key={sId} className="p-6 border border-[#eff4ff] shadow-sm">
-                        <div className="flex items-center justify-between pb-4 mb-4 border-b border-[#eff4ff]">
-                          <div className="flex items-center gap-3">
-                            <span className="w-7 h-7 bg-[#2563EB] text-white rounded-lg flex items-center justify-center font-bold text-xs">
+                        <div className="flex items-start justify-between pb-4 mb-4 border-b border-[#eff4ff]">
+                          <div className="flex items-start gap-3">
+                            <span className="w-7 h-7 bg-[#2563EB] text-white rounded-lg flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">
                               {sIdx + 1}
                             </span>
-                            <h3 className="text-base font-bold text-[#172554]">{session.title}</h3>
+                            <div>
+                              <h3 className="text-base font-bold text-[#172554]">{session.title}</h3>
+                              {session.description && (
+                                <p className="text-xs text-[#737686] mt-0.5 leading-relaxed">{session.description}</p>
+                              )}
+                            </div>
                           </div>
 
                           {!isPublished && (
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 shrink-0">
                               {sIdx > 0 && (
                                 <button
+                                  type="button"
                                   onClick={() => handleMoveSession(sIdx, 'up')}
                                   className="p-1 text-slate-400 hover:text-[#2563EB]"
                                   title="Di chuyển buổi học lên"
@@ -1014,6 +1219,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
                               )}
                               {sIdx < course.sessions.length - 1 && (
                                 <button
+                                  type="button"
                                   onClick={() => handleMoveSession(sIdx, 'down')}
                                   className="p-1 text-slate-400 hover:text-[#2563EB]"
                                   title="Di chuyển buổi học xuống"
@@ -1021,10 +1227,19 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
                                   ▼
                                 </button>
                               )}
+                              <button
+                                type="button"
+                                onClick={() => openEditSessionModal(session)}
+                                className="p-1.5 text-slate-400 hover:text-[#2563EB] rounded-lg hover:bg-blue-50 transition"
+                                title="Chỉnh sửa buổi học (tiêu đề & mô tả)"
+                              >
+                                ✏️
+                              </button>
                               <Button size="sm" variant="secondary" onClick={() => openAddLessonModal(sId)}>
                                 ＋ Thêm bài học
                               </Button>
                               <button
+                                type="button"
                                 onClick={() => handleDeleteSession(sId)}
                                 className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50"
                                 title="Xóa buổi học"
@@ -1099,11 +1314,24 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
                                           Video YouTube: <span className="font-mono">{vidId}</span> • Thời lượng:{' '}
                                           {durMin}:{durRemSec.toString().padStart(2, '0')} ({durSec}s)
                                         </p>
+                                        {lesson.description && (
+                                          <p className="text-xs text-[#434655] bg-white/80 px-2.5 py-1 rounded-lg border border-[#eff4ff] mt-1.5 leading-relaxed">
+                                            {lesson.description}
+                                          </p>
+                                        )}
                                       </div>
                                     </div>
 
                                     {!isPublished && (
                                       <div className="flex items-center gap-2">
+                                        <button
+                                          type="button"
+                                          onClick={() => openEditLessonModal(sId, lesson)}
+                                          className="p-1.5 text-slate-400 hover:text-[#2563EB] rounded-lg hover:bg-blue-50 transition"
+                                          title="Chỉnh sửa bài học (tiêu đề, mô tả, video)"
+                                        >
+                                          ✏️
+                                        </button>
                                         <label className="cursor-pointer">
                                           <input
                                             type="file"
@@ -1249,7 +1477,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
           </div>
         )}
 
-        {/* Modal: Add Session */}
+        {/* Modal: Add / Edit Session */}
         <Modal
           isOpen={showSessionModal}
           onClose={() => setShowSessionModal(false)}
@@ -1257,31 +1485,45 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
         >
           <div className="p-6 space-y-4">
             <h3 className="text-xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
-              Thêm buổi học mới
+              {sessionModalMode === 'create' ? 'Thêm buổi học mới' : 'Chỉnh sửa buổi học'}
             </h3>
             <div>
               <label className="block text-sm font-semibold text-[#172554] mb-1.5">Tiêu đề buổi học *</label>
               <input
                 type="text"
                 required
-                value={newSessionTitle}
-                onChange={(e) => setNewSessionTitle(e.target.value)}
+                value={sessionForm.title}
+                onChange={(e) => setSessionForm({ ...sessionForm, title: e.target.value })}
                 placeholder="Ví dụ: Buổi 1 — Tổng quan kiến thức BBE"
                 className="w-full px-4 py-2.5 border border-[#cbdbf5] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-[#172554] mb-1.5">Mô tả buổi học</label>
+              <textarea
+                rows={3}
+                value={sessionForm.description}
+                onChange={(e) => setSessionForm({ ...sessionForm, description: e.target.value })}
+                placeholder="Mô tả tóm tắt nội dung buổi học này (tùy chọn)"
+                className="w-full px-4 py-2 border border-[#cbdbf5] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
               />
             </div>
             <div className="flex justify-end gap-3 pt-2">
               <Button variant="outline" onClick={() => setShowSessionModal(false)}>
                 Hủy
               </Button>
-              <Button loading={sessionSaving} loadingText="Đang thêm..." onClick={handleAddSession}>
-                Thêm buổi học
+              <Button
+                loading={sessionSaving}
+                loadingText={sessionModalMode === 'create' ? 'Đang thêm...' : 'Đang lưu...'}
+                onClick={handleSaveSession}
+              >
+                {sessionModalMode === 'create' ? 'Thêm buổi học' : 'Lưu thay đổi'}
               </Button>
             </div>
           </div>
         </Modal>
 
-        {/* Modal: Add Lesson */}
+        {/* Modal: Add / Edit Lesson */}
         <Modal
           isOpen={Boolean(showLessonModal)}
           onClose={closeLessonModal}
@@ -1290,7 +1532,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
           <div className="p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center border-b border-[#eff4ff] pb-3">
               <h3 className="text-xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
-                Thêm bài học & Video YouTube
+                {editingLessonId ? 'Chỉnh sửa bài học' : 'Thêm bài học & Video YouTube'}
               </h3>
               <button onClick={closeLessonModal} className="text-[#737686] hover:text-[#172554] text-xl font-bold p-1 rounded-lg hover:bg-slate-100 transition">
                 ✕
@@ -1351,7 +1593,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
             <div>
               <label className="block text-sm font-semibold text-[#172554] mb-1">Mô tả bài học</label>
               <textarea
-                rows={2}
+                rows={3}
                 value={lessonForm.description}
                 onChange={(e) => setLessonForm({ ...lessonForm, description: e.target.value })}
                 placeholder="Mô tả nội dung bài học (tùy chọn)"
@@ -1365,11 +1607,11 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
               </Button>
               <Button
                 loading={lessonSaving}
-                loadingText="Đang tạo..."
+                loadingText={editingLessonId ? 'Đang lưu...' : 'Đang tạo...'}
                 disabled={!isVideoVerified || fetchingDuration}
-                onClick={handleAddLesson}
+                onClick={handleSaveLesson}
               >
-                Tạo bài học
+                {editingLessonId ? 'Lưu thay đổi' : 'Tạo bài học'}
               </Button>
             </div>
           </div>

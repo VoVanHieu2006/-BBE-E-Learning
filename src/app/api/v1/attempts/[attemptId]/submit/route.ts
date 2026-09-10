@@ -79,10 +79,22 @@ export async function POST(request: NextRequest, { params }: { params: { attempt
   const scoreRatio = totalPoints > 0 ? score / totalPoints : 0
   const passed = scoreRatio >= 0.85
 
-  await prisma.attempt.update({
-    where: { id: params.attemptId },
+  // Atomic conditional update — chỉ update nếu attempt vẫn còn IN_PROGRESS
+  // Ngăn chặn race condition (TOCTOU) khi nhiều requests nộp bài cùng lúc
+  const updateResult = await prisma.attempt.updateMany({
+    where: {
+      id: params.attemptId,
+      status: 'IN_PROGRESS', // Atomic guard
+    },
     data: { status: 'SUBMITTED', submitted_at: new Date(), score: scoreRatio, passed },
   })
+
+  if (updateResult.count === 0) {
+    return NextResponse.json(
+      { error: { code: 'AttemptNotInProgress', message: 'Bài thi đã được nộp từ trước hoặc không còn hiệu lực' } },
+      { status: 400 }
+    )
+  }
 
   // For response: return all attempt questions in order
   const resultAnswers = allQuestions.map((aq) => {

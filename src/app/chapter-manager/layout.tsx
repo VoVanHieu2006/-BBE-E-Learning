@@ -48,7 +48,23 @@ function ChapterManagerLayoutInner({ children }: { children: React.ReactNode }) 
       }
 
       if (!token || !u) {
-        router.replace('/login?callbackUrl=' + encodeURIComponent(window.location.pathname));
+        fetch('/api/v1/auth/refresh', { method: 'POST' })
+          .then((res) => res.json())
+          .then((data) => {
+            if (data?.accessToken && data?.user) {
+              localStorage.setItem('accessToken', data.accessToken);
+              localStorage.setItem('user', JSON.stringify(data.user));
+              setUser(data.user);
+              if (data.user.role === 'CHAPTER_LEADER' || data.user.role === 'ADMIN') {
+                setIsAuthorized(true);
+                return;
+              }
+            }
+            router.replace('/login?callbackUrl=' + encodeURIComponent(window.location.pathname));
+          })
+          .catch(() => {
+            router.replace('/login?callbackUrl=' + encodeURIComponent(window.location.pathname));
+          });
         return;
       }
 

@@ -76,6 +76,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { sessio
     id: updated.id,
     courseId: updated.course_id,
     title: updated.title,
+    description: updated.description,
     sortOrder: updated.sort_order,
   })
 }

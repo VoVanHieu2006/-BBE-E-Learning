@@ -27,5 +27,12 @@ export async function POST(request: NextRequest, { params }: { params: { courseI
     },
   })
 
-  return NextResponse.json({ sessionId: session.id, courseId: session.course_id, title: session.title, sortOrder: session.sort_order }, { status: 201 })
+  return NextResponse.json({
+    sessionId: session.id,
+    id: session.id,
+    courseId: session.course_id,
+    title: session.title,
+    description: session.description,
+    sortOrder: session.sort_order,
+  }, { status: 201 })
 }

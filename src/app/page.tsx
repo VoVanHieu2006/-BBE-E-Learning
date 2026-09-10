@@ -18,19 +18,14 @@ export default function LandingPage() {
         try {
           const u = JSON.parse(rawUser);
           setUser(u);
-          const target =
-            u.role === 'ADMIN'
-              ? '/admin/dashboard'
-              : u.role === 'CHAPTER_LEADER'
-              ? '/chapter-manager/dashboard'
-              : '/student/dashboard';
-          router.replace(target);
-          return;
-        } catch {}
+        } catch {
+          localStorage.removeItem('user');
+          localStorage.removeItem('accessToken');
+        }
       }
     }
     setMounted(true);
-  }, [router]);
+  }, []);
 
   const getDashboardHref = () => {
     if (!user) return '/login';
@@ -48,12 +43,11 @@ export default function LandingPage() {
 
   const isLoggedIn = mounted && Boolean(user);
 
-  // If checking authentication or logged in, show clean transitional screen to prevent guest flash (Request 3)
-  if (!mounted || user) {
+  // Prevent hydration mismatch while reading client state
+  if (!mounted) {
     return (
       <main className="min-h-screen bg-[#172554] flex flex-col items-center justify-center p-6 text-white text-center">
         <div className="w-12 h-12 border-4 border-[#2563EB] border-t-transparent rounded-full animate-spin mb-4" />
-        <p className="text-sm text-slate-300 font-medium">Đang chuyển tiếp tới Bàn làm việc...</p>
       </main>
     );
   }
@@ -105,14 +99,22 @@ export default function LandingPage() {
         </div>
         <div className="relative max-w-5xl mx-auto text-center space-y-6">
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 backdrop-blur-sm border border-white/20 text-xs font-semibold text-[#cbdbf5] mb-2">
-            ✨ Nền tảng đào tạo nội bộ câu lạc bộ BBE
+            ✨ Nền tảng đào tạo nội bộ cho thành viên BBE
           </div>
-          <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight leading-tight" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
-            Học tập chuyên sâu <br />
-            <span className="text-[#F97316]">Nâng tầm kỹ năng cùng BBE</span>
+          <h1
+            className="text-4xl md:text-6xl font-extrabold tracking-tight leading-tight"
+            style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}
+          >
+            <span className="block mb-6">
+              Học tập chuyên sâu
+            </span>
+
+            <span className="block text-[#F97316]">
+              Nâng tầm kỹ năng cùng BBE
+            </span>
           </h1>
           <p className="text-lg md:text-xl text-[#cbdbf5] max-w-2xl mx-auto leading-relaxed">
-            Hệ thống quản lý học tập tích hợp video bài giảng chống tua gian lận, tài liệu chuyên sâu, bài kiểm tra chuẩn đầu ra và thống kê tiến độ đa thiết bị.
+            Hệ thống đào tạo trực tuyến nhằm nâng cao kiến thức và kỹ năng cho các thành viên BBE.
           </p>
 
           <div className="flex flex-wrap justify-center gap-4 pt-4">
@@ -147,7 +149,7 @@ export default function LandingPage() {
             Trải nghiệm học tập hiện đại
           </h2>
           <p className="text-[#737686] max-w-xl mx-auto text-sm">
-            Được xây dựng dựa trên tiêu chuẩn Stitch Design System mang lại trải nghiệm mượt mà, tiện lợi.
+            Được xây dựng để phục vụ thành viên BBE, mang lại trải nghiệm mượt mà, tiện lợi.
           </p>
         </div>
 
@@ -155,18 +157,18 @@ export default function LandingPage() {
           {[
             {
               icon: '📚',
-              title: 'Khóa học chuyên sâu',
-              desc: 'Hệ thống video chất lượng cao từ YouTube, tài liệu lưu trữ đám mây Cloudflare R2 và lộ trình bài giảng bài bản.',
+              title: 'Kho tri thức tập trung',
+              desc: 'Hệ thống hóa toàn bộ video đào tạo chất lượng cao và tài liệu nội bộ BBE trên một nền tảng duy nhất. Học viên dễ dàng truy cập, học tập chủ động và xem lại bất cứ lúc nào.',
             },
             {
-              icon: '⏱️',
-              title: 'Đồng bộ tiến độ chuẩn xác',
-              desc: 'Tự động lưu vị trí video đang xem theo thời gian thực, chống tua gian lận và đánh dấu hoàn thành khi đạt ≥ 85%.',
+              icon: '🎯',
+              title: 'Đánh giá đúng năng lực',
+              desc: 'Thử thách bản thân qua bài kiểm tra cuối khóa để nắm chắc cách hoạt động của BBE. Biết ngay điểm số, nhận đáp án khi vượt qua mốc 85% và sẵn sàng tự tin bước vào công việc thực tế.',
             },
             {
-              icon: '👥',
-              title: 'Bảng điều khiển BĐHU & Admin',
-              desc: 'Quản lý toàn diện theo từng Chapter: theo dõi tiến độ từng học viên, gửi lời mời tự động qua email và bài kiểm tra cuối khóa.',
+              icon: '🤝',
+              title: 'Đồng hành cùng thành viên',
+              desc: 'Giúp BĐHU dễ dàng chào đón nhân sự mới qua email chỉ với một cú nhấp chuột. Nắm bắt tức thì ai đang học tốt, ai cần hỗ trợ để không một thành viên nào trong Chapter bị bỏ lại phía sau.',
             },
           ].map((f) => (
             <div
@@ -192,7 +194,7 @@ export default function LandingPage() {
             <img src="/images/logo-transparent.png" alt="BBE" className="h-6 w-auto brightness-200" />
             <span className="font-semibold text-xs">© BBE E-Learning Platform</span>
           </div>
-          <div className="text-xs text-[#94a3b8]">Thiết kế dựa trên Stitch Design System • Next.js 14 App Router</div>
+          <div className="text-xs text-[#94a3b8]">"Học, học nữa, học mãi" - Lê Nin -</div>
         </div>
       </footer>
     </main>

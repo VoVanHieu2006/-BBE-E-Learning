@@ -84,7 +84,6 @@ export function clearApiCache(prefix?: string) {
 async function tryRefreshToken(): Promise<string | null> {
   if (typeof window === 'undefined') return null
   const refreshToken = localStorage.getItem('refreshToken')
-  if (!refreshToken) return null
 
   if (isRefreshing && refreshPromise) {
     return refreshPromise
@@ -96,7 +95,7 @@ async function tryRefreshToken(): Promise<string | null> {
       const res = await fetch('/api/v1/auth/refresh', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refreshToken }),
+        body: JSON.stringify({ refreshToken: refreshToken || undefined }),
       })
 
       if (res.ok) {
@@ -197,29 +196,26 @@ export async function apiFetch<T = any>(
         headers,
       })
 
-      // 3. Handle 401 token expiration with automatic refresh (only if user was previously logged in)
+      // 3. Handle 401 token expiration with automatic refresh
       if (res.status === 401 && retryCount === 0 && typeof window !== 'undefined' && !path.includes('/auth/')) {
-        const storedRefreshToken = localStorage.getItem('refreshToken')
-        if (storedRefreshToken) {
-          const newToken = await tryRefreshToken()
-          if (newToken) {
-            return apiFetch<T>(path, { ...options, token: newToken, retryCount: retryCount + 1 })
-          } else {
-            // Token refresh failed -> clear stale auth info
-            localStorage.removeItem('accessToken')
-            localStorage.removeItem('refreshToken')
-            localStorage.removeItem('user')
-            
-            // Only redirect if on protected pages (not on homepage or public courses)
-            const currentPath = window.location.pathname
-            if (
-              currentPath !== '/login' &&
-              currentPath !== '/' &&
-              !currentPath.startsWith('/student/courses') &&
-              !currentPath.startsWith('/student/learning')
-            ) {
-              window.location.href = '/login'
-            }
+        const newToken = await tryRefreshToken()
+        if (newToken) {
+          return apiFetch<T>(path, { ...options, token: newToken, retryCount: retryCount + 1 })
+        } else {
+          // Token refresh failed -> clear stale auth info
+          localStorage.removeItem('accessToken')
+          localStorage.removeItem('refreshToken')
+          localStorage.removeItem('user')
+          
+          // Only redirect if on protected pages (not on homepage or public courses)
+          const currentPath = window.location.pathname
+          if (
+            currentPath !== '/login' &&
+            currentPath !== '/' &&
+            !currentPath.startsWith('/student/courses') &&
+            !currentPath.startsWith('/student/learning')
+          ) {
+            window.location.href = '/login'
           }
         }
       }

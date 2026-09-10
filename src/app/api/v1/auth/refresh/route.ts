@@ -13,7 +13,7 @@ const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || ''
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}))
-    const { refreshToken } = body
+    const refreshToken = body?.refreshToken || request.cookies.get('refreshToken')?.value
 
     if (!refreshToken) {
       return NextResponse.json(
@@ -108,11 +108,15 @@ export async function POST(request: NextRequest) {
       path: '/',
       sameSite: 'lax',
       maxAge: 15 * 60,
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
     })
     response.cookies.set('userRole', user.role, {
       path: '/',
       sameSite: 'lax',
       maxAge: 7 * 24 * 60 * 60,
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
     })
 
     return response

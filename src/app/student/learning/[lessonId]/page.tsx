@@ -79,6 +79,11 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
           setProgress(lessonProgRes.data);
         }
       }
+    } else if (!activeToken && (lessonRes.status === 401 || lessonRes.status === 403)) {
+      if (typeof window !== 'undefined') {
+        window.location.href = '/login?callbackUrl=' + encodeURIComponent(window.location.pathname);
+        return;
+      }
     }
 
     setLoadingLesson(false);
@@ -105,6 +110,11 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
 
     if (lessonRes.ok && lessonRes.data) {
       setLesson(lessonRes.data);
+    } else if (!activeToken && (lessonRes.status === 401 || lessonRes.status === 403)) {
+      if (typeof window !== 'undefined') {
+        window.location.href = '/login?callbackUrl=' + encodeURIComponent(window.location.pathname);
+        return;
+      }
     }
 
     if (lessonProgRes && lessonProgRes.ok && lessonProgRes.data) {

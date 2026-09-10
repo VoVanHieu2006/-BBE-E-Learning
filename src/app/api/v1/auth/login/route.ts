@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
     .setIssuedAt()
     .sign(accessSecret)
 
-  const refreshToken = await new SignJWT({ sub: user.id })
+  const refreshToken = await new SignJWT({ sub: user.id, role: user.role, chapterId })
     .setProtectedHeader({ alg: 'HS256' })
     .setExpirationTime('7d')
     .setIssuedAt()
@@ -108,16 +108,22 @@ export async function POST(request: NextRequest) {
     path: '/',
     sameSite: 'lax',
     maxAge: 15 * 60, // 15 minutes
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
   })
   response.cookies.set('userRole', user.role, {
     path: '/',
     sameSite: 'lax',
     maxAge: 7 * 24 * 60 * 60,
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
   })
   response.cookies.set('refreshToken', refreshToken, {
     path: '/',
     sameSite: 'lax',
     maxAge: 7 * 24 * 60 * 60,
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
   })
 
   return response

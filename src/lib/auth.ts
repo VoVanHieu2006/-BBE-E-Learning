@@ -43,12 +43,41 @@ export function invalidateUserAuthCache(userId?: string) {
  */
 export async function authenticate(request: NextRequest): Promise<AuthResult> {
   const authHeader = request.headers.get('Authorization')
+  let accessToken: string | undefined
 
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return { ok: false, error: { code: 'UNAUTHORIZED', message: 'Missing or malformed Authorization header' } }
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    accessToken = authHeader.slice(7)
+  } else {
+    accessToken = request.cookies.get('accessToken')?.value
   }
 
-  const accessToken = authHeader.slice(7)
+  // Fallback: If no accessToken, try refreshToken from cookies
+  if (!accessToken) {
+    const refreshToken = request.cookies.get('refreshToken')?.value
+    if (refreshToken && process.env.JWT_REFRESH_SECRET) {
+      try {
+        const refreshSecret = new TextEncoder().encode(process.env.JWT_REFRESH_SECRET)
+        const { payload } = await jwtVerify(refreshToken, refreshSecret)
+        const userId = payload.sub as string
+        if (userId) {
+          const now = Date.now()
+          const cached = userStatusCache.get(userId)
+          if (cached && now - cached.timestamp < USER_CACHE_TTL && cached.status === 'ACTIVE') {
+            return { ok: true, context: { userId: cached.id, role: cached.role, chapterId: payload.chapterId as string } }
+          }
+          const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { id: true, status: true, role: true, chapter_members: { take: 1, select: { chapter_id: true } } },
+          })
+          if (user && user.status === 'ACTIVE') {
+            userStatusCache.set(userId, { id: user.id, status: user.status, role: user.role, timestamp: now })
+            return { ok: true, context: { userId: user.id, role: user.role, chapterId: user.chapter_members?.[0]?.chapter_id } }
+          }
+        }
+      } catch {}
+    }
+    return { ok: false, error: { code: 'UNAUTHORIZED', message: 'Missing or malformed Authorization header' } }
+  }
 
   try {
     const { payload } = await jwtVerify(accessToken, secret)
@@ -84,6 +113,30 @@ export async function authenticate(request: NextRequest): Promise<AuthResult> {
 
     return { ok: true, context: { userId: user.id, role: user.role, chapterId } }
   } catch {
+    // If accessToken verification failed, attempt silent fallback via refreshToken cookie
+    const refreshToken = request.cookies.get('refreshToken')?.value
+    if (refreshToken && process.env.JWT_REFRESH_SECRET) {
+      try {
+        const refreshSecret = new TextEncoder().encode(process.env.JWT_REFRESH_SECRET)
+        const { payload } = await jwtVerify(refreshToken, refreshSecret)
+        const userId = payload.sub as string
+        if (userId) {
+          const now = Date.now()
+          const cached = userStatusCache.get(userId)
+          if (cached && now - cached.timestamp < USER_CACHE_TTL && cached.status === 'ACTIVE') {
+            return { ok: true, context: { userId: cached.id, role: cached.role, chapterId: payload.chapterId as string } }
+          }
+          const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { id: true, status: true, role: true, chapter_members: { take: 1, select: { chapter_id: true } } },
+          })
+          if (user && user.status === 'ACTIVE') {
+            userStatusCache.set(userId, { id: user.id, status: user.status, role: user.role, timestamp: now })
+            return { ok: true, context: { userId: user.id, role: user.role, chapterId: user.chapter_members?.[0]?.chapter_id } }
+          }
+        }
+      } catch {}
+    }
     return { ok: false, error: { code: 'UNAUTHORIZED', message: 'Token không hợp lệ hoặc đã hết hạn' } }
   }
 }
