@@ -128,8 +128,8 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
     const lId = lesson.lessonId || lesson.id;
     let assessData = lesson.assessment;
 
-    if (assessData && !assessData.questions) {
-      // Fetch full questions if not loaded
+    // Always fetch fresh full questions and explanations if lesson has an assessment
+    if (assessData) {
       const res = await apiFetch(`/api/v1/lessons/${lId}/assessment`, { noCache: true });
       if (res.ok && res.data) {
         assessData = res.data;
@@ -1076,7 +1076,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
           questionType: q.type,
           points: q.points,
           durationSeconds: q.durationSeconds,
-          ...(q.explanation.trim() ? { explanation: q.explanation.trim() } : {}),
+          explanation: (q.explanation || '').trim() || null,
           sortOrder: idx,
           options: q.options.map((opt, oIdx) => ({
             optionText: opt.optionText.trim(),
@@ -1909,7 +1909,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
                       </label>
                       <textarea
                         rows={2}
-                        value={q.explanation}
+                        value={q.explanation ?? ''}
                         onChange={(e) => {
                           const qs = [...assessmentForm.questions];
                           qs[qIdx].explanation = e.target.value;

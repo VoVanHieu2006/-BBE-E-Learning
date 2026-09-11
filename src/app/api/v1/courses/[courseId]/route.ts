@@ -2,9 +2,15 @@ import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 export async function GET(request: NextRequest, { params }: { params: { courseId: string } }) {
-  const auth = await authenticate(request).catch(() => ({ ok: false, error: { code: 'UNAUTHORIZED', message: 'Auth error' } }))
   const courseId = params.courseId
+  if (!UUID_REGEX.test(courseId)) {
+    return NextResponse.json({ error: { code: 'CourseNotFound', message: 'Khóa học không tồn tại' } }, { status: 404 })
+  }
+
+  const auth = await authenticate(request).catch(() => ({ ok: false, error: { code: 'UNAUTHORIZED', message: 'Auth error' } }))
 
   const courseDetail = await prisma.course.findUnique({
     where: { id: courseId },
@@ -94,13 +100,17 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
 }
 
 export async function PATCH(request: NextRequest, { params }: { params: { courseId: string } }) {
+  const courseId = params.courseId
+  if (!UUID_REGEX.test(courseId)) {
+    return NextResponse.json({ error: { code: 'CourseNotFound', message: 'Khóa học không tồn tại' } }, { status: 404 })
+  }
+
   const auth = await authenticate(request)
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: 401 })
   if ((auth as any).context!.role !== 'ADMIN') {
     return NextResponse.json({ error: { code: 'AccessDenied', message: 'Chỉ Admin mới có quyền cập nhật khóa học' } }, { status: 403 })
   }
 
-  const courseId = params.courseId
   const course = await prisma.course.findUnique({ where: { id: courseId }, select: { status: true } })
   if (!course) return NextResponse.json({ error: { code: 'CourseNotFound', message: 'Khóa học không tồn tại' } }, { status: 404 })
 
@@ -142,13 +152,17 @@ export async function PATCH(request: NextRequest, { params }: { params: { course
 }
 
 export async function DELETE(request: NextRequest, { params }: { params: { courseId: string } }) {
+  const courseId = params.courseId
+  if (!UUID_REGEX.test(courseId)) {
+    return NextResponse.json({ error: { code: 'CourseNotFound', message: 'Khóa học không tồn tại' } }, { status: 404 })
+  }
+
   const auth = await authenticate(request)
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: 401 })
   if ((auth as any).context!.role !== 'ADMIN') {
     return NextResponse.json({ error: { code: 'AccessDenied', message: 'Chỉ Admin mới có quyền xóa khóa học' } }, { status: 403 })
   }
 
-  const courseId = params.courseId
   const course = await prisma.course.findUnique({ where: { id: courseId } })
   if (!course) return NextResponse.json({ error: { code: 'CourseNotFound', message: 'Khóa học không tồn tại' } }, { status: 404 })
 

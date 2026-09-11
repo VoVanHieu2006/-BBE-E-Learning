@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
+import crypto from 'crypto';
 import { authenticate } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * GET /api/v1/lessons/{lessonId}/assessment
@@ -14,11 +17,18 @@ export async function GET(
   request: NextRequest,
   { params }: { params: { lessonId: string } }
 ) {
+  const { lessonId } = params;
+  if (!UUID_REGEX.test(lessonId)) {
+    return NextResponse.json(
+      { error: { code: 'LessonNotFound', message: 'Bài học không tồn tại' } },
+      { status: 404 }
+    );
+  }
+
   const auth = await authenticate(request).catch(() => ({
     ok: false,
     error: { code: 'UNAUTHORIZED' },
   }));
-  const { lessonId } = params;
 
   const assessment = await prisma.assessment.findUnique({
     where: { lesson_id: lessonId },
@@ -58,7 +68,7 @@ export async function GET(
         points: Number(q.points),
         durationSeconds: q.duration_seconds,
         sortOrder: q.sort_order,
-        ...(canSeeCorrect && q.explanation ? { explanation: q.explanation } : {}),
+        ...(canSeeCorrect ? { explanation: q.explanation || '' } : {}),
         options: q.options.map((o) => ({
           optionId: o.id,
           id: o.id,
@@ -78,12 +88,21 @@ export async function GET(
 /**
  * POST /api/v1/lessons/{lessonId}/assessment
  * Tạo hoặc cập nhật bài kiểm tra của bài học — Admin only
+ * OPTIMIZED: Uses batch createMany for questions and options
  */
 export async function POST(
   request: NextRequest,
   { params }: { params: { lessonId: string } }
 ) {
   try {
+    const { lessonId } = params;
+    if (!UUID_REGEX.test(lessonId)) {
+      return NextResponse.json(
+        { error: { code: 'LessonNotFound', message: 'Bài học không tồn tại' } },
+        { status: 404 }
+      );
+    }
+
     const auth = await authenticate(request);
     if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: 401 });
     if ((auth as any).context!.role !== 'ADMIN') {
@@ -92,8 +111,6 @@ export async function POST(
         { status: 403 }
       );
     }
-
-    const { lessonId } = params;
 
     const lesson = await prisma.lesson.findUnique({
       where: { id: lessonId },
@@ -127,8 +144,11 @@ export async function POST(
       );
     }
 
-    // Format nested questions & options
-    const questionsCreateData = questions.map((q: any, i: number) => {
+    const assessmentId = crypto.randomUUID();
+
+    // Prepare questions and options with pre-generated UUIDs for batch createMany
+    const preparedQuestions = questions.map((q: any, i: number) => {
+      const qId = crypto.randomUUID();
       const qText = (q.questionText || q.question_text || `Câu hỏi ${i + 1}`).trim();
       const qType = q.questionType || q.type || 'SINGLE_CHOICE';
       const qPoints = Math.max(1, parseInt(String(q.points), 10) || 10);
@@ -149,24 +169,33 @@ export async function POST(
               { optionText: 'Đáp án B', isCorrect: false },
             ];
 
+      const options = rawOptions.map((opt: any, j: number) => ({
+        id: crypto.randomUUID(),
+        question_id: qId,
+        option_text: (opt.optionText || opt.option_text || `Đáp án ${j + 1}`).trim(),
+        is_correct: Boolean(opt.isCorrect ?? opt.is_correct ?? false),
+        sort_order: j,
+      }));
+
       return {
-        question_text: qText,
-        question_type: qType,
-        points: qPoints,
-        duration_seconds: qDuration,
-        explanation: qExplanation,
-        sort_order: i,
-        options: {
-          create: rawOptions.map((opt: any, j: number) => ({
-            option_text: (opt.optionText || opt.option_text || `Đáp án ${j + 1}`).trim(),
-            is_correct: Boolean(opt.isCorrect ?? opt.is_correct),
-            sort_order: j,
-          })),
+        question: {
+          id: qId,
+          assessment_id: assessmentId,
+          question_text: qText,
+          question_type: qType as any,
+          points: qPoints,
+          duration_seconds: qDuration,
+          explanation: qExplanation,
+          sort_order: i,
         },
+        options,
       };
     });
 
-    const result = await prisma.$transaction(
+    const allQuestionRows = preparedQuestions.map((p) => p.question);
+    const allOptionRows = preparedQuestions.flatMap((p) => p.options);
+
+    await prisma.$transaction(
       async (tx) => {
         // Delete existing assessment if present
         const existing = await tx.assessment.findUnique({
@@ -175,47 +204,55 @@ export async function POST(
         });
 
         if (existing) {
-          await tx.assessment.delete({
-            where: { id: existing.id },
+          // Clean attempts & related questions
+          const attempts = await tx.attempt.findMany({
+            where: { assessment_id: existing.id },
+            select: { id: true },
           });
+          const attemptIds = attempts.map((a) => a.id);
+          if (attemptIds.length > 0) {
+            await tx.attemptAnswer.deleteMany({ where: { attempt_id: { in: attemptIds } } });
+            await tx.attemptQuestion.deleteMany({ where: { attempt_id: { in: attemptIds } } });
+            await tx.attempt.deleteMany({ where: { id: { in: attemptIds } } });
+          }
+
+          await tx.questionOption.deleteMany({ where: { question: { assessment_id: existing.id } } });
+          await tx.question.deleteMany({ where: { assessment_id: existing.id } });
+          await tx.assessment.delete({ where: { id: existing.id } });
         }
 
         // Create new assessment
-        return tx.assessment.create({
+        await tx.assessment.create({
           data: {
+            id: assessmentId,
             lesson_id: lessonId,
             title: title.trim(),
             description: description?.trim() || null,
             created_by: (auth as any).context!.userId,
-            questions: {
-              create: questionsCreateData,
-            },
-          },
-          include: {
-            questions: {
-              include: {
-                options: { orderBy: { sort_order: 'asc' } },
-              },
-              orderBy: { sort_order: 'asc' },
-            },
           },
         });
+
+        // Batch insert questions & options
+        await tx.question.createMany({ data: allQuestionRows });
+        if (allOptionRows.length > 0) {
+          await tx.questionOption.createMany({ data: allOptionRows });
+        }
       },
       {
-        timeout: 20000,
+        timeout: 15000,
         maxWait: 5000,
       }
     );
 
     return NextResponse.json(
       {
-        assessmentId: result.id,
-        id: result.id,
-        lessonId: result.lesson_id,
-        title: result.title,
-        description: result.description,
-        questionCount: result.questions.length,
-        questions: result.questions.map((q) => ({
+        assessmentId,
+        id: assessmentId,
+        lessonId,
+        title: title.trim(),
+        description: description?.trim() || null,
+        questionCount: preparedQuestions.length,
+        questions: preparedQuestions.map(({ question: q, options: opts }) => ({
           questionId: q.id,
           id: q.id,
           questionText: q.question_text,
@@ -223,7 +260,8 @@ export async function POST(
           points: Number(q.points),
           durationSeconds: q.duration_seconds,
           sortOrder: q.sort_order,
-          options: q.options.map((o) => ({
+          explanation: q.explanation || '',
+          options: opts.map((o) => ({
             optionId: o.id,
             id: o.id,
             optionText: o.option_text,
@@ -240,4 +278,72 @@ export async function POST(
       { status: 500 }
     );
   }
+}
+
+/**
+ * DELETE /api/v1/lessons/{lessonId}/assessment
+ * Delete assessment associated with this lesson (Admin only)
+ */
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: { lessonId: string } }
+) {
+  const { lessonId } = params;
+  if (!UUID_REGEX.test(lessonId)) {
+    return NextResponse.json(
+      { error: { code: 'LessonNotFound', message: 'Bài học không tồn tại' } },
+      { status: 404 }
+    );
+  }
+
+  const auth = await authenticate(request);
+  if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: 401 });
+  if ((auth as any).context!.role !== 'ADMIN') {
+    return NextResponse.json(
+      { error: { code: 'AccessDenied', message: 'Chỉ Admin mới có quyền xóa bài kiểm tra' } },
+      { status: 403 }
+    );
+  }
+
+  const existing = await prisma.assessment.findUnique({
+    where: { lesson_id: lessonId },
+    select: { id: true },
+  });
+
+  if (!existing) {
+    return NextResponse.json(
+      { error: { code: 'AssessmentNotFound', message: 'Bài học chưa có bài kiểm tra' } },
+      { status: 404 }
+    );
+  }
+
+  await prisma.$transaction(
+    async (tx) => {
+      const attempts = await tx.attempt.findMany({
+        where: { assessment_id: existing.id },
+        select: { id: true },
+      });
+      const attemptIds = attempts.map((a) => a.id);
+      if (attemptIds.length > 0) {
+        await tx.attemptAnswer.deleteMany({ where: { attempt_id: { in: attemptIds } } });
+        await tx.attemptQuestion.deleteMany({ where: { attempt_id: { in: attemptIds } } });
+        await tx.attempt.deleteMany({ where: { id: { in: attemptIds } } });
+      }
+
+      await tx.questionOption.deleteMany({ where: { question: { assessment_id: existing.id } } });
+      await tx.question.deleteMany({ where: { assessment_id: existing.id } });
+      await tx.assessment.delete({ where: { id: existing.id } });
+    },
+    {
+      timeout: 15000,
+      maxWait: 5000,
+    }
+  );
+
+  return NextResponse.json({
+    success: true,
+    message: 'Đã xóa bài kiểm tra thành công',
+    lessonId,
+    assessmentId: existing.id,
+  });
 }
