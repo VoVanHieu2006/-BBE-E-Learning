@@ -69,11 +69,13 @@ export async function getPublishedSystemData(forceFresh = false): Promise<Publis
       title: true,
       sessions: {
         select: {
-          lessons: { select: { id: true } },
+          lessons: {
+            select: {
+              id: true,
+              assessment: { select: { id: true } },
+            },
+          },
         },
-      },
-      assessment: {
-        select: { id: true },
       },
     },
     orderBy: { created_at: 'asc' },
@@ -81,17 +83,19 @@ export async function getPublishedSystemData(forceFresh = false): Promise<Publis
 
   const allLessonIdSet = new Set<string>()
   const formattedCourses: PublishedCourseInfo[] = courses.map((c) => {
-    const lessonIds = c.sessions.flatMap((s) => s.lessons.map((l) => l.id))
+    const lessonList = c.sessions.flatMap((s) => s.lessons)
+    const lessonIds = lessonList.map((l) => l.id)
     for (const lid of lessonIds) {
       allLessonIdSet.add(lid)
     }
+    const hasAnyAssessment = lessonList.some((l) => !!l.assessment)
     return {
       id: c.id,
       title: c.title,
       lessonIds,
       totalLessons: lessonIds.length,
-      hasAssessment: !!c.assessment,
-      assessmentId: c.assessment?.id || null,
+      hasAssessment: hasAnyAssessment,
+      assessmentId: null,
     }
   })
 
@@ -174,25 +178,7 @@ export async function calculateUserProgress(
     totalCoursePercentSum += progressPercent
 
     const allVideosDone = c.totalLessons > 0 && courseDoneCount >= c.totalLessons
-
-    let latestAttempt: any = null
-    let isPassed = false
-
-    if (c.hasAssessment && c.assessmentId) {
-      const att = latestAttemptMap.get(c.assessmentId)
-      if (att) {
-        latestAttempt = {
-          score: att.score !== null ? Math.round(Number(att.score) * 100) : null,
-          passed: Boolean(att.passed),
-          submittedAt: att.submitted_at,
-        }
-        isPassed = Boolean(att.passed)
-      }
-    } else {
-      isPassed = true
-    }
-
-    const isCompleted = allVideosDone && isPassed
+    const isCompleted = allVideosDone
     if (isCompleted) {
       completedCoursesCount++
     }
@@ -212,7 +198,7 @@ export async function calculateUserProgress(
       allVideosDone,
       hasAssessment: c.hasAssessment,
       assessmentId: c.assessmentId,
-      latestAttempt,
+      latestAttempt: c.assessmentId ? latestAttemptMap.get(c.assessmentId) || null : null,
       isCompleted,
       state,
     }
@@ -326,16 +312,7 @@ export async function calculateBatchUsersProgress(
       totalCoursePercentSum += progressPercent
 
       const allVideosDone = c.totalLessons > 0 && courseDoneCount >= c.totalLessons
-
-      let isPassed = false
-      if (c.hasAssessment && c.assessmentId) {
-        const att = uAttempts?.latestByAssess.get(c.assessmentId)
-        isPassed = Boolean(att?.passed)
-      } else {
-        isPassed = true
-      }
-
-      if (allVideosDone && isPassed) {
+      if (allVideosDone) {
         completedCoursesCount++
       }
     }

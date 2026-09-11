@@ -15,14 +15,14 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
             include: {
               video: { select: { id: true, youtube_video_id: true, duration_seconds: true } },
               documents: { select: { id: true, file_name: true, file_size: true, mime_type: true } },
+              assessment: {
+                select: { id: true, title: true, description: true, _count: { select: { questions: true } } },
+              },
             },
             orderBy: { sort_order: 'asc' },
           },
         },
         orderBy: { sort_order: 'asc' },
-      },
-      assessment: {
-        select: { id: true, title: true, description: true, _count: { select: { questions: true } } },
       },
     },
   })
@@ -35,13 +35,6 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
   if (courseDetail.visibility === 'PRIVATE') {
     if (!auth.ok || ((auth as any).context!.role !== 'ADMIN' && (auth as any).context!.role !== 'CHAPTER_LEADER' && (auth as any).context!.role !== 'MEMBER')) {
       return NextResponse.json({ error: { code: 'AccessDenied', message: 'Khóa học Private — Vui lòng đăng nhập' } }, { status: 403 })
-    }
-    
-    if (auth.ok) {
-      const user = await prisma.user.findUnique({ where: { id: (auth as any).context!.userId }, select: { status: true } })
-      if (!user || user.status !== 'ACTIVE') {
-        return NextResponse.json({ error: { code: 'AccessDenied', message: 'Tài khoản phải Active' } }, { status: 403 })
-      }
     }
   }
   
@@ -57,13 +50,7 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
     status: courseDetail.status,
     visibility: courseDetail.visibility,
     publishedAt: courseDetail.published_at,
-    assessment: courseDetail.assessment ? {
-      assessmentId: courseDetail.assessment.id,
-      id: courseDetail.assessment.id,
-      title: courseDetail.assessment.title,
-      description: courseDetail.assessment.description,
-      questionCount: courseDetail.assessment._count.questions,
-    } : null,
+    assessment: null,
     sessions: courseDetail.sessions.map((s) => ({
       sessionId: s.id,
       id: s.id,
@@ -82,6 +69,13 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
           youtubeVideoId: l.video.youtube_video_id,
           durationSeconds: l.video.duration_seconds,
         } : null,
+        assessment: l.assessment ? {
+          assessmentId: l.assessment.id,
+          id: l.assessment.id,
+          title: l.assessment.title,
+          description: l.assessment.description,
+          questionCount: l.assessment._count.questions,
+        } : null,
         documentCount: l.documents.length,
         documents: l.documents.map((d) => ({
           documentId: d.id,
@@ -94,7 +88,7 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
     })),
   }, {
     headers: {
-      'Cache-Control': 'private, max-age=5, stale-while-revalidate=30',
+      'Cache-Control': 'private, max-age=10, stale-while-revalidate=60',
     },
   })
 }

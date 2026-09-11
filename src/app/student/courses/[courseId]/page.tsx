@@ -30,16 +30,19 @@ export default function CourseDetailPage({ params }: { params: { courseId: strin
 
   async function loadCourseAndProgress(token?: string) {
     setLoading(true);
-    const courseRes = await apiFetch(`/api/v1/courses/${params.courseId}`);
+    const hasToken = !!token || (typeof window !== 'undefined' && !!localStorage.getItem('accessToken'));
+
+    const [courseRes, progressRes] = await Promise.all([
+      apiFetch(`/api/v1/courses/${params.courseId}`),
+      hasToken ? apiFetch(`/api/v1/courses/${params.courseId}/my-progress`) : Promise.resolve(null),
+    ]);
+
     if (courseRes.ok && courseRes.data) {
       setCourse(courseRes.data);
     }
 
-    if (token || (typeof window !== 'undefined' && localStorage.getItem('accessToken'))) {
-      const progressRes = await apiFetch(`/api/v1/courses/${params.courseId}/my-progress`, { noCache: true });
-      if (progressRes.ok && progressRes.data) {
-        setProgressData(progressRes.data);
-      }
+    if (progressRes && progressRes.ok && progressRes.data) {
+      setProgressData(progressRes.data);
     }
 
     setLoading(false);
@@ -83,8 +86,8 @@ export default function CourseDetailPage({ params }: { params: { courseId: strin
             <div className="rounded-2xl border-2 border-emerald-300 bg-emerald-50 px-5 py-4 flex items-center gap-3 shadow-sm">
               <span className="text-2xl">🎉</span>
               <div>
-                <p className="font-bold text-emerald-800 text-sm">Chúc mừng! Bạn đã hoàn thành khóa học này</p>
-                <p className="text-xs text-emerald-700">Hãy làm bài kiểm tra cuối khóa để nhận chứng nhận nhé.</p>
+                <p className="font-bold text-emerald-800 text-sm">Chúc mừng! Bạn đã hoàn thành toàn bộ khóa học này</p>
+                <p className="text-xs text-emerald-700">Bạn đã hoàn thành tất cả video bài giảng và bài kiểm tra của các bài học.</p>
               </div>
             </div>
           )}
@@ -184,8 +187,13 @@ export default function CourseDetailPage({ params }: { params: { courseId: strin
                                 {lesson.description && (
                                   <p className="text-xs text-[#434655] mt-0.5 line-clamp-1">{lesson.description}</p>
                                 )}
-                                <div className="flex items-center gap-3 text-xs text-[#737686] mt-0.5">
+                                <div className="flex flex-wrap items-center gap-2 text-xs text-[#737686] mt-1">
                                   <span>📹 Video bài giảng</span>
+                                  {lesson.assessment && (
+                                    <span className="inline-flex items-center gap-1 font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md text-[11px]">
+                                      📝 Quiz ({lesson.assessment.questionCount || lesson.assessment._count?.questions || 0} câu)
+                                    </span>
+                                  )}
                                   {lesson.documents?.length > 0 && (
                                     <span>• 📄 {lesson.documents.length} tài liệu</span>
                                   )}
@@ -214,34 +222,31 @@ export default function CourseDetailPage({ params }: { params: { courseId: strin
             })}
           </div>
 
-          {/* Final Quiz Section */}
-          <div className="bg-white rounded-3xl p-8 border border-[#eff4ff] shadow-md flex flex-col md:flex-row items-center justify-between gap-6">
-            <div className="space-y-1 text-center md:text-left">
+          {/* Learning & Assessment Info Section */}
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50/60 rounded-3xl p-6 md:p-8 border border-blue-100 shadow-sm flex flex-col md:flex-row items-center justify-between gap-6">
+            <div className="space-y-1.5 text-center md:text-left">
+              <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-100 text-[#2563EB] text-xs font-bold rounded-full mb-1">
+                <span>✨ Đánh giá theo bài học</span>
+              </div>
               <h3 className="text-xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
-                Bài kiểm tra đánh giá cuối khóa
+                Học xong video làm bài kiểm tra ngay
               </h3>
-              <p className="text-sm text-[#737686]">
-                Yêu cầu: Hoàn thành tất cả các bài học và đạt tối thiểu 85% điểm số để được cấp chứng nhận.
+              <p className="text-sm text-[#55586d]">
+                Mỗi bài học tích hợp bài kiểm tra riêng bên cạnh video bài giảng. Hoàn thành video và đạt điểm bài kiểm tra để mở khóa bài học tiếp theo!
               </p>
             </div>
 
-            <div>
+            <div className="shrink-0">
               {user ? (
-                allLessonsDone || isLeaderOrAdmin ? (
-                  <Link href={`/student/courses/${params.courseId}/quiz${course?.assessment?.id ? `?assessmentId=${course.assessment.id}` : ''}`}>
-                    <Button size="lg" className="shadow-lg whitespace-nowrap">
-                      📝 Bắt đầu làm bài kiểm tra
-                    </Button>
-                  </Link>
-                ) : (
-                  <Button size="lg" disabled className="opacity-50 cursor-not-allowed whitespace-nowrap">
-                    🔒 Cần hoàn thành đủ bài học
-                  </Button>
-                )
+                <div className="text-center md:text-right">
+                  <span className="inline-block text-xs font-semibold text-slate-600 bg-white px-4 py-2.5 rounded-xl border border-slate-200 shadow-xs">
+                    Tiến độ hoàn thành: <strong className="text-[#2563EB] text-sm">{progressPercentage}%</strong> ({completedLessons}/{totalLessons} bài)
+                  </span>
+                </div>
               ) : (
                 <Link href="/login">
-                  <Button size="lg" variant="secondary" className="whitespace-nowrap">
-                    Đăng nhập để làm Quiz
+                  <Button size="lg" className="shadow-lg whitespace-nowrap">
+                    Đăng nhập để bắt đầu học
                   </Button>
                 </Link>
               )}

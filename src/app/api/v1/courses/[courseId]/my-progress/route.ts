@@ -7,29 +7,34 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: 401 })
 
   const courseId = params.courseId
-
-  const course = await prisma.course.findUnique({ where: { id: courseId } })
-  if (!course) return NextResponse.json({ error: { code: 'CourseNotFound', message: 'Khóa học không tồn tại' } }, { status: 404 })
-  
+  const userId = (auth as any).context!.userId
   const role = (auth as any).context!.role
-  if (course.status !== 'PUBLISHED' && role !== 'ADMIN') {
-    return NextResponse.json({ error: { code: 'AccessDenied', message: 'Khóa học chưa publish' } }, { status: 403 })
-  }
 
-  const user = await prisma.user.findUnique({ where: { id: (auth as any).context!.userId } })
-  if (!user || user.status !== 'ACTIVE') return NextResponse.json({ error: { code: 'AccessDenied', message: 'Tài khoản phải Active' } }, { status: 403 })
-
-  const detail = await prisma.course.findUnique({
+  // Single streamlined query: fetch course status, sessions, lessons and user progress in 1 round-trip chain
+  const course = await prisma.course.findUnique({
     where: { id: courseId },
-    include: {
+    select: {
+      id: true,
+      status: true,
       sessions: {
         orderBy: { sort_order: 'asc' },
-        include: {
+        select: {
+          id: true,
+          title: true,
+          sort_order: true,
           lessons: {
             orderBy: { sort_order: 'asc' },
-            include: {
-              video: { select: { id: true, duration_seconds: true } },
-              progress: { where: { user_id: (auth as any).context!.userId } },
+            select: {
+              id: true,
+              title: true,
+              progress: {
+                where: { user_id: userId },
+                select: {
+                  completed: true,
+                  furthest_watched_position_seconds: true,
+                  last_position_seconds: true,
+                },
+              },
             },
           },
         },
@@ -37,9 +42,17 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
     },
   })
 
+  if (!course) {
+    return NextResponse.json({ error: { code: 'CourseNotFound', message: 'Khóa học không tồn tại' } }, { status: 404 })
+  }
+
+  if (course.status !== 'PUBLISHED' && role !== 'ADMIN') {
+    return NextResponse.json({ error: { code: 'AccessDenied', message: 'Khóa học chưa publish' } }, { status: 403 })
+  }
+
   let totalLessons = 0
   let completedLessons = 0
-  const sessions = detail!.sessions.map((s) => {
+  const sessions = course.sessions.map((s) => {
     return {
       sessionId: s.id,
       id: s.id,
@@ -63,13 +76,20 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
 
   const progressPercentage = totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0
 
-  return NextResponse.json({
-    courseId,
-    id: courseId,
-    progressPercentage,
-    percentage: progressPercentage,
-    totalLessons,
-    completedLessons,
-    sessions,
-  })
+  return NextResponse.json(
+    {
+      courseId,
+      id: courseId,
+      progressPercentage,
+      percentage: progressPercentage,
+      totalLessons,
+      completedLessons,
+      sessions,
+    },
+    {
+      headers: {
+        'Cache-Control': 'private, max-age=5, stale-while-revalidate=15',
+      },
+    }
+  )
 }

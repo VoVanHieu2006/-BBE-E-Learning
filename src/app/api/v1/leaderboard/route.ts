@@ -68,6 +68,13 @@ export async function GET(request: NextRequest) {
   const totalCount = allResults.length
   const items = allResults.slice(skip, skip + limit)
 
-  return NextResponse.json({ items, page, limit, totalCount })
+  return NextResponse.json(
+    { items, page, limit, totalCount },
+    {
+      headers: {
+        'Cache-Control': 'public, max-age=30, stale-while-revalidate=120',
+      },
+    }
+  )
 }
 

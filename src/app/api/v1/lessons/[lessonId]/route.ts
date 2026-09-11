@@ -17,6 +17,9 @@ export async function GET(request: NextRequest, { params }: { params: { lessonId
         },
       },
       video: true,
+      assessment: {
+        select: { id: true, title: true, description: true, _count: { select: { questions: true } } },
+      },
       documents: {
         select: { id: true, file_name: true, file_size: true, mime_type: true, created_at: true },
         orderBy: { created_at: 'asc' },
@@ -66,6 +69,13 @@ export async function GET(request: NextRequest, { params }: { params: { lessonId
       youtubeVideoId: lesson.video.youtube_video_id,
       durationSeconds: lesson.video.duration_seconds,
       title: lesson.video.title,
+    } : null,
+    assessment: lesson.assessment ? {
+      assessmentId: lesson.assessment.id,
+      id: lesson.assessment.id,
+      title: lesson.assessment.title,
+      description: lesson.assessment.description,
+      questionCount: lesson.assessment._count.questions,
     } : null,
     documents: lesson.documents.map((d) => ({
       documentId: d.id,

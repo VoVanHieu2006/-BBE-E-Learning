@@ -73,11 +73,17 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
 
   // Assessment State
   const [showAssessmentModal, setShowAssessmentModal] = useState(false);
+  const [activeLessonForAssessment, setActiveLessonForAssessment] = useState<{
+    sessionId: string;
+    lessonId: string;
+    lessonTitle: string;
+    assessment: any;
+  } | null>(null);
   const [assessmentSaving, setAssessmentSaving] = useState(false);
   const [assessmentFormError, setAssessmentFormError] = useState('');
   const [assessmentForm, setAssessmentForm] = useState({
-    title: 'Bài kiểm tra cuối khóa',
-    description: 'Đạt từ 85% điểm để hoàn thành khóa học',
+    title: 'Bài kiểm tra bài học',
+    description: 'Đạt từ 85% điểm để hoàn thành bài học',
     questions: [
       {
         questionText: 'Câu hỏi 1: ',
@@ -100,10 +106,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
   }, [params.courseId]);
 
   async function loadCourse() {
-    const [courseRes, assessRes] = await Promise.all([
-      apiFetch(`/api/v1/courses/${params.courseId}`, { noCache: true }),
-      apiFetch(`/api/v1/courses/${params.courseId}/assessment`, { noCache: true }),
-    ]);
+    const courseRes = await apiFetch(`/api/v1/courses/${params.courseId}`, { noCache: true });
 
     if (courseRes.ok && courseRes.data) {
       const c = courseRes.data;
@@ -116,21 +119,36 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
       });
     }
 
-    if (assessRes.ok && assessRes.data) {
-      setAssessment(assessRes.data);
-    }
-
     setLoading(false);
   }
 
-  // ─── Open Assessment Modal with Existing Questions ─────────────────────────────
-  const openAssessmentEditor = () => {
+  // ─── Open Assessment Modal for a specific Lesson ─────────────────────────────
+  const openAssessmentEditorForLesson = async (sId: string, lesson: any) => {
     setAssessmentFormError('');
-    if (assessment && Array.isArray(assessment.questions) && assessment.questions.length > 0) {
+    const lId = lesson.lessonId || lesson.id;
+    let assessData = lesson.assessment;
+
+    if (assessData && !assessData.questions) {
+      // Fetch full questions if not loaded
+      const res = await apiFetch(`/api/v1/lessons/${lId}/assessment`, { noCache: true });
+      if (res.ok && res.data) {
+        assessData = res.data;
+      }
+    }
+
+    setActiveLessonForAssessment({
+      sessionId: sId,
+      lessonId: lId,
+      lessonTitle: lesson.title,
+      assessment: assessData,
+    });
+    setAssessment(assessData);
+
+    if (assessData && Array.isArray(assessData.questions) && assessData.questions.length > 0) {
       setAssessmentForm({
-        title: assessment.title || 'Bài kiểm tra cuối khóa',
-        description: assessment.description || '',
-        questions: assessment.questions.map((q: any, idx: number) => ({
+        title: assessData.title || `Bài kiểm tra: ${lesson.title}`,
+        description: assessData.description || '',
+        questions: assessData.questions.map((q: any, idx: number) => ({
           questionText: q.questionText || q.question_text || `Câu hỏi ${idx + 1}`,
           type: q.type || q.questionType || 'SINGLE_CHOICE',
           points: q.points || 10,
@@ -138,26 +156,26 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
           explanation: q.explanation || '',
           options: (q.options || []).map((opt: any, oIdx: number) => ({
             optionText: opt.optionText || opt.option_text || `Đáp án ${oIdx + 1}`,
-            isCorrect: Boolean(opt.isCorrect || opt.is_correct),
+            isCorrect: Boolean(opt.isCorrect ?? opt.is_correct),
           })),
         })),
       });
     } else {
       setAssessmentForm({
-        title: 'Bài kiểm tra cuối khóa',
-        description: 'Đạt từ 85% điểm để hoàn thành khóa học',
+        title: `Bài kiểm tra: ${lesson.title}`,
+        description: 'Vui lòng hoàn thành bài kiểm tra để tiếp tục bài học tiếp theo.',
         questions: [
           {
-            questionText: 'Câu hỏi 1: ',
-            type: 'SINGLE_CHOICE',
+            questionText: 'Câu hỏi 1: Nội dung bài học này nói về điều gì?',
+            type: 'SINGLE_CHOICE' as 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'TRUE_FALSE',
             points: 10,
             durationSeconds: 120,
             explanation: '',
             options: [
-              { optionText: 'Đáp án A (Đúng)', isCorrect: true },
-              { optionText: 'Đáp án B', isCorrect: false },
-              { optionText: 'Đáp án C', isCorrect: false },
-              { optionText: 'Đáp án D', isCorrect: false },
+              { optionText: 'Đáp án đúng', isCorrect: true },
+              { optionText: 'Đáp án sai 1', isCorrect: false },
+              { optionText: 'Đáp án sai 2', isCorrect: false },
+              { optionText: 'Đáp án sai 3', isCorrect: false },
             ],
           },
         ],
@@ -1040,10 +1058,15 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
       }
     }
 
+    if (!activeLessonForAssessment?.lessonId) {
+      showToast('error', 'Không xác định được bài học cần gắn bài kiểm tra');
+      return;
+    }
+
     setAssessmentSaving(true);
     clearApiCache('/api/v1/courses');
 
-    const res = await apiFetch(`/api/v1/courses/${params.courseId}/assessment`, {
+    const res = await apiFetch(`/api/v1/lessons/${activeLessonForAssessment.lessonId}/assessment`, {
       method: 'POST',
       body: JSON.stringify({
         title: assessmentForm.title.trim(),
@@ -1068,6 +1091,29 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
       showToast('success', `Đã lưu thành công bài kiểm tra (${assessmentForm.questions.length} câu hỏi)!`);
       setShowAssessmentModal(false);
       setAssessment(res.data);
+
+      setCourse((prev: any) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          sessions: (prev.sessions || []).map((s: any) => {
+            const sId = s.sessionId || s.id;
+            if (sId === activeLessonForAssessment.sessionId) {
+              return {
+                ...s,
+                lessons: (s.lessons || []).map((l: any) => {
+                  const lId = l.lessonId || l.id;
+                  if (lId === activeLessonForAssessment.lessonId) {
+                    return { ...l, assessment: res.data };
+                  }
+                  return l;
+                }),
+              };
+            }
+            return s;
+          }),
+        };
+      });
     } else {
       const errMsg = res.error?.message || 'Lỗi khi lưu bài kiểm tra';
       setAssessmentFormError(errMsg);
@@ -1077,15 +1123,44 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
   };
 
   const handleDeleteAssessment = async () => {
-    if (!window.confirm('Bạn có chắc muốn xóa bài kiểm tra cuối khóa?')) return;
-    if (!assessment?.assessmentId && !assessment?.id) return;
+    const assessObj = activeLessonForAssessment?.assessment || assessment;
+    if (!assessObj) return;
+    const aId = assessObj.assessmentId || assessObj.id;
+    if (!aId) return;
+
+    if (!window.confirm('Bạn có chắc muốn xóa bài kiểm tra của bài học này?')) return;
 
     clearApiCache('/api/v1/courses');
-    const aId = assessment.assessmentId || assessment.id;
     const res = await apiFetch(`/api/v1/assessments/${aId}`, { method: 'DELETE' });
     if (res.ok) {
       showToast('success', 'Đã xóa bài kiểm tra thành công.');
+      setShowAssessmentModal(false);
       setAssessment(null);
+
+      if (activeLessonForAssessment) {
+        setCourse((prev: any) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            sessions: (prev.sessions || []).map((s: any) => {
+              const sId = s.sessionId || s.id;
+              if (sId === activeLessonForAssessment.sessionId) {
+                return {
+                  ...s,
+                  lessons: (s.lessons || []).map((l: any) => {
+                    const lId = l.lessonId || l.id;
+                    if (lId === activeLessonForAssessment.lessonId) {
+                      return { ...l, assessment: null };
+                    }
+                    return l;
+                  }),
+                };
+              }
+              return s;
+            }),
+          };
+        });
+      }
     } else {
       showToast('error', res.error?.message || 'Lỗi khi xóa bài kiểm tra');
     }
@@ -1397,7 +1472,14 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
                                         />
                                       )}
                                       <div>
-                                        <h4 className="text-sm font-bold text-[#172554]">{lesson.title}</h4>
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                          <h4 className="text-sm font-bold text-[#172554]">{lesson.title}</h4>
+                                          {lesson.assessment && (
+                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                              📝 Quiz ({lesson.assessment.questionCount || lesson.assessment.questions?.length || 0} câu)
+                                            </span>
+                                          )}
+                                        </div>
                                         <p className="text-xs text-[#737686]">
                                           Video YouTube: <span className="font-mono">{vidId}</span> • Thời lượng:{' '}
                                           {durMin}:{durRemSec.toString().padStart(2, '0')} ({durSec}s)
@@ -1411,7 +1493,20 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
                                     </div>
 
                                     {!isPublished && (
-                                      <div className="flex items-center gap-2">
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <button
+                                          type="button"
+                                          onClick={() => openAssessmentEditorForLesson(sId, lesson)}
+                                          className={`px-2.5 py-1 border rounded-lg text-xs font-semibold inline-flex items-center gap-1 transition ${
+                                            lesson.assessment
+                                              ? 'bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100'
+                                              : 'bg-white text-[#2563EB] border-[#cbdbf5] hover:bg-[#eff4ff]'
+                                          }`}
+                                          title="Cấu hình bài kiểm tra cho bài học này"
+                                        >
+                                          <span>📝</span>
+                                          <span>{lesson.assessment ? 'Sửa Quiz' : '+ Thêm Quiz'}</span>
+                                        </button>
                                         <button
                                           type="button"
                                           onClick={() => openEditLessonModal(sId, lesson)}
@@ -1428,7 +1523,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
                                             onChange={(e) => handleDirectUploadDoc(sId, lId, e)}
                                           />
                                           <span className="px-2.5 py-1 bg-white border border-[#cbdbf5] hover:bg-[#eff4ff] text-[#2563EB] rounded-lg text-xs font-semibold inline-block transition">
-                                            {uploadingDocForLessonId === lId ? '⏳ Đang tải tài liệu...' : '📎 Thêm tài liệu (nhiều file, max 100MB)'}
+                                            {uploadingDocForLessonId === lId ? '⏳ Đang tải...' : '📎 Tài liệu'}
                                           </span>
                                         </label>
 
@@ -1485,83 +1580,43 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
               )}
             </div>
 
-            {/* 3. Final Quiz Assessment Section */}
+            {/* 3. Quiz Per-Lesson Overview Section */}
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
-                    Bài kiểm tra cuối khóa (Assessment)
-                  </h2>
-                  <p className="text-xs text-[#737686]">
-                    Thiết lập bài kiểm tra trắc nghiệm cuối khóa để cấp chứng chỉ / ghi nhận hoàn thành
-                  </p>
-                </div>
-                {assessment && !isPublished && (
-                  <div className="flex gap-2">
-                    <Button size="sm" variant="outline" onClick={openAssessmentEditor}>
-                      ✏️ Chỉnh sửa Quiz
-                    </Button>
-                    <Button size="sm" variant="secondary" onClick={handleDeleteAssessment}>
-                      Xóa Quiz
-                    </Button>
-                  </div>
-                )}
+              <div>
+                <h2 className="text-xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
+                  Bài kiểm tra theo từng bài giảng (Quiz per-lesson)
+                </h2>
+                <p className="text-xs text-[#737686]">
+                  Hệ thống áp dụng mô hình làm bài kiểm tra sau khi xem xong từng video bài giảng. Bạn có thể bấm <strong>"+ Thêm Quiz"</strong> hoặc <strong>"Sửa Quiz"</strong> ở từng bài học trong danh sách bên trên.
+                </p>
               </div>
 
-              {assessment ? (
-                <Card className="p-6 border border-[#eff4ff] shadow-sm">
-                  <div className="flex items-start justify-between pb-4 border-b border-[#eff4ff] mb-4">
+              <Card className="p-6 border border-[#eff4ff] shadow-sm">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3.5">
+                    <span className="text-3xl p-2.5 bg-blue-50 border border-blue-200 rounded-2xl">📝</span>
                     <div>
-                      <h3 className="text-lg font-bold text-[#172554]">{assessment.title}</h3>
-                      <p className="text-sm text-[#737686]">{assessment.description || 'Chưa có mô tả'}</p>
+                      <h4 className="text-sm font-bold text-[#172554]">Trạng thái cấu hình bài kiểm tra</h4>
+                      <p className="text-xs text-[#737686] mt-0.5">
+                        {(() => {
+                          let totalL = 0;
+                          let quizL = 0;
+                          (course?.sessions || []).forEach((s: any) => {
+                            (s.lessons || []).forEach((l: any) => {
+                              totalL++;
+                              if (l.assessment) quizL++;
+                            });
+                          });
+                          return `${quizL}/${totalL} bài giảng đã có bài kiểm tra (Quiz)`;
+                        })()}
+                      </p>
                     </div>
-                    <span className="text-xs font-bold px-3 py-1 bg-blue-100 text-[#2563EB] rounded-full">
-                      {assessment.questions?.length || 0} câu hỏi
-                    </span>
                   </div>
-
-                  <div className="space-y-3">
-                    {assessment.questions?.map((q: any, qIdx: number) => (
-                      <div key={q.questionId || q.id || qIdx} className="p-4 bg-[#f8f9ff] rounded-xl border border-[#eff4ff] space-y-2">
-                        <div className="flex items-start justify-between gap-2">
-                          <span className="font-bold text-sm text-[#172554]">
-                            Câu {qIdx + 1}: {q.questionText}
-                          </span>
-                          <span className="text-xs font-bold px-2 py-0.5 bg-[#eff4ff] text-[#2563EB] rounded-full shrink-0">
-                            {q.points || 10} điểm
-                          </span>
-                        </div>
-                        <div className="grid sm:grid-cols-2 gap-2 pt-1">
-                          {q.options?.map((opt: any, oIdx: number) => (
-                            <div
-                              key={opt.optionId || opt.id || oIdx}
-                              className={`p-2.5 rounded-lg border text-xs flex items-center justify-between ${
-                                opt.isCorrect ? 'bg-green-50 border-green-300 text-green-800 font-semibold' : 'bg-white border-slate-200 text-slate-700'
-                              }`}
-                            >
-                              <span>{opt.optionText}</span>
-                              {opt.isCorrect && <span className="text-green-600 font-bold">✓ Đáp án đúng</span>}
-                            </div>
-                          ))}
-                        </div>
-                        {q.explanation && (
-                          <p className="text-xs text-[#434655] bg-amber-50 border border-amber-200 rounded-lg p-2.5">
-                            💡 Giải thích: {q.explanation}
-                          </p>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </Card>
-              ) : (
-                <Card className="text-center py-10 shadow-sm">
-                  <p className="text-[#172554] font-semibold mb-1">Khóa học này chưa có bài kiểm tra cuối khóa</p>
-                  <p className="text-xs text-[#737686] mb-4">Học viên sẽ chỉ cần xem video nếu không có bài kiểm tra.</p>
-                  <Button size="sm" disabled={isPublished} onClick={openAssessmentEditor}>
-                    ＋ Thêm bài kiểm tra ngay
-                  </Button>
-                </Card>
-              )}
+                  <span className="self-start sm:self-auto px-3 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold rounded-xl shadow-2xs">
+                    ✓ Quiz Theo Từng Video
+                  </span>
+                </div>
+              </Card>
             </div>
           </div>
         )}
@@ -1715,7 +1770,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
           <div className="p-6 space-y-5 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center border-b border-[#eff4ff] pb-3">
               <h3 className="text-xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
-                Thiết lập bài kiểm tra cuối khóa
+                {activeLessonForAssessment ? `Cấu hình Quiz: ${activeLessonForAssessment.lessonTitle}` : 'Cấu hình bài kiểm tra'}
               </h3>
               <button
                 onClick={() => setShowAssessmentModal(false)}
@@ -1934,13 +1989,22 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
                 ))}
               </div>
 
-              <div className="flex justify-end gap-3 pt-3 border-t border-[#eff4ff]">
-                <Button variant="outline" onClick={() => setShowAssessmentModal(false)}>
-                  Hủy
-                </Button>
-                <Button loading={assessmentSaving} loadingText="Đang lưu..." onClick={handleSaveAssessment}>
-                  Lưu bài đánh giá
-                </Button>
+              <div className="flex items-center justify-between pt-3 border-t border-[#eff4ff]">
+                <div>
+                  {activeLessonForAssessment?.assessment && !isPublished && (
+                    <Button variant="danger" size="sm" onClick={handleDeleteAssessment}>
+                      🗑️ Xóa Quiz này
+                    </Button>
+                  )}
+                </div>
+                <div className="flex gap-3">
+                  <Button variant="outline" onClick={() => setShowAssessmentModal(false)}>
+                    Hủy
+                  </Button>
+                  <Button loading={assessmentSaving} loadingText="Đang lưu..." onClick={handleSaveAssessment}>
+                    Lưu bài kiểm tra
+                  </Button>
+                </div>
               </div>
             </div>
         </Modal>

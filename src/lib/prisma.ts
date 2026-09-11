@@ -6,4 +6,5 @@ export const prisma = globalForPrisma.prisma || new PrismaClient({
   log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
 })
 
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
+// Always cache prisma instance on globalThis for warm serverless lambdas on Vercel
+globalForPrisma.prisma = prisma

@@ -72,6 +72,33 @@ export async function POST(request: NextRequest) {
       },
     })
 
+    if (passed) {
+      const assess = await prisma.assessment.findUnique({
+        where: { id: attempt.assessment_id },
+        select: { lesson_id: true },
+      })
+      if (assess?.lesson_id) {
+        await prisma.lessonProgress.upsert({
+          where: {
+            user_id_lesson_id: {
+              user_id: attempt.user_id,
+              lesson_id: assess.lesson_id,
+            },
+          },
+          create: {
+            user_id: attempt.user_id,
+            lesson_id: assess.lesson_id,
+            completed: true,
+            completed_at: now,
+          },
+          update: {
+            completed: true,
+            completed_at: now,
+          },
+        })
+      }
+    }
+
     results.push({
       attemptId: updated.id,
       userId: updated.user_id,

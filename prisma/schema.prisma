@@ -120,6 +120,7 @@ model User {
   password_reset_tokens PasswordResetToken[]
   created_assessments   Assessment[]
   refresh_tokens        RefreshToken[]
+  comments              LessonComment[]
 
   @@map("users")
   @@index([email])
@@ -192,7 +193,6 @@ model Course {
 
   created_by_user User             @relation(fields: [created_by], references: [id], onDelete: Cascade)
   sessions      Session[]
-  assessment    Assessment?
 
   @@map("courses")
   @@index([status, visibility])
@@ -228,6 +228,8 @@ model Lesson {
   video       Video?
   documents   Document[]
   progress    LessonProgress[]
+  comments    LessonComment[]
+  assessment  Assessment?
 
   @@map("lessons")
   @@index([session_id, sort_order])
@@ -289,14 +291,14 @@ model LessonProgress {
 
 model Assessment {
   id            String     @id @default(uuid()) @db.Uuid
-  course_id     String     @unique @db.Uuid
+  lesson_id     String     @unique @db.Uuid
   title         String     @db.VarChar(255)
   description   String?    @db.Text
   created_by    String     @db.Uuid
   created_at    DateTime   @default(now()) @db.Timestamp
   updated_at    DateTime   @updatedAt @db.Timestamp
 
-  course        Course     @relation(fields: [course_id], references: [id], onDelete: Cascade)
+  lesson        Lesson     @relation(fields: [lesson_id], references: [id], onDelete: Cascade)
   created_by_user User    @relation(fields: [created_by], references: [id], onDelete: Cascade)
   questions     Question[]
   attempts      Attempt[]
@@ -445,4 +447,23 @@ model RefreshToken {
   @@index([user_id])
   @@index([expires_at])
   @@index([revoked_at])
+}
+
+model LessonComment {
+  id         String    @id @default(uuid()) @db.Uuid
+  lesson_id  String    @db.Uuid
+  user_id    String    @db.Uuid
+  parent_id  String?   @db.Uuid
+  content    String    @db.Text
+  created_at DateTime  @default(now()) @db.Timestamp
+  updated_at DateTime  @updatedAt @db.Timestamp
+
+  lesson     Lesson    @relation(fields: [lesson_id], references: [id], onDelete: Cascade)
+  user       User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  parent     LessonComment?  @relation("CommentReplies", fields: [parent_id], references: [id], onDelete: Cascade)
+  replies    LessonComment[] @relation("CommentReplies")
+
+  @@map("lesson_comments")
+  @@index([lesson_id, created_at])
+  @@index([parent_id])
 }

@@ -283,16 +283,37 @@ Table lesson_progress {
 }
 
 
+// ============================================================
+// LESSON COMMENTS
+// Comments / Q&A under lessons (Supports replies)
+// ============================================================
+
+Table lesson_comments {
+  id uuid [primary key]
+  lesson_id uuid [not null]
+  user_id uuid [not null]
+  parent_id uuid
+  content text [not null]
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+
+  indexes {
+    (lesson_id, created_at)
+    parent_id
+  }
+}
+
+
 
 // ============================================================
 // ASSESSMENTS
-// One Course = maximum one Assessment
-// course_id is UNIQUE
+// One Lesson = maximum one Assessment
+// lesson_id is UNIQUE
 // ============================================================
 
 Table assessments {
   id uuid [primary key]
-  course_id uuid [not null, unique]
+  lesson_id uuid [not null, unique]
   title varchar(255) [not null]
   description text
   created_by uuid [not null]
@@ -300,7 +321,7 @@ Table assessments {
   updated_at timestamp [not null]
 
   indexes {
-    course_id [unique]
+    lesson_id [unique]
   }
 }
 
@@ -481,11 +502,16 @@ Ref: documents.lesson_id > lessons.id
 Ref: lesson_progress.user_id > users.id
 Ref: lesson_progress.lesson_id > lessons.id
 
+// Lesson Comments
+Ref: lesson_comments.lesson_id > lessons.id
+Ref: lesson_comments.user_id > users.id
+Ref: lesson_comments.parent_id > lesson_comments.id
+
 
 // Watch Segments
 
 // Assessment
-Ref: assessments.course_id - courses.id
+Ref: assessments.lesson_id - lessons.id
 Ref: assessments.created_by > users.id
 
 // Questions

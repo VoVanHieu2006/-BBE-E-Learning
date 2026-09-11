@@ -67,40 +67,49 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: { code: 'InvalidCredentials', message: 'Tài khoản hoặc mật khẩu không đúng' } }, { status: 401 })
     }
 
-    // Login successful — reset counter
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { failed_login_count: 0, status: 'ACTIVE' },
-    })
-
-    // Generate JWT tokens
+    // Generate JWT tokens concurrently
     const chapterId = user.chapter_members?.[0]?.chapter?.id || undefined
 
     const accessSecret = new TextEncoder().encode(JWT_ACCESS_SECRET)
     const refreshSecret = new TextEncoder().encode(JWT_REFRESH_SECRET)
 
-    const accessToken = await new SignJWT({ sub: user.id, role: user.role, chapterId })
-      .setProtectedHeader({ alg: 'HS256' })
-      .setExpirationTime('15m')
-      .setIssuedAt()
-      .sign(accessSecret)
+    const [accessToken, refreshToken] = await Promise.all([
+      new SignJWT({ sub: user.id, role: user.role, chapterId })
+        .setProtectedHeader({ alg: 'HS256' })
+        .setExpirationTime('15m')
+        .setIssuedAt()
+        .sign(accessSecret),
+      new SignJWT({ sub: user.id, role: user.role, chapterId })
+        .setProtectedHeader({ alg: 'HS256' })
+        .setExpirationTime('7d')
+        .setIssuedAt()
+        .sign(refreshSecret),
+    ])
 
-    const refreshToken = await new SignJWT({ sub: user.id, role: user.role, chapterId })
-      .setProtectedHeader({ alg: 'HS256' })
-      .setExpirationTime('7d')
-      .setIssuedAt()
-      .sign(refreshSecret)
-
-    // Store refresh token hash in DB
+    // Store refresh token hash in DB and conditionally reset counter concurrently
     const refreshHash = crypto.createHash('sha256').update(refreshToken + (process.env.TOKEN_HASH_PEPPER || '')).digest('hex')
     const refreshExpires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-    await prisma.refreshToken.create({
-      data: {
-        user_id: user.id,
-        token_hash: refreshHash,
-        expires_at: refreshExpires,
-      },
-    })
+
+    const dbOps: Promise<any>[] = [
+      prisma.refreshToken.create({
+        data: {
+          user_id: user.id,
+          token_hash: refreshHash,
+          expires_at: refreshExpires,
+        },
+      }),
+    ]
+
+    if (user.failed_login_count > 0 || user.status !== 'ACTIVE') {
+      dbOps.push(
+        prisma.user.update({
+          where: { id: user.id },
+          data: { failed_login_count: 0, status: 'ACTIVE' },
+        })
+      )
+    }
+
+    await Promise.all(dbOps)
 
     const response = NextResponse.json({
       accessToken,

@@ -130,7 +130,12 @@ export async function GET(request: NextRequest) {
         durationFormatted: formatDuration(finalDuration),
         thumbnail: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
       },
-      { status: 200 }
+      {
+        status: 200,
+        headers: {
+          'Cache-Control': 'public, max-age=86400, stale-while-revalidate=604800',
+        },
+      }
     )
   } catch (err: any) {
     return NextResponse.json(

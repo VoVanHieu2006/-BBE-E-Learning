@@ -23,47 +23,34 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
     where: { id: assessmentId },
     select: {
       id: true,
-      course: {
+      lesson_id: true,
+      lesson: {
         select: {
-          sessions: {
-            select: {
-              lessons: { select: { id: true } },
-            },
-          },
+          id: true,
+          video: { select: { duration_seconds: true } },
         },
       },
     },
   })
   if (!assessment) return NextResponse.json({ error: { code: 'AssessmentNotFound' } }, { status: 404 })
 
-  // For members, verify all lessons are completed
+  // For members, verify video of this lesson has been watched
   if (role === 'MEMBER') {
-    const allLessonIds = assessment.course.sessions.flatMap((s) => s.lessons.map((l) => l.id))
-    if (allLessonIds.length > 0) {
-      const completed = await prisma.lessonProgress.findMany({
-        where: { user_id: userId, lesson_id: { in: allLessonIds }, completed: true },
-        select: { id: true },
-      })
-      if (completed.length < allLessonIds.length) {
-        return NextResponse.json({ error: { code: 'LessonsNotCompleted', message: 'Chưa hoàn thành tất cả bài học' } }, { status: 403 })
-      }
-    }
-
-    // 24h cooldown check (BR-04: applies to SUBMITTED, AUTO_SUBMITTED, and CANCELLED)
-    const lastSubmitted = await prisma.attempt.findFirst({
-      where: { assessment_id: assessmentId, user_id: userId, status: { in: ['SUBMITTED', 'AUTO_SUBMITTED', 'CANCELLED'] } },
-      orderBy: { submitted_at: 'desc' },
-      select: { score: true, submitted_at: true },
+    const prog = await prisma.lessonProgress.findUnique({
+      where: {
+        user_id_lesson_id: {
+          user_id: userId,
+          lesson_id: assessment.lesson_id,
+        },
+      },
     })
-    if (lastSubmitted && lastSubmitted.submitted_at) {
-      const hours = (Date.now() - lastSubmitted.submitted_at.getTime()) / (1000 * 60 * 60)
-      if (hours < 24) {
-        const scoreVal = lastSubmitted.score != null ? Number(lastSubmitted.score) : 0
-        const perfect = scoreVal >= 1 || scoreVal >= 100
-        if (!perfect) {
-          return NextResponse.json({ error: { code: 'CooldownActive', message: 'Còn thời gian chờ 24h kể từ lần nộp/hủy gần nhất' } }, { status: 403 })
-        }
-      }
+    const videoDuration = assessment.lesson.video?.duration_seconds || 0
+    const furthest = prog?.furthest_watched_position_seconds || 0
+    const watchedEnough = prog?.completed || (videoDuration > 0 && furthest >= videoDuration * 0.8) || videoDuration === 0
+    if (!watchedEnough) {
+      return NextResponse.json({
+        error: { code: 'VideoNotWatched', message: 'Bạn cần xem video bài giảng trước khi làm bài kiểm tra' },
+      }, { status: 403 })
     }
   }
 

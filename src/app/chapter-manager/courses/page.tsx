@@ -103,12 +103,12 @@ export default function ChapterManagerCoursesPage() {
     setVideoLesson(lesson);
   };
 
-  // ─── Modal 3: Bài kiểm tra + đáp án + giải thích ──────────────────────────────
-  const openQuiz = async (course: any) => {
-    setQuizModal(course);
+  // ─── Modal 3: Bài kiểm tra + đáp án + giải thích từng bài học ──────────────
+  const openLessonQuiz = async (lessonId: string, lessonTitle: string) => {
+    setQuizModal({ title: lessonTitle });
     setAssessment(null);
     setAssessmentLoading(true);
-    const res = await apiFetch(`/api/v1/courses/${course.courseId || course.id}/assessment`);
+    const res = await apiFetch(`/api/v1/lessons/${lessonId}/assessment`);
     if (res.ok && res.data) {
       setAssessment(res.data);
     }
@@ -200,10 +200,7 @@ export default function ChapterManagerCoursesPage() {
                       👥 Học viên
                     </Button>
                     <Button size="sm" variant="secondary" onClick={() => openContent(c)}>
-                      ▶ Xem nội dung
-                    </Button>
-                    <Button size="sm" variant="secondary" onClick={() => openQuiz(c)}>
-                      📝 Bài kiểm tra
+                      ▶ Nội dung & Quiz
                     </Button>
                   </div>
                 </Card>
@@ -312,21 +309,33 @@ export default function ChapterManagerCoursesPage() {
                                   {lesson.documents?.length > 0 ? ` • ${lesson.documents.length} tài liệu` : ''}
                                 </p>
                               </div>
-                              {vidId && (
-                                <Button
-                                  size="sm"
-                                  onClick={() =>
-                                    openVideoPreview({
-                                      lessonId: lId,
-                                      title: lesson.title,
-                                      youtubeVideoId: vidId,
-                                      durationSeconds: durSec,
-                                    })
-                                  }
-                                >
-                                  ▶ Xem
-                                </Button>
-                              )}
+                              <div className="flex items-center gap-2 shrink-0">
+                                {lesson.assessment && (
+                                  <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    onClick={() => openLessonQuiz(lId, lesson.title)}
+                                    className="text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200"
+                                  >
+                                    📝 Đáp án Quiz ({lesson.assessment.questionCount || lesson.assessment._count?.questions || 0} câu)
+                                  </Button>
+                                )}
+                                {vidId && (
+                                  <Button
+                                    size="sm"
+                                    onClick={() =>
+                                      openVideoPreview({
+                                        lessonId: lId,
+                                        title: lesson.title,
+                                        youtubeVideoId: vidId,
+                                        durationSeconds: durSec,
+                                      })
+                                    }
+                                  >
+                                    ▶ Xem video
+                                  </Button>
+                                )}
+                              </div>
                             </div>
                           );
                         })}
@@ -406,7 +415,7 @@ export default function ChapterManagerCoursesPage() {
             {assessmentLoading ? (
               <div className="py-12 text-center text-[#737686]">Đang tải bài kiểm tra...</div>
             ) : !assessment ? (
-              <div className="text-center py-10 text-[#737686]">Khóa học này chưa có bài kiểm tra cuối khóa.</div>
+              <div className="text-center py-10 text-[#737686]">Bài học này chưa có bài kiểm tra.</div>
             ) : (
               <div className="space-y-3">
                 <div className="flex items-center justify-between">

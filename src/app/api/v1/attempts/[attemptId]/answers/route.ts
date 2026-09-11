@@ -23,28 +23,40 @@ export async function POST(request: NextRequest, { params }: { params: { attempt
 
   // Case 1: Batch answers { answers: { [qId]: optionId } }
   if (answers && typeof answers === 'object') {
-    const entries = Object.entries(answers)
-    for (const [qId, optId] of entries) {
-      if (typeof optId === 'string' && optId) {
-        const option = await prisma.questionOption.findUnique({ where: { id: optId } })
-        await prisma.attemptAnswer.upsert({
-          where: { attempt_id_question_id: { attempt_id: params.attemptId, question_id: qId } },
-          create: {
-            attempt_id: params.attemptId,
-            question_id: qId,
-            selected_option_id: optId,
-            is_correct: option?.is_correct || false,
-            answered_at: new Date(),
-          },
-          update: {
-            selected_option_id: optId,
-            is_correct: option?.is_correct || false,
-            answered_at: new Date(),
-          },
+    const validEntries = Object.entries(answers).filter(
+      ([_, optId]) => typeof optId === 'string' && optId
+    ) as [string, string][]
+
+    if (validEntries.length > 0) {
+      const optIds = Array.from(new Set(validEntries.map(([_, optId]) => optId)))
+      const options = await prisma.questionOption.findMany({
+        where: { id: { in: optIds } },
+        select: { id: true, is_correct: true },
+      })
+      const optMap = new Map(options.map((o) => [o.id, o.is_correct]))
+
+      await Promise.all(
+        validEntries.map(([qId, optId]) => {
+          const isCorrect = optMap.get(optId) || false
+          return prisma.attemptAnswer.upsert({
+            where: { attempt_id_question_id: { attempt_id: params.attemptId, question_id: qId } },
+            create: {
+              attempt_id: params.attemptId,
+              question_id: qId,
+              selected_option_id: optId,
+              is_correct: isCorrect,
+              answered_at: new Date(),
+            },
+            update: {
+              selected_option_id: optId,
+              is_correct: isCorrect,
+              answered_at: new Date(),
+            },
+          })
         })
-      }
+      )
     }
-    return NextResponse.json({ saved: true, count: entries.length })
+    return NextResponse.json({ saved: true, count: validEntries.length })
   }
 
   // Case 2: Single answer { questionId, selectedOptionId }

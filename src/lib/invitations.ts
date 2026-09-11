@@ -128,8 +128,8 @@ export async function sendChapterLeaderInvitation(
     return { ok: false, code: 'ChapterNameConflict', message: 'Tên chapter đã tồn tại' }
   }
 
-  // Use transaction to create chapter + invitation
-  return await prisma.$transaction(async (tx) => {
+  // Use transaction to create chapter + invitation in DB first
+  const created = await prisma.$transaction(async (tx) => {
     // Create chapter
     const chapter = await tx.chapter.create({
       data: {
@@ -166,26 +166,33 @@ export async function sendChapterLeaderInvitation(
       },
     })
 
-    // Send chapter leader invitation email via Resend
-    const emailResult = await sendInvitationEmail({
-      to: email,
-      role: 'CHAPTER_LEADER',
-      chapterName,
-      token,
-      expiresAt,
-    })
-
     return {
-      ok: true as const,
       invitationId: invitation.id,
       chapterId: chapter.id,
-      status: 'PENDING' as InvitationStatus,
       expiresAt,
       token,
-      emailSent: emailResult.success,
-      emailError: emailResult.success ? undefined : emailResult.error,
     }
   })
+
+  // Send chapter leader invitation email via Resend OUTSIDE transaction
+  const emailResult = await sendInvitationEmail({
+    to: email,
+    role: 'CHAPTER_LEADER',
+    chapterName,
+    token: created.token,
+    expiresAt: created.expiresAt,
+  })
+
+  return {
+    ok: true as const,
+    invitationId: created.invitationId,
+    chapterId: created.chapterId,
+    status: 'PENDING' as InvitationStatus,
+    expiresAt: created.expiresAt,
+    token: created.token,
+    emailSent: emailResult.success,
+    emailError: emailResult.success ? undefined : emailResult.error,
+  }
 }
 
 /** Resend invitation — invalidates old token if PENDING, creates new token */

@@ -351,7 +351,7 @@ export default function YouTubePlayer({
     if (isGuest) return;
     stopHeartbeat();
     const d = durationRef.current || duration;
-    const intervalMs = d > 0 && d < 30 ? 3000 : 8000;
+    const intervalMs = d > 0 && d < 30 ? 3000 : 12000;
 
     heartbeatRef.current = setInterval(() => {
       try {
@@ -566,7 +566,7 @@ export default function YouTubePlayer({
                 </span>
               ) : (
                 <span className="text-[10px] text-slate-400 font-normal px-2 py-0.5 bg-slate-800/60 rounded-full hidden sm:inline">
-                  Không thể tua
+                  Không thể tua tới
                 </span>
               )}
             </div>

@@ -5,6 +5,8 @@ import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Toast, { ToastMessage } from '@/components/ui/Toast';
 import YouTubePlayer from '@/components/YouTubePlayer';
+import LessonComments from '@/components/lesson/LessonComments';
+import LessonQuiz from '@/components/lesson/LessonQuiz';
 import { apiFetch, ApiResponse } from '@/lib/api/client';
 
 export default function LearningVideoPage({ params }: { params: { lessonId: string } }) {
@@ -18,7 +20,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
   const [loadingCourse, setLoadingCourse] = useState(true);
   const [token, setToken] = useState<string>('');
   const [downloadLoading, setDownloadLoading] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'desc' | 'docs'>('desc');
+  const [activeTab, setActiveTab] = useState<'desc' | 'docs' | 'comments' | 'quiz'>('desc');
   const [openSessions, setOpenSessions] = useState<Record<string, boolean>>({});
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [toast, setToast] = useState<ToastMessage | null>(null);
@@ -57,7 +59,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
       if (courseId) {
         const [courseRes, progListRes, lessonProgRes] = await Promise.all([
           apiFetch(`/api/v1/courses/${courseId}`),
-          activeToken ? apiFetch(`/api/v1/courses/${courseId}/my-progress`, { noCache: true }) : Promise.resolve<ApiResponse<any>>({ ok: false, status: 0 }),
+          activeToken ? apiFetch(`/api/v1/courses/${courseId}/my-progress`) : Promise.resolve<ApiResponse<any>>({ ok: false, status: 0 }),
           activeToken ? apiFetch(`/api/v1/lessons/${lessonId}/progress`, { noCache: true }) : Promise.resolve<ApiResponse<any>>({ ok: false, status: 0 }),
         ]);
 
@@ -96,6 +98,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
 
     setCurrentLessonId(newLessonId);
     setLoadingLesson(true);
+    setActiveTab('desc'); // Reset tab to description when switching lessons
 
     // Update browser URL without triggering full-page router remount
     if (typeof window !== 'undefined') {
@@ -243,14 +246,26 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
     ? totalLessonsCount
     : courseProgress?.completedLessons ?? (progress?.completed ? 1 : 0);
   const overallPercent = Math.round((completedLessonsCount / totalLessonsCount) * 100);
+  const hasQuiz = Boolean(lesson?.assessment);
+  const isLessonPassed = Boolean(progress?.completed) || isLeaderOrAdmin;
+  const canGoNext = isGuest || isLeaderOrAdmin || Boolean(progress?.completed);
 
   const handleLessonComplete = () => {
     if (!isGuest) {
-      setProgress((prev: any) => ({ ...prev, completed: true, progressPercentage: 100 }));
-      if (nextLesson) {
-        showToast('success', `Đã hoàn thành bài học! Bạn có thể bấm "Bài tiếp theo →" để học tiếp.`, 'Hoàn thành bài học');
+      if (hasQuiz && !progress?.completed && !isLeaderOrAdmin) {
+        setActiveTab('quiz');
+        showToast(
+          'info',
+          'Bạn đã xem xong video! Hãy hoàn thành bài kiểm tra bên dưới để sang bài tiếp theo.',
+          'Làm bài kiểm tra'
+        );
       } else {
-        showToast('success', 'Chúc mừng! Bạn đã hoàn thành tất cả bài học trong khóa học này.', 'Hoàn thành khóa học');
+        setProgress((prev: any) => ({ ...prev, completed: true, progressPercentage: 100 }));
+        if (nextLesson) {
+          showToast('success', `Đã hoàn thành bài học! Bạn có thể bấm "Bài tiếp theo →" để học tiếp.`, 'Hoàn thành bài học');
+        } else {
+          showToast('success', 'Chúc mừng! Bạn đã hoàn thành tất cả bài học trong khóa học này.', 'Hoàn thành khóa học');
+        }
       }
     }
   };
@@ -370,12 +385,38 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
               )}
 
               {nextLesson && (
-                <button
-                  onClick={() => switchLesson(nextLesson.lessonId || nextLesson.id)}
-                  className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-[#F97316] hover:bg-[#ea580c] text-white text-xs font-bold shadow-md transition hover:scale-[1.02] active:scale-[0.98]"
-                >
-                  Bài tiếp theo →
-                </button>
+                canGoNext ? (
+                  <button
+                    onClick={() => switchLesson(nextLesson.lessonId || nextLesson.id)}
+                    className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-[#F97316] hover:bg-[#ea580c] text-white text-xs font-bold shadow-md transition hover:scale-[1.02] active:scale-[0.98]"
+                  >
+                    Bài tiếp theo →
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (hasQuiz) {
+                        setActiveTab('quiz');
+                        showToast(
+                          'info',
+                          'Bạn cần vượt qua bài kiểm tra để tiếp tục sang bài tiếp theo.',
+                          'Yêu cầu hoàn thành Quiz'
+                        );
+                      } else {
+                        showToast(
+                          'info',
+                          'Bạn cần xem video bài giảng trước khi sang bài tiếp theo.',
+                          'Xem video'
+                        );
+                      }
+                    }}
+                    className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-500 text-xs font-bold transition shadow-2xs"
+                    title={hasQuiz ? 'Cần hoàn thành bài kiểm tra để tiếp tục' : 'Cần xem video trước'}
+                  >
+                    <span>🔒 Bài tiếp theo →</span>
+                  </button>
+                )
               )}
             </div>
 
@@ -403,7 +444,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                     : 'border-transparent text-[#737686] hover:text-[#172554]'
                 }`}
               >
-                📝 Mô tả bài giảng
+                📖 Mô tả bài giảng
               </button>
               <button
                 onClick={() => setActiveTab('docs')}
@@ -420,6 +461,37 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                   </span>
                 )}
               </button>
+              <button
+                onClick={() => setActiveTab('comments')}
+                className={`pb-3 text-sm font-bold border-b-2 transition flex items-center gap-1.5 ${
+                  activeTab === 'comments'
+                    ? 'border-[#2563EB] text-[#2563EB]'
+                    : 'border-transparent text-[#737686] hover:text-[#172554]'
+                }`}
+              >
+                <span>💬 Hỏi đáp</span>
+              </button>
+              {hasQuiz && (
+                <button
+                  onClick={() => setActiveTab('quiz')}
+                  className={`pb-3 text-sm font-bold border-b-2 transition flex items-center gap-1.5 ${
+                    activeTab === 'quiz'
+                      ? 'border-[#2563EB] text-[#2563EB]'
+                      : 'border-transparent text-[#737686] hover:text-[#172554]'
+                  }`}
+                >
+                  <span>📝 Bài kiểm tra</span>
+                  <span
+                    className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                      progress?.completed
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : 'bg-orange-100 text-orange-800'
+                    }`}
+                  >
+                    {progress?.completed ? '✓ Đã đạt' : 'Cần làm'}
+                  </span>
+                </button>
+              )}
             </div>
 
             {activeTab === 'desc' ? (
@@ -431,7 +503,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                   {lesson?.description || 'Bài học này không có mô tả chi tiết.'}
                 </p>
               </Card>
-            ) : (
+            ) : activeTab === 'docs' ? (
               <Card className="p-6 border border-[#eff4ff] shadow-sm space-y-4">
                 <h3 className="text-base font-bold text-[#172554] flex items-center gap-2">
                   <span>📄</span> Danh sách tài liệu đính kèm ({lesson?.documents?.length || 0})
@@ -475,7 +547,51 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                   </div>
                 )}
               </Card>
-            )}
+            ) : activeTab === 'comments' ? (
+              <LessonComments
+                lessonId={currentLessonId}
+                currentUser={user}
+                accessToken={token}
+                onToast={showToast}
+              />
+            ) : activeTab === 'quiz' && hasQuiz ? (
+              <LessonQuiz
+                lessonId={currentLessonId}
+                assessmentId={lesson.assessment.assessmentId || lesson.assessment.id}
+                lessonTitle={lesson.title}
+                accessToken={token}
+                isCompleted={Boolean(progress?.completed)}
+                onQuizPassed={() => {
+                  setProgress((prev: any) => ({ ...prev, completed: true, progressPercentage: 100 }));
+                  // Update courseProgress sidebar so the checkmark appears immediately
+                  setCourseProgress((prev: any) => {
+                    if (!prev) return prev;
+                    let wasDone = false;
+                    const sessions = (prev.sessions || []).map((ps: any) => ({
+                      ...ps,
+                      lessons: (ps.lessons || []).map((pl: any) => {
+                        if (pl.lessonId !== currentLessonId) return pl;
+                        wasDone = Boolean(pl.completed);
+                        return { ...pl, completed: true };
+                      }),
+                    }));
+                    return {
+                      ...prev,
+                      sessions,
+                      completedLessons: wasDone
+                        ? prev.completedLessons
+                        : Math.min((prev.completedLessons || 0) + 1, prev.totalLessons || (prev.completedLessons || 0) + 1),
+                    };
+                  });
+                  if (nextLesson) {
+                    showToast('success', 'Hoàn thành bài kiểm tra! Bạn có thể chuyển sang bài tiếp theo.', 'Mở khóa bài tiếp theo');
+                  } else {
+                    showToast('success', 'Chúc mừng! Bạn đã hoàn thành tất cả bài học trong khóa học này.', 'Hoàn thành khóa học');
+                  }
+                }}
+                onToast={showToast}
+              />
+            ) : null}
           </div>
         </div>
 
@@ -563,8 +679,17 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                                 <p className={`font-semibold line-clamp-2 ${isCurrent ? 'text-[#2563EB]' : 'text-[#172554]'}`}>
                                   {sIdx + 1}.{lIdx + 1} {l.title}
                                 </p>
-                                <div className="flex items-center gap-2 text-[10px] text-[#737686] mt-1 font-normal">
+                              <div className="flex items-center gap-2 text-[10px] text-[#737686] mt-1 font-normal flex-wrap">
                                   <span>📹 {l.video?.durationSeconds ? `${Math.floor(l.video.durationSeconds / 60)}:${(l.video.durationSeconds % 60).toString().padStart(2, '0')}` : 'Video'}</span>
+                                  {l.assessment && (
+                                    <span className={`font-semibold px-1.5 py-0.5 rounded text-[9px] ${
+                                      isLessonDone
+                                        ? 'bg-emerald-100 text-emerald-700'
+                                        : 'bg-amber-100 text-amber-700'
+                                    }`}>
+                                      {isLessonDone ? '✓ Quiz đạt' : '📝 Quiz'}
+                                    </span>
+                                  )}
                                   {l.documents?.length > 0 && <span>• 📎 {l.documents.length} tài liệu</span>}
                                 </div>
                               </div>

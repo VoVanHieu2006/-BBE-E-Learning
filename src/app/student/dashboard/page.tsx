@@ -75,7 +75,7 @@ export default function StudentDashboard() {
             Chào mừng, <span suppressHydrationWarning>{mounted && user?.email ? user.email.split('@')[0] : 'bạn'}</span>
           </h1>
           <p className="text-[#737686] mt-1">
-            Chapter: <span suppressHydrationWarning className="font-semibold text-[#172554]">{mounted && user?.chapterName ? user.chapterName : 'BBE Core'}</span> • Tiếp tục học tập hôm nay
+            Chapter: <span suppressHydrationWarning className="font-semibold text-[#172554]">{mounted && user?.chapterName ? user.chapterName : 'BBE Core'}</span> • Tiếp tục học nhé!
           </p>
         </div>
         <Link href="/student/courses">

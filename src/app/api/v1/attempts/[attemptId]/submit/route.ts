@@ -20,41 +20,55 @@ export async function POST(request: NextRequest, { params }: { params: { attempt
   const body = await request.json().catch(() => ({}))
   const clientAnswers = body?.answers || {}
 
-  // Upsert any answers submitted in body
+  // Upsert any answers submitted in body with batch lookup to eliminate N+1
   if (clientAnswers && typeof clientAnswers === 'object') {
-    for (const [qId, optId] of Object.entries(clientAnswers)) {
-      if (optId && typeof optId === 'string') {
-        const opt = await prisma.questionOption.findUnique({ where: { id: optId } })
-        await prisma.attemptAnswer.upsert({
-          where: { attempt_id_question_id: { attempt_id: params.attemptId, question_id: qId } },
-          create: {
-            attempt_id: params.attemptId,
-            question_id: qId,
-            selected_option_id: optId,
-            is_correct: opt?.is_correct || false,
-            answered_at: new Date(),
-          },
-          update: {
-            selected_option_id: optId,
-            is_correct: opt?.is_correct || false,
-            answered_at: new Date(),
-          },
+    const validEntries = Object.entries(clientAnswers).filter(
+      ([_, optId]) => typeof optId === 'string' && optId
+    ) as [string, string][]
+
+    if (validEntries.length > 0) {
+      const optIds = Array.from(new Set(validEntries.map(([_, optId]) => optId)))
+      const options = await prisma.questionOption.findMany({
+        where: { id: { in: optIds } },
+        select: { id: true, is_correct: true },
+      })
+      const optMap = new Map(options.map((o) => [o.id, o.is_correct]))
+
+      await Promise.all(
+        validEntries.map(([qId, optId]) => {
+          const isCorrect = optMap.get(optId) || false
+          return prisma.attemptAnswer.upsert({
+            where: { attempt_id_question_id: { attempt_id: params.attemptId, question_id: qId } },
+            create: {
+              attempt_id: params.attemptId,
+              question_id: qId,
+              selected_option_id: optId,
+              is_correct: isCorrect,
+              answered_at: new Date(),
+            },
+            update: {
+              selected_option_id: optId,
+              is_correct: isCorrect,
+              answered_at: new Date(),
+            },
+          })
         })
-      }
+      )
     }
   }
 
-  // Calculate score
-  const answers = await prisma.attemptAnswer.findMany({
-    where: { attempt_id: params.attemptId },
-    include: { question: true, selected_option: true },
-  })
-
-  const allQuestions = await prisma.attemptQuestion.findMany({
-    where: { attempt_id: params.attemptId },
-    include: { question: { include: { options: true } } },
-    orderBy: { display_order: 'asc' },
-  })
+  // Calculate score concurrently
+  const [answers, allQuestions] = await Promise.all([
+    prisma.attemptAnswer.findMany({
+      where: { attempt_id: params.attemptId },
+      include: { question: true, selected_option: true },
+    }),
+    prisma.attemptQuestion.findMany({
+      where: { attempt_id: params.attemptId },
+      include: { question: { include: { options: true } } },
+      orderBy: { display_order: 'asc' },
+    }),
+  ])
 
   let totalPoints = 0
   let score = 0
@@ -66,13 +80,6 @@ export async function POST(request: NextRequest, { params }: { params: { attempt
     const isCorrect = ans.selected_option?.is_correct || false
     if (isCorrect) {
       score += Number(ans.question.points || 1)
-    }
-    // Update is_correct on attemptAnswer if not set
-    if (ans.is_correct !== isCorrect) {
-      await prisma.attemptAnswer.update({
-        where: { id: ans.id },
-        data: { is_correct: isCorrect },
-      })
     }
   }
 
@@ -94,6 +101,34 @@ export async function POST(request: NextRequest, { params }: { params: { attempt
       { error: { code: 'AttemptNotInProgress', message: 'Bài thi đã được nộp từ trước hoặc không còn hiệu lực' } },
       { status: 400 }
     )
+  }
+
+  // If passed, auto-complete the lesson associated with this assessment
+  if (passed) {
+    const assess = await prisma.assessment.findUnique({
+      where: { id: attempt.assessment_id },
+      select: { lesson_id: true },
+    })
+    if (assess?.lesson_id) {
+      await prisma.lessonProgress.upsert({
+        where: {
+          user_id_lesson_id: {
+            user_id: userId,
+            lesson_id: assess.lesson_id,
+          },
+        },
+        create: {
+          user_id: userId,
+          lesson_id: assess.lesson_id,
+          completed: true,
+          completed_at: new Date(),
+        },
+        update: {
+          completed: true,
+          completed_at: new Date(),
+        },
+      })
+    }
   }
 
   // For response: return all attempt questions in order

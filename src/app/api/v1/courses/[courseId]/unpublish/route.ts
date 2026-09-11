@@ -21,7 +21,11 @@ export async function POST(request: NextRequest, { params }: { params: { courseI
   // Check for active in-progress attempts before unpublishing (issue #5 — warning)
   const activeAttempts = await prisma.attempt.count({
     where: {
-      assessment: { course_id: courseId },
+      assessment: {
+        lesson: {
+          session: { course_id: courseId },
+        },
+      },
       status: 'IN_PROGRESS',
     },
   })

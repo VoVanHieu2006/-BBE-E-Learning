@@ -23,11 +23,12 @@ export async function GET(request: NextRequest, { params }: { params: { assessme
   })
   if (!assessment) return NextResponse.json({ error: { code: 'AssessmentNotFound' } }, { status: 404 })
 
-  const hideCorrect = (auth as any).context!.role === 'MEMBER' || (auth as any).context!.role === 'CHAPTER_LEADER'
+  // Only MEMBER hides correct answers; Admin and Chapter Leader can see full answer keys
+  const hideCorrect = (auth as any).context!.role === 'MEMBER'
 
   return NextResponse.json({
     assessmentId: assessment.id,
-    courseId: assessment.course_id,
+    lessonId: assessment.lesson_id,
     title: assessment.title,
     description: assessment.description,
     questionCount: assessment.questions.length,
@@ -78,7 +79,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { assess
       await tx.question.deleteMany({ where: { assessment_id: params.assessmentId } })
 
       for (const q of questions) {
-        const question = await tx.question.create({
+        await tx.question.create({
           data: {
             assessment_id: params.assessmentId,
             question_text: String(q.questionText || q.text || '').trim(),
@@ -86,22 +87,21 @@ export async function PATCH(request: NextRequest, { params }: { params: { assess
             points: Math.max(1, Number(q.points || 1)),
             duration_seconds: Math.max(30, Number(q.durationSeconds || q.duration_seconds || 120)),
             sort_order: Number(q.sortOrder || q.sort_order || 0),
+            options: {
+              create: (q.options || []).map((opt: any) => ({
+                option_text: String(opt.optionText || opt.text || '').trim(),
+                is_correct: Boolean(opt.isCorrect || false),
+                sort_order: Number(opt.sortOrder || opt.sort_order || 0),
+              })),
+            },
           },
         })
-        for (const opt of q.options || []) {
-          await tx.questionOption.create({
-            data: {
-              question_id: question.id,
-              option_text: String(opt.optionText || opt.text || '').trim(),
-              is_correct: Boolean(opt.isCorrect || false),
-              sort_order: Number(opt.sortOrder || opt.sort_order || 0),
-            },
-          })
-        }
       }
     }
   })
 
-  const count = await prisma.question.count({ where: { assessment_id: params.assessmentId } })
-  return NextResponse.json({ assessmentId: params.assessmentId, questionCount: count })
+  return NextResponse.json({
+    assessmentId: params.assessmentId,
+    questionCount: Array.isArray(questions) ? questions.length : 0,
+  })
 }
