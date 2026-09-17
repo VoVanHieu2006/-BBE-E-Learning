@@ -359,7 +359,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                     : progress?.lastPosition || 0
                 }
                 initialFurthest={progress?.watchedUntil || progress?.furthestWatchedPositionSeconds || 0}
-                durationSeconds={lesson.video.durationSeconds || 120}
+                durationSeconds={lesson.video.durationSeconds || 0}
                 onProgress={(p) => handleProgress(p.currentTime, p.furthest)}
                 onComplete={handleLessonComplete}
               />

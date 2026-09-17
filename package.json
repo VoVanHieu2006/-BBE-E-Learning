@@ -12,6 +12,7 @@
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
     "db:seed": "ts-node -P prisma/tsconfig.seed.json prisma/seed.ts",
+    "db:fix-durations": "ts-node -P scripts/tsconfig.json scripts/fix-video-durations.ts",
     "db:reset": "prisma migrate reset --force",
     "db:generate": "prisma generate"
   },

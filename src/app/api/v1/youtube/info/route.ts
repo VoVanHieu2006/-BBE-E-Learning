@@ -1,24 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { formatDuration, lookupYouTube, parseYouTubeVideoId } from '@/lib/youtube/duration'
 
 /**
  * GET /api/v1/youtube/info?videoId=...
- * Auto-extract YouTube video title, exact duration in seconds, and thumbnail.
- * Strictly verifies video existence & embeddability.
+ * Trả về tiêu đề, tác giả, thumbnail và thời lượng thật của video YouTube.
+ * Nếu không xác định được thời lượng (live/premiere/bị chặn), trả durationKnown = false
+ * và durationSeconds = 0 — KHÔNG bịa số mặc định. Admin phải nhập tay trước khi lưu.
  */
 export async function GET(request: NextRequest) {
   const url = new URL(request.url)
   const rawId = url.searchParams.get('videoId') || ''
+  const videoId = parseYouTubeVideoId(rawId)
 
-  // Support full YouTube URLs (standard, shorts, embed, youtu.be) and raw 11-char ID
-  let videoId = rawId.trim()
-  const match = videoId.match(
-    /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=|shorts\/)|youtu\.be\/)([^"&?\/\s]{11})/i
-  )
-  if (match && match[1]) {
-    videoId = match[1]
-  }
-
-  if (!videoId || !/^[a-zA-Z0-9_-]{11}$/.test(videoId)) {
+  if (!videoId) {
     return NextResponse.json(
       { error: { code: 'InvalidVideoId', message: 'ID video YouTube phải có đúng 11 ký tự' } },
       { status: 400 }
@@ -26,86 +20,21 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    let title = ''
-    let authorName = ''
-    let isOembedValid = false
+    const result = await lookupYouTube(videoId)
 
-    // 1. Verify existence via YouTube oEmbed API
-    try {
-      const oembedRes = await fetch(
-        `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`,
+    if (result.status === 'lookup_failed') {
+      return NextResponse.json(
         {
-          headers: {
-            'User-Agent':
-              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          error: {
+            code: 'FetchError',
+            message: 'Không kết nối được tới YouTube để kiểm tra video. Vui lòng thử lại.',
           },
-          cache: 'no-store',
-        }
-      )
-
-      if (oembedRes.ok) {
-        const odata = await oembedRes.json()
-        title = odata.title || ''
-        authorName = odata.author_name || ''
-        isOembedValid = true
-      }
-    } catch {}
-
-    // 2. Fetch watch page to extract exact duration and verify playability
-    let durationSeconds = 0
-    let isWatchPageValid = false
-
-    try {
-      const pageRes = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
-        headers: {
-          'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
         },
-        cache: 'no-store',
-      })
+        { status: 502 }
+      )
+    }
 
-      if (pageRes.ok) {
-        const html = await pageRes.text()
-
-        // Check playability status
-        const isUnavailable =
-          html.includes('"playabilityStatus":{"status":"ERROR"') ||
-          html.includes('"playabilityStatus":{"status":"UNPLAYABLE"') ||
-          html.includes('Video unavailable') ||
-          html.includes("This video isn't available anymore")
-
-        if (!isUnavailable) {
-          isWatchPageValid = true
-
-          // Exact duration matchers
-          const lenMatch = html.match(/"lengthSeconds"\s*:\s*"(\d+)"/)
-          const approxMatch = html.match(/"approxDurationMs"\s*:\s*"(\d+)"/)
-          const schemaMatch = html.match(/itemprop="duration" content="PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?"/)
-
-          if (lenMatch && lenMatch[1]) {
-            durationSeconds = parseInt(lenMatch[1], 10)
-          } else if (approxMatch && approxMatch[1]) {
-            durationSeconds = Math.round(parseInt(approxMatch[1], 10) / 1000)
-          } else if (schemaMatch) {
-            const h = parseInt(schemaMatch[1] || '0', 10)
-            const m = parseInt(schemaMatch[2] || '0', 10)
-            const s = parseInt(schemaMatch[3] || '0', 10)
-            durationSeconds = h * 3600 + m * 60 + s
-          }
-
-          if (!title) {
-            const titleTagMatch = html.match(/<title>([^<]+)<\/title>/)
-            if (titleTagMatch && titleTagMatch[1]) {
-              title = titleTagMatch[1].replace(' - YouTube', '').trim()
-            }
-          }
-        }
-      }
-    } catch {}
-
-    // If neither oEmbed nor watch page indicates a valid playable video, reject!
-    if (!isOembedValid && !isWatchPageValid) {
+    if (result.status === 'not_found') {
       return NextResponse.json(
         {
           error: {
@@ -118,26 +47,27 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Default duration to at least 60s if YouTube didn't return duration tag (e.g. some live streams)
-    const finalDuration = durationSeconds > 0 ? durationSeconds : 180
+    const info = result.info
 
     return NextResponse.json(
       {
-        videoId,
-        title: title || 'Video YouTube',
-        authorName: authorName || '',
-        durationSeconds: finalDuration,
-        durationFormatted: formatDuration(finalDuration),
-        thumbnail: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+        videoId: info.videoId,
+        title: info.title,
+        authorName: info.authorName,
+        durationSeconds: info.durationSeconds,
+        durationFormatted: info.durationKnown ? formatDuration(info.durationSeconds) : '',
+        durationKnown: info.durationKnown,
+        thumbnail: info.thumbnail,
       },
       {
         status: 200,
-        headers: {
-          'Cache-Control': 'public, max-age=86400, stale-while-revalidate=604800',
-        },
+        // Không cache kết quả chưa xác định được thời lượng (có thể do YouTube chặn tạm thời)
+        headers: info.durationKnown
+          ? { 'Cache-Control': 'public, max-age=86400, stale-while-revalidate=604800' }
+          : { 'Cache-Control': 'no-store' },
       }
     )
-  } catch (err: any) {
+  } catch {
     return NextResponse.json(
       {
         error: {
@@ -148,16 +78,4 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     )
   }
-}
-
-function formatDuration(seconds: number): string {
-  if (!seconds || seconds <= 0) return '0:00'
-  const m = Math.floor(seconds / 60)
-  const s = seconds % 60
-  if (m >= 60) {
-    const h = Math.floor(m / 60)
-    const remM = m % 60
-    return `${h} giờ ${remM} phút ${s > 0 ? `${s} giây` : ''}`.trim()
-  }
-  return `${m} phút ${s.toString().padStart(2, '0')} giây`
 }

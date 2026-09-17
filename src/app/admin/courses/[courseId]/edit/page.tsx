@@ -6,6 +6,7 @@ import Button from '@/components/ui/Button';
 import Toast, { ToastMessage } from '@/components/ui/Toast';
 import Modal from '@/components/ui/Modal';
 import { apiFetch, clearApiCache, getCachedApiData } from '@/lib/api/client';
+import { normalizeDurationSeconds, parseDurationInput } from '@/lib/validation/duration';
 
 interface QuestionOptionForm {
   optionText: string;
@@ -58,13 +59,16 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
     title: '',
     description: '',
     youtubeVideoId: '',
-    durationSeconds: 180,
+    durationSeconds: 0,
     durationFormatted: '',
+    durationKnown: false,
+    manualDuration: '',
   });
   const [lessonSaving, setLessonSaving] = useState(false);
   const [videoPreviewTitle, setVideoPreviewTitle] = useState('');
   const [fetchingDuration, setFetchingDuration] = useState(false);
   const [durationFetchError, setDurationFetchError] = useState('');
+  const [durationWarning, setDurationWarning] = useState('');
   const [isVideoVerified, setIsVideoVerified] = useState(false);
   const ytIdDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -442,9 +446,10 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
   const openAddLessonModal = (sessionId: string) => {
     setEditingLessonId(null);
     setShowLessonModal(sessionId);
-    setLessonForm({ title: '', description: '', youtubeVideoId: '', durationSeconds: 0, durationFormatted: '' });
+    setLessonForm({ title: '', description: '', youtubeVideoId: '', durationSeconds: 0, durationFormatted: '', durationKnown: false, manualDuration: '' });
     setVideoPreviewTitle('');
     setDurationFetchError('');
+    setDurationWarning('');
     setFetchingDuration(false);
     setIsVideoVerified(false);
   };
@@ -465,9 +470,12 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
       youtubeVideoId: vidId,
       durationSeconds: durSec,
       durationFormatted: formatted,
+      durationKnown: durSec > 0,
+      manualDuration: '',
     });
     setVideoPreviewTitle(lesson.video?.title || lesson.title || '');
     setDurationFetchError('');
+    setDurationWarning('');
     setFetchingDuration(false);
     setIsVideoVerified(Boolean(vidId));
   };
@@ -475,9 +483,10 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
   const closeLessonModal = () => {
     setShowLessonModal(null);
     setEditingLessonId(null);
-    setLessonForm({ title: '', description: '', youtubeVideoId: '', durationSeconds: 0, durationFormatted: '' });
+    setLessonForm({ title: '', description: '', youtubeVideoId: '', durationSeconds: 0, durationFormatted: '', durationKnown: false, manualDuration: '' });
     setVideoPreviewTitle('');
     setDurationFetchError('');
+    setDurationWarning('');
     setFetchingDuration(false);
     setIsVideoVerified(false);
   };
@@ -500,8 +509,16 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
   const handleYtIdChange = (rawVal: string) => {
     const rawInput = rawVal.trim();
     const vidId = parseYouTubeId(rawInput);
-    setLessonForm((prev) => ({ ...prev, youtubeVideoId: rawVal }));
+    setLessonForm((prev) => ({
+      ...prev,
+      youtubeVideoId: rawVal,
+      durationSeconds: 0,
+      durationFormatted: '',
+      durationKnown: false,
+      manualDuration: '',
+    }));
     setDurationFetchError('');
+    setDurationWarning('');
     setVideoPreviewTitle('');
     setIsVideoVerified(false);
 
@@ -516,20 +533,28 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
     ytIdDebounceRef.current = setTimeout(async () => {
       setFetchingDuration(true);
       try {
-        const infoRes = await apiFetch(`/api/v1/youtube/info?videoId=${vidId}`);
+        const infoRes = await apiFetch(`/api/v1/youtube/info?videoId=${vidId}`, { noCache: true });
         if (infoRes.ok && infoRes.data) {
           const info = infoRes.data;
+          const durationKnown = info.durationKnown === true && Number(info.durationSeconds) > 0;
           setVideoPreviewTitle(info.title || 'Video YouTube');
           setDurationFetchError('');
+          setDurationWarning(
+            durationKnown
+              ? ''
+              : 'Không tự nhận diện được thời lượng video này (video live/premiere hoặc bị hạn chế). Vui lòng nhập thời lượng thủ công bên dưới.'
+          );
           setIsVideoVerified(true);
 
           setLessonForm((prev) => ({
             ...prev,
             title: prev.title ? prev.title : info.title || prev.title,
-            durationSeconds: info.durationSeconds || 180,
-            durationFormatted: info.durationFormatted || '',
+            durationSeconds: durationKnown ? info.durationSeconds : 0,
+            durationFormatted: durationKnown ? info.durationFormatted || '' : '',
+            durationKnown,
           }));
         } else {
+          setDurationWarning('');
           setDurationFetchError(
             infoRes.error?.message ||
               'Video YouTube không tồn tại, ở chế độ riêng tư hoặc không cho phép nhúng. Vui lòng kiểm tra lại link/ID.'
@@ -537,6 +562,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
           setIsVideoVerified(false);
         }
       } catch {
+        setDurationWarning('');
         setDurationFetchError('Lỗi kiểm tra thông tin video YouTube.');
         setIsVideoVerified(false);
       } finally {
@@ -568,12 +594,20 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
       return;
     }
 
+    const durationSec = lessonForm.durationKnown
+      ? normalizeDurationSeconds(lessonForm.durationSeconds)
+      : parseDurationInput(lessonForm.manualDuration);
+
+    if (durationSec === null) {
+      showToast('error', 'Vui lòng nhập thời lượng video (định dạng mm:ss hoặc tổng số giây).');
+      return;
+    }
+
     setLessonSaving(true);
     clearApiCache('/api/v1/courses');
 
     const targetSessionId = showLessonModal;
     const lessonTitle = lessonForm.title.trim();
-    const durationSec = Math.max(1, Number(lessonForm.durationSeconds) || 180);
 
     if (editingLessonId) {
       const targetLessonId = editingLessonId;
@@ -1423,7 +1457,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
                             {session.lessons?.map((lesson: any, lIdx: number) => {
                               const lId = lesson.lessonId || lesson.id;
                               const vidId = lesson.video?.youtubeVideoId || lesson.youtubeVideoId;
-                              const durSec = lesson.video?.durationSeconds || lesson.durationSeconds || 180;
+                              const durSec = lesson.video?.durationSeconds || lesson.durationSeconds || 0;
                               const durMin = Math.floor(durSec / 60);
                               const durRemSec = durSec % 60;
 
@@ -1482,7 +1516,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
                                         </div>
                                         <p className="text-xs text-[#737686]">
                                           Video YouTube: <span className="font-mono">{vidId}</span> • Thời lượng:{' '}
-                                          {durMin}:{durRemSec.toString().padStart(2, '0')} ({durSec}s)
+                                          {durSec > 0 ? `${durMin}:${durRemSec.toString().padStart(2, '0')} (${durSec}s)` : '—'}
                                         </p>
                                         {lesson.description && (
                                           <p className="text-xs text-[#434655] bg-white/80 px-2.5 py-1 rounded-lg border border-[#eff4ff] mt-1.5 leading-relaxed">
@@ -1706,7 +1740,11 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
                 <p className="text-xs text-red-600 mt-1.5 font-medium">⚠️ {durationFetchError}</p>
               )}
               {isVideoVerified && videoPreviewTitle && (
-                <div className="mt-2.5 p-3 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center gap-3">
+                <div
+                  className={`mt-2.5 p-3 rounded-2xl flex items-center gap-3 border ${
+                    lessonForm.durationKnown ? 'bg-emerald-50 border-emerald-200' : 'bg-[#f8f9ff] border-[#cbdbf5]'
+                  }`}
+                >
                   <img
                     src={`https://i.ytimg.com/vi/${parseYouTubeId(lessonForm.youtubeVideoId)}/hqdefault.jpg`}
                     alt="Thumbnail"
@@ -1714,9 +1752,38 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
                   />
                   <div className="overflow-hidden flex-1">
                     <p className="text-xs font-bold text-[#172554] truncate">{videoPreviewTitle}</p>
-                    <p className="text-xs text-emerald-700 font-semibold mt-0.5">
-                      ✓ Tự động nhận diện: {lessonForm.durationFormatted || `${lessonForm.durationSeconds} giây`}
-                    </p>
+                    {lessonForm.durationKnown ? (
+                      <p className="text-xs text-emerald-700 font-semibold mt-0.5">
+                        ✓ Tự động nhận diện: {lessonForm.durationFormatted || `${lessonForm.durationSeconds} giây`}
+                      </p>
+                    ) : (
+                      <p className="text-xs text-[#737686] font-semibold mt-0.5">
+                        Chưa xác định được thời lượng — cần nhập thủ công
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {isVideoVerified && !lessonForm.durationKnown && (
+                <div className="mt-2.5 p-3 bg-amber-50 border border-amber-200 rounded-2xl space-y-2">
+                  <p className="text-xs text-amber-800 font-semibold">⚠️ {durationWarning}</p>
+                  <div>
+                    <label className="block text-xs font-semibold text-[#172554] mb-1">
+                      Thời lượng video * (mm:ss hoặc tổng số giây)
+                    </label>
+                    <input
+                      type="text"
+                      value={lessonForm.manualDuration}
+                      onChange={(e) => setLessonForm((prev) => ({ ...prev, manualDuration: e.target.value }))}
+                      placeholder="Ví dụ: 20:15 hoặc 1215"
+                      className="w-full px-4 py-2.5 border border-[#cbdbf5] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                    />
+                    {lessonForm.manualDuration.trim() !== '' && parseDurationInput(lessonForm.manualDuration) === null && (
+                      <p className="text-xs text-red-600 mt-1.5 font-medium">
+                        Định dạng chưa hợp lệ. Nhập mm:ss (vd 20:15) hoặc tổng số giây (vd 1215).
+                      </p>
+                    )}
                   </div>
                 </div>
               )}
@@ -1752,7 +1819,11 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
               <Button
                 loading={lessonSaving}
                 loadingText={editingLessonId ? 'Đang lưu...' : 'Đang tạo...'}
-                disabled={!isVideoVerified || fetchingDuration}
+                disabled={
+                  !isVideoVerified ||
+                  fetchingDuration ||
+                  (!lessonForm.durationKnown && parseDurationInput(lessonForm.manualDuration) === null)
+                }
                 onClick={handleSaveLesson}
               >
                 {editingLessonId ? 'Lưu thay đổi' : 'Tạo bài học'}

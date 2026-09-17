@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { MAX_VIDEO_DURATION_SECONDS, MIN_VIDEO_DURATION_SECONDS, normalizeDurationSeconds } from '@/lib/validation/duration'
 
 export async function POST(request: NextRequest, { params }: { params: { sessionId: string } }) {
   const auth = await authenticate(request)
@@ -18,12 +19,21 @@ export async function POST(request: NextRequest, { params }: { params: { session
   }
 
   const vidId = video?.youtubeVideoId || youtubeVideoId
-  const vidDuration = video?.durationSeconds || durationSeconds || 120
+  const vidDuration = normalizeDurationSeconds(video?.durationSeconds ?? durationSeconds)
   const vidTitle = video?.title || title.trim()
 
   if (!vidId) {
     return NextResponse.json({
       error: { code: 'ValidationError', message: 'Video là bắt buộc cho mỗi lesson (youtubeVideoId)' },
+    }, { status: 400 })
+  }
+
+  if (vidDuration === null) {
+    return NextResponse.json({
+      error: {
+        code: 'ValidationError',
+        message: `Thời lượng video không hợp lệ. Vui lòng nhập số giây trong khoảng ${MIN_VIDEO_DURATION_SECONDS} – ${MAX_VIDEO_DURATION_SECONDS}.`,
+      },
     }, { status: 400 })
   }
 
@@ -45,7 +55,7 @@ export async function POST(request: NextRequest, { params }: { params: { session
         lesson_id: lesson.id,
         provider: 'YOUTUBE',
         youtube_video_id: vidId,
-        duration_seconds: Number(vidDuration),
+        duration_seconds: vidDuration,
         title: vidTitle,
       },
     })

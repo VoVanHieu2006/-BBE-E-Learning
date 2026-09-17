@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { MAX_VIDEO_DURATION_SECONDS, MIN_VIDEO_DURATION_SECONDS, normalizeDurationSeconds } from '@/lib/validation/duration'
 
 export async function GET(request: NextRequest, { params }: { params: { lessonId: string } }) {
   const auth = await authenticate(request).catch(() => ({ ok: false, error: { code: 'UNAUTHORIZED', message: 'Auth error' } }))
@@ -105,6 +106,20 @@ export async function PATCH(request: NextRequest, { params }: { params: { lesson
   if (body.description !== undefined) updates.description = body.description?.trim() || null
   if (body.sortOrder !== undefined) updates.sort_order = body.sortOrder
 
+  // Kiểm tra thời lượng TRƯỚC khi ghi bất cứ thứ gì, tránh cập nhật dở dang khi dữ liệu sai.
+  let videoDuration: number | null = null
+  if (body.video && body.video.durationSeconds !== undefined && body.video.durationSeconds !== null) {
+    videoDuration = normalizeDurationSeconds(body.video.durationSeconds)
+    if (videoDuration === null) {
+      return NextResponse.json({
+        error: {
+          code: 'ValidationError',
+          message: `Thời lượng video không hợp lệ. Vui lòng nhập số giây trong khoảng ${MIN_VIDEO_DURATION_SECONDS} – ${MAX_VIDEO_DURATION_SECONDS}.`,
+        },
+      }, { status: 400 })
+    }
+  }
+
   const updatedLesson = await prisma.lesson.update({ where: { id: lessonId }, data: updates })
 
   if (body.video) {
@@ -113,17 +128,26 @@ export async function PATCH(request: NextRequest, { params }: { params: { lesson
         where: { lesson_id: lessonId },
         data: {
           youtube_video_id: body.video.youtubeVideoId || lesson.video.youtube_video_id,
-          duration_seconds: body.video.durationSeconds || lesson.video.duration_seconds,
+          duration_seconds: videoDuration ?? lesson.video.duration_seconds,
           title: body.video.title?.trim() || lesson.video.title,
         },
       })
-    } else if (body.video.youtubeVideoId && body.video.durationSeconds) {
+    } else if (body.video.youtubeVideoId) {
+      if (videoDuration === null) {
+        return NextResponse.json({
+          error: {
+            code: 'ValidationError',
+            message: `Thời lượng video không hợp lệ. Vui lòng nhập số giây trong khoảng ${MIN_VIDEO_DURATION_SECONDS} – ${MAX_VIDEO_DURATION_SECONDS}.`,
+          },
+        }, { status: 400 })
+      }
+
       await prisma.video.create({
         data: {
           lesson_id: lessonId,
           provider: 'YOUTUBE',
           youtube_video_id: body.video.youtubeVideoId,
-          duration_seconds: body.video.durationSeconds,
+          duration_seconds: videoDuration,
           title: body.video.title?.trim() || null,
         },
       })
