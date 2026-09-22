@@ -15,7 +15,7 @@ interface QuestionOptionForm {
 
 interface QuestionForm {
   questionText: string;
-  type: 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'TRUE_FALSE';
+  type: 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE';
   points: number;
   durationSeconds: number;
   explanation: string;
@@ -85,13 +85,16 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
   } | null>(null);
   const [assessmentSaving, setAssessmentSaving] = useState(false);
   const [assessmentFormError, setAssessmentFormError] = useState('');
+  const [quizImportUrl, setQuizImportUrl] = useState('');
+  const [quizImporting, setQuizImporting] = useState(false);
+  const [quizImportErrors, setQuizImportErrors] = useState<{ row: number; message: string }[]>([]);
   const [assessmentForm, setAssessmentForm] = useState({
     title: 'Bài kiểm tra bài học',
     description: 'Đạt từ 85% điểm để hoàn thành bài học',
     questions: [
       {
         questionText: 'Câu hỏi 1: ',
-        type: 'SINGLE_CHOICE' as 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'TRUE_FALSE',
+        type: 'SINGLE_CHOICE' as 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE',
         points: 10,
         durationSeconds: 120,
         explanation: '',
@@ -129,6 +132,8 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
   // ─── Open Assessment Modal for a specific Lesson ─────────────────────────────
   const openAssessmentEditorForLesson = async (sId: string, lesson: any) => {
     setAssessmentFormError('');
+    setQuizImportUrl('');
+    setQuizImportErrors([]);
     const lId = lesson.lessonId || lesson.id;
     let assessData = lesson.assessment;
 
@@ -154,7 +159,8 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
         description: assessData.description || '',
         questions: assessData.questions.map((q: any, idx: number) => ({
           questionText: q.questionText || q.question_text || `Câu hỏi ${idx + 1}`,
-          type: q.type || q.questionType || 'SINGLE_CHOICE',
+          // Loại Đúng/Sai đã ngừng dùng: quy về 1 đáp án để form không lỗi khi đọc dữ liệu cũ
+          type: (q.type || q.questionType) === 'MULTIPLE_CHOICE' ? 'MULTIPLE_CHOICE' : 'SINGLE_CHOICE',
           points: q.points || 10,
           durationSeconds: q.durationSeconds || q.duration_seconds || 120,
           explanation: q.explanation || '',
@@ -171,7 +177,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
         questions: [
           {
             questionText: 'Câu hỏi 1: Nội dung bài học này nói về điều gì?',
-            type: 'SINGLE_CHOICE' as 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'TRUE_FALSE',
+            type: 'SINGLE_CHOICE' as 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE',
             points: 10,
             durationSeconds: 120,
             explanation: '',
@@ -539,10 +545,12 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
           const durationKnown = info.durationKnown === true && Number(info.durationSeconds) > 0;
           setVideoPreviewTitle(info.title || 'Video YouTube');
           setDurationFetchError('');
+          const reasonText =
+            info.reason === 'LIVE_STREAM'
+              ? 'Video đang phát trực tiếp nên không có thời lượng cố định'
+              : 'Hệ thống không đọc được thời lượng từ YouTube';
           setDurationWarning(
-            durationKnown
-              ? ''
-              : 'Không tự nhận diện được thời lượng video này (video live/premiere hoặc bị hạn chế). Vui lòng nhập thời lượng thủ công bên dưới.'
+            durationKnown ? '' : `${reasonText}. Vui lòng nhập thời lượng thủ công bên dưới.`
           );
           setIsVideoVerified(true);
 
@@ -1018,18 +1026,13 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
 
   const handleQuestionTypeChange = (
     qIdx: number,
-    newType: 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'TRUE_FALSE'
+    newType: 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE'
   ) => {
     const updated = [...assessmentForm.questions];
     const q = updated[qIdx];
     q.type = newType;
 
-    if (newType === 'TRUE_FALSE') {
-      q.options = [
-        { optionText: 'Đúng', isCorrect: true },
-        { optionText: 'Sai', isCorrect: false },
-      ];
-    } else if (newType === 'SINGLE_CHOICE') {
+    if (newType === 'SINGLE_CHOICE') {
       if (q.options.length < 2) {
         q.options = [
           { optionText: 'Đáp án A (Đúng)', isCorrect: true },
@@ -1064,6 +1067,60 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
     }
     updated[qIdx].options = updated[qIdx].options.filter((_, i) => i !== oIdx);
     setAssessmentForm({ ...assessmentForm, questions: updated });
+  };
+
+  const handleImportQuiz = async () => {
+    const url = quizImportUrl.trim();
+    if (!url) {
+      showToast('error', 'Vui lòng dán link Google Sheet hoặc Google Doc');
+      return;
+    }
+
+    const existingCount = assessmentForm.questions.length;
+    if (
+      existingCount > 0 &&
+      !window.confirm(
+        `Form đang có ${existingCount} câu hỏi. Import sẽ THAY THẾ danh sách câu hỏi đang soạn; bấm "Lưu bài kiểm tra" để ghi đè bài kiểm tra hiện có. Tiếp tục?`
+      )
+    ) {
+      return;
+    }
+
+    setQuizImporting(true);
+    const res = await apiFetch('/api/v1/quiz/parse-sheet', {
+      method: 'POST',
+      body: JSON.stringify({ url }),
+    });
+    setQuizImporting(false);
+
+    if (!res.ok || !res.data) {
+      setQuizImportErrors([]);
+      showToast('error', res.error?.message || 'Không nhập được câu hỏi từ Google Sheet');
+      return;
+    }
+
+    const imported = res.data.questions || [];
+    setAssessmentForm((prev) => ({
+      ...prev,
+      questions: imported.map((q: any, idx: number) => ({
+        questionText: q.questionText,
+        type: q.questionType as 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE',
+        points: q.points || 1,
+        durationSeconds: prev.questions[0]?.durationSeconds ?? 120,
+        explanation: q.explanation || '',
+        options: (q.options || []).map((o: any) => ({
+          optionText: o.optionText,
+          isCorrect: Boolean(o.isCorrect),
+        })),
+      })),
+    }));
+    setQuizImportErrors(res.data.errors || []);
+
+    const errorCount = (res.data.errors || []).length;
+    showToast(
+      'success',
+      `Đã nhập ${imported.length} câu hỏi${errorCount > 0 ? ` (bỏ qua ${errorCount} dòng lỗi)` : ''}`
+    );
   };
 
   const handleSaveAssessment = async () => {
@@ -1891,6 +1948,41 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
                   </Button>
                 </div>
 
+                {/* Import câu hỏi từ Google Sheet / Google Doc */}
+                <div className="p-4 bg-white border border-[#cbdbf5] rounded-2xl space-y-2">
+                  <label className="block text-xs font-semibold text-[#172554]">
+                    Nhập câu hỏi từ Google Sheet / Google Doc
+                  </label>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <input
+                      type="text"
+                      value={quizImportUrl}
+                      onChange={(e) => setQuizImportUrl(e.target.value)}
+                      placeholder="Dán link Google Sheet/Doc đã chia sẻ công khai"
+                      className="flex-1 px-3 py-2 border border-[#cbdbf5] rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                    />
+                    <Button size="sm" variant="secondary" loading={quizImporting} loadingText="Đang tải..." onClick={handleImportQuiz}>
+                      Tải câu hỏi
+                    </Button>
+                  </div>
+                  <p className="text-[11px] text-[#737686] leading-relaxed">
+                    Mỗi dòng 1 câu, cột lần lượt: Câu hỏi | A | B | C | D | Đáp án (A hoặc A,C) | Điểm | Giải thích.
+                    Tài liệu phải chia sẻ <strong>"Bất kỳ ai có liên kết – Người xem"</strong>.
+                  </p>
+                  {quizImportErrors.length > 0 && (
+                    <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-xl">
+                      <p className="text-[11px] font-bold text-amber-800 mb-1">
+                        {quizImportErrors.length} dòng bị bỏ qua:
+                      </p>
+                      <ul className="text-[11px] text-amber-800 list-disc pl-4 space-y-0.5">
+                        {quizImportErrors.map((err) => (
+                          <li key={`${err.row}-${err.message}`}>Dòng {err.row}: {err.message}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+
                 {assessmentForm.questions.map((q, qIdx) => (
                   <div key={qIdx} className="p-4 bg-[#f8f9ff] rounded-2xl border border-[#eff4ff] space-y-3">
                     <div className="flex items-start justify-between gap-3">
@@ -1953,7 +2045,6 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
                         >
                           <option value="SINGLE_CHOICE">Trắc nghiệm 1 đáp án</option>
                           <option value="MULTIPLE_CHOICE">Trắc nghiệm nhiều đáp án</option>
-                          <option value="TRUE_FALSE">Đúng / Sai</option>
                         </select>
                       </div>
 
@@ -2004,12 +2095,12 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
                       {q.options.map((opt, oIdx) => (
                         <div key={oIdx} className="flex items-center gap-2">
                           <input
-                            type={q.type === 'SINGLE_CHOICE' || q.type === 'TRUE_FALSE' ? 'radio' : 'checkbox'}
+                            type={q.type === 'SINGLE_CHOICE' ? 'radio' : 'checkbox'}
                             name={`correct-${qIdx}`}
                             checked={opt.isCorrect}
                             onChange={() => {
                               const qs = [...assessmentForm.questions];
-                              if (q.type === 'SINGLE_CHOICE' || q.type === 'TRUE_FALSE') {
+                              if (q.type === 'SINGLE_CHOICE') {
                                 qs[qIdx].options = qs[qIdx].options.map((o, idx) => ({
                                   ...o,
                                   isCorrect: idx === oIdx,
@@ -2024,7 +2115,6 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
                           <input
                             type="text"
                             required
-                            disabled={q.type === 'TRUE_FALSE'}
                             value={opt.optionText}
                             onChange={(e) => {
                               const qs = [...assessmentForm.questions];
@@ -2033,7 +2123,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
                             }}
                             className="flex-1 px-3 py-1.5 border border-[#cbdbf5] rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#2563EB] disabled:bg-slate-100"
                           />
-                          {q.type !== 'TRUE_FALSE' && q.options.length > 2 && (
+                          {q.options.length > 2 && (
                             <button
                               type="button"
                               onClick={() => handleRemoveOption(qIdx, oIdx)}
@@ -2046,15 +2136,13 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
                         </div>
                       ))}
 
-                      {q.type !== 'TRUE_FALSE' && (
-                        <button
-                          type="button"
-                          onClick={() => handleAddOption(qIdx)}
-                          className="text-xs text-[#2563EB] hover:underline font-semibold pt-1 block"
-                        >
-                          ＋ Thêm đáp án lựa chọn
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleAddOption(qIdx)}
+                        className="text-xs text-[#2563EB] hover:underline font-semibold pt-1 block"
+                      >
+                        ＋ Thêm đáp án lựa chọn
+                      </button>
                     </div>
                   </div>
                 ))}

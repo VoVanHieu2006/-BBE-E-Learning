@@ -95,6 +95,11 @@ export async function PATCH(request: NextRequest, { params }: { params: { assess
     if (Array.isArray(questions)) {
       if (questions.length === 0 || questions.length > 100) throw new Error('Cần 1-100 câu hỏi')
 
+      // Loại câu hỏi Đúng/Sai đã ngừng sử dụng
+      if (questions.some((q: any) => (q.questionType || q.type) === 'TRUE_FALSE')) {
+        throw new Error('Loại câu hỏi "Đúng / Sai" đã ngừng sử dụng. Vui lòng dùng trắc nghiệm 1 hoặc nhiều đáp án.')
+      }
+
       // Pre-generate UUIDs for batch createMany
       const preparedQuestions = questions.map((q: any, idx: number) => {
         const qId = crypto.randomUUID()

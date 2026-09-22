@@ -57,6 +57,8 @@ export async function GET(request: NextRequest) {
         durationSeconds: info.durationSeconds,
         durationFormatted: info.durationKnown ? formatDuration(info.durationSeconds) : '',
         durationKnown: info.durationKnown,
+        source: info.source,
+        reason: result.reason,
         thumbnail: info.thumbnail,
       },
       {

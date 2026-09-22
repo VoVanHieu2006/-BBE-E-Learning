@@ -380,7 +380,7 @@ async function main(): Promise<void> {
   console.log("📝 Creating assessments, questions, options...");
   interface QSpec {
     text: string;
-    type: "SINGLE_CHOICE" | "MULTIPLE_CHOICE" | "TRUE_FALSE";
+    type: "SINGLE_CHOICE" | "MULTIPLE_CHOICE";
     options: { text: string; correct: boolean }[];
     explanation: string;
   }
@@ -411,7 +411,7 @@ async function main(): Promise<void> {
       },
       {
         text: "Ctrl + C là phím tắt để sao chép dữ liệu đang chọn.",
-        type: "TRUE_FALSE",
+        type: "SINGLE_CHOICE",
         options: [{ text: "Đúng", correct: true }, { text: "Sai", correct: false }],
         explanation: "Ctrl + C = Copy, Ctrl + X = Cut, Ctrl + V = Paste.",
       },
@@ -456,7 +456,7 @@ async function main(): Promise<void> {
       },
       {
         text: "Lãi suất kép giúp tiền sinh sôi nhanh hơn theo thời gian.",
-        type: "TRUE_FALSE",
+        type: "SINGLE_CHOICE",
         options: [{ text: "Đúng", correct: true }, { text: "Sai", correct: false }],
         explanation: "Lãi nhập vốn làm giá trị tăng theo hàm mũ theo thời gian.",
       },
@@ -470,7 +470,7 @@ async function main(): Promise<void> {
       },
       {
         text: "\"Could you please send me the report?\" là câu yêu cầu lịch sự.",
-        type: "TRUE_FALSE",
+        type: "SINGLE_CHOICE",
         options: [{ text: "Đúng", correct: true }, { text: "Sai", correct: false }],
         explanation: "Could you please... là mẫu câu yêu cầu lịch sự trong công việc.",
       },
@@ -495,7 +495,7 @@ async function main(): Promise<void> {
       },
       {
         text: "Xác thực hai yếu tố (2FA) giúp bảo vệ tài khoản kể cả khi mật khẩu bị lộ.",
-        type: "TRUE_FALSE",
+        type: "SINGLE_CHOICE",
         options: [{ text: "Đúng", correct: true }, { text: "Sai", correct: false }],
         explanation: "2FA yêu cầu yếu tố thứ hai, khiến kẻ xấu khó truy cập dù có mật khẩu.",
       },

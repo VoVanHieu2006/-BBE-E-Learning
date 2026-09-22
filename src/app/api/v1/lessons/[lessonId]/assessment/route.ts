@@ -144,6 +144,19 @@ export async function POST(
       );
     }
 
+    // Loại câu hỏi Đúng/Sai đã ngừng sử dụng
+    if (questions.some((q: any) => (q.questionType || q.type) === 'TRUE_FALSE')) {
+      return NextResponse.json(
+        {
+          error: {
+            code: 'ValidationError',
+            message: 'Loại câu hỏi "Đúng / Sai" đã ngừng sử dụng. Vui lòng dùng trắc nghiệm 1 hoặc nhiều đáp án.',
+          },
+        },
+        { status: 400 }
+      );
+    }
+
     const assessmentId = crypto.randomUUID();
 
     // Prepare questions and options with pre-generated UUIDs for batch createMany
