@@ -146,20 +146,22 @@ export async function calculateUserProgress(
 
   const userCompletedLessonsSet = new Set(progressRecords.map((p) => p.lesson_id))
 
-  // Group latest attempt by assessment_id
+  // Group latest attempt by assessment_id (attempts are sorted by submitted_at desc)
   const latestAttemptMap = new Map<string, any>()
-  let totalScoreSum = 0
-  let attemptCount = 0
-
   for (const a of attempts) {
     if (!latestAttemptMap.has(a.assessment_id)) {
       latestAttemptMap.set(a.assessment_id, a)
     }
+  }
+
+  let totalScoreSum = 0
+  let attemptCount = 0
+  latestAttemptMap.forEach((a) => {
     if (a.score !== null) {
       totalScoreSum += Math.round(Number(a.score) * 100)
       attemptCount++
     }
-  }
+  })
 
   const avgQuizScore = attemptCount > 0 ? Math.round(totalScoreSum / attemptCount) : 0
 
@@ -275,27 +277,33 @@ export async function calculateBatchUsersProgress(
     set.add(p.lesson_id)
   }
 
-  // Group attempts by user & assessment
-  const userAttemptsMap = new Map<string, { latestByAssess: Map<string, any>; totalScore: number; count: number }>()
+  // Group attempts by user & assessment (allAttempts are sorted by submitted_at desc)
+  const userAttemptsMap = new Map<string, Map<string, any>>()
   for (const a of allAttempts) {
-    let uEntry = userAttemptsMap.get(a.user_id)
-    if (!uEntry) {
-      uEntry = { latestByAssess: new Map(), totalScore: 0, count: 0 }
-      userAttemptsMap.set(a.user_id, uEntry)
+    let uAssessMap = userAttemptsMap.get(a.user_id)
+    if (!uAssessMap) {
+      uAssessMap = new Map()
+      userAttemptsMap.set(a.user_id, uAssessMap)
     }
-    if (!uEntry.latestByAssess.has(a.assessment_id)) {
-      uEntry.latestByAssess.set(a.assessment_id, a)
-    }
-    if (a.score !== null) {
-      uEntry.totalScore += Math.round(Number(a.score) * 100)
-      uEntry.count++
+    if (!uAssessMap.has(a.assessment_id)) {
+      uAssessMap.set(a.assessment_id, a)
     }
   }
 
   for (const uid of userIds) {
     const userCompletedLessonsSet = userProgressMap.get(uid) || new Set()
-    const uAttempts = userAttemptsMap.get(uid)
-    const avgQuizScore = uAttempts && uAttempts.count > 0 ? Math.round(uAttempts.totalScore / uAttempts.count) : 0
+    const uAssessMap = userAttemptsMap.get(uid)
+    let totalScore = 0
+    let count = 0
+    if (uAssessMap) {
+      uAssessMap.forEach((a) => {
+        if (a.score !== null) {
+          totalScore += Math.round(Number(a.score) * 100)
+          count++
+        }
+      })
+    }
+    const avgQuizScore = count > 0 ? Math.round(totalScore / count) : 0
 
     let completedCoursesCount = 0
     let totalCoursePercentSum = 0

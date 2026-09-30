@@ -485,12 +485,6 @@ export default function YouTubePlayer({
         </div>
       )}
 
-      {/* Khi đang phát: dải che TRÊN cố định — che sạch tiêu đề/nút share của YouTube.
-          KHÔNG còn bất kỳ lớp che nào ở phía dưới video. */}
-      {!videoError && isReady && isPlaying && (
-        <div className="absolute top-0 inset-x-0 h-16 z-[5] pointer-events-none bg-gradient-to-b from-black from-50% via-black/80 via-78% to-transparent" />
-      )}
-
       {/* Completion Banner (only for logged-in accounts) */}
       {!isGuest && isCompleted && (
         <div className="absolute top-4 left-4 z-20 bg-green-900/90 border border-green-500/40 text-white px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-lg backdrop-blur-sm animate-fade-in">

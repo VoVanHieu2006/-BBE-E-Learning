@@ -481,7 +481,7 @@ export default function AdminUsersPage() {
                           )}
                         </td>
                         <td className="px-6 py-4 text-center font-semibold text-[#172554]">
-                          {isLeader ? '—' : u.avgQuizScore ? `${u.avgQuizScore}%` : '—'}
+                          {isLeader ? '—' : typeof u.avgQuizScore === 'number' ? `${u.avgQuizScore}%` : '—'}
                         </td>
                         <td className="px-6 py-4 text-center">
                           <span

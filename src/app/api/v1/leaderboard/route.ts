@@ -68,6 +68,8 @@ export async function GET(request: NextRequest) {
         chapterName,
         courseCompletionPercent: courseProgress,
         assessmentAverageScore: avgScore,
+        avgScore,
+        avgQuizScore: avgScore,
         leaderboardPoint,
         completedLessons,
         totalLessons,

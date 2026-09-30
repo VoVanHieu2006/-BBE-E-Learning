@@ -51,6 +51,8 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
       totalCourses: sys.totalCourses,
       courseProgress,
       avgScore,
+      avgQuizScore: avgScore,
+      assessmentAverageScore: avgScore,
       leaderboardPoint,
     }
   })

@@ -242,7 +242,9 @@ export default function LeaderboardPage() {
                       {m.completedLessons || 0} / {m.totalLessons || 0} bài
                     </td>
                     <td className="px-6 py-4 text-center font-semibold text-[#172554]">
-                      {m.avgScore ? `${m.avgScore}%` : '—'}
+                      {typeof (m.avgScore ?? m.avgQuizScore ?? m.assessmentAverageScore) === 'number'
+                        ? `${m.avgScore ?? m.avgQuizScore ?? m.assessmentAverageScore}%`
+                        : '—'}
                     </td>
                     <td className="px-6 py-4 text-right font-extrabold text-[#2563EB] text-base">
                       {m.points || m.leaderboardPoint || 0} điểm
@@ -346,7 +348,7 @@ export default function LeaderboardPage() {
                       <div>
                         <div className="font-semibold text-[#172554]">{m.email}</div>
                         <div className="text-xs text-[#737686]">
-                          Đã học: {m.completedLessons || 0} / {m.totalLessons || 0} bài • Điểm Quiz: {m.avgScore || 0}%
+                          Đã học: {m.completedLessons || 0} / {m.totalLessons || 0} bài • Điểm Quiz: {m.avgScore ?? m.avgQuizScore ?? m.assessmentAverageScore ?? 0}%
                         </div>
                       </div>
                     </div>

@@ -1966,8 +1966,15 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
                     </Button>
                   </div>
                   <p className="text-[11px] text-[#737686] leading-relaxed">
-                    Mỗi dòng 1 câu, cột lần lượt: Câu hỏi | A | B | C | D | Đáp án (A hoặc A,C) | Điểm | Giải thích.
-                    Tài liệu phải chia sẻ <strong>"Bất kỳ ai có liên kết – Người xem"</strong>.
+                    Hãy thực hiện theo mẫu sau:{' '}
+                    <a
+                      href="https://docs.google.com/spreadsheets/d/1HhM0S2agnLMWz9MQYCswyGL1W8SeplN0DiNMFWYNa20/edit?usp=sharing"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[#2563EB] hover:underline font-semibold inline-flex items-center gap-1"
+                    >
+                      Mẫu các câu hỏi
+                    </a>
                   </p>
                   {quizImportErrors.length > 0 && (
                     <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-xl">

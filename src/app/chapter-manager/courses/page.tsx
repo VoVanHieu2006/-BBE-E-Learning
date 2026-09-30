@@ -313,9 +313,9 @@ export default function ChapterManagerCoursesPage() {
                                 {lesson.assessment && (
                                   <Button
                                     size="sm"
-                                    variant="secondary"
+                                    variant="outline"
                                     onClick={() => openLessonQuiz(lId, lesson.title)}
-                                    className="text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200"
+                                    className="!bg-amber-50 !text-amber-800 !border-amber-300 hover:!bg-amber-100"
                                   >
                                     📝 Đáp án Quiz ({lesson.assessment.questionCount || lesson.assessment._count?.questions || 0} câu)
                                   </Button>

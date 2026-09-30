@@ -241,7 +241,7 @@ export default function LessonQuiz({
           </div>
           <p className="text-xs max-w-lg mx-auto opacity-90 leading-relaxed">
             {result.passed
-              ? 'Bạn đã hoàn thành xuất sắc bài học này! Nút "Bài tiếp theo →" đã được kích hoạt để bạn tiếp tục bài giảng tiếp theo.'
+              ? 'Bạn đã hoàn thành xuất sắc bài học này! Quay lại bài học để tiếp tục bài giảng tiếp theo.'
               : 'Bạn cần đạt từ 85% điểm trở lên để hoàn thành bài giảng này và sang bài tiếp theo. Hãy xem lại video và thử lại nhé!'}
           </p>
           {!result.passed && (

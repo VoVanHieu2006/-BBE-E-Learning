@@ -6,7 +6,6 @@ import Button from '@/components/ui/Button';
 import Toast, { ToastMessage } from '@/components/ui/Toast';
 import YouTubePlayer from '@/components/YouTubePlayer';
 import LessonComments from '@/components/lesson/LessonComments';
-import LessonQuiz from '@/components/lesson/LessonQuiz';
 import { apiFetch, ApiResponse } from '@/lib/api/client';
 
 export default function LearningVideoPage({ params }: { params: { lessonId: string } }) {
@@ -555,42 +554,25 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                 onToast={showToast}
               />
             ) : activeTab === 'quiz' && hasQuiz ? (
-              <LessonQuiz
-                lessonId={currentLessonId}
-                assessmentId={lesson.assessment.assessmentId || lesson.assessment.id}
-                lessonTitle={lesson.title}
-                accessToken={token}
-                isCompleted={Boolean(progress?.completed)}
-                onQuizPassed={() => {
-                  setProgress((prev: any) => ({ ...prev, completed: true, progressPercentage: 100 }));
-                  // Update courseProgress sidebar so the checkmark appears immediately
-                  setCourseProgress((prev: any) => {
-                    if (!prev) return prev;
-                    let wasDone = false;
-                    const sessions = (prev.sessions || []).map((ps: any) => ({
-                      ...ps,
-                      lessons: (ps.lessons || []).map((pl: any) => {
-                        if (pl.lessonId !== currentLessonId) return pl;
-                        wasDone = Boolean(pl.completed);
-                        return { ...pl, completed: true };
-                      }),
-                    }));
-                    return {
-                      ...prev,
-                      sessions,
-                      completedLessons: wasDone
-                        ? prev.completedLessons
-                        : Math.min((prev.completedLessons || 0) + 1, prev.totalLessons || (prev.completedLessons || 0) + 1),
-                    };
-                  });
-                  if (nextLesson) {
-                    showToast('success', 'Hoàn thành bài kiểm tra! Bạn có thể chuyển sang bài tiếp theo.', 'Mở khóa bài tiếp theo');
-                  } else {
-                    showToast('success', 'Chúc mừng! Bạn đã hoàn thành tất cả bài học trong khóa học này.', 'Hoàn thành khóa học');
-                  }
-                }}
-                onToast={showToast}
-              />
+              <Card className="p-6 border border-[#eff4ff] shadow-sm">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <h3 className="text-base font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
+                      📝 {lesson.assessment.title || 'Bài kiểm tra bài học'}
+                    </h3>
+                    <p className="text-xs text-[#737686] leading-relaxed max-w-xl">
+                      {progress?.completed
+                        ? 'Bạn đã hoàn thành bài kiểm tra này. Có thể xem lại hoặc làm lại bất cứ lúc nào.'
+                        : 'Hoàn thành bài kiểm tra (đạt từ 85%) để mở khóa bài học tiếp theo. Trang làm bài sẽ tách riêng để bạn tập trung.'}
+                    </p>
+                  </div>
+                  <Link href={`/student/learning/${currentLessonId}/quiz`} className="shrink-0">
+                    <Button variant="primary">
+                      {progress?.completed ? 'Xem bài kiểm tra →' : 'Vào làm bài kiểm tra →'}
+                    </Button>
+                  </Link>
+                </div>
+              </Card>
             ) : null}
           </div>
         </div>
