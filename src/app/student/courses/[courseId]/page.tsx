@@ -232,7 +232,7 @@ export default function CourseDetailPage({ params }: { params: { courseId: strin
                 Học xong video làm bài kiểm tra ngay
               </h3>
               <p className="text-sm text-[#55586d]">
-                Mỗi bài học tích hợp bài kiểm tra riêng bên cạnh video bài giảng. Hoàn thành video và đạt điểm bài kiểm tra để mở khóa bài học tiếp theo!
+                Mỗi bài học tích hợp bài kiểm tra riêng bên cạnh video bài giảng. Hoàn thành video và đạt điểm bài kiểm tra để vượt qua bài học!
               </p>
             </div>
 

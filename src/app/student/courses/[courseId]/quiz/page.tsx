@@ -16,7 +16,7 @@ export default function StudentQuizPage({ params }: { params: { courseId: string
             Bài kiểm tra theo từng bài học
           </h1>
           <p className="text-sm text-[#434655] leading-relaxed">
-            Hệ thống đã nâng cấp sang mô hình làm bài kiểm tra tích hợp trực tiếp trong mỗi video bài học. Sau khi học xong mỗi bài giảng, bạn sẽ làm bài kiểm tra ngay bên cạnh video để hoàn thành bài và mở khóa bài tiếp theo.
+            Hệ thống đã nâng cấp sang mô hình làm bài kiểm tra tích hợp trực tiếp trong mỗi video bài học. Sau khi học xong mỗi bài giảng, bạn sẽ làm bài kiểm tra ngay bên cạnh video để hoàn thành và vượt qua bài học.
           </p>
         </div>
 

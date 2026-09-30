@@ -255,7 +255,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
         setActiveTab('quiz');
         showToast(
           'info',
-          'Bạn đã xem xong video! Hãy hoàn thành bài kiểm tra bên dưới để sang bài tiếp theo.',
+          'Bạn đã xem xong video! Hãy hoàn thành bài kiểm tra bên dưới để vượt qua bài học.',
           'Làm bài kiểm tra'
         );
       } else {
@@ -562,15 +562,30 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                     </h3>
                     <p className="text-xs text-[#737686] leading-relaxed max-w-xl">
                       {progress?.completed
-                        ? 'Bạn đã hoàn thành bài kiểm tra này. Có thể xem lại hoặc làm lại bất cứ lúc nào.'
-                        : 'Hoàn thành bài kiểm tra (đạt từ 85%) để mở khóa bài học tiếp theo. Trang làm bài sẽ tách riêng để bạn tập trung.'}
+                        ? 'Bạn đã vượt qua bài kiểm tra này. Có thể xem lại kết quả bất cứ lúc nào.'
+                        : 'Hoàn thành bài kiểm tra (đạt từ 85%) để vượt qua bài học. Trang làm bài sẽ tách riêng để bạn tập trung.'}
                     </p>
                   </div>
-                  <Link href={`/student/learning/${currentLessonId}/quiz`} className="shrink-0">
-                    <Button variant="primary">
-                      {progress?.completed ? 'Xem bài kiểm tra →' : 'Vào làm bài kiểm tra →'}
-                    </Button>
-                  </Link>
+                  {isLeaderOrAdmin || Boolean(progress?.completed) || (progress?.progressPercentage ?? 0) >= 85 || !(lesson?.video?.durationSeconds || lesson?.video?.duration_seconds) ? (
+                    <Link href={`/student/learning/${currentLessonId}/quiz`} className="shrink-0">
+                      <Button variant="primary">
+                        {progress?.completed ? 'Xem bài kiểm tra →' : 'Vào làm bài kiểm tra →'}
+                      </Button>
+                    </Link>
+                  ) : (
+                    <div className="shrink-0 flex flex-col sm:items-end gap-1">
+                      <Button
+                        variant="secondary"
+                        disabled
+                        className="!bg-slate-100 !text-slate-400 !border-slate-200 cursor-not-allowed font-bold"
+                      >
+                        🔒 Cần xem video trước ({progress?.progressPercentage || 0}%/85%)
+                      </Button>
+                      <span className="text-[10px] text-amber-700 font-medium">
+                        Cần xem đạt tối thiểu 85% video để mở khóa bài kiểm tra
+                      </span>
+                    </div>
+                  )}
                 </div>
               </Card>
             ) : null}
