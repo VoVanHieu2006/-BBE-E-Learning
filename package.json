@@ -11,7 +11,7 @@
     "test:baseline-safety": "node --test scripts/baseline-empty-database.test.mjs",
     "test:leaderboard-integration": "node scripts/test-chapter-leaderboard-integration.mjs",
     "test:learning-flow-integration": "node scripts/test-learning-flow-integration.mjs",
-    "postinstall": "prisma skills sync || exit 0",
+    "postinstall": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:baseline-empty": "node scripts/baseline-empty-database.mjs",
     "db:push": "prisma db push",
