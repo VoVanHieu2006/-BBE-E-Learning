@@ -5,11 +5,8 @@ import { MAX_VIDEO_DURATION_SECONDS, MIN_VIDEO_DURATION_SECONDS, normalizeDurati
 import { checkLessonProgression } from '@/lib/progression'
 
 export async function GET(request: NextRequest, { params }: { params: { lessonId: string } }) {
-  const auth = await authenticate(request).catch(() => ({ ok: false, error: { code: 'UNAUTHORIZED', message: 'Auth error' } }))
-  if (!auth.ok) {
-    return NextResponse.json({ error: auth.error || { code: 'UNAUTHORIZED', message: 'Vui lòng đăng nhập để học bài.' } }, { status: 401 })
-  }
-  const context = (auth as any).context!
+  const auth = await authenticate(request).catch(() => ({ ok: false }))
+  const context = auth.ok ? (auth as any).context! : null
   const lessonId = params.lessonId
 
   const lesson = await prisma.lesson.findUnique({
@@ -40,11 +37,15 @@ export async function GET(request: NextRequest, { params }: { params: { lessonId
   // Published/public course status is not a substitute for a learning assignment.
   const course = lesson.session.course
 
-  if (course.status !== 'PUBLISHED' && context.role !== 'ADMIN') {
+  if (course.status !== 'PUBLISHED' && context?.role !== 'ADMIN') {
     return NextResponse.json({ error: { code: 'AccessDenied', message: 'Khóa học chưa Published' } }, { status: 403 })
   }
 
-  if (context.role !== 'ADMIN') {
+  if (!context && !(course.status === 'PUBLISHED' && course.visibility === 'PUBLIC')) {
+    return NextResponse.json({ error: { code: 'AccessDenied', message: 'Please sign in to access this lesson.' } }, { status: 401 })
+  }
+
+  if (context && context.role !== 'ADMIN') {
     const gate = await checkLessonProgression(context.userId, lesson.id, 'VIEW')
     if (gate.ok === false) return NextResponse.json({ error: { code: gate.code, message: gate.message } }, { status: 403 })
   }
@@ -69,20 +70,20 @@ export async function GET(request: NextRequest, { params }: { params: { lessonId
       durationSeconds: lesson.video.duration_seconds,
       title: lesson.video.title,
     } : null,
-    assessment: lesson.assessment ? {
+    assessment: context && lesson.assessment ? {
       assessmentId: lesson.assessment.id,
       id: lesson.assessment.id,
       title: lesson.assessment.title,
       description: lesson.assessment.description,
       questionCount: lesson.assessment._count.questions,
     } : null,
-    documents: lesson.documents.map((d) => ({
+    documents: context ? lesson.documents.map((d) => ({
       documentId: d.id,
       id: d.id,
       fileName: d.file_name,
       fileSize: Number(d.file_size),
       mimeType: d.mime_type,
-    })),
+    })) : [],
   }, { status: 200 })
 }
 

@@ -321,6 +321,8 @@ async function main(): Promise<void> {
         status: cs.status,
         visibility: cs.visibility,
         created_by: admin.id,
+        // Temporary seed cover; replace through the Admin course cover uploader.
+        cover_url: "https://images.unsplash.com/photo-1501504905252-473c47e087f8?auto=format&fit=crop&w=1200&q=80",
         published_at: cs.publishedAgo ? daysAgo(cs.publishedAgo) : null,
         created_at: daysAgo((cs.publishedAgo || 40) + 14),
       },

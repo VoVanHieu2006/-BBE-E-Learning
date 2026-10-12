@@ -113,22 +113,22 @@ export default function LandingPage() {
             <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-semibold text-blue-100 shadow-sm backdrop-blur">
               <span aria-hidden="true">✦</span> Nền tảng học tập nội bộ BBE
             </div>
-            <h1 className="mt-6 text-4xl font-extrabold leading-[1.12] tracking-tight sm:text-5xl lg:text-6xl">
+            <h1 className="mt-7 max-w-xl text-4xl font-extrabold leading-[1.22] tracking-tight sm:text-5xl sm:leading-[1.18] lg:text-6xl">
               Học có lộ trình.
-              <span className="mt-2 block bg-gradient-to-r from-orange-300 to-amber-200 bg-clip-text text-transparent">Tiến bộ mỗi ngày.</span>
+              <span className="mt-4 block bg-gradient-to-r from-orange-300 to-amber-200 bg-clip-text text-transparent">Tiến bộ mỗi ngày.</span>
             </h1>
             <p className="mt-6 max-w-xl text-base leading-7 text-blue-100/90 sm:text-lg sm:leading-8">
               Khám phá kiến thức, rèn kỹ năng và theo dõi hành trình phát triển của bạn trong một không gian học tập dành riêng cho cộng đồng BBE.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <Link href={getDashboardHref()}>
+              <Link href="/student/courses">
                 <Button size="lg" className="w-full justify-center bg-orange-500 px-7 font-bold text-white shadow-lg shadow-orange-950/20 hover:bg-orange-400 sm:w-auto">
-                  {getDashboardLabel()} <span aria-hidden="true" className="ml-2">→</span>
+                  Xem khóa học cho thành viên <span aria-hidden="true" className="ml-2">→</span>
                 </Button>
               </Link>
-              <Link href="/student/courses">
-                <Button variant="outline" size="lg" className="w-full justify-center border-white/30 bg-white/5 px-7 text-white hover:bg-white/15 sm:w-auto">
-                  Khám phá khóa học
+              <Link href="/login">
+                <Button variant="outline" size="lg" className="w-full justify-center border-white/40 bg-white px-7 font-bold text-[#172554] hover:bg-blue-50 sm:w-auto">
+                  Đăng nhập để xem nhiều khóa học hơn và lưu tiến độ
                 </Button>
               </Link>
             </div>
@@ -221,7 +221,7 @@ export default function LandingPage() {
                     <p className="text-[11px] font-bold uppercase tracking-wider text-blue-700">{course.sessionCount || 0} buổi học</p>
                     <h3 className="mt-2 line-clamp-2 min-h-12 font-extrabold leading-6 text-[#172554]">{course.title}</h3>
                     <p className="mt-2 line-clamp-2 min-h-10 text-xs leading-5 text-slate-500">{course.description || 'Khám phá nội dung đào tạo được thiết kế cho hành trình phát triển của bạn.'}</p>
-                    <span className="mt-4 inline-flex items-center gap-2 text-sm font-bold text-blue-700">Tìm hiểu khóa học <span aria-hidden="true" className="transition-transform group-hover:translate-x-1">→</span></span>
+                    <span className="mt-4 inline-flex items-center gap-2 text-sm font-bold text-blue-700">Khám phá ngay <span aria-hidden="true" className="transition-transform group-hover:translate-x-1">→</span></span>
                   </div>
                 </Link>
               )
@@ -260,9 +260,9 @@ export default function LandingPage() {
             <h2 className="mt-3 text-2xl font-extrabold sm:text-3xl">Chọn khóa học phù hợp với bạn.</h2>
             <p className="mt-3 text-sm leading-6 text-blue-100">Bắt đầu từ một bài học nhỏ và tiến từng bước trên hành trình của mình.</p>
           </div>
-          <Link href={isLoggedIn ? getDashboardHref() : '/student/courses'} className="shrink-0">
+          <Link href="/login" className="shrink-0">
             <Button size="lg" className="w-full justify-center bg-white px-6 font-bold text-blue-800 hover:bg-blue-50 sm:w-auto">
-              {isLoggedIn ? 'Tiếp tục học' : 'Xem khóa học'} <span aria-hidden="true" className="ml-2">→</span>
+              Khám phá ngay <span aria-hidden="true" className="ml-2">→</span>
             </Button>
           </Link>
         </div>

@@ -70,7 +70,9 @@ export default function StudentCoursesPage() {
               <div className="grid md:grid-cols-2 gap-6">
                 {courses.map((c) => (
                   <Link key={c.courseId || c.id} href={`/student/courses/${c.courseId || c.id}`}>
-                    <Card className="hover:-translate-y-1 transition-all cursor-pointer group h-full flex flex-col justify-between border border-[#eff4ff] p-6 shadow-sm hover:shadow-md">
+                    <Card className="hover:-translate-y-1 transition-all cursor-pointer group h-full overflow-hidden border border-[#eff4ff] p-0 shadow-sm hover:shadow-md">
+                      {c.coverUrl ? <img src={c.coverUrl} alt={`Ảnh bìa ${c.title}`} className="h-40 w-full object-cover" /> : <div className="grid h-40 place-items-center bg-gradient-to-br from-[#172554] via-blue-700 to-indigo-500 text-4xl">📚</div>}
+                      <div className="flex h-[calc(100%-10rem)] flex-col justify-between p-6">
                       <div>
                         <div className="flex items-start justify-between mb-3">
                           <h3 className="text-xl font-bold text-[#172554] group-hover:text-[#2563EB] transition-colors">
@@ -95,6 +97,7 @@ export default function StudentCoursesPage() {
                         <span className="inline-flex items-center gap-1 text-[#2563EB] font-bold group-hover:underline">
                           Vào học ngay →
                         </span>
+                      </div>
                       </div>
                     </Card>
                   </Link>
@@ -156,7 +159,9 @@ export default function StudentCoursesPage() {
               <div className="grid md:grid-cols-3 gap-6">
                 {courses.map((c) => (
                   <Link key={c.courseId || c.id} href={`/student/courses/${c.courseId || c.id}`}>
-                    <Card className="hover:-translate-y-1 transition-all cursor-pointer group h-full flex flex-col justify-between border border-[#eff4ff] p-6 shadow-sm hover:shadow-md">
+                    <Card className="hover:-translate-y-1 transition-all cursor-pointer group h-full overflow-hidden border border-[#eff4ff] p-0 shadow-sm hover:shadow-md">
+                      {c.coverUrl ? <img src={c.coverUrl} alt={`Ảnh bìa ${c.title}`} className="h-40 w-full object-cover" /> : <div className="grid h-40 place-items-center bg-gradient-to-br from-[#172554] via-blue-700 to-indigo-500 text-4xl">📚</div>}
+                      <div className="flex h-[calc(100%-10rem)] flex-col justify-between p-6">
                       <div>
                         <div className="flex items-start justify-between mb-3">
                           <h3 className="text-lg font-bold text-[#172554] group-hover:text-[#2563EB] transition-colors">
@@ -172,6 +177,7 @@ export default function StudentCoursesPage() {
                         <span className="inline-flex items-center gap-1 text-[#2563EB] font-bold group-hover:underline">
                           Chi tiết →
                         </span>
+                      </div>
                       </div>
                     </Card>
                   </Link>
