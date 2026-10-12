@@ -345,11 +345,12 @@ describe('strict video progress', () => {
 })
 
 describe('Star reward rules', () => {
-  it('rewards an approximately three-minute video with one Star and caps long videos', () => {
-    assert.equal(starsForVideoDuration(119), 0)
-    assert.equal(starsForVideoDuration(180), 1)
-    assert.equal(starsForVideoDuration(360), 2)
-    assert.equal(starsForVideoDuration(3600), 5)
+  it('rewards completed videos by full-minute duration with a one-Star minimum', () => {
+    assert.equal(starsForVideoDuration(30), 1)
+    assert.equal(starsForVideoDuration(179), 2)
+    assert.equal(starsForVideoDuration(180), 3)
+    assert.equal(starsForVideoDuration(360), 6)
+    assert.equal(starsForVideoDuration(3600), 60)
     assert.equal(starsForVideoDuration(Number.NaN), 0)
   })
 
@@ -372,9 +373,9 @@ describe('Chapter leaderboard scoring', () => {
 
     assert.equal(chapter30.averageCompletion, chapter50.averageCompletion)
     assert.equal(chapter30.averageStars, chapter50.averageStars)
-    assert.ok(chapter30.sizeScore < chapter50.sizeScore)
+    assert.equal(chapter30.sizeScore, chapter50.sizeScore)
     assert.equal(chapter50.sizeScore, 100)
-    assert.ok(Math.abs((score50.score - score30.score) - 3.38) < 0.02)
+    assert.equal(score50.score, score30.score)
   })
 
   it('penalizes uneven learning instead of letting a few high performers carry the Chapter', () => {

@@ -1,9 +1,9 @@
-export type ChapterKpiStatus = 'RED' | 'YELLOW' | 'GREEN'
+export type ChapterKpiStatus = 'BLACK' | 'RED' | 'YELLOW' | 'GREEN'
 
 export const CHAPTER_LEADERBOARD_WEIGHTS = {
-  completion: 40,
-  stars: 25,
-  chapterSize: 15,
+  completion: 30,
+  stars: 30,
+  chapterSize: 20,
   greenKpiBonus: 20,
 } as const
 
@@ -101,7 +101,7 @@ export function normalizeChapterKpiInput(input: unknown): {
   const monthStart = parseChapterKpiMonthStart(body.month)
   const status = body.status
   const note = body.note
-  if (!monthStart || (status !== 'RED' && status !== 'YELLOW' && status !== 'GREEN')) return null
+  if (!monthStart || (status !== 'BLACK' && status !== 'RED' && status !== 'YELLOW' && status !== 'GREEN')) return null
   if (note !== undefined && note !== null && (typeof note !== 'string' || note.trim().length > 500)) return null
   return { monthStart, status, note: typeof note === 'string' ? note.trim() || null : null }
 }
@@ -117,19 +117,17 @@ export function calculateChapterLeaderboardMetrics(
   const memberCount = completions.length
   const sorted = [...completions].sort((a, b) => a - b)
   const middle = Math.floor(sorted.length / 2)
-  const medianCompletion = sorted.length === 0
-    ? 0
-    : sorted.length % 2 === 1
-      ? sorted[middle]
-      : (sorted[middle - 1] + sorted[middle]) / 2
+  const medianCompletion = sorted.length === 0 ? 0 : sorted.length % 2 === 1 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2
   const averageCompletion = memberCount
     ? completions.reduce((sum, value) => sum + value, 0) / memberCount
     : 0
   const at70Rate = memberCount
     ? completions.filter((completion) => completion >= 70).length / memberCount
     : 0
-  const completionScore = averageCompletion * 0.45 + medianCompletion * 0.35 + at70Rate * 100 * 0.2
-  const sizeScore = Math.min(100, (Math.sqrt(memberCount) / Math.sqrt(50)) * 100)
+  const completionScore = averageCompletion
+  // A Chapter reaches the full size component at 30 people, so 50 members
+  // do not obtain an advantage over a healthy 30-member Chapter.
+  const sizeScore = Math.min(100, (memberCount / 30) * 100)
 
   return {
     memberCount,
@@ -138,7 +136,7 @@ export function calculateChapterLeaderboardMetrics(
     at70Rate,
     averageStars: finiteNonNegative(rawAverageStars),
     kpiStatus,
-    eligible: memberCount >= 20 && at70Rate >= 0.5 && kpiStatus !== 'RED',
+    eligible: memberCount >= 20 && at70Rate >= 0.5 && kpiStatus !== 'RED' && kpiStatus !== 'BLACK',
     completionScore,
     sizeScore,
   }

@@ -301,6 +301,9 @@ export default function AdminChaptersProgressPage() {
                         </div>
 
                         <div className="flex items-center gap-4">
+                          <Link href={`/chapter-manager/members/${mId}`} className="rounded-lg border border-blue-200 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50">
+                            Lộ trình học
+                          </Link>
                           {/* Progress bar */}
                           <div className="text-right shrink-0">
                             <div className="text-xs font-bold text-[#2563EB]">{m.avgProgress || 0}%</div>

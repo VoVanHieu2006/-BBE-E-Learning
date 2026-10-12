@@ -16,6 +16,7 @@ export default function LeaderboardPage() {
   const [members, setMembers] = useState<any[]>([]);
   const [chapters, setChapters] = useState<any[]>([]);
   const [leaderboardMonth, setLeaderboardMonth] = useState<string | null>(null);
+  const [leaderboardUpdatedAt, setLeaderboardUpdatedAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Chapter Drill-down Modal
@@ -80,6 +81,7 @@ export default function LeaderboardPage() {
     if (chaptersRes.ok && chaptersRes.data) {
       setChapters(chaptersRes.data.items || []);
       setLeaderboardMonth(chaptersRes.data.month || null);
+      setLeaderboardUpdatedAt(chaptersRes.data.updatedAt || null);
     }
     setLoading(false);
   }
@@ -408,6 +410,7 @@ export default function LeaderboardPage() {
           <div className="space-y-3 text-sm text-[#434655]">
             {activeTab === 'chapters' && !isScopedView ? (
               <div className="space-y-3 text-sm text-[#434655]">
+                {leaderboardUpdatedAt && <p className="text-xs text-[#737686]">Cập nhật lúc: {new Date(leaderboardUpdatedAt).toLocaleString('vi-VN')}</p>}
                 {leaderboardMonth && <p className="text-xs text-[#737686]">Kỳ xếp hạng: {new Date(leaderboardMonth).toLocaleDateString('vi-VN', { month: 'long', year: 'numeric' })}</p>}
                 <p>Chapter chỉ được vào BXH khi có ít nhất <strong>20 thành viên hợp lệ</strong>, ít nhất <strong>50% đạt từ 70% completion</strong>, và KPI tháng không đỏ. DNA không được đưa vào BXH Chapter.</p>
                 <div className="rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs leading-6">

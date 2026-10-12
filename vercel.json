@@ -3,6 +3,10 @@
     {
       "path": "/api/internal/learning/deadlines/enforce",
       "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/internal/organization/reorganizations/apply",
+      "schedule": "5 17 * * *"
     }
   ]
 }

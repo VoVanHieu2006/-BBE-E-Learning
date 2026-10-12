@@ -39,7 +39,7 @@ export default function OrganizationMemberProgressPage() {
       <h2 className="text-xl font-bold text-[#172554]">{course.title}</h2>
       {course.finalAssessment && <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-3 text-sm"><p className="font-semibold text-[#172554]">Bài thi cuối khóa: {course.finalAssessment.title}</p><p className="mt-1 text-xs text-[#596174]">{course.finalAssessment.latestAttempt ? `Lần ${course.finalAssessment.latestAttempt.number}/${course.finalAssessment.attemptCount} · ${course.finalAssessment.latestAttempt.scorePercent ?? '—'}% · ${course.finalAssessment.latestAttempt.passed ? 'Đạt' : 'Chưa đạt'} · ${course.finalAssessment.latestAttempt.status}` : `Chưa nộp bài (${course.finalAssessment.attemptCount} lần)`} · ⭐ {course.finalAssessment.stars || 0}</p>{course.finalAssessment.latestAttempt?.submittedAt && <p className="mt-1 text-[11px] text-[#737686]">Nộp lúc {new Date(course.finalAssessment.latestAttempt.submittedAt).toLocaleString('vi-VN')}</p>}</div>}
       {course.modules.map((module: any) => <section key={module.moduleId} className="space-y-3">
-        <h3 className="border-b border-[#eff4ff] pb-2 text-sm font-bold text-blue-800">Module: {module.title}</h3>
+        <h3 className="border-b border-[#eff4ff] pb-2 text-sm font-bold text-blue-800">Buổi học: {module.title}</h3>
         {module.lessons.map((lesson: any) => <div key={lesson.lessonId} className="rounded-xl border border-[#eff4ff] bg-[#fbfcff] p-4">
           <p className="font-semibold text-[#172554]">{lesson.title}</p>
           <div className="mt-2 grid gap-3 text-sm md:grid-cols-2">

@@ -81,7 +81,7 @@ async function calculateMandatoryCompletion(memberIds: string[]): Promise<Map<st
   return calculateMandatoryCompletionPercentByUser(memberIds, requirements, completedByUser, passedByUser)
 }
 
-/** Only Chapters participate. A Chapter needs 20 members, 50% at >=70%, and non-RED KPI. */
+/** Only Chapters participate. A Chapter needs 20 members, 50% at >=70%, and a yellow or green KPI. */
 export async function GET(request: NextRequest) {
   await authenticate(request).catch(() => null)
 
@@ -102,7 +102,7 @@ export async function GET(request: NextRequest) {
     }),
     prisma.chapterMonthlyKpi.findMany({
       where: { month_start: { gte: monthStart, lt: nextMonth } },
-      select: { chapter_id: true, status: true },
+      select: { chapter_id: true, status: true, updated_at: true },
     }),
   ])
 
@@ -166,11 +166,13 @@ export async function GET(request: NextRequest) {
     memberCount: item.memberCount,
     atLeast70Percent: Math.round(item.at70Rate * 1000) / 10,
     kpiStatus: item.kpiStatus,
-    reason: item.kpiStatus === 'RED' ? 'KPI_RED' : item.memberCount < 20 ? 'MINIMUM_MEMBERS' : 'COMPLETION_THRESHOLD',
+    reason: item.kpiStatus === 'RED' || item.kpiStatus === 'BLACK' ? `KPI_${item.kpiStatus}` : item.memberCount < 20 ? 'MINIMUM_MEMBERS' : 'COMPLETION_THRESHOLD',
   }))
   const data = {
     month: monthStart.toISOString(),
-    formulaVersion: 'chapter-v3',
+    formulaVersion: 'chapter-v4',
+    updatedAt: new Date().toISOString(),
+    sourceUpdatedAt: kpis.reduce<string | null>((latest, kpi) => !latest || kpi.updated_at.toISOString() > latest ? kpi.updated_at.toISOString() : latest, null),
     weights: CHAPTER_LEADERBOARD_WEIGHTS,
     items,
     excluded,

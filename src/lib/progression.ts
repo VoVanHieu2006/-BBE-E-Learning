@@ -7,7 +7,7 @@ export type ProgressionAction = 'VIEW' | 'WATCH' | 'ASSESS'
 
 export type ProgressionDecision =
   | { ok: true; courseId: string; canEarnStars: boolean }
-  | { ok: false; code: 'NotAssigned' | 'PreviousModuleIncomplete' | 'AssessmentNotAllowed' | 'ModuleVideosIncomplete' | 'ModuleAssessmentRequired'; message: string }
+  | { ok: false; code: 'NotAssigned' | 'PreviousLessonIncomplete' | 'AssessmentNotAllowed' | 'LessonVideoIncomplete' | 'LessonAssessmentRequired'; message: string }
 
 export type CourseFinalProgressionDecision =
   | { ok: true; courseId: string; canEarnStars: boolean }
@@ -142,14 +142,7 @@ export async function checkLessonProgression(
   if (currentIndex < 0) return { ok: false, code: 'NotAssigned', message: 'Bài học không tồn tại trong khóa học' }
   const current = lessons[currentIndex]
   const previousLessons = lessons.slice(0, currentIndex)
-  const currentModuleLessons = lessons.filter((item) => item.session_id === current.session_id)
-  const priorModuleIds = new Set(
-    previousLessons.filter((item) => item.session_id !== current.session_id).map((item) => item.session_id),
-  )
-  const relevantLessons = lessons.filter((item) =>
-    previousLessons.some((previous) => previous.id === item.id) ||
-    (action === 'ASSESS' && item.session_id === current.session_id),
-  )
+  const relevantLessons = action === 'ASSESS' ? [...previousLessons, current] : previousLessons
   const relevantLessonIds = relevantLessons.map((item) => item.id)
   const progressRows = relevantLessonIds.length
     ? await prisma.lessonProgress.findMany({
@@ -167,13 +160,11 @@ export async function checkLessonProgression(
   // Every earlier video must be complete; within a module, videos remain
   // sequential, but the module quiz does not interrupt the video sequence.
   if (previousLessons.some((item) => !videoIsComplete(item))) {
-    return { ok: false, code: 'PreviousModuleIncomplete', message: 'Bạn cần hoàn thành video trước đó trước khi tiếp tục' }
+    return { ok: false, code: 'PreviousLessonIncomplete', message: 'Bạn cần hoàn thành video trước đó trước khi tiếp tục' }
   }
 
   // Assessment(s) in an earlier module are the checkpoint that unlocks this one.
-  const requiredAssessmentIds = lessons
-    .filter((item) => priorModuleIds.has(item.session_id) && item.assessment)
-    .map((item) => item.assessment!.id)
+  const requiredAssessmentIds = previousLessons.flatMap((item) => item.assessment ? [item.assessment.id] : [])
   if (requiredAssessmentIds.length) {
     const passedAttempts = await prisma.attempt.findMany({
       where: {
@@ -187,13 +178,13 @@ export async function checkLessonProgression(
     })
     const passedIds = new Set(passedAttempts.map((attempt) => attempt.assessment_id))
     if (requiredAssessmentIds.some((id) => !passedIds.has(id))) {
-      return { ok: false, code: 'ModuleAssessmentRequired', message: 'Bạn cần đạt bài kiểm tra của module trước để mở nội dung tiếp theo' }
+      return { ok: false, code: 'LessonAssessmentRequired', message: 'Bạn cần đạt bài kiểm tra của module trước để mở nội dung tiếp theo' }
     }
   }
 
   // All videos in a module must be completed before any assessment in it starts.
-  if (action === 'ASSESS' && currentModuleLessons.some((item) => !videoIsComplete(item))) {
-    return { ok: false, code: 'ModuleVideosIncomplete', message: 'Hãy hoàn thành toàn bộ video trong module trước khi làm quiz' }
+  if (action === 'ASSESS' && !videoIsComplete(current)) {
+    return { ok: false, code: 'LessonVideoIncomplete', message: 'Hãy hoàn thành toàn bộ video trong module trước khi làm quiz' }
   }
 
   return { ok: true, courseId, canEarnStars: assignments.every((assignment) => assignment.can_earn_stars) }

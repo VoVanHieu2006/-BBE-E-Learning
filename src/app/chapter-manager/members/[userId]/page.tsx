@@ -26,7 +26,7 @@ export default function MemberDetailPage({ params }: { params: { userId: string 
           setUser(parsed);
         } catch {}
       }
-      loadMemberDetail(parsed?.chapterId);
+      loadMemberDetail(parsed?.role === 'ADMIN' ? 'all' : parsed?.chapterId);
     }
   }, [params.userId]);
 

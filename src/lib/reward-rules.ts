@@ -1,7 +1,7 @@
-/** Keep video rewards bounded so very long videos do not dominate the Star economy. */
+/** Award after full completion: one Star per full minute, minimum one Star. */
 export function starsForVideoDuration(durationSeconds: number): number {
-  if (!Number.isFinite(durationSeconds) || durationSeconds < 120) return 0
-  return Math.min(5, Math.max(1, Math.ceil((durationSeconds / 60) / 3)))
+  if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) return 0
+  return Math.max(1, Math.floor(durationSeconds / 60))
 }
 
 /** A passed quiz grants 2 Stars, plus up to 3 for each full 5-point band above the pass mark. */

@@ -148,11 +148,21 @@ enum RestrictionType {
 }
 
 enum KpiStatus {
+  BLACK
   RED
   YELLOW
   GREEN
 
   @@map("kpi_status")
+}
+
+enum ChapterReorganizationStatus {
+  DRAFT
+  SCHEDULED
+  APPLIED
+  CANCELLED
+
+  @@map("chapter_reorganization_status")
 }
 
 enum StarReason {
@@ -764,6 +774,7 @@ model QuestionPool {
   assessment_id String     @db.Uuid
   name          String     @db.VarChar(255)
   sort_order    Int
+  draw_count    Int        @default(3)
   created_at    DateTime   @default(now()) @db.Timestamp
 
   assessment    Assessment @relation(fields: [assessment_id], references: [id], onDelete: Cascade)
@@ -790,4 +801,41 @@ model ChapterMonthlyKpi {
   @@unique([chapter_id, month_start])
   @@index([month_start, status])
   @@map("chapter_monthly_kpis")
+}
+
+/** A confirmed future change of department/LT assignments inside one Chapter. */
+model ChapterReorganization {
+  id                String                      @id @default(uuid()) @db.Uuid
+  chapter_id        String                      @db.Uuid
+  effective_at      DateTime                    @db.Timestamp
+  status            ChapterReorganizationStatus @default(DRAFT)
+  source_url        String?                     @db.Text
+  created_by_user_id String                     @db.Uuid
+  confirmed_at      DateTime?                   @db.Timestamp
+  applied_at        DateTime?                   @db.Timestamp
+  cancelled_at      DateTime?                   @db.Timestamp
+  created_at        DateTime                    @default(now()) @db.Timestamp
+  updated_at        DateTime                    @updatedAt @db.Timestamp
+
+  items             ChapterReorganizationItem[]
+
+  @@index([chapter_id, status, effective_at])
+  @@map("chapter_reorganizations")
+}
+
+model ChapterReorganizationItem {
+  id                    String                  @id @default(uuid()) @db.Uuid
+  reorganization_id     String                  @db.Uuid
+  user_id               String                  @db.Uuid
+  department_unit_id    String                  @db.Uuid
+  position_id           String?                 @db.Uuid
+  is_primary            Boolean                 @default(true)
+  validation_error      String?                 @db.Text
+  created_at            DateTime                @default(now()) @db.Timestamp
+
+  reorganization        ChapterReorganization   @relation(fields: [reorganization_id], references: [id], onDelete: Cascade)
+
+  @@unique([reorganization_id, user_id])
+  @@index([reorganization_id])
+  @@map("chapter_reorganization_items")
 }

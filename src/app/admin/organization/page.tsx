@@ -30,6 +30,7 @@ export default function AdminOrganizationPage() {
   const [courses, setCourses] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [chapters, setChapters] = useState<any[]>([]);
+  const [recentKpis, setRecentKpis] = useState<any[]>([]);
   const [restrictionHistory, setRestrictionHistory] = useState<any[]>([]);
   const [restrictionTotal, setRestrictionTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -68,6 +69,7 @@ export default function AdminOrganizationPage() {
       setUnitParentById(Object.fromEntries((org.data.units || []).map((unit: any) => [unit.id, unit.parent_id || ''])));
       setMemberships(org.data.memberships || []);
       setPositionAssignments(org.data.positionAssignments || []);
+      setRecentKpis(org.data.recentKpis || []);
       if (org.data.membershipPagination) setMembershipPagination(org.data.membershipPagination);
       if (org.data.assignmentPagination) setAssignmentPagination(org.data.assignmentPagination);
     }
@@ -319,14 +321,17 @@ export default function AdminOrganizationPage() {
       <Card className="space-y-4 border border-[#eff4ff]"><h2 className="font-bold text-[#172554]">Cấp quyền cho chức vụ</h2><form className="space-y-3" onSubmit={grantPermission}><select required value={grantForm.positionId} onChange={(e) => setGrantForm({ ...grantForm, positionId: e.target.value })} className="w-full rounded-xl border border-[#cbdbf5] px-3 py-2 text-sm"><option value="">Chọn chức vụ</option>{data.positions.map((position: any) => <option key={position.id} value={position.id}>{position.code} · {position.name}</option>)}</select><select required value={grantForm.permissionId} onChange={(e) => setGrantForm({ ...grantForm, permissionId: e.target.value })} className="w-full rounded-xl border border-[#cbdbf5] px-3 py-2 text-sm"><option value="">Chọn quyền</option>{data.permissions.map((permission: any) => <option key={permission.id} value={permission.id}>{permission.code}</option>)}</select><Button type="submit" loading={saving} className="w-full">Cấp quyền</Button></form><p className="text-xs text-[#737686]">Quyền có hiệu lực theo chức vụ, đơn vị và thời gian bổ nhiệm.</p><div className="border-t border-[#eff4ff] pt-3"><h3 className="mb-2 text-sm font-semibold text-[#172554]">Quyền đã cấp</h3><div className="max-h-72 space-y-2 overflow-y-auto">{(data.positionPermissions || []).length === 0 ? <p className="text-xs text-[#737686]">Chưa có quyền nào được gán.</p> : data.positionPermissions.map((grant: any) => <div key={`${grant.position_id}:${grant.permission_id}`} className="flex items-center justify-between gap-3 rounded-lg bg-[#f8f9ff] px-3 py-2"><div className="min-w-0"><p className="truncate text-xs font-semibold text-[#172554]">{grant.position?.code} · {grant.permission?.code}</p><p className="truncate text-[11px] text-[#737686]">{grant.position?.name} · {grant.position?.scope}</p></div><Button size="sm" variant="outline" disabled={saving} onClick={() => void revokePermission(grant.position_id, grant.permission_id)}>Thu hồi</Button></div>)}</div></div></Card>
     </div>
     <Card className="space-y-4 border border-[#eff4ff]">
-      <div><h2 className="font-bold text-[#172554]">KPI Chapter theo tháng</h2><p className="mt-1 text-xs text-[#737686]">Đỏ: loại khỏi BXH; Vàng: đủ điều kiện không bonus; Xanh: nhận bonus KPI.</p></div>
+      <div><h2 className="font-bold text-[#172554]">KPI Chapter theo tháng</h2><p className="mt-1 text-xs text-[#737686]">Đen/Đỏ: loại khỏi BXH; Vàng: đủ điều kiện không bonus; Xanh: nhận bonus KPI.</p></div>
       <form className="grid gap-3 md:grid-cols-2 xl:grid-cols-4" onSubmit={saveKpi}>
         <select required value={kpiForm.chapterId} onChange={(e) => setKpiForm({ ...kpiForm, chapterId: e.target.value })} className="rounded-xl border border-[#cbdbf5] px-3 py-2 text-sm"><option value="">Chọn Chapter</option>{chapters.map((chapter) => <option key={chapter.id || chapter.chapterId} value={chapter.id || chapter.chapterId}>{chapter.name}</option>)}</select>
         <input required type="month" value={kpiForm.month} onChange={(e) => setKpiForm({ ...kpiForm, month: e.target.value })} className="rounded-xl border border-[#cbdbf5] px-3 py-2 text-sm" />
-        <select value={kpiForm.status} onChange={(e) => setKpiForm({ ...kpiForm, status: e.target.value })} className="rounded-xl border border-[#cbdbf5] px-3 py-2 text-sm"><option value="RED">Đỏ</option><option value="YELLOW">Vàng</option><option value="GREEN">Xanh</option></select>
+        <select value={kpiForm.status} onChange={(e) => setKpiForm({ ...kpiForm, status: e.target.value })} className="rounded-xl border border-[#cbdbf5] px-3 py-2 text-sm"><option value="BLACK">Đen</option><option value="RED">Đỏ</option><option value="YELLOW">Vàng</option><option value="GREEN">Xanh</option></select>
         <input value={kpiForm.note} onChange={(e) => setKpiForm({ ...kpiForm, note: e.target.value })} placeholder="Ghi chú KPI" className="rounded-xl border border-[#cbdbf5] px-3 py-2 text-sm" />
         <Button type="submit" loading={saving} className="md:col-span-2 xl:col-span-4">Lưu KPI</Button>
       </form>
+      <div className="overflow-x-auto rounded-xl border border-[#eff4ff]">
+        <table className="w-full min-w-[700px] text-left text-xs"><thead className="bg-[#f8f9ff] text-[#737686]"><tr><th className="px-3 py-2">Chapter</th><th className="px-3 py-2">Tháng</th><th className="px-3 py-2">KPI</th><th className="px-3 py-2">Ghi chú</th><th className="px-3 py-2">Cập nhật</th></tr></thead><tbody className="divide-y divide-[#eff4ff]">{recentKpis.length === 0 ? <tr><td className="px-3 py-4 text-[#737686]" colSpan={5}>Chưa có KPI được cập nhật.</td></tr> : recentKpis.map((item) => <tr key={item.id}><td className="px-3 py-2 font-semibold text-[#172554]">{item.chapterName}</td><td className="px-3 py-2">{new Date(item.month).toLocaleDateString('vi-VN', { month: '2-digit', year: 'numeric' })}</td><td className="px-3 py-2"><span className={`rounded-full px-2 py-0.5 font-semibold ${item.status === 'GREEN' ? 'bg-green-50 text-green-700' : item.status === 'YELLOW' ? 'bg-yellow-50 text-yellow-700' : item.status === 'BLACK' ? 'bg-slate-900 text-white' : 'bg-red-50 text-red-700'}`}>{item.status}</span></td><td className="px-3 py-2">{item.note || '—'}</td><td className="px-3 py-2 text-[#737686]">{item.configuredBy} · {new Date(item.updatedAt).toLocaleString('vi-VN')}</td></tr>)}</tbody></table>
+      </div>
     </Card>
     <Card className="space-y-4 border border-[#eff4ff]">
       <div><h2 className="font-bold text-[#172554]">Khóa / mở khóa có audit</h2><p className="mt-1 text-xs text-[#737686]">Chỉ Admin có quyền gỡ restriction. Khóa Chapter áp dụng cho toàn bộ thành viên.</p></div>

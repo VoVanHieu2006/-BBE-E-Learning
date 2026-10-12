@@ -11,8 +11,8 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
   if (!await canAccessChapterPermission(auth.context!, params.chapterId, 'VIEW_MEMBER_PROGRESS')) {
     return NextResponse.json({ error: { code: 'AccessDenied' } }, { status: 403 })
   }
-  const items = await prisma.chapterMonthlyKpi.findMany({ where: { chapter_id: params.chapterId }, orderBy: { month_start: 'desc' } })
-  return NextResponse.json({ items: items.map((item) => ({ month: item.month_start, status: item.status, note: item.note, updatedAt: item.updated_at })) })
+  const items = await prisma.chapterMonthlyKpi.findMany({ where: { chapter_id: params.chapterId }, orderBy: { month_start: 'desc' }, include: { configured_by: { select: { email: true } } } })
+  return NextResponse.json({ items: items.map((item) => ({ month: item.month_start, status: item.status, note: item.note, updatedAt: item.updated_at, configuredBy: item.configured_by.email })) })
 }
 
 export async function PUT(request: NextRequest, { params }: { params: { chapterId: string } }) {

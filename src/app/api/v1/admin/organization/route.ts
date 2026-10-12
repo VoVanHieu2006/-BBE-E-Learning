@@ -72,7 +72,7 @@ export async function GET(request: NextRequest) {
   if (assignmentStatus === 'ENDED') assignmentConditions.push({ ends_at: { lte: now } })
   const assignmentWhere: Prisma.PositionAssignmentWhereInput = assignmentConditions.length ? { AND: assignmentConditions } : {}
 
-  const [units, positions, permissions, positionPermissions, totalMemberships, totalPositionAssignments] = await Promise.all([
+  const [units, positions, permissions, positionPermissions, totalMemberships, totalPositionAssignments, recentKpis] = await Promise.all([
     prisma.organizationUnit.findMany({ include: { parent: { select: { id: true, name: true } }, _count: { select: { memberships: true, positions: true } } }, orderBy: [{ type: 'asc' }, { name: 'asc' }] }),
     prisma.position.findMany({ include: { _count: { select: { assignments: true } } }, orderBy: { code: 'asc' } }),
     prisma.permission.findMany({ orderBy: { code: 'asc' } }),
@@ -82,6 +82,11 @@ export async function GET(request: NextRequest) {
     }),
     prisma.organizationMembership.count({ where: membershipWhere }),
     prisma.positionAssignment.count({ where: assignmentWhere }),
+    prisma.chapterMonthlyKpi.findMany({
+      take: 60,
+      include: { chapter: { select: { name: true } }, configured_by: { select: { email: true } } },
+      orderBy: { updated_at: 'desc' },
+    }),
   ])
   const membershipPagination = normalizeOrganizationPagination(params.get('membershipPage'), params.get('membershipLimit'), totalMemberships)
   const assignmentPagination = normalizeOrganizationPagination(params.get('assignmentPage'), params.get('assignmentLimit'), totalPositionAssignments)
@@ -114,6 +119,7 @@ export async function GET(request: NextRequest) {
     positionAssignments,
     membershipPagination: { page: membershipPagination.page, limit: membershipPagination.limit, total: membershipPagination.total, totalPages: membershipPagination.totalPages },
     assignmentPagination: { page: assignmentPagination.page, limit: assignmentPagination.limit, total: assignmentPagination.total, totalPages: assignmentPagination.totalPages },
+    recentKpis: recentKpis.map((item) => ({ id: item.id, chapterName: item.chapter.name, month: item.month_start, status: item.status, note: item.note, updatedAt: item.updated_at, configuredBy: item.configured_by.email })),
   })
 }
 
