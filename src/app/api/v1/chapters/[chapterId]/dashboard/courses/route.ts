@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { canAccessChapterPermission, resolveSingleManagedChapter } from '@/lib/authorization'
+import { listChapterMembers } from '@/lib/chapter-members'
 
 /**
  * GET /api/v1/chapters/[chapterId]/dashboard/courses
@@ -14,19 +16,13 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
 
   // Support "me" alias
   if (chapterId === 'me') {
-    if ((auth as any).context!.role === 'CHAPTER_LEADER' && (auth as any).context!.chapterId) {
-      chapterId = (auth as any).context!.chapterId
-    } else {
-      return NextResponse.json({ error: { code: 'ValidationError', message: 'ChapterId không hợp lệ' } }, { status: 400 })
-    }
+    const resolved = await resolveSingleManagedChapter(auth.context!)
+    if (!resolved) return NextResponse.json({ error: { code: 'ChapterScopeRequired', message: 'Không có Chapter duy nhất trong phạm vi; hãy gửi chapterId cụ thể.' } }, { status: 400 })
+    chapterId = resolved
   }
 
-  // Authorization check
-  if ((auth as any).context!.role === 'CHAPTER_LEADER') {
-    if ((auth as any).context!.chapterId !== chapterId) {
-      return NextResponse.json({ error: { code: 'AccessDenied', message: 'BĐHU chỉ có quyền xem chapter của mình' } }, { status: 403 })
-    }
-  } else if ((auth as any).context!.role !== 'ADMIN') {
+  // Position-based managers are checked against the exact requested Chapter.
+  if (!await canAccessChapterPermission(auth.context!, chapterId, 'VIEW_MEMBER_PROGRESS')) {
     return NextResponse.json({ error: { code: 'AccessDenied', message: 'Không có quyền' } }, { status: 403 })
   }
 
@@ -36,14 +32,8 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
   const skip = (page - 1) * limit
 
   // Get active student members in this chapter (EXCLUDING BĐHU and Admin)
-  const chapterMembers = await prisma.chapterMember.findMany({
-    where: {
-      chapter_id: chapterId,
-      user: { status: 'ACTIVE', role: 'MEMBER' },
-    },
-    select: { user_id: true },
-  })
-  const memberUserIds = chapterMembers.map((m) => m.user_id)
+  const chapterMembers = await listChapterMembers(chapterId, { roles: ['MEMBER'], status: 'ACTIVE' })
+  const memberUserIds = chapterMembers.map((member) => member.userId)
   const totalMembers = memberUserIds.length
 
   // Get published courses with pagination

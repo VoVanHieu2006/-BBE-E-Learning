@@ -2,9 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { MAX_VIDEO_DURATION_SECONDS, MIN_VIDEO_DURATION_SECONDS, normalizeDurationSeconds } from '@/lib/validation/duration'
+import { checkLessonProgression } from '@/lib/progression'
 
 export async function GET(request: NextRequest, { params }: { params: { lessonId: string } }) {
   const auth = await authenticate(request).catch(() => ({ ok: false, error: { code: 'UNAUTHORIZED', message: 'Auth error' } }))
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error || { code: 'UNAUTHORIZED', message: 'Vui lòng đăng nhập để học bài.' } }, { status: 401 })
+  }
+  const context = (auth as any).context!
   const lessonId = params.lessonId
 
   const lesson = await prisma.lesson.findUnique({
@@ -32,23 +37,16 @@ export async function GET(request: NextRequest, { params }: { params: { lessonId
     return NextResponse.json({ error: { code: 'LessonNotFound', message: 'Bài học không tồn tại' } }, { status: 404 })
   }
 
+  // Published/public course status is not a substitute for a learning assignment.
   const course = lesson.session.course
 
-  // Check visibility & status access
-  if (course.visibility === 'PRIVATE') {
-    if (!auth.ok || ((auth as any).context!.role !== 'ADMIN' && (auth as any).context!.role !== 'CHAPTER_LEADER' && (auth as any).context!.role !== 'MEMBER')) {
-      return NextResponse.json({ error: { code: 'AccessDenied', message: 'Khóa học Private' } }, { status: 403 })
-    }
-    if (auth.ok) {
-      const user = await prisma.user.findUnique({ where: { id: (auth as any).context!.userId } })
-      if (!user || user.status !== 'ACTIVE') {
-        return NextResponse.json({ error: { code: 'AccessDenied', message: 'Tài khoản phải Active' } }, { status: 403 })
-      }
-    }
+  if (course.status !== 'PUBLISHED' && context.role !== 'ADMIN') {
+    return NextResponse.json({ error: { code: 'AccessDenied', message: 'Khóa học chưa Published' } }, { status: 403 })
   }
 
-  if (course.status !== 'PUBLISHED' && (!auth.ok || (auth as any).context!.role !== 'ADMIN')) {
-    return NextResponse.json({ error: { code: 'AccessDenied', message: 'Khóa học chưa Published' } }, { status: 403 })
+  if (context.role !== 'ADMIN') {
+    const gate = await checkLessonProgression(context.userId, lesson.id, 'VIEW')
+    if (gate.ok === false) return NextResponse.json({ error: { code: gate.code, message: gate.message } }, { status: 403 })
   }
 
   return NextResponse.json({

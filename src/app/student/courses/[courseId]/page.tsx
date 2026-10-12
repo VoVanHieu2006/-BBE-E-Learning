@@ -226,22 +226,27 @@ export default function CourseDetailPage({ params }: { params: { courseId: strin
           <div className="bg-gradient-to-r from-blue-50 to-indigo-50/60 rounded-3xl p-6 md:p-8 border border-blue-100 shadow-sm flex flex-col md:flex-row items-center justify-between gap-6">
             <div className="space-y-1.5 text-center md:text-left">
               <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-100 text-[#2563EB] text-xs font-bold rounded-full mb-1">
-                <span>✨ Đánh giá theo bài học</span>
+                <span>✨ Quiz từng bài và bài thi cuối khóa</span>
               </div>
               <h3 className="text-xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
-                Học xong video làm bài kiểm tra ngay
+                Hoàn tất video, quiz từng bài và thi cuối khóa
               </h3>
               <p className="text-sm text-[#55586d]">
-                Mỗi bài học tích hợp bài kiểm tra riêng bên cạnh video bài giảng. Hoàn thành video và đạt điểm bài kiểm tra để vượt qua bài học!
+                Quiz từng bài giúp mở nội dung tiếp theo. Khi hoàn thành 100% video và đạt toàn bộ quiz, bài thi cuối khóa sẽ mở để ghi nhận hoàn tất khóa học.
               </p>
             </div>
 
             <div className="shrink-0">
               {user ? (
-                <div className="text-center md:text-right">
+                <div className="flex flex-col items-center gap-3 md:items-end">
                   <span className="inline-block text-xs font-semibold text-slate-600 bg-white px-4 py-2.5 rounded-xl border border-slate-200 shadow-xs">
                     Tiến độ hoàn thành: <strong className="text-[#2563EB] text-sm">{progressPercentage}%</strong> ({completedLessons}/{totalLessons} bài)
                   </span>
+                  {course.finalAssessment && (
+                    <Link href={`/student/courses/${params.courseId}/quiz`}>
+                      <Button size="sm" variant="secondary">Bài thi cuối khóa →</Button>
+                    </Link>
+                  )}
                 </div>
               ) : (
                 <Link href="/login">

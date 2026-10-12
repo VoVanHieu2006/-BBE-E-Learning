@@ -13,7 +13,7 @@ const LEADERBOARD_CACHE_TTL_MS = 30_000 // 30 seconds in-memory cache
 
 /**
  * GET /api/v1/leaderboard
- * Global leaderboard — ranking active members by course completion % and quiz score
+ * Global member standings — ranking active members by Star balance, with learning metrics as tie-breakers.
  *
  * OPTIMIZED (Audit #2):
  * In-memory server cache with 30s TTL. All requests within 30s return instantly
@@ -48,7 +48,13 @@ export async function GET(request: NextRequest) {
     })
 
     const memberUserIds = allMembers.map((m) => m.id)
-    const progressMap = await calculateBatchUsersProgress(memberUserIds, sys)
+    const [progressMap, starRows] = await Promise.all([
+      calculateBatchUsersProgress(memberUserIds, sys),
+      memberUserIds.length
+        ? prisma.starLedger.groupBy({ where: { user_id: { in: memberUserIds } }, by: ['user_id'], _sum: { amount: true } })
+        : Promise.resolve([]),
+    ])
+    const starsByUser = new Map(starRows.map((row) => [row.user_id, row._sum.amount || 0]))
 
     // 2. Format and compute leaderboard points for ALL members
     allResults = allMembers.map((m) => {
@@ -57,7 +63,6 @@ export async function GET(request: NextRequest) {
       const totalLessons = sys.totalLessons
       const courseProgress = p?.overallProgressPercent || 0
       const avgScore = p?.avgQuizScore || 0
-      const leaderboardPoint = p?.leaderboardPoint || 0
       const completedCourses = p?.completedCourses || 0
       const totalCourses = sys.totalCourses
       const chapterName = m.chapter_members[0]?.chapter?.name || 'BBE Core'
@@ -70,7 +75,7 @@ export async function GET(request: NextRequest) {
         assessmentAverageScore: avgScore,
         avgScore,
         avgQuizScore: avgScore,
-        leaderboardPoint,
+        stars: starsByUser.get(m.id) || 0,
         completedLessons,
         totalLessons,
         completedCourses,
@@ -78,8 +83,8 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    // 3. Sort globally by leaderboard points FIRST
-    allResults.sort((a, b) => b.leaderboardPoint - a.leaderboardPoint)
+    // 3. Sort by Star balance, then learning progress and quiz average.
+    allResults.sort((a, b) => b.stars - a.stars || b.courseCompletionPercent - a.courseCompletionPercent || b.avgScore - a.avgScore)
 
     leaderboardCache = {
       timestamp: now,

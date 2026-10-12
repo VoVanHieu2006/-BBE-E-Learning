@@ -7,7 +7,8 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 
 /**
  * GET /api/v1/assessments/{assessmentId}
- * Get detail (Admin/Leader/Member with rules)
+ * Get question-bank detail for Admin authoring only. Learners receive the
+ * sampled question set through an individual attempt, never the whole bank.
  */
 export async function GET(request: NextRequest, { params }: { params: { assessmentId: string } }) {
   const { assessmentId } = params
@@ -19,10 +20,17 @@ export async function GET(request: NextRequest, { params }: { params: { assessme
   if (!auth.ok) {
     return NextResponse.json({ error: { code: 'Unauthorized' } }, { status: 401 })
   }
+  if ((auth as any).context!.role !== 'ADMIN') {
+    return NextResponse.json(
+      { error: { code: 'AccessDenied', message: 'Chỉ Admin được xem ngân hàng câu hỏi.' } },
+      { status: 403 },
+    )
+  }
 
   const assessment = await prisma.assessment.findUnique({
     where: { id: assessmentId },
     include: {
+      question_pools: { orderBy: { sort_order: 'asc' } },
       questions: {
         include: { options: { orderBy: { sort_order: 'asc' } } },
         orderBy: { sort_order: 'asc' },
@@ -31,9 +39,6 @@ export async function GET(request: NextRequest, { params }: { params: { assessme
   })
   if (!assessment) return NextResponse.json({ error: { code: 'AssessmentNotFound', message: 'Bài kiểm tra không tồn tại' } }, { status: 404 })
 
-  // Only MEMBER hides correct answers and explanations; Admin and Chapter Leader can see full answer keys
-  const hideCorrect = (auth as any).context!.role === 'MEMBER'
-
   return NextResponse.json({
     assessmentId: assessment.id,
     id: assessment.id,
@@ -41,6 +46,7 @@ export async function GET(request: NextRequest, { params }: { params: { assessme
     title: assessment.title,
     description: assessment.description,
     questionCount: assessment.questions.length,
+    pools: assessment.question_pools.map((pool) => ({ poolId: pool.id, name: pool.name, sortOrder: pool.sort_order })),
     questions: assessment.questions.map((q) => ({
       questionId: q.id,
       id: q.id,
@@ -49,12 +55,13 @@ export async function GET(request: NextRequest, { params }: { params: { assessme
       points: Number(q.points),
       durationSeconds: q.duration_seconds,
       sortOrder: q.sort_order,
-      ...(!hideCorrect ? { explanation: q.explanation || '' } : {}),
+      poolId: q.pool_id,
+      explanation: q.explanation || '',
       options: q.options.map((o) => ({
         optionId: o.id,
         id: o.id,
         optionText: o.option_text,
-        ...(!hideCorrect ? { isCorrect: o.is_correct } : {}),
+        isCorrect: o.is_correct,
       })),
     })),
   })
@@ -81,6 +88,13 @@ export async function PATCH(request: NextRequest, { params }: { params: { assess
   const body = await request.json()
   const { title, description, questions } = body || {}
 
+  if (Array.isArray(questions)) {
+    const historicalAttempts = await prisma.attempt.count({ where: { assessment_id: assessmentId } })
+    if (historicalAttempts) {
+      return NextResponse.json({ error: { code: 'AssessmentVersionRequired', message: 'Cannot replace questions after attempts exist; create a new assessment version to preserve history.' } }, { status: 409 })
+    }
+  }
+
   await prisma.$transaction(async (tx) => {
     if (title || description !== undefined) {
       await tx.assessment.update({
@@ -101,6 +115,11 @@ export async function PATCH(request: NextRequest, { params }: { params: { assess
       }
 
       // Pre-generate UUIDs for batch createMany
+      const poolIds = Array.from(new Set(questions.map((q: any) => q.poolId || q.pool_id).filter(Boolean))) as string[]
+      if (poolIds.length) {
+        const poolCount = await tx.questionPool.count({ where: { id: { in: poolIds }, assessment_id: assessmentId } })
+        if (poolCount !== poolIds.length) throw new Error('Question pool does not belong to this assessment')
+      }
       const preparedQuestions = questions.map((q: any, idx: number) => {
         const qId = crypto.randomUUID()
         const rawOptions = Array.isArray(q.options) ? q.options : []
@@ -122,6 +141,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { assess
             duration_seconds: Math.max(10, Number(q.durationSeconds || q.duration_seconds || 120)),
             sort_order: Number(q.sortOrder ?? q.sort_order ?? idx),
             explanation: typeof q.explanation === 'string' && q.explanation.trim() ? q.explanation.trim() : null,
+            pool_id: q.poolId || q.pool_id || null,
           },
           options,
         }
@@ -169,41 +189,24 @@ export async function DELETE(request: NextRequest, { params }: { params: { asses
 
   const existing = await prisma.assessment.findUnique({
     where: { id: assessmentId },
-    select: { id: true, lesson_id: true },
+    select: { id: true, type: true, lesson_id: true, course_id: true, _count: { select: { attempts: true } } },
   })
   if (!existing) {
     return NextResponse.json({ error: { code: 'AssessmentNotFound', message: 'Bài kiểm tra không tồn tại' } }, { status: 404 })
   }
+  if (existing._count.attempts > 0) {
+    return NextResponse.json({ error: { code: 'AssessmentVersionRequired', message: 'Không thể xóa bài thi đã có attempt; lịch sử và kết quả cần được bảo toàn.' } }, { status: 409 })
+  }
 
-  // Clean cascading deletion
-  await prisma.$transaction(async (tx) => {
-    // Delete attempt details first
-    const attempts = await tx.attempt.findMany({
-      where: { assessment_id: assessmentId },
-      select: { id: true },
-    })
-    const attemptIds = attempts.map((a) => a.id)
-    if (attemptIds.length > 0) {
-      await tx.attemptAnswer.deleteMany({ where: { attempt_id: { in: attemptIds } } })
-      await tx.attemptQuestion.deleteMany({ where: { attempt_id: { in: attemptIds } } })
-      await tx.attempt.deleteMany({ where: { id: { in: attemptIds } } })
-    }
-
-    // Delete question options & questions
-    await tx.questionOption.deleteMany({ where: { question: { assessment_id: assessmentId } } })
-    await tx.question.deleteMany({ where: { assessment_id: assessmentId } })
-
-    // Delete assessment
-    await tx.assessment.delete({ where: { id: assessmentId } })
-  }, {
-    timeout: 15000,
-    maxWait: 5000,
-  })
+  // Child question/option rows cascade; no learner attempts are deleted.
+  await prisma.assessment.delete({ where: { id: assessmentId } })
 
   return NextResponse.json({
     success: true,
     message: 'Đã xóa bài kiểm tra thành công',
     assessmentId,
     lessonId: existing.lesson_id,
+    courseId: existing.course_id,
+    assessmentType: existing.type,
   })
 }

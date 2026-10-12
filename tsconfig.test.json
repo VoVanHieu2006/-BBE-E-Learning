@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "noEmit": false,
+    "types": ["node"]
+  },
+  "include": ["src/lib/video-progress-rules.ts", "src/lib/reward-rules.ts", "src/lib/learning-rule-scope.ts", "src/lib/organization-scope.ts", "src/lib/organization-admin-rules.ts", "src/lib/learning-rule-rules.ts", "src/lib/quiz-pool-selection.ts", "src/lib/quiz-attempt-rules.ts", "src/test/business-rules.test.ts"]
+}

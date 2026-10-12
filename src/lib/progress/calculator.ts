@@ -7,6 +7,8 @@ export interface PublishedCourseInfo {
   totalLessons: number
   hasAssessment: boolean
   assessmentId: string | null
+  lessonAssessmentIds: string[]
+  finalAssessmentId: string | null
 }
 
 export interface PublishedSystemData {
@@ -24,6 +26,9 @@ export interface UserCourseProgressDetail {
   progressPercent: number
   allVideosDone: boolean
   hasAssessment: boolean
+  hasFinalAssessment: boolean
+  hasLessonAssessments: boolean
+  lessonAssessmentsPassed: boolean
   assessmentId: string | null
   latestAttempt: {
     score: number | null
@@ -43,7 +48,6 @@ export interface UserProgressSummary {
   completedCourses: number
   totalCourses: number
   avgQuizScore: number
-  leaderboardPoint: number
   courses?: UserCourseProgressDetail[]
 }
 
@@ -67,6 +71,7 @@ export async function getPublishedSystemData(forceFresh = false): Promise<Publis
     select: {
       id: true,
       title: true,
+      final_assessment: { select: { id: true } },
       sessions: {
         select: {
           lessons: {
@@ -88,14 +93,16 @@ export async function getPublishedSystemData(forceFresh = false): Promise<Publis
     for (const lid of lessonIds) {
       allLessonIdSet.add(lid)
     }
-    const hasAnyAssessment = lessonList.some((l) => !!l.assessment)
+    const hasAnyAssessment = lessonList.some((lesson) => Boolean(lesson.assessment))
     return {
       id: c.id,
       title: c.title,
       lessonIds,
       totalLessons: lessonIds.length,
-      hasAssessment: hasAnyAssessment,
-      assessmentId: null,
+      hasAssessment: hasAnyAssessment || Boolean(c.final_assessment),
+      assessmentId: c.final_assessment?.id || null,
+      lessonAssessmentIds: lessonList.flatMap((lesson) => lesson.assessment ? [lesson.assessment.id] : []),
+      finalAssessmentId: c.final_assessment?.id || null,
     }
   })
 
@@ -145,6 +152,7 @@ export async function calculateUserProgress(
   ])
 
   const userCompletedLessonsSet = new Set(progressRecords.map((p) => p.lesson_id))
+  const passedAssessmentIds = new Set(attempts.filter((attempt) => attempt.passed).map((attempt) => attempt.assessment_id))
 
   // Group latest attempt by assessment_id (attempts are sorted by submitted_at desc)
   const latestAttemptMap = new Map<string, any>()
@@ -180,7 +188,9 @@ export async function calculateUserProgress(
     totalCoursePercentSum += progressPercent
 
     const allVideosDone = c.totalLessons > 0 && courseDoneCount >= c.totalLessons
-    const isCompleted = allVideosDone
+    const lessonQuizzesPassed = c.lessonAssessmentIds.every((assessmentId) => passedAssessmentIds.has(assessmentId))
+    const finalExamPassed = !c.finalAssessmentId || passedAssessmentIds.has(c.finalAssessmentId)
+    const isCompleted = allVideosDone && lessonQuizzesPassed && finalExamPassed
     if (isCompleted) {
       completedCoursesCount++
     }
@@ -198,9 +208,12 @@ export async function calculateUserProgress(
       completedLessons: courseDoneCount,
       progressPercent,
       allVideosDone,
-      hasAssessment: c.hasAssessment,
-      assessmentId: c.assessmentId,
-      latestAttempt: c.assessmentId ? latestAttemptMap.get(c.assessmentId) || null : null,
+      hasAssessment: Boolean(c.finalAssessmentId),
+      hasFinalAssessment: Boolean(c.finalAssessmentId),
+      hasLessonAssessments: c.lessonAssessmentIds.length > 0,
+      lessonAssessmentsPassed: lessonQuizzesPassed,
+      assessmentId: c.finalAssessmentId,
+      latestAttempt: c.finalAssessmentId ? latestAttemptMap.get(c.finalAssessmentId) || null : null,
       isCompleted,
       state,
     }
@@ -212,9 +225,6 @@ export async function calculateUserProgress(
   const avgCourseProgressPercent =
     sys.totalCourses > 0 ? Math.round(totalCoursePercentSum / sys.totalCourses) : 0
 
-  // Standard Leaderboard formula: 40% lesson progress + 60% average quiz score
-  const leaderboardPoint = Math.round(overallProgressPercent * 0.4 + avgQuizScore * 0.6)
-
   return {
     userId,
     completedLessons,
@@ -224,7 +234,6 @@ export async function calculateUserProgress(
     completedCourses: completedCoursesCount,
     totalCourses: sys.totalCourses,
     avgQuizScore,
-    leaderboardPoint,
     courses: coursesDetail,
   }
 }
@@ -279,6 +288,7 @@ export async function calculateBatchUsersProgress(
 
   // Group attempts by user & assessment (allAttempts are sorted by submitted_at desc)
   const userAttemptsMap = new Map<string, Map<string, any>>()
+  const userPassedAssessmentMap = new Map<string, Set<string>>()
   for (const a of allAttempts) {
     let uAssessMap = userAttemptsMap.get(a.user_id)
     if (!uAssessMap) {
@@ -288,11 +298,20 @@ export async function calculateBatchUsersProgress(
     if (!uAssessMap.has(a.assessment_id)) {
       uAssessMap.set(a.assessment_id, a)
     }
+    if (a.passed) {
+      let passed = userPassedAssessmentMap.get(a.user_id)
+      if (!passed) {
+        passed = new Set()
+        userPassedAssessmentMap.set(a.user_id, passed)
+      }
+      passed.add(a.assessment_id)
+    }
   }
 
   for (const uid of userIds) {
     const userCompletedLessonsSet = userProgressMap.get(uid) || new Set()
     const uAssessMap = userAttemptsMap.get(uid)
+    const passedAssessmentIds = userPassedAssessmentMap.get(uid) || new Set<string>()
     let totalScore = 0
     let count = 0
     if (uAssessMap) {
@@ -320,7 +339,9 @@ export async function calculateBatchUsersProgress(
       totalCoursePercentSum += progressPercent
 
       const allVideosDone = c.totalLessons > 0 && courseDoneCount >= c.totalLessons
-      if (allVideosDone) {
+      const lessonQuizzesPassed = c.lessonAssessmentIds.every((assessmentId) => passedAssessmentIds.has(assessmentId))
+      const finalExamPassed = !c.finalAssessmentId || passedAssessmentIds.has(c.finalAssessmentId)
+      if (allVideosDone && lessonQuizzesPassed && finalExamPassed) {
         completedCoursesCount++
       }
     }
@@ -330,8 +351,6 @@ export async function calculateBatchUsersProgress(
       sys.totalLessons > 0 ? Math.round((completedLessons / sys.totalLessons) * 100) : 0
     const avgCourseProgressPercent =
       sys.totalCourses > 0 ? Math.round(totalCoursePercentSum / sys.totalCourses) : 0
-    const leaderboardPoint = Math.round(overallProgressPercent * 0.4 + avgQuizScore * 0.6)
-
     resultMap.set(uid, {
       userId: uid,
       completedLessons,
@@ -341,7 +360,6 @@ export async function calculateBatchUsersProgress(
       completedCourses: completedCoursesCount,
       totalCourses: sys.totalCourses,
       avgQuizScore,
-      leaderboardPoint,
     })
   }
 

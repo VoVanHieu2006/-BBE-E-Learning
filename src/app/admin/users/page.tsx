@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
@@ -38,6 +38,10 @@ export default function AdminUsersPage() {
 
   const [actionUserId, setActionUserId] = useState<string | null>(null);
   const [selectedUserDetail, setSelectedUserDetail] = useState<any | null>(null);
+  const [learningDetail, setLearningDetail] = useState<any | null>(null);
+  const [learningDetailLoading, setLearningDetailLoading] = useState(false);
+  const [learningDetailError, setLearningDetailError] = useState('');
+  const learningDetailRequestId = useRef(0);
   const [confirmStatusModal, setConfirmStatusModal] = useState<{
     user: any;
     nextStatus: 'ACTIVE' | 'INACTIVE';
@@ -137,6 +141,34 @@ export default function AdminUsersPage() {
   const handleOpenConfirmModal = (targetUser: any) => {
     const nextStatus = targetUser.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
     setConfirmStatusModal({ user: targetUser, nextStatus });
+  };
+
+  const handleOpenUserDetail = async (user: any) => {
+    const requestId = ++learningDetailRequestId.current;
+    setSelectedUserDetail(user);
+    setLearningDetail(null);
+    setLearningDetailError('');
+    setLearningDetailLoading(false);
+    const userId = user.userId || user.id;
+    const chapterId = user.chapter?.chapterId || user.chapter?.id || 'all';
+    if (user.role !== 'MEMBER') return;
+
+    setLearningDetailLoading(true);
+    const result = await apiFetch(`/api/v1/chapters/${chapterId}/members/${userId}/course-progress`, { noCache: true });
+    if (requestId !== learningDetailRequestId.current) return;
+    if (result.ok && result.data) {
+      setLearningDetail(result.data);
+    } else {
+      setLearningDetailError(result.error?.message || 'Không thể tải tiến độ học tập chi tiết.');
+    }
+    setLearningDetailLoading(false);
+  };
+
+  const handleCloseUserDetail = () => {
+    learningDetailRequestId.current += 1;
+    setSelectedUserDetail(null);
+    setLearningDetail(null);
+    setLearningDetailLoading(false);
   };
 
   const handleExecuteStatusToggle = async () => {
@@ -499,7 +531,7 @@ export default function AdminUsersPage() {
                         <td className="px-6 py-4 text-right">
                           <div className="flex items-center justify-end gap-2">
                             <button
-                              onClick={() => setSelectedUserDetail(u)}
+                              onClick={() => void handleOpenUserDetail(u)}
                               className="px-2.5 py-1 text-xs font-semibold text-[#2563EB] hover:bg-blue-50 rounded-lg transition"
                             >
                               Xem chi tiết
@@ -654,8 +686,8 @@ export default function AdminUsersPage() {
         {/* Modal: User Detail View */}
         <Modal
           isOpen={Boolean(selectedUserDetail)}
-          onClose={() => setSelectedUserDetail(null)}
-          maxWidth="max-w-lg"
+          onClose={handleCloseUserDetail}
+          maxWidth="max-w-4xl"
         >
           {selectedUserDetail && (
             <div className="p-6 space-y-5 max-h-[90vh] overflow-y-auto">
@@ -667,7 +699,7 @@ export default function AdminUsersPage() {
                   <p className="text-xs text-[#737686]">{selectedUserDetail.email}</p>
                 </div>
                 <button
-                  onClick={() => setSelectedUserDetail(null)}
+                  onClick={handleCloseUserDetail}
                   className="text-[#737686] hover:text-[#172554] text-xl font-bold p-1 rounded-lg hover:bg-slate-100 transition"
                 >
                   ✕
@@ -740,17 +772,92 @@ export default function AdminUsersPage() {
                 </div>
               </div>
 
+              {selectedUserDetail.role === 'MEMBER' && (
+                <section className="space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <h4 className="font-bold text-[#172554]">Tiến độ học chi tiết</h4>
+                      <p className="text-xs text-[#737686]">Trạng thái video, điểm/lần làm quiz và sao đã nhận.</p>
+                    </div>
+                    {learningDetail?.summary && (
+                      <span className="rounded-full bg-amber-50 px-3 py-1 text-sm font-bold text-amber-700">
+                        ⭐ {learningDetail.summary.stars} sao
+                      </span>
+                    )}
+                  </div>
+
+                  {learningDetailLoading ? (
+                    <div className="rounded-xl bg-[#f8f9ff] p-5 text-sm text-[#737686] animate-pulse">Đang tải tiến độ học tập…</div>
+                  ) : learningDetailError ? (
+                    <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{learningDetailError}</div>
+                  ) : learningDetail ? (
+                    <div className="max-h-[42vh] space-y-3 overflow-y-auto pr-1">
+                      {(learningDetail.learningDetail || []).map((course: any) => (
+                        <details key={course.courseId} className="rounded-2xl border border-[#eff4ff] bg-white" open>
+                          <summary className="cursor-pointer px-4 py-3 font-bold text-[#172554]">{course.title}</summary>
+                          <div className="space-y-3 px-4 pb-4">
+                            {course.finalAssessment && (
+                              <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-3 text-sm">
+                                <div className="font-semibold text-[#172554]">Bài thi cuối khóa: {course.finalAssessment.title}</div>
+                                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#596174]">
+                                  <span>{course.finalAssessment.latestAttempt
+                                    ? `Lần ${course.finalAssessment.latestAttempt.number}/${course.finalAssessment.attemptCount} · ${course.finalAssessment.latestAttempt.scorePercent ?? '—'}% · ${course.finalAssessment.latestAttempt.passed ? 'Đạt' : 'Chưa đạt'}`
+                                    : `Chưa nộp bài (${course.finalAssessment.attemptCount} lần)`}</span>
+                                  <span>⭐ {course.finalAssessment.stars || 0} sao</span>
+                                  {course.finalAssessment.latestAttempt?.submittedAt && <span>Nộp lúc {new Date(course.finalAssessment.latestAttempt.submittedAt).toLocaleString('vi-VN')}</span>}
+                                </div>
+                              </div>
+                            )}
+                            {(course.modules || []).map((module: any) => (
+                              <div key={module.moduleId} className="rounded-xl bg-[#f8f9ff] p-3">
+                                <h5 className="mb-2 text-sm font-semibold text-[#172554]">{module.title}</h5>
+                                <div className="space-y-2">
+                                  {(module.lessons || []).map((lesson: any) => (
+                                    <div key={lesson.lessonId} className="rounded-lg border border-[#eff4ff] bg-white p-3 text-sm">
+                                      <div className="font-semibold text-[#172554]">{lesson.title}</div>
+                                      {lesson.video && (
+                                        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#596174]">
+                                          <span>{lesson.video.title}: {lesson.video.completed ? 'Hoàn thành 100%' : `Đã xem ${lesson.video.watchedPercent}%`}</span>
+                                          <span>{lesson.video.watchedSeconds}s / {lesson.video.durationSeconds}s</span>
+                                          <span>⭐ {lesson.video.stars} sao</span>
+                                          {lesson.video.completedAt && <span>Hoàn thành lúc {new Date(lesson.video.completedAt).toLocaleString('vi-VN')}</span>}
+                                        </div>
+                                      )}
+                                      {lesson.quiz && (
+                                        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-slate-100 pt-2 text-xs text-[#596174]">
+                                          <span>{lesson.quiz.title}: {lesson.quiz.latestAttempt ? `${lesson.quiz.latestAttempt.scorePercent ?? '—'}% · ${lesson.quiz.latestAttempt.passed ? 'Đạt' : 'Chưa đạt'}` : 'Chưa nộp bài'}</span>
+                                          <span>{lesson.quiz.attemptCount} lần nộp</span>
+                                          <span>⭐ {lesson.quiz.stars} sao</span>
+                                          {lesson.quiz.latestAttempt?.submittedAt && <span>Nộp lúc {new Date(lesson.quiz.latestAttempt.submittedAt).toLocaleString('vi-VN')}</span>}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </details>
+                      ))}
+                      {learningDetail.learningDetail?.length === 0 && <p className="rounded-xl bg-[#f8f9ff] p-4 text-sm text-[#737686]">Chưa có khóa học đã xuất bản.</p>}
+                    </div>
+                  ) : (
+                    <div className="rounded-xl bg-[#f8f9ff] p-4 text-sm text-[#737686]">Tài khoản này chưa được gán Chapter hoặc không có dữ liệu tiến độ thành viên.</div>
+                  )}
+                </section>
+              )}
+
               <div className="flex justify-end gap-3 pt-3 border-t border-[#eff4ff]">
                 <Button
                   variant={selectedUserDetail.status === 'ACTIVE' ? 'danger' : 'primary'}
                   onClick={() => {
                     handleOpenConfirmModal(selectedUserDetail);
-                    setSelectedUserDetail(null);
+                    handleCloseUserDetail();
                   }}
                 >
                   {selectedUserDetail.status === 'ACTIVE' ? 'Vô hiệu hóa tài khoản' : 'Kích hoạt tài khoản'}
                 </Button>
-                <Button variant="secondary" onClick={() => setSelectedUserDetail(null)}>
+                <Button variant="secondary" onClick={handleCloseUserDetail}>
                   Đóng
                 </Button>
               </div>

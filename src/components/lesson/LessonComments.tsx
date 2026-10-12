@@ -95,8 +95,7 @@ export default function LessonComments({
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const currentUserId = currentUser?.id || currentUser?.userId;
-  const isLeaderOrAdmin =
-    currentUser?.role === 'ADMIN' || currentUser?.role === 'CHAPTER_LEADER';
+  const isAdmin = currentUser?.role === 'ADMIN';
 
   useEffect(() => {
     loadComments();
@@ -110,6 +109,7 @@ export default function LessonComments({
     try {
       const res = await fetch(`/api/v1/lessons/${lessonId}/comments`, {
         cache: 'no-store',
+        headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
       });
       const data = await res.json();
       if (res.ok && data.comments) {
@@ -367,7 +367,7 @@ export default function LessonComments({
         <div className="space-y-6 pt-2">
           {comments.map((comment) => {
             const isAuthor = currentUserId && comment.userId === currentUserId;
-            const canDelete = isAuthor || isLeaderOrAdmin;
+            const canDelete = isAuthor || isAdmin;
             const isReplyingThis = replyingToId === comment.id;
 
             return (
@@ -489,7 +489,7 @@ export default function LessonComments({
                         {comment.replies.map((reply) => {
                           const isReplyAuthor =
                             currentUserId && reply.userId === currentUserId;
-                          const canDeleteReply = isReplyAuthor || isLeaderOrAdmin;
+                          const canDeleteReply = isReplyAuthor || isAdmin;
 
                           return (
                             <div key={reply.id} className="flex items-start gap-2.5 group/reply">

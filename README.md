@@ -52,3 +52,10 @@ Chi tiết các tài liệu phân tích nghiệp vụ và kỹ thuật khác:
 - [BA Document](file:///c:/Users/Acer/Desktop/E-learning/docs/ba-document.md)
 - [Codebase Context](file:///c:/Users/Acer/Desktop/E-learning/docs/codebase-context.md)
 - [API Design](file:///c:/Users/Acer/Desktop/E-learning/docs/api-design.md)
+
+## Deadline scheduler
+
+For Vercel deployment, set `CRON_SECRET` to a long random value. `vercel.json` invokes
+`/api/internal/learning/deadlines/enforce` daily at 00:00 UTC. The endpoint marks overdue
+mandatory assignments as `OVERDUE`, locks the account, and writes a `DEADLINE` restriction.
+Only an Admin can lift that restriction.

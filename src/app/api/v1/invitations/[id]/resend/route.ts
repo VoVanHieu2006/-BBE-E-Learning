@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { resendInvitation } from '@/lib/invitations'
 import { invalidateInvitationsServerCache } from '@/lib/server-cache'
+import { prisma } from '@/lib/prisma'
+import { canAccessOrganizationUnitPermission } from '@/lib/authorization'
+import { isOrganizationId } from '@/lib/organization-admin-rules'
 
 export async function POST(request: NextRequest) {
   const auth = await authenticate(request)
@@ -16,7 +19,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: { code: 'ValidationError', message: 'Thiếu invitationId' } }, { status: 400 })
   }
 
-  const result = await resendInvitation(invitationId, (auth as any).context!.userId, (auth as any).context!.role)
+  if (!isOrganizationId(invitationId)) return NextResponse.json({ error: { code: 'ValidationError' } }, { status: 400 })
+  const context = auth.context!
+  if (context.role !== 'ADMIN') {
+    const invitation = await prisma.invitation.findUnique({ where: { id: invitationId }, include: { chapter: { select: { organization_unit_id: true } } } })
+    if (!invitation) return NextResponse.json({ error: { code: 'InvitationNotFound' } }, { status: 404 })
+    const scopeUnitId = invitation.organization_unit_id || invitation.chapter?.organization_unit_id
+    if (!scopeUnitId || !await canAccessOrganizationUnitPermission(context, scopeUnitId, 'MANAGE_CHAPTER_MEMBERS')) {
+      return NextResponse.json({ error: { code: 'AccessDenied' } }, { status: 403 })
+    }
+  }
+  const result = await resendInvitation(invitationId, context.userId, context.role, context.role !== 'ADMIN')
 
   if (!result.ok) {
     return NextResponse.json(

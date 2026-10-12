@@ -59,6 +59,7 @@ export async function GET(request: NextRequest) {
       visibility: c.visibility,
       sessionCount: c._count.sessions,
       publishedAt: c.published_at,
+      coverUrl: c.cover_url,
     })),
     totalItems,
     totalPages: Math.ceil(totalItems / limit),
@@ -80,7 +81,7 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json().catch(() => ({}))
-  const { title, description, visibility } = body
+  const { title, description, visibility, coverUrl } = body
 
   if (!title || typeof title !== 'string' || title.trim().length < 2) {
     return NextResponse.json({ error: { code: 'ValidationError', message: 'Tiêu đề khóa học phải từ 2 ký tự trở lên' } }, { status: 400 })
@@ -94,6 +95,7 @@ export async function POST(request: NextRequest) {
       description: description?.trim() || null,
       visibility: courseVisibility,
       status: 'DRAFT',
+      cover_url: typeof coverUrl === 'string' && /^https:\/\//.test(coverUrl) ? coverUrl : null,
       created_by: (auth as any).context!.userId,
     },
   })
@@ -107,6 +109,7 @@ export async function POST(request: NextRequest) {
     description: course.description,
     status: course.status,
     visibility: course.visibility,
+    coverUrl: course.cover_url,
     createdAt: course.created_at,
   }, { status: 201 })
 }

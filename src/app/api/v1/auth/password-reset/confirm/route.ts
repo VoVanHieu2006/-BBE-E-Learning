@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
+import { invalidateUserAuthCache } from '@/lib/auth'
+import { hasActiveAccountRestrictions } from '@/lib/account-restrictions'
 
 /**
  * POST /api/v1/auth/password-reset/confirm
@@ -50,15 +52,19 @@ export async function POST(request: NextRequest) {
     // Success — update password
     const passwordHash = await bcrypt.hash(newPassword, 12)
 
-    // Use transaction: update password, set token used, reset failed_login, unlock if LOCKED
+    // A password reset can clear a brute-force lock, but must never bypass an
+    // auditable Admin/deadline/Chapter restriction. Only the Admin restriction
+    // endpoint is allowed to lift those restrictions.
     await prisma.$transaction(async (tx) => {
+      const hasActiveRestrictions = await hasActiveAccountRestrictions(resetRecord.user_id, tx)
       await tx.user.update({
         where: { id: resetRecord.user_id },
         data: {
           password_hash: passwordHash,
-          status: 'ACTIVE',
+          status: hasActiveRestrictions ? 'LOCKED' : resetRecord.user.status === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE',
           failed_login_count: 0,
           locked_until: null,
+          auth_version: { increment: 1 },
         },
       })
 
@@ -67,6 +73,7 @@ export async function POST(request: NextRequest) {
         data: { used_at: new Date() },
       })
     })
+    invalidateUserAuthCache(resetRecord.user_id)
 
     console.log(`[AUTH] Password reset successful for user: ${resetRecord.user.email}`)
 

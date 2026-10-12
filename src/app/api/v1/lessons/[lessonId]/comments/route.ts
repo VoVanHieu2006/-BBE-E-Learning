@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticate } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { checkLessonProgression } from '@/lib/progression';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -12,6 +13,18 @@ export async function GET(
 ) {
   try {
     const { lessonId } = params;
+    const auth = await authenticate(request);
+    if (!auth.ok || !auth.context) {
+      return NextResponse.json(
+        { error: auth.error || { code: 'Unauthorized', message: 'Vui lòng đăng nhập để xem thảo luận.' } },
+        { status: 401 },
+      );
+    }
+
+    const gate = await checkLessonProgression(auth.context.userId, lessonId, 'VIEW', auth.context.role === 'ADMIN');
+    if (gate.ok === false) {
+      return NextResponse.json({ error: { code: gate.code, message: gate.message } }, { status: 403 });
+    }
 
     const comments = await prisma.lessonComment.findMany({
       where: {
@@ -122,6 +135,11 @@ export async function POST(
         { error: { code: 'NotFound', message: 'Bài học không tồn tại' } },
         { status: 404 }
       );
+    }
+
+    const gate = await checkLessonProgression(auth.context.userId, lessonId, 'VIEW', auth.context.role === 'ADMIN');
+    if (gate.ok === false) {
+      return NextResponse.json({ error: { code: gate.code, message: gate.message } }, { status: 403 });
     }
 
     let resolvedParentId: string | null = null;

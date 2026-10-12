@@ -35,6 +35,7 @@ export async function GET(request: NextRequest) {
     email: result.email,
     role: result.role,
     chapterName: result.chapterName,
+    organizationUnitId: result.organizationUnitId || null,
     expiresAt: result.expiresAt.toISOString(),
   }, { status: 200 })
 }

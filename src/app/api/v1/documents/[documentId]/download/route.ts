@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { checkLessonProgression } from '@/lib/progression'
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 
@@ -15,6 +16,10 @@ const s3 = new S3Client({
 
 export async function GET(request: NextRequest, { params }: { params: { documentId: string } }) {
   const auth = await authenticate(request).catch(() => ({ ok: false, error: { code: 'UNAUTHORIZED', message: 'Auth error' } }))
+  if (!auth.ok || !(auth as any).context) {
+    return NextResponse.json({ error: { code: 'AccessDenied', message: 'Vui lòng đăng nhập để tải tài liệu.' } }, { status: 401 })
+  }
+  const context = (auth as any).context!
 
   const doc = await prisma.document.findUnique({
     where: { id: params.documentId },
@@ -38,17 +43,17 @@ export async function GET(request: NextRequest, { params }: { params: { document
   }
 
   const course = doc.lesson?.session?.course
-  const isPublicCourse = course?.visibility === 'PUBLIC' && course?.status === 'PUBLISHED'
 
-  // If course is Private, require active authenticated account
-  if (!isPublicCourse) {
-    if (!auth.ok || (auth as any).context?.role === undefined) {
-      return NextResponse.json({ error: { code: 'AccessDenied', message: 'Cần đăng nhập để tải tài liệu của khóa học nội bộ' } }, { status: 403 })
-    }
-
-    const user = await prisma.user.findUnique({ where: { id: (auth as any).context!.userId } })
-    if (!user || user.status !== 'ACTIVE') {
-      return NextResponse.json({ error: { code: 'AccessDenied', message: 'Tài khoản phải ở trạng thái Active' } }, { status: 403 })
+  if (!course || !doc.lesson) {
+    return NextResponse.json({ error: { code: 'DocumentNotFound' } }, { status: 404 })
+  }
+  if (course.status !== 'PUBLISHED' && context.role !== 'ADMIN') {
+    return NextResponse.json({ error: { code: 'AccessDenied', message: 'Khóa học chưa được xuất bản.' } }, { status: 403 })
+  }
+  if (context.role !== 'ADMIN') {
+    const gate = await checkLessonProgression(context.userId, doc.lesson_id, 'VIEW')
+    if (gate.ok === false) {
+      return NextResponse.json({ error: { code: gate.code, message: gate.message } }, { status: 403 })
     }
   }
 

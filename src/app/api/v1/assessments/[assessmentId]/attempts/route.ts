@@ -1,6 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { checkCourseFinalProgression, checkLessonProgression } from '@/lib/progression'
+import { hasWatchedFullVideo } from '@/lib/video-progress-rules'
+import { selectQuizQuestions } from '@/lib/quiz-pool-selection'
+import { randomInt } from 'crypto'
+
+function shuffleSecurely<T>(items: readonly T[]): T[] {
+  const shuffled = [...items]
+  for (let index = shuffled.length - 1; index > 0; index--) {
+    const swapIndex = randomInt(index + 1)
+    ;[shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]]
+  }
+  return shuffled
+}
 
 /**
  * POST /api/v1/assessments/{assessmentId}/attempts
@@ -10,7 +23,6 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
   const auth = await authenticate(request)
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: 401 })
 
-  const role = (auth as any).context!.role
   const userId = (auth as any).context!.userId
   const assessmentId = params.assessmentId
 
@@ -23,7 +35,9 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
     where: { id: assessmentId },
     select: {
       id: true,
+      type: true,
       lesson_id: true,
+      course_id: true,
       lesson: {
         select: {
           id: true,
@@ -34,8 +48,24 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
   })
   if (!assessment) return NextResponse.json({ error: { code: 'AssessmentNotFound' } }, { status: 404 })
 
-  // For members, verify video of this lesson has been watched
-  if (role === 'MEMBER') {
+  const isAdmin = (auth as any).context!.role === 'ADMIN'
+  const gate = assessment.type === 'COURSE_FINAL' && assessment.course_id
+    ? await checkCourseFinalProgression(userId, assessment.course_id, isAdmin)
+    : assessment.lesson_id
+      ? await checkLessonProgression(userId, assessment.lesson_id, 'ASSESS', isAdmin)
+      : { ok: false as const, code: 'InvalidAssessmentOwner', message: 'Assessment owner is missing.' }
+  if (gate.ok === false) return NextResponse.json({ error: { code: gate.code, message: gate.message } }, { status: 403 })
+
+  if (assessment.type === 'COURSE_FINAL') {
+    const alreadyPassed = await prisma.attempt.findFirst({
+      where: { assessment_id: assessmentId, user_id: userId, passed: true, status: { in: ['SUBMITTED', 'AUTO_SUBMITTED'] } },
+      select: { id: true },
+    })
+    if (alreadyPassed) return NextResponse.json({ error: { code: 'AssessmentAlreadyPassed', message: 'Bạn đã đạt bài thi cuối khóa này.' } }, { status: 409 })
+  }
+
+  // No staff bypass: everyone must complete the prerequisite video.
+  if (assessment.lesson_id && assessment.lesson) {
     const prog = await prisma.lessonProgress.findUnique({
       where: {
         user_id_lesson_id: {
@@ -44,12 +74,12 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
         },
       },
     })
-    const videoDuration = assessment.lesson.video?.duration_seconds || 0
+    const video = assessment.lesson.video
     const furthest = prog?.furthest_watched_position_seconds || 0
-    const watchedEnough = prog?.completed || (videoDuration > 0 && furthest >= videoDuration * 0.85) || videoDuration === 0
+    const watchedEnough = !video || hasWatchedFullVideo(furthest, video.duration_seconds)
     if (!watchedEnough) {
       return NextResponse.json({
-        error: { code: 'VideoNotWatched', message: 'Bạn cần xem ít nhất 85% video bài giảng trước khi làm bài kiểm tra' },
+      error: { code: 'VideoNotCompleted', message: 'Bạn cần xem hoàn tất 100% video bài giảng trước khi làm bài kiểm tra' },
       }, { status: 403 })
     }
   }
@@ -100,36 +130,56 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
     },
   })
 
-  // 3. Kiểm tra xem có bài thi nào ĐANG còn trong thời hạn hay không
-  const active = await prisma.attempt.findFirst({
-    where: { assessment_id: assessmentId, user_id: userId, status: 'IN_PROGRESS' },
-  })
-  if (active) {
-    // If not expired, return active attempt questions
-    if (new Date() < active.expires_at) {
-      const activeQuestions = await prisma.attemptQuestion.findMany({
-        where: { attempt_id: active.id },
-        include: { question: { include: { options: true } } },
-        orderBy: { display_order: 'asc' },
-      })
+  const body = await request.json().catch(() => ({}))
+  const forceNew = body?.forceNew === true
 
-      return NextResponse.json({
-        attemptId: active.id,
-        id: active.id,
-        attemptNumber: active.attempt_number,
-        expiresAt: active.expires_at,
-        questions: activeQuestions.map((aq) => ({
-          questionId: aq.question.id,
-          id: aq.question.id,
-          questionText: aq.question.question_text,
-          points: aq.question.points,
-          options: aq.question.options.map((o) => ({
-            optionId: o.id,
-            id: o.id,
-            optionText: o.option_text,
+  // 3. Kiểm tra xem có bài thi nào ĐANG còn trong thời hạn hay không (nếu không forceNew)
+  if (!forceNew) {
+    const active = await prisma.attempt.findFirst({
+      where: { assessment_id: assessmentId, user_id: userId, status: 'IN_PROGRESS' },
+    })
+    if (active) {
+      // If not expired, return active attempt questions
+      if (new Date() < active.expires_at) {
+        const [activeQuestions, existingAnswers] = await Promise.all([
+          prisma.attemptQuestion.findMany({
+            where: { attempt_id: active.id },
+            include: { question: { include: { options: true } } },
+            orderBy: { display_order: 'asc' },
+          }),
+          prisma.attemptAnswer.findMany({
+            where: { attempt_id: active.id },
+            select: { question_id: true, selected_option_id: true },
+          }),
+        ])
+
+        const answersMap: Record<string, string> = {}
+        for (const ans of existingAnswers) {
+          if (ans.selected_option_id) {
+            answersMap[ans.question_id] = ans.selected_option_id
+          }
+        }
+
+        return NextResponse.json({
+          attemptId: active.id,
+          id: active.id,
+          attemptNumber: active.attempt_number,
+          expiresAt: active.expires_at,
+          isResumed: true,
+          existingAnswers: answersMap,
+          questions: activeQuestions.map((aq) => ({
+            questionId: aq.question.id,
+            id: aq.question.id,
+            questionText: aq.question.question_text,
+            points: aq.question.points,
+            options: aq.question.options.map((o) => ({
+              optionId: o.id,
+              id: o.id,
+              optionText: o.option_text,
+            })),
           })),
-        })),
-      }, { status: 200 })
+        }, { status: 200 })
+      }
     }
   }
 
@@ -142,9 +192,39 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
     return NextResponse.json({ error: { code: 'AssessmentNotFound', message: 'Assessment chưa có câu hỏi' } }, { status: 404 })
   }
 
-  const expiresAt = new Date(Date.now() + Math.max(5, questions.length * 2) * 60 * 1000)
+  // A configured assessment must have exactly five complete pools, and every
+  // question must belong to one of them. Never silently fall back to a normal quiz.
+  const questionPools = await prisma.questionPool.findMany({
+    where: { assessment_id: assessmentId },
+    select: { id: true },
+    orderBy: { sort_order: 'asc' },
+  })
+  const poolSelection = selectQuizQuestions(
+    questionPools,
+    questions.map((question) => ({ ...question, poolId: question.pool_id })),
+    shuffleSecurely,
+  )
+  if (poolSelection.ok === false) {
+    const messages = {
+      QuestionPoolCountInvalid: 'A pooled quiz must have exactly five question pools.',
+      QuestionPoolQuestionUnassigned: 'Every question must belong to one of the five configured pools.',
+      QuestionPoolIncomplete: 'Each of the five question pools needs at least three questions.',
+    }
+    return NextResponse.json({ error: { code: poolSelection.code, message: messages[poolSelection.code] } }, { status: 422 })
+  }
+  const selectedQuestions = poolSelection.questions
+  const expiresAt = new Date(Date.now() + Math.max(5, selectedQuestions.length * 2) * 60 * 1000)
 
   const attempt = await prisma.$transaction(async (tx) => {
+    // Do not discard a resumable attempt until every prerequisite and the full
+    // question-pool configuration above have passed validation.
+    if (forceNew) {
+      await tx.attempt.updateMany({
+        where: { assessment_id: assessmentId, user_id: userId, status: 'IN_PROGRESS' },
+        data: { status: 'CANCELLED', submitted_at: new Date() },
+      })
+    }
+
     // Đếm CHỈ những bài đã nộp thành công để tính lượt làm bài
     const submittedCount = await tx.attempt.count({
       where: {
@@ -165,9 +245,8 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
       },
     })
 
-    const shuffledQuestions = [...questions].sort(() => Math.random() - 0.5)
     await tx.attemptQuestion.createMany({
-      data: shuffledQuestions.map((q, idx) => ({
+      data: selectedQuestions.map((q, idx) => ({
         attempt_id: a.id,
         question_id: q.id,
         display_order: idx,
@@ -177,12 +256,13 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
     return a
   })
 
-  const shuffledQs = [...questions].sort(() => Math.random() - 0.5).map((q) => ({
+  // Reuse precisely the same selection/order stored in AttemptQuestion.
+  const shuffledQs = selectedQuestions.map((q) => ({
     questionId: q.id,
     id: q.id,
     questionText: q.question_text,
     points: q.points,
-    options: [...q.options].sort(() => Math.random() - 0.5).map((o) => ({
+    options: shuffleSecurely(q.options).map((o) => ({
       optionId: o.id,
       id: o.id,
       optionText: o.option_text,
@@ -194,6 +274,8 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
     id: attempt.id,
     attemptNumber: attempt.attempt_number,
     expiresAt: attempt.expires_at,
+    isResumed: false,
+    existingAnswers: {},
     questions: shuffledQs,
   }, { status: 201 })
 }

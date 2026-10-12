@@ -46,12 +46,11 @@ export default function StudentProgressPage() {
   }
 
   const totalCourses = summary?.totalCourses ?? courses.length;
-  // Khóa học chỉ tính hoàn thành khi: nếu có bài kiểm tra thì phải học xong video VÀ đã pass bài test
   const completedCourses = summary?.completedCourses ?? courses.filter((c) => {
     const allVideosDone =
       (c.totalLessons > 0 && (c.completedLessons || 0) >= c.totalLessons) ||
       (c.progressPercentage || 0) >= 100;
-    return c.hasAssessment ? allVideosDone && c.latestAttempt?.passed : allVideosDone;
+    return Boolean(c.isCompleted ?? (allVideosDone && (c.lessonAssessmentsPassed ?? true) && (!c.hasFinalAssessment || c.latestAttempt?.passed)));
   }).length;
 
   return (
@@ -109,9 +108,11 @@ export default function StudentProgressPage() {
                 (c.totalLessons > 0 && (c.completedLessons || 0) >= c.totalLessons) ||
                 (c.progressPercentage || 0) >= 100;
               const hasAssessment = Boolean(c.hasAssessment);
+              const hasFinalExam = Boolean(c.hasFinalAssessment ?? c.assessmentId);
+              const lessonQuizzesPassed = c.lessonAssessmentsPassed ?? true;
               const latestAttempt = c.latestAttempt;
               const isPassed = Boolean(latestAttempt?.passed);
-              const isFullyDone = hasAssessment ? allVideosDone && isPassed : allVideosDone;
+              const isFullyDone = Boolean(c.isCompleted ?? (allVideosDone && lessonQuizzesPassed && (!hasFinalExam || isPassed)));
 
               return (
                 <Card key={courseId} className="p-6 transition-all hover:shadow-md border border-[#eff4ff]">
@@ -142,17 +143,17 @@ export default function StudentProgressPage() {
                         <span className="text-xs font-bold px-3 py-1 rounded-full bg-blue-100 text-blue-700">
                           Đang học
                         </span>
-                      ) : !hasAssessment ? (
+                      ) : !lessonQuizzesPassed ? (
+                        <span className="text-xs font-bold px-3 py-1 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
+                          📝 Cần đạt quiz từng bài
+                        </span>
+                      ) : hasFinalExam && !isPassed ? (
+                        <span className="text-xs font-bold px-3 py-1 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
+                          📝 Cần thi cuối khóa
+                        </span>
+                      ) : isFullyDone ? (
                         <span className="text-xs font-bold px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
                           ✓ Hoàn thành
-                        </span>
-                      ) : !latestAttempt ? (
-                        <span className="text-xs font-bold px-3 py-1 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
-                          📝 Cần làm bài kiểm tra
-                        </span>
-                      ) : isPassed ? (
-                        <span className="text-xs font-bold px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
-                          ✓ Hoàn thành (Đã pass)
                         </span>
                       ) : (
                         <span className="text-xs font-bold px-3 py-1 rounded-full bg-rose-100 text-rose-700 border border-rose-200">
@@ -165,44 +166,27 @@ export default function StudentProgressPage() {
                         <Link href={`/student/courses/${courseId}`}>
                           <Button size="sm">Tiếp tục học →</Button>
                         </Link>
-                      ) : !hasAssessment ? (
+                      ) : !lessonQuizzesPassed ? (
                         <Link href={`/student/courses/${courseId}`}>
-                          <Button size="sm" variant="outline">
-                            Ôn tập lại
+                          <Button size="sm" className="bg-[#F97316] hover:bg-[#ea580c] text-white">
+                            Hoàn tất quiz từng bài
                           </Button>
                         </Link>
-                      ) : !latestAttempt ? (
-                        // Học xong video nhưng CHƯA LÀM bài kiểm tra -> Nút "Làm bài kiểm tra"
+                      ) : hasFinalExam && !isPassed ? (
                         <div className="flex items-center gap-2">
-                          <Link href={`/student/courses/${courseId}/quiz${c.assessmentId ? `?assessmentId=${c.assessmentId}` : ''}`}>
+                          <Link href={`/student/courses/${courseId}/quiz`}>
                             <Button size="sm" className="bg-[#F97316] hover:bg-[#ea580c] text-white shadow-sm font-bold">
-                              📝 Làm bài kiểm tra
+                              {latestAttempt ? '🔄 Thi lại cuối khóa' : '📝 Thi cuối khóa'}
                             </Button>
                           </Link>
                           <Link href={`/student/courses/${courseId}`}>
-                            <Button size="sm" variant="outline">
-                              Ôn tập lại
-                            </Button>
+                            <Button size="sm" variant="outline">Ôn tập</Button>
                           </Link>
                         </div>
                       ) : (
-                        // ĐÃ LÀM bài kiểm tra -> Nút "Làm lại bài kiểm tra" + "Ôn tập lại"
-                        <div className="flex items-center gap-2">
-                          <Link href={`/student/courses/${courseId}/quiz${c.assessmentId ? `?assessmentId=${c.assessmentId}` : ''}`}>
-                            <Button
-                              size="sm"
-                              variant={isPassed ? 'secondary' : 'primary'}
-                              className="font-bold shadow-sm"
-                            >
-                              🔄 Làm lại bài kiểm tra
-                            </Button>
-                          </Link>
-                          <Link href={`/student/courses/${courseId}`}>
-                            <Button size="sm" variant={isPassed ? 'outline' : 'outline'}>
-                              Ôn tập lại
-                            </Button>
-                          </Link>
-                        </div>
+                        <Link href={`/student/courses/${courseId}`}>
+                          <Button size="sm" variant="outline">Ôn tập lại</Button>
+                        </Link>
                       )}
                     </div>
                   </div>
@@ -216,7 +200,7 @@ export default function StudentProgressPage() {
                       </div>
 
                       {/* Hiển thị điểm số lần cuối cùng + pass/chưa pass */}
-                      {allVideosDone && hasAssessment && latestAttempt && (
+                      {allVideosDone && hasFinalExam && latestAttempt && (
                         <div className="flex items-center gap-2 text-xs font-semibold">
                           <span className="text-[#737686]">Điểm lần cuối cùng:</span>
                           <span
@@ -232,7 +216,7 @@ export default function StudentProgressPage() {
                       )}
 
                       {/* Thông báo nếu chưa làm bài kiểm tra */}
-                      {allVideosDone && hasAssessment && !latestAttempt && (
+                      {allVideosDone && hasFinalExam && lessonQuizzesPassed && !latestAttempt && (
                         <span className="text-xs text-amber-700 font-medium italic">
                           * Cần làm bài kiểm tra (đạt ≥ 85%) để được đánh dấu hoàn thành khóa học
                         </span>

@@ -2,14 +2,18 @@ import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { sendMemberInvitation } from '@/lib/invitations'
 import { invalidateInvitationsServerCache } from '@/lib/server-cache'
+import { canAccessChapterPermission } from '@/lib/authorization'
+import { canAccessOrganizationUnitPermission } from '@/lib/authorization'
+import { prisma } from '@/lib/prisma'
+import { isOrganizationId } from '@/lib/organization-admin-rules'
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 /**
  * POST /api/v1/invitations/member
  * Send invitation to a member.
- * Only CHAPTER_LEADER is allowed to invite members into their chapter.
- * Admin cannot invite members (BA-01).
+ * Scoped organization managers may invite ordinary members into their unit.
+ * Admin member invitations continue to use the separate Admin invitation flow.
  */
 export async function POST(request: NextRequest) {
   const auth = await authenticate(request)
@@ -17,31 +21,45 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: auth.error }, { status: 401 })
   }
 
-  const role = (auth as any).context!.role
-  if (role !== 'CHAPTER_LEADER') {
-    return NextResponse.json(
-      {
-        error: {
-          code: 'AccessDenied',
-          message: 'Chỉ Ban Định Hướng (BĐHU) mới có quyền gửi lời mời thành viên vào Chapter của mình',
-        },
-      },
-      { status: 403 }
-    )
+  const context = auth.context!
+  const role = context.role
+  const body = await request.json().catch(() => null)
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return NextResponse.json({ error: { code: 'ValidationError' } }, { status: 400 })
+  const requestedChapterId = typeof body.chapterId === 'string' ? body.chapterId : undefined
+  let chapterId = role === 'CHAPTER_LEADER' ? undefined : requestedChapterId
+  let organizationUnitId: string | undefined
+  if (body.organizationUnitId !== undefined) {
+    if (role === 'ADMIN' || chapterId || (typeof body.chapterId === 'string' && body.chapterId.trim()) || !isOrganizationId(body.organizationUnitId)) {
+      return NextResponse.json({ error: { code: 'ValidationError', message: 'Choose one valid organization unit scope.' } }, { status: 400 })
+    }
+    const unit = await prisma.organizationUnit.findUnique({ where: { id: body.organizationUnitId }, select: { id: true, type: true, status: true } })
+    if (!unit || unit.status !== 'ACTIVE' || !['DNA', 'CHAPTER', 'DEPARTMENT'].includes(unit.type)) {
+      return NextResponse.json({ error: { code: 'OrganizationUnitNotFound' } }, { status: 404 })
+    }
+    if (!await canAccessOrganizationUnitPermission(context, unit.id, 'MANAGE_CHAPTER_MEMBERS')) {
+      return NextResponse.json({ error: { code: 'AccessDenied' } }, { status: 403 })
+    }
+    organizationUnitId = unit.id
+    chapterId = undefined
   }
-
-  const chapterId = (auth as any).context!.chapterId
-  if (!chapterId) {
+  if (!organizationUnitId && role === 'CHAPTER_LEADER') chapterId = context.chapterId
+  if (!chapterId && !organizationUnitId) {
     return NextResponse.json(
       { error: { code: 'AccessDenied', message: 'Tài khoản BĐHU chưa được phân công Chapter' } },
       { status: 403 }
     )
   }
 
-  const body = await request.json().catch(() => ({}))
-  const { email } = body
+  if (organizationUnitId && role === 'ADMIN') {
+    return NextResponse.json({ error: { code: 'AccessDenied' } }, { status: 403 })
+  }
+  if (!organizationUnitId && role !== 'CHAPTER_LEADER' && (role === 'ADMIN' || !await canAccessChapterPermission(context, chapterId!, 'MANAGE_CHAPTER_MEMBERS'))) {
+    return NextResponse.json({ error: { code: 'AccessDenied', message: 'Bạn không có quyền mời thành viên vào Chapter này.' } }, { status: 403 })
+  }
 
-  if (!email || !EMAIL_REGEX.test(email)) {
+  const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : ''
+
+  if (!email || email.length > 255 || !EMAIL_REGEX.test(email)) {
     return NextResponse.json(
       { error: { code: 'ValidationError', message: 'Email không hợp lệ' } },
       { status: 400 }
@@ -49,9 +67,10 @@ export async function POST(request: NextRequest) {
   }
 
   const result = await sendMemberInvitation({
-    email: email.toLowerCase().trim(),
+    email,
     role: 'MEMBER',
     chapterId,
+    organizationUnitId,
     invitedBy: (auth as any).context!.userId,
   })
 
@@ -73,7 +92,8 @@ export async function POST(request: NextRequest) {
     {
       invitationId: result.invitationId,
       id: result.invitationId,
-      chapterId: result.chapterId,
+      chapterId: result.chapterId || null,
+      organizationUnitId: result.organizationUnitId || null,
       status: result.status,
       expiresAt: result.expiresAt.toISOString(),
       emailSent: result.emailSent,

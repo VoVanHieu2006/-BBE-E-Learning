@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { listAccessibleChapterIds } from '@/lib/authorization'
+import { listChapterMembers } from '@/lib/chapter-members'
 
 /**
  * GET /api/v1/courses/[courseId]/students
@@ -12,13 +14,14 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
   const auth = await authenticate(request)
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: 401 })
 
-  const role = (auth as any).context!.role
-  if (role !== 'ADMIN' && role !== 'CHAPTER_LEADER') {
+  const context = auth.context!
+  const isAdmin = context.role === 'ADMIN'
+  const accessibleChapterIds = isAdmin ? [] : await listAccessibleChapterIds(context, 'VIEW_MEMBER_PROGRESS')
+  if (!isAdmin && accessibleChapterIds.length === 0) {
     return NextResponse.json({ error: { code: 'AccessDenied', message: 'Không có quyền' } }, { status: 403 })
   }
 
   const courseId = params.courseId
-  const leaderChapterId = role === 'CHAPTER_LEADER' ? (auth as any).context!.chapterId : null
 
   const course = await prisma.course.findUnique({
     where: { id: courseId },
@@ -37,20 +40,38 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
 
   let users: Array<{ id: string; email: string; status: string }>
 
-  if (role === 'CHAPTER_LEADER') {
-    users = await prisma.user.findMany({
-      where: {
-        status: 'ACTIVE',
-        role: 'MEMBER',
-        chapter_members: { some: { chapter_id: leaderChapterId } },
-      },
-      select: { id: true, email: true, status: true },
-      orderBy: { email: 'asc' },
-    })
-  } else {
-    users = lessonIds.length
+  if (isAdmin) {
+    const [assigned, withProgress] = await Promise.all([
+      prisma.userLearningAssignment.findMany({
+        where: { course_id: courseId, ended_at: null, user: { role: 'MEMBER' } },
+        select: { user_id: true },
+      }),
+      lessonIds.length > 0
+        ? prisma.user.findMany({
+            where: { role: 'MEMBER', lessonProgress: { some: { lesson_id: { in: lessonIds } } } },
+            select: { id: true },
+          })
+        : Promise.resolve([]),
+    ])
+    const userIds = Array.from(new Set([...assigned.map((row) => row.user_id), ...withProgress.map((row) => row.id)]))
+    users = userIds.length > 0
       ? await prisma.user.findMany({
-          where: { role: 'MEMBER', lessonProgress: { some: { lesson_id: { in: lessonIds } } } },
+          where: { id: { in: userIds }, role: 'MEMBER' },
+          select: { id: true, email: true, status: true },
+          orderBy: { email: 'asc' },
+        })
+      : []
+  } else {
+    const membersByChapter = await Promise.all(accessibleChapterIds.map((chapterId) =>
+      listChapterMembers(chapterId, { roles: ['MEMBER'], status: 'ACTIVE' }),
+    ))
+    const memberIds = Array.from(new Set(membersByChapter.reduce<string[]>(
+      (ids, members) => ids.concat(members.map((member) => member.userId)),
+      [],
+    )))
+    users = memberIds.length > 0
+      ? await prisma.user.findMany({
+          where: { id: { in: memberIds }, status: 'ACTIVE', role: 'MEMBER' },
           select: { id: true, email: true, status: true },
           orderBy: { email: 'asc' },
         })

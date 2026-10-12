@@ -18,5 +18,5 @@ export const QUIZ_COOLDOWN_MS = QUIZ_COOLDOWN_HOURS * 60 * 60 * 1000;
 // Điểm tối thiểu để vượt qua bài kiểm tra (85%)
 export const QUIZ_PASS_PERCENT = 85;
 
-// Tỉ lệ xem video tối thiểu để được mở khóa bài kiểm tra (85%)
-export const VIDEO_WATCH_REQUIRED_PERCENT = 85;
+// Phải xem hết video để được mở khóa bài kiểm tra. Server là nguồn kiểm soát cuối.
+export const VIDEO_WATCH_REQUIRED_PERCENT = 100;

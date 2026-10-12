@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { jwtVerify } from 'jose'
 import { prisma } from './prisma'
+import { resolveLegacyChapterMembershipScope } from './authorization-rules'
 
 type UserRole = 'ADMIN' | 'CHAPTER_LEADER' | 'MEMBER';
 
@@ -22,6 +23,7 @@ interface CachedUser {
   id: string
   status: string
   role: UserRole
+  chapterId?: string
   timestamp: number
 }
 
@@ -35,6 +37,16 @@ export function invalidateUserAuthCache(userId?: string) {
   } else {
     userStatusCache.delete(userId)
   }
+}
+
+async function getCurrentChapterScope(cached: CachedUser): Promise<string | undefined> {
+  if (cached.role !== 'CHAPTER_LEADER') return cached.chapterId
+  const membership = await prisma.chapterMember.findFirst({
+    where: { user_id: cached.id },
+    orderBy: { joined_at: 'asc' },
+    select: { chapter_id: true },
+  })
+  return resolveLegacyChapterMembershipScope(membership ? [membership.chapter_id] : [])
 }
 
 /**
@@ -63,15 +75,16 @@ export async function authenticate(request: NextRequest): Promise<AuthResult> {
           const now = Date.now()
           const cached = userStatusCache.get(userId)
           if (cached && now - cached.timestamp < USER_CACHE_TTL && cached.status === 'ACTIVE') {
-            return { ok: true, context: { userId: cached.id, role: cached.role, chapterId: payload.chapterId as string } }
+            return { ok: true, context: { userId: cached.id, role: cached.role, chapterId: await getCurrentChapterScope(cached) } }
           }
           const user = await prisma.user.findUnique({
             where: { id: userId },
-            select: { id: true, status: true, role: true, chapter_members: { take: 1, select: { chapter_id: true } } },
+            select: { id: true, status: true, role: true, chapter_members: { take: 1, orderBy: { joined_at: 'asc' }, select: { chapter_id: true } } },
           })
           if (user && user.status === 'ACTIVE') {
-            userStatusCache.set(userId, { id: user.id, status: user.status, role: user.role, timestamp: now })
-            return { ok: true, context: { userId: user.id, role: user.role, chapterId: user.chapter_members?.[0]?.chapter_id } }
+            const chapterId = resolveLegacyChapterMembershipScope(user.chapter_members.map((member) => member.chapter_id))
+            userStatusCache.set(userId, { id: user.id, status: user.status, role: user.role, chapterId, timestamp: now })
+            return { ok: true, context: { userId: user.id, role: user.role, chapterId } }
           }
         }
       } catch {}
@@ -83,8 +96,6 @@ export async function authenticate(request: NextRequest): Promise<AuthResult> {
     const { payload } = await jwtVerify(accessToken, secret)
 
     const userId = payload.sub as string
-    const role = payload.role as UserRole
-    const chapterId = payload.chapterId as string | undefined
 
     // Check in-memory cache first
     const now = Date.now()
@@ -93,13 +104,13 @@ export async function authenticate(request: NextRequest): Promise<AuthResult> {
       if (cached.status !== 'ACTIVE') {
         return { ok: false, error: { code: 'AccountInactive', message: 'Tài khoản không hoạt động' } }
       }
-      return { ok: true, context: { userId: cached.id, role: cached.role, chapterId } }
+      return { ok: true, context: { userId: cached.id, role: cached.role, chapterId: await getCurrentChapterScope(cached) } }
     }
 
     // Verify user exists and is ACTIVE
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, status: true, role: true },
+      select: { id: true, status: true, role: true, chapter_members: { take: 1, orderBy: { joined_at: 'asc' }, select: { chapter_id: true } } },
     })
 
     if (!user || user.status !== 'ACTIVE') {
@@ -109,7 +120,8 @@ export async function authenticate(request: NextRequest): Promise<AuthResult> {
       return { ok: false, error: { code: 'AccountInactive', message: 'Tài khoản không hoạt động' } }
     }
 
-    userStatusCache.set(userId, { id: user.id, status: user.status, role: user.role, timestamp: now })
+    const chapterId = resolveLegacyChapterMembershipScope(user.chapter_members.map((member) => member.chapter_id))
+    userStatusCache.set(userId, { id: user.id, status: user.status, role: user.role, chapterId, timestamp: now })
 
     return { ok: true, context: { userId: user.id, role: user.role, chapterId } }
   } catch {
@@ -124,15 +136,16 @@ export async function authenticate(request: NextRequest): Promise<AuthResult> {
           const now = Date.now()
           const cached = userStatusCache.get(userId)
           if (cached && now - cached.timestamp < USER_CACHE_TTL && cached.status === 'ACTIVE') {
-            return { ok: true, context: { userId: cached.id, role: cached.role, chapterId: payload.chapterId as string } }
+            return { ok: true, context: { userId: cached.id, role: cached.role, chapterId: await getCurrentChapterScope(cached) } }
           }
           const user = await prisma.user.findUnique({
             where: { id: userId },
-            select: { id: true, status: true, role: true, chapter_members: { take: 1, select: { chapter_id: true } } },
+            select: { id: true, status: true, role: true, chapter_members: { take: 1, orderBy: { joined_at: 'asc' }, select: { chapter_id: true } } },
           })
           if (user && user.status === 'ACTIVE') {
-            userStatusCache.set(userId, { id: user.id, status: user.status, role: user.role, timestamp: now })
-            return { ok: true, context: { userId: user.id, role: user.role, chapterId: user.chapter_members?.[0]?.chapter_id } }
+            const chapterId = resolveLegacyChapterMembershipScope(user.chapter_members.map((member) => member.chapter_id))
+            userStatusCache.set(userId, { id: user.id, status: user.status, role: user.role, chapterId, timestamp: now })
+            return { ok: true, context: { userId: user.id, role: user.role, chapterId } }
           }
         }
       } catch {}

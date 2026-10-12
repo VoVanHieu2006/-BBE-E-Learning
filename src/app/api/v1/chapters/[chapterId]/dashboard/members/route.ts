@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getPublishedSystemData, calculateBatchUsersProgress } from '@/lib/progress/calculator'
+import { canAccessChapterPermission, resolveSingleManagedChapter } from '@/lib/authorization'
+import { listChapterMembers } from '@/lib/chapter-members'
 
 /**
  * GET /api/v1/chapters/[chapterId]/dashboard/members
@@ -15,19 +17,13 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
 
   // Support "me" alias for chapter leader
   if (chapterId === 'me') {
-    if ((auth as any).context!.role === 'CHAPTER_LEADER' && (auth as any).context!.chapterId) {
-      chapterId = (auth as any).context!.chapterId
-    } else {
-      return NextResponse.json({ error: { code: 'ValidationError', message: 'ChapterId không hợp lệ' } }, { status: 400 })
-    }
+    const resolved = await resolveSingleManagedChapter(auth.context!)
+    if (!resolved) return NextResponse.json({ error: { code: 'ChapterScopeRequired', message: 'Không có Chapter duy nhất trong phạm vi; hãy gửi chapterId cụ thể.' } }, { status: 400 })
+    chapterId = resolved
   }
 
-  // Authorization check
-  if ((auth as any).context!.role === 'CHAPTER_LEADER') {
-    if ((auth as any).context!.chapterId !== chapterId) {
-      return NextResponse.json({ error: { code: 'AccessDenied', message: 'BĐHU chỉ có quyền xem chapter của mình' } }, { status: 403 })
-    }
-  } else if ((auth as any).context!.role !== 'ADMIN') {
+  // Position-based managers are checked against the exact requested Chapter.
+  if (!await canAccessChapterPermission(auth.context!, chapterId, 'VIEW_MEMBER_PROGRESS')) {
     return NextResponse.json({ error: { code: 'AccessDenied', message: 'Không có quyền' } }, { status: 403 })
   }
 
@@ -53,40 +49,33 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
 
   const sys = await getPublishedSystemData()
 
-  const [members, totalItems] = await Promise.all([
-    prisma.chapterMember.findMany({
-      where,
-      include: {
-        user: {
-          select: {
-            id: true,
-            email: true,
-            status: true,
-            role: true,
-            created_at: true,
-          },
-        },
-      },
-      orderBy: { joined_at: 'desc' },
-      skip,
-      take: limit,
-    }),
-    prisma.chapterMember.count({ where }),
-  ])
+  const allMembers = await listChapterMembers(chapterId, {
+    roles: ['MEMBER'],
+    status: includeInactive ? undefined : 'ACTIVE',
+    search,
+  })
+  const totalItems = allMembers.length
+  const members = allMembers.slice(skip, skip + limit)
 
-  const memberUserIds = members.map((m) => m.user.id)
-  const progressMap = await calculateBatchUsersProgress(memberUserIds, sys)
+  const memberUserIds = members.map((member) => member.userId)
+  const [progressMap, starRows] = await Promise.all([
+    calculateBatchUsersProgress(memberUserIds, sys),
+    memberUserIds.length
+      ? prisma.starLedger.groupBy({ where: { user_id: { in: memberUserIds } }, by: ['user_id'], _sum: { amount: true } })
+      : Promise.resolve([]),
+  ])
+  const starsByUser = new Map(starRows.map((row) => [row.user_id, row._sum.amount || 0]))
 
   const items = members.map((m) => {
-    const p = progressMap.get(m.user.id)
+    const p = progressMap.get(m.userId)
 
     return {
-      userId: m.user.id,
-      id: m.user.id,
-      email: m.user.email,
-      role: m.user.role,
-      status: m.user.status,
-      joinedAt: m.joined_at,
+      userId: m.userId,
+      id: m.userId,
+      email: m.email,
+      role: m.role,
+      status: m.status,
+      joinedAt: m.joinedAt,
       completedCourses: p?.completedCourses || 0,
       totalCourses: sys.totalCourses,
       completedLessons: p?.completedLessons || 0,
@@ -94,7 +83,7 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
       avgProgress: p?.overallProgressPercent || 0,
       avgCourseProgress: p?.avgCourseProgressPercent || 0,
       avgQuizScore: p?.avgQuizScore || 0,
-      leaderboardPoint: p?.leaderboardPoint || 0,
+      stars: starsByUser.get(m.userId) || 0,
     }
   })
 

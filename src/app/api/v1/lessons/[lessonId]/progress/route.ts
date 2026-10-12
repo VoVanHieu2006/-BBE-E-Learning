@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { awardStars, canEarnStarsForCourse, starsForVideoDuration } from '@/lib/stars'
+import { checkLessonProgression } from '@/lib/progression'
+import { syncCourseAssignmentCompletion } from '@/lib/learning-assignments'
+import { capVideoProgress, hasWatchedFullVideo } from '@/lib/video-progress-rules'
 
 /**
  * PATCH / POST /api/v1/lessons/[lessonId]/progress
@@ -11,7 +15,10 @@ export async function PATCH(request: NextRequest, { params }: { params: { lesson
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: 401 })
 
   const userId = (auth as any).context!.userId
-  const role = (auth as any).context!.role
+  const isAdmin = (auth as any).context!.role === 'ADMIN'
+
+  const gate = await checkLessonProgression(userId, params.lessonId, 'WATCH', isAdmin)
+  if (gate.ok === false) return NextResponse.json({ error: { code: gate.code, message: gate.message } }, { status: 403 })
 
   const body = await request.json().catch(() => ({}))
   const positionSeconds = body.positionSeconds ?? body.currentPositionSeconds ?? body.position ?? 0
@@ -23,6 +30,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { lesson
       where: { id: params.lessonId },
       select: {
         id: true,
+        session: { select: { course_id: true } },
         video: { select: { id: true, duration_seconds: true } },
         assessment: { select: { id: true } },
       },
@@ -35,32 +43,38 @@ export async function PATCH(request: NextRequest, { params }: { params: { lesson
   if (!lesson) return NextResponse.json({ error: { code: 'LessonNotFound', message: 'Bài học không tồn tại' } }, { status: 404 })
   if (!lesson.video) return NextResponse.json({ error: { code: 'LessonNotFound', message: 'Bài học chưa có video' } }, { status: 404 })
 
-  // Anti-cheat tỉ lệ theo thời gian thực: furthest chỉ được tăng tối đa (25s + 2× thời gian thực trôi qua kể từ
-  // lần lưu trước). Người xem thật luôn pass — kể cả heartbeat thưa do Chrome throttle timer khi tab ẩn, kể cả
-  // tốc độ 2x; còn gọi API trực tiếp để nhảy cóc thì không thể nhanh hơn thời gian đã chờ (≈ thời gian xem).
-  // `completed` chỉ được bật khi tiến độ sau kẹp (clamp) thực sự ≥ 85% (hoặc đã hoàn thành từ trước).
+  // Anti-cheat tỉ lệ theo thời gian thực: furthest chỉ được tăng tối đa 2x thời
+  // gian thực kể từ lần lưu trước, tương ứng tốc độ phát nhanh nhất UI cho phép.
+  // Không cộng một lượng tiến độ miễn phí cho mỗi request để tránh farm heartbeat.
+  // Nhảy thẳng tới cuối qua API không thể bỏ qua thời lượng xem thực tế.
   const currentFurthest = existing?.furthest_watched_position_seconds || 0
-  const seekExempt = role === 'ADMIN' || role === 'CHAPTER_LEADER'
   const duration = lesson.video.duration_seconds || 1
 
   const elapsedSec = existing?.last_watched_at
     ? Math.min(Math.max((Date.now() - new Date(existing.last_watched_at).getTime()) / 1000, 0), 3600)
     : 0
-  const cap = seekExempt ? Number.MAX_SAFE_INTEGER : currentFurthest + 25 + 2 * elapsedSec
-  const requestedFurthest = Math.max(Number(positionSeconds) || 0, Number(furthestWatchedPositionSeconds) || 0)
-  const newFurthest = Math.max(currentFurthest, Math.min(requestedFurthest, cap))
-  const clampedPosition = Math.min(Number(positionSeconds) || 0, newFurthest)
+  // Staff accounts use the same integrity checks as learners: no role bypass.
+  const cappedProgress = capVideoProgress(
+    currentFurthest,
+    Number(positionSeconds),
+    Number(furthestWatchedPositionSeconds),
+    elapsedSec,
+  )
+  const newFurthest = cappedProgress.furthestWatchedPositionSeconds
+  const clampedPosition = cappedProgress.lastPositionSeconds
 
   const progressPercentage = duration > 0
     ? Math.min(100, (newFurthest / duration) * 100)
     : 0
 
-  const watched85 = progressPercentage >= 85
+  // Completion/rewards require the entire known duration. Unknown duration is
+  // not sufficient evidence to complete a required video.
+  const watchedCompletely = hasWatchedFullVideo(newFurthest, lesson.video.duration_seconds)
   const alreadyCompleted = existing?.completed ?? false
 
-  // Only query attempt if not already completed, watched >= 85%, and lesson has an assessment
+  // Completion for assessment lessons requires both the full video and a passed quiz.
   let isQuizPassed = false
-  if (!alreadyCompleted && watched85 && lesson.assessment) {
+  if (!alreadyCompleted && watchedCompletely && lesson.assessment) {
     const passedAttempt = await prisma.attempt.findFirst({
       where: {
         assessment_id: lesson.assessment.id,
@@ -73,8 +87,8 @@ export async function PATCH(request: NextRequest, { params }: { params: { lesson
   }
 
   const completed = lesson.assessment
-    ? (alreadyCompleted || (watched85 && isQuizPassed))
-    : (alreadyCompleted || watched85)
+    ? (alreadyCompleted || (watchedCompletely && isQuizPassed))
+    : (alreadyCompleted || watchedCompletely)
   const completed_at = completed ? (existing?.completed_at || new Date()) : null
 
   const updated = await prisma.lessonProgress.upsert({
@@ -97,6 +111,23 @@ export async function PATCH(request: NextRequest, { params }: { params: { lesson
     },
   })
 
+  if (completed) await syncCourseAssignmentCompletion(userId, lesson.session.course_id)
+
+  let starReward: { awarded: boolean; amount: number } | undefined
+  const crossedVideoFinishLine = !existing?.completed && currentFurthest < lesson.video.duration_seconds && watchedCompletely
+  if (crossedVideoFinishLine && await canEarnStarsForCourse(userId, lesson.session.course_id)) {
+    const amount = starsForVideoDuration(duration)
+    starReward = await awardStars({
+      userId,
+      amount,
+      reason: 'VIDEO_COMPLETION',
+      rewardKey: `video:${userId}:${lesson.video.id}`,
+      sourceType: 'VIDEO',
+      sourceId: lesson.video.id,
+      metadata: { lessonId: lesson.id, durationSeconds: duration },
+    })
+  }
+
   return NextResponse.json({
     lessonId: updated.lesson_id,
     id: updated.lesson_id,
@@ -105,6 +136,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { lesson
     progressPercentage: Math.round(progressPercentage * 100) / 100,
     completed: updated.completed,
     completedAt: updated.completed_at,
+    starReward,
   }, { status: 200 })
 }
 

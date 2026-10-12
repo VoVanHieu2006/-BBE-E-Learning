@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticate } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { canDeleteLessonComment } from '@/lib/authorization-rules';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -32,10 +33,9 @@ export async function DELETE(
       );
     }
 
-    const isAuthor = comment.user_id === auth.context.userId;
-    const isElevated = auth.context.role === 'ADMIN' || auth.context.role === 'CHAPTER_LEADER';
+    const canDelete = canDeleteLessonComment(auth.context.role, comment.user_id === auth.context.userId);
 
-    if (!isAuthor && !isElevated) {
+    if (!canDelete) {
       return NextResponse.json(
         { error: { code: 'Forbidden', message: 'Bạn không có quyền xóa bình luận này' } },
         { status: 403 }

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { QUIZ_PASS_PERCENT } from '@/lib/config/quiz'
+import { gradeQuizAttempt } from '@/lib/quiz-attempt-rules'
 
 export async function GET(request: NextRequest, { params }: { params: { attemptId: string } }) {
   const auth = await authenticate(request)
@@ -10,50 +12,56 @@ export async function GET(request: NextRequest, { params }: { params: { attemptI
   if (!attempt) return NextResponse.json({ error: { code: 'AttemptNotFound' } }, { status: 404 })
   if (attempt.user_id !== (auth as any).context!.userId) return NextResponse.json({ error: { code: 'AccessDenied' } }, { status: 403 })
 
-  const status = attempt.status
-  if (status !== 'SUBMITTED' && status !== 'AUTO_SUBMITTED') return NextResponse.json({ error: { code: 'AttemptNotSubmitted', message: 'Chưa nộp bài' } }, { status: 400 })
+  if (attempt.status !== 'SUBMITTED' && attempt.status !== 'AUTO_SUBMITTED') {
+    return NextResponse.json({ error: { code: 'AttemptNotSubmitted', message: 'Attempt has not been submitted' } }, { status: 400 })
+  }
 
-  const allAttemptQuestions = await prisma.attemptQuestion.findMany({
-    where: { attempt_id: params.attemptId },
-    include: { question: { include: { options: true } } },
-    orderBy: { display_order: 'asc' },
-  })
+  const [allAttemptQuestions, answers] = await Promise.all([
+    prisma.attemptQuestion.findMany({
+      where: { attempt_id: params.attemptId },
+      include: { question: { include: { options: true } } },
+      orderBy: { display_order: 'asc' },
+    }),
+    prisma.attemptAnswer.findMany({ where: { attempt_id: params.attemptId } }),
+  ])
 
-  const answers = await prisma.attemptAnswer.findMany({
-    where: { attempt_id: params.attemptId },
-    include: { question: true, selected_option: true },
-  })
-
-  const passed = attempt.passed || false
-
-  const answerResults = allAttemptQuestions.map((aq) => {
-    const ans = answers.find((a) => a.question_id === aq.question_id)
-    const isCorrect = ans?.is_correct || (ans?.selected_option?.is_correct || false)
-    const correctOption = aq.question.options.find((o) => o.is_correct) || null
-
-    return {
-      questionId: aq.question_id,
-      isCorrect,
-      selectedOptionId: ans?.selected_option_id || null,
-      ...(passed ? {
-        correctOptionId: correctOption?.id || null,
-        explanation: aq.question.explanation || (correctOption ? `Đáp án đúng: ${correctOption.option_text}` : null),
-      } : {}),
-    }
-  })
+  const grading = gradeQuizAttempt(
+    allAttemptQuestions.map((attemptQuestion) => ({
+      id: attemptQuestion.question_id,
+      points: Number(attemptQuestion.question.points || 1),
+      explanation: attemptQuestion.question.explanation,
+      options: attemptQuestion.question.options.map((option) => ({
+        id: option.id,
+        text: option.option_text,
+        correct: option.is_correct,
+      })),
+    })),
+    answers.map((answer) => ({
+      questionId: answer.question_id,
+      selectedOptionId: answer.selected_option_id,
+    })),
+    QUIZ_PASS_PERCENT / 100,
+  )
+  const passed = attempt.passed === true
+  const answerResults = grading.results.map((result) => ({
+    questionId: result.questionId,
+    isCorrect: result.isCorrect,
+    selectedOptionId: result.selectedOptionId,
+    ...(passed ? {
+      correctOptionId: result.correctOptionId,
+      explanation: result.explanation,
+    } : {}),
+  }))
 
   return NextResponse.json({
     attemptId: attempt.id,
-    score: attempt.score ? Number(attempt.score) * 100 : 0,
+    score: attempt.score === null ? 0 : Number(attempt.score) * 100,
     passed,
     answers: answerResults,
   })
 }
 
-/**
- * DELETE /api/v1/attempts/{attemptId}
- * Cancel an in-progress attempt (BR-04: không tính vào lịch sử điểm, sau 24h mới được làm lại)
- */
+/** Cancel an in-progress attempt. */
 export async function DELETE(request: NextRequest, { params }: { params: { attemptId: string } }) {
   const auth = await authenticate(request)
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: 401 })
@@ -61,20 +69,16 @@ export async function DELETE(request: NextRequest, { params }: { params: { attem
   const attempt = await prisma.attempt.findUnique({ where: { id: params.attemptId } })
   if (!attempt) return NextResponse.json({ error: { code: 'AttemptNotFound' } }, { status: 404 })
   if (attempt.user_id !== (auth as any).context!.userId) return NextResponse.json({ error: { code: 'AccessDenied' } }, { status: 403 })
-  if (attempt.status !== 'IN_PROGRESS') return NextResponse.json({ error: { code: 'AttemptNotInProgress', message: 'Chỉ có thể hủy bài đang trong tiến trình' } }, { status: 400 })
+  if (attempt.status !== 'IN_PROGRESS') return NextResponse.json({ error: { code: 'AttemptNotInProgress' } }, { status: 400 })
 
   const updated = await prisma.attempt.update({
     where: { id: params.attemptId },
-    data: {
-      status: 'CANCELLED',
-      submitted_at: new Date(),
-    },
+    data: { status: 'CANCELLED', submitted_at: new Date() },
   })
 
   return NextResponse.json({
     attemptId: updated.id,
     status: 'CANCELLED',
-    message: 'Đã hủy bài làm thành công. Bạn cần đợi 24 giờ để bắt đầu lượt mới.',
+    message: 'Attempt cancelled successfully. Retry is available after 24 hours.',
   }, { status: 200 })
 }
-

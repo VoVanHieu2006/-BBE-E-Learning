@@ -6,8 +6,10 @@ import { QUIZ_COOLDOWN_MS, QUIZ_COOLDOWN_HOURS } from '@/lib/config/quiz'
 export async function GET(request: NextRequest, { params }: { params: { assessmentId: string } }) {
   const auth = await authenticate(request)
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: 401 })
-  if ((auth as any).context!.role !== 'MEMBER') return NextResponse.json({ error: { code: 'AccessDenied' } }, { status: 403 })
 
+  // This endpoint only returns the caller's own attempt metadata. Do not bind it
+  // to the legacy MEMBER role: a user's active position/tenure must not prevent
+  // them from reviewing their own quiz history.
   const userId = (auth as any).context!.userId
 
   // Tự động chuyển các bài IN_PROGRESS đã hết hạn sang CANCELLED
@@ -56,7 +58,7 @@ export async function GET(request: NextRequest, { params }: { params: { assessme
       attemptId: a.id,
       attemptNumber: a.attempt_number,
       status: a.status,
-      score: a.score ? Number(a.score) * 100 : null,
+      score: a.score === null ? null : Number(a.score) * 100,
       passed: a.passed,
       submittedAt: a.submitted_at || a.created_at,
     })),

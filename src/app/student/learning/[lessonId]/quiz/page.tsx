@@ -6,6 +6,7 @@ import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Toast, { ToastMessage } from '@/components/ui/Toast';
 import LessonQuiz from '@/components/lesson/LessonQuiz';
+import StarRewardCelebration from '@/components/StarRewardCelebration';
 import { apiFetch } from '@/lib/api/client';
 import { QUIZ_COOLDOWN_MS, QUIZ_COOLDOWN_HOURS } from '@/lib/config/quiz';
 
@@ -30,9 +31,12 @@ export default function LessonQuizPage({ params }: { params: { lessonId: string 
   const [attemptsAvailable, setAttemptsAvailable] = useState(false);
   const [quizCompleted, setQuizCompleted] = useState(false);
   const [started, setStarted] = useState(false);
+  const [attemptKey, setAttemptKey] = useState(0);
+  const [isNewAttempt, setIsNewAttempt] = useState(false);
   const [showConfirmStartModal, setShowConfirmStartModal] = useState(false);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const [cooldownRemainingMs, setCooldownRemainingMs] = useState<number>(0);
+  const [starReward, setStarReward] = useState<number | null>(null);
 
   const showToast = (type: 'success' | 'error' | 'info', message: string, title?: string) => {
     setToast({ type, message, title });
@@ -92,16 +96,37 @@ export default function LessonQuizPage({ params }: { params: { lessonId: string 
     setLoading(false);
   }
 
+  // Refresh attempts & progress in background WITHOUT unmounting LessonQuiz or resetting its result UI
+  async function refreshDataSilently(accessToken: string, userRole: string) {
+    const assessmentId = lesson?.assessment?.assessmentId || lesson?.assessment?.id;
+    const [progressRes, attemptsRes] = await Promise.all([
+      apiFetch(`/api/v1/lessons/${params.lessonId}/progress`, { noCache: true, token: accessToken }),
+      assessmentId && userRole === 'MEMBER'
+        ? apiFetch(`/api/v1/assessments/${assessmentId}/attempts/me`, { noCache: true, token: accessToken })
+        : Promise.resolve<any>({ ok: false, data: null }),
+    ]);
+
+    if (progressRes.ok && progressRes.data) {
+      setProgress(progressRes.data);
+      if (progressRes.data.completed) setQuizCompleted(true);
+    }
+
+    if (attemptsRes?.ok && attemptsRes.data?.items) {
+      setAttempts(attemptsRes.data.items);
+      setAttemptsAvailable(true);
+    }
+  }
+
   // ─── Derived data ────────────────────────────────────────────────────────────
   const assessment = lesson?.assessment;
   const assessmentId = assessment?.assessmentId || assessment?.id;
   const questionCount = Number(assessment?.questionCount || 0);
   const durationMinutes = questionCount * 2;
 
-  // Video watch status check (phải xem ≥ 85% video bài học)
+  // Video watch status check. Backend also verifies this before creating an attempt.
   const videoDuration = lesson?.video?.durationSeconds || lesson?.video?.duration_seconds || 0;
   const watchedPercent = progress?.progressPercentage ?? 0;
-  const canAccessQuiz = role === 'ADMIN' || role === 'CHAPTER_LEADER' || Boolean(progress?.completed) || watchedPercent >= 85 || videoDuration === 0;
+  const canAccessQuiz = Boolean(progress?.completed) || watchedPercent >= 100 || videoDuration === 0;
 
   // Lịch sử bài làm: CHỈ tính bài đã nộp thành công
   const submittedAttempts = attempts.filter((a) => a.status === 'SUBMITTED' || a.status === 'AUTO_SUBMITTED');
@@ -189,7 +214,7 @@ export default function LessonQuizPage({ params }: { params: { lessonId: string 
     );
   }
 
-  // Chặn ngay nếu chưa hoàn thành xem ≥ 85% video bài học
+  // Chặn ngay nếu chưa hoàn thành xem 100% video bài học
   if (!canAccessQuiz) {
     return (
       <div className="min-h-screen bg-[#f8f9ff] flex items-center justify-center p-6">
@@ -202,10 +227,10 @@ export default function LessonQuizPage({ params }: { params: { lessonId: string 
               Bài kiểm tra đang bị khóa
             </h2>
             <p className="text-xs text-[#737686] leading-relaxed">
-              Bạn cần xem tối thiểu <strong>85%</strong> thời lượng video bài giảng trước khi được phép làm bài kiểm tra.
+              Bạn cần xem đủ <strong>100%</strong> thời lượng video bài giảng trước khi được phép làm bài kiểm tra.
             </p>
             <div className="p-3 bg-[#eff4ff] rounded-xl text-xs font-semibold text-[#172554]">
-              Tiến độ xem hiện tại của bạn: <span className="text-[#2563EB]">{watchedPercent}% / 85%</span>
+              Tiến độ xem hiện tại của bạn: <span className="text-[#2563EB]">{watchedPercent}% / 100%</span>
             </div>
           </div>
           <Link href={`/student/learning/${params.lessonId}`}>
@@ -234,8 +259,8 @@ export default function LessonQuizPage({ params }: { params: { lessonId: string 
           </p>
         </div>
 
-        {/* Nút quay lại CHỈ hiện khi chưa bấm Bắt đầu làm bài */}
-        {!started && (
+        {/* Nút quay lại hiện khi chưa bấm Bắt đầu hoặc sau khi đã hoàn thành */}
+        {(!started || quizCompleted) && (
           <Link
             href={`/student/learning/${params.lessonId}`}
             className="shrink-0 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#eff4ff] hover:bg-[#cbdbf5] text-[#172554] text-xs font-bold transition shadow-xs"
@@ -249,35 +274,33 @@ export default function LessonQuizPage({ params }: { params: { lessonId: string 
         {started ? (
           <div className="space-y-4">
             <LessonQuiz
+              key={`attempt-${attemptKey}`}
               lessonId={params.lessonId}
               assessmentId={assessmentId}
               lessonTitle={lesson.title}
               accessToken={token}
               isCompleted={quizCompleted}
+              forceNew={isNewAttempt}
               onQuizPassed={() => {
                 setQuizCompleted(true);
               }}
-              onSubmitted={() => {
-                load(token, role);
+              onSubmitted={(resultData) => {
+                if (resultData?.passed) {
+                  setQuizCompleted(true);
+                }
+                if (resultData?.starReward?.awarded && Number(resultData.starReward.amount) > 0) {
+                  setStarReward(Number(resultData.starReward.amount));
+                  window.setTimeout(() => setStarReward(null), 3600);
+                }
+                refreshDataSilently(token, role);
               }}
               onCancel={() => {
                 setStarted(false);
+                setIsNewAttempt(false);
                 load(token, role);
               }}
               onToast={showToast}
             />
-
-            {/* Sau khi đã nộp hoặc vượt qua, cho phép quay về bài học */}
-            {quizCompleted && (
-              <div className="text-center pt-2">
-                <Link
-                  href={`/student/learning/${params.lessonId}`}
-                  className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md transition"
-                >
-                  ✓ Quay lại bài học để tiếp tục →
-                </Link>
-              </div>
-            )}
           </div>
         ) : (
           <Card className="p-6 md:p-8 space-y-6 shadow-sm border border-[#eff4ff]">
@@ -399,6 +422,7 @@ export default function LessonQuizPage({ params }: { params: { lessonId: string 
           </Card>
         )}
       </div>
+      {starReward !== null && <StarRewardCelebration amount={starReward} message="Quiz đạt yêu cầu — phần thưởng của bạn!" />}
 
       {/* Modal Xác nhận trước khi vào làm bài */}
       {showConfirmStartModal && (
@@ -434,6 +458,8 @@ export default function LessonQuizPage({ params }: { params: { lessonId: string 
                 className="flex-1 font-bold shadow-md"
                 onClick={() => {
                   setShowConfirmStartModal(false);
+                  setIsNewAttempt(true);
+                  setAttemptKey((prev) => prev + 1);
                   setStarted(true);
                 }}
               >

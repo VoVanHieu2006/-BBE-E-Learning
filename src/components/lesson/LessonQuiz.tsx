@@ -1,5 +1,6 @@
 'use client';
-import { useState, useEffect } from 'react';
+import Link from 'next/link';
+import { useState, useEffect, useRef } from 'react';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 
@@ -9,6 +10,9 @@ interface LessonQuizProps {
   lessonTitle: string;
   accessToken: string;
   isCompleted: boolean;
+  forceNew?: boolean;
+  assessmentLabel?: string;
+  returnHref?: string;
   onQuizPassed: () => void;
   onCancel?: (cooldownInfo?: any) => void;
   onSubmitted?: (result?: any) => void;
@@ -21,6 +25,9 @@ export default function LessonQuiz({
   lessonTitle,
   accessToken,
   isCompleted,
+  forceNew = false,
+  assessmentLabel = 'Bài kiểm tra bài học',
+  returnHref,
   onQuizPassed,
   onCancel,
   onSubmitted,
@@ -36,11 +43,15 @@ export default function LessonQuiz({
   const [result, setResult] = useState<any>(null);
   const [timeLeft, setTimeLeft] = useState<number>(0);
 
+  const isSubmittingRef = useRef(false);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   useEffect(() => {
     initQuiz();
   }, [assessmentId]);
 
   async function initQuiz() {
+    isSubmittingRef.current = false;
     setLoading(true);
     setError('');
     setResult(null);
@@ -59,6 +70,7 @@ export default function LessonQuiz({
           Authorization: `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
         },
+        body: JSON.stringify({ forceNew: Boolean(forceNew) }),
       });
 
       const data = await res.json();
@@ -70,22 +82,33 @@ export default function LessonQuiz({
 
       setAttempt(data);
 
-      // Restore cached answers if any
       const attemptId = data.attemptId || data.id;
-      if (attemptId && typeof window !== 'undefined') {
-        try {
-          const cached = localStorage.getItem(`quiz_answers_${attemptId}`);
-          if (cached) setSelectedAnswers(JSON.parse(cached));
-        } catch {}
+
+      // BR-04: Phân biệt rõ giữa khôi phục bài đang làm dở (data.isResumed === true)
+      // và bắt đầu một lượt làm bài mới (không tự động điền đáp án của lượt trước)
+      if (data.isResumed && attemptId) {
+        let draftAnswers: Record<string, string> = data.existingAnswers || {};
+        if (typeof window !== 'undefined') {
+          try {
+            const cached = localStorage.getItem(`quiz_answers_${attemptId}`);
+            if (cached) {
+              draftAnswers = { ...draftAnswers, ...JSON.parse(cached) };
+            }
+          } catch {}
+        }
+        setSelectedAnswers(draftAnswers);
+      } else {
+        // Lượt làm mới hoàn toàn: reset về rỗng và dọn dẹp bộ nhớ nháp cũ
+        setSelectedAnswers({});
       }
 
       // Calculate timer
       const questionCount = data.questions?.length || 1;
       const totalMinutes = questionCount * 2;
       let initialSecs = totalMinutes * 60;
-      if (data.startedAt) {
-        const elapsed = Math.floor((Date.now() - new Date(data.startedAt).getTime()) / 1000);
-        initialSecs = Math.max(0, initialSecs - elapsed);
+      const expiresAtMs = data.expiresAt ? new Date(data.expiresAt).getTime() : Number.NaN;
+      if (Number.isFinite(expiresAtMs)) {
+        initialSecs = Math.max(0, Math.ceil((expiresAtMs - Date.now()) / 1000));
       }
       setTimeLeft(initialSecs);
     } catch (e: any) {
@@ -97,12 +120,12 @@ export default function LessonQuiz({
 
   // Timer countdown
   useEffect(() => {
-    if (loading || !attempt || timeLeft <= 0 || result) return;
+    if (loading || !attempt || timeLeft <= 0 || result || isSubmittingRef.current) return;
 
-    const timer = setInterval(() => {
+    timerRef.current = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
-          clearInterval(timer);
+          if (timerRef.current) clearInterval(timerRef.current);
           handleAutoSubmit();
           return 0;
         }
@@ -110,7 +133,9 @@ export default function LessonQuiz({
       });
     }, 1000);
 
-    return () => clearInterval(timer);
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
   }, [loading, attempt, timeLeft, result]);
 
   // Tab close / navigation warning & auto cancel on page close
@@ -156,16 +181,25 @@ export default function LessonQuiz({
   };
 
   const handleAutoSubmit = async () => {
-    if (result || submitting) return;
+    if (result || submitting || isSubmittingRef.current) return;
     onToast?.('info', 'Hết thời gian làm bài! Đang tự động nộp bài...', 'Hết giờ');
     handleSubmit();
   };
 
   const handleSubmit = async () => {
     const attemptId = attempt?.attemptId || attempt?.id;
-    if (!attemptId || submitting) return;
+    if (!attemptId || submitting || result || isSubmittingRef.current) return;
 
+    // Synchronous mutex to prevent race conditions and double-submits
+    isSubmittingRef.current = true;
     setSubmitting(true);
+
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+
+    let isSuccess = false;
     try {
       const res = await fetch(`/api/v1/attempts/${attemptId}/submit`, {
         method: 'POST',
@@ -178,16 +212,19 @@ export default function LessonQuiz({
 
       const data = await res.json();
       if (res.ok) {
+        isSuccess = true;
         setResult(data);
         if (typeof window !== 'undefined') {
-          localStorage.removeItem(`quiz_answers_${attemptId}`);
+          try {
+            localStorage.removeItem(`quiz_answers_${attemptId}`);
+          } catch {}
         }
 
         onSubmitted?.(data);
 
         if (data.passed) {
           onQuizPassed();
-          onToast?.('success', `Chúc mừng! Bạn đạt ${data.scorePercent}% và đã hoàn thành bài học!`, 'Đạt yêu cầu');
+          onToast?.('success', `Chúc mừng! Bạn đạt ${data.scorePercent}% và đã vượt qua ${assessmentLabel.toLowerCase()}!`, 'Đạt yêu cầu');
         } else {
           onToast?.('error', `Bạn đạt ${data.scorePercent}%. Cần đạt từ 85% để vượt qua bài học. Bạn có thể làm lại sau 24h!`, 'Chưa đạt');
         }
@@ -198,6 +235,10 @@ export default function LessonQuiz({
       onToast?.('error', e?.message || 'Lỗi kết nối khi nộp bài.', 'Lỗi');
     } finally {
       setSubmitting(false);
+      // If failed, release mutex so user can try submitting again
+      if (!isSuccess) {
+        isSubmittingRef.current = false;
+      }
     }
   };
 
@@ -245,7 +286,7 @@ export default function LessonQuiz({
             className="text-base font-bold text-[#172554] flex items-center gap-2"
             style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}
           >
-            <span>📝</span> Bài kiểm tra bài học
+            <span>📝</span> {assessmentLabel}
           </h3>
           <p className="text-xs text-[#737686] mt-0.5">
             Cần đạt tối thiểu <strong>85%</strong> điểm để vượt qua bài học.
@@ -306,7 +347,7 @@ export default function LessonQuiz({
           </div>
           <p className="text-xs max-w-lg mx-auto opacity-90 leading-relaxed">
             {result.passed
-              ? 'Bạn đã hoàn thành xuất sắc bài học này! Hãy quay lại bài học để tiếp tục bài giảng tiếp theo.'
+              ? `Bạn đã vượt qua ${assessmentLabel.toLowerCase()}! Hãy quay lại lộ trình để tiếp tục.`
               : 'Bạn cần đạt từ 85% điểm trở lên để vượt qua bài học. Theo quy chế, bạn có thể làm lại sau 24 giờ.'}
           </p>
         </div>
@@ -414,13 +455,25 @@ export default function LessonQuiz({
                   variant="primary"
                   size="md"
                   loading={submitting}
-                  disabled={Object.keys(selectedAnswers).length === 0 || cancelling}
+                  disabled={Object.keys(selectedAnswers).length === 0 || cancelling || submitting || isSubmittingRef.current || Boolean(result)}
                   onClick={handleSubmit}
                   className="px-6 py-2.5 rounded-xl shadow-md flex-1 sm:flex-initial"
                 >
                   Nộp bài kiểm tra →
                 </Button>
               </div>
+            </div>
+          )}
+
+          {/* Sau khi đã nộp và có kết quả: liên kết quay về lớp học */}
+          {result && (
+            <div className="flex justify-center pt-4 border-t border-[#eff4ff]">
+              <Link
+                href={returnHref || `/student/learning/${lessonId}`}
+                className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-[#2563EB] hover:bg-[#1d4ed8] text-white text-xs font-bold shadow-md transition hover:scale-[1.02] active:scale-[0.98]"
+              >
+                <span>← Trở về lớp học</span>
+              </Link>
             </div>
           )}
         </div>

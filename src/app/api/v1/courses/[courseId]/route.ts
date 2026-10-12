@@ -15,6 +15,9 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
   const courseDetail = await prisma.course.findUnique({
     where: { id: courseId },
     include: {
+      final_assessment: {
+        select: { id: true, title: true, description: true, _count: { select: { questions: true } } },
+      },
       sessions: {
         include: {
           lessons: {
@@ -56,7 +59,23 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
     status: courseDetail.status,
     visibility: courseDetail.visibility,
     publishedAt: courseDetail.published_at,
-    assessment: null,
+    coverUrl: courseDetail.cover_url,
+    assessment: courseDetail.final_assessment ? {
+      assessmentId: courseDetail.final_assessment.id,
+      id: courseDetail.final_assessment.id,
+      assessmentType: 'COURSE_FINAL',
+      title: courseDetail.final_assessment.title,
+      description: courseDetail.final_assessment.description,
+      questionCount: courseDetail.final_assessment._count.questions,
+    } : null,
+    finalAssessment: courseDetail.final_assessment ? {
+      assessmentId: courseDetail.final_assessment.id,
+      id: courseDetail.final_assessment.id,
+      assessmentType: 'COURSE_FINAL',
+      title: courseDetail.final_assessment.title,
+      description: courseDetail.final_assessment.description,
+      questionCount: courseDetail.final_assessment._count.questions,
+    } : null,
     sessions: courseDetail.sessions.map((s) => ({
       sessionId: s.id,
       id: s.id,
@@ -69,10 +88,13 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
         description: l.description,
         sortOrder: l.sort_order,
         hasVideo: !!l.video,
-        videoId: l.video?.id || null,
+        // This endpoint provides the outline, not playable media. A video URL
+        // is returned only by the progression-gated lesson endpoint (or Admin).
+        videoId: auth.ok && (auth as any).context!.role === 'ADMIN' ? l.video?.id || null : null,
         video: l.video ? {
-          videoId: l.video.id,
-          youtubeVideoId: l.video.youtube_video_id,
+          ...(auth.ok && (auth as any).context!.role === 'ADMIN'
+            ? { videoId: l.video.id, youtubeVideoId: l.video.youtube_video_id }
+            : {}),
           durationSeconds: l.video.duration_seconds,
         } : null,
         assessment: l.assessment ? {
@@ -122,13 +144,16 @@ export async function PATCH(request: NextRequest, { params }: { params: { course
   }
 
   const body = await request.json()
-  const { title, description, visibility } = body
+  const { title, description, visibility, coverUrl } = body
 
   if (title !== undefined && (typeof title !== 'string' || title.trim().length < 3 || title.trim().length > 255)) {
     return NextResponse.json({ error: { code: 'ValidationError', message: 'title phải từ 3-255 ký tự' } }, { status: 400 })
   }
   if (visibility !== undefined && !['PUBLIC', 'PRIVATE'].includes(visibility)) {
     return NextResponse.json({ error: { code: 'ValidationError', message: 'visibility phải là PUBLIC hoặc PRIVATE' } }, { status: 400 })
+  }
+  if (coverUrl !== undefined && coverUrl !== null && (typeof coverUrl !== 'string' || !/^https:\/\//.test(coverUrl))) {
+    return NextResponse.json({ error: { code: 'ValidationError', message: 'coverUrl must be an HTTPS URL.' } }, { status: 400 })
   }
 
   const updated = await prisma.course.update({
@@ -137,6 +162,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { course
       ...(title !== undefined ? { title: title.trim() } : {}),
       ...(description !== undefined ? { description: description?.trim() || null } : {}),
       ...(visibility !== undefined ? { visibility } : {}),
+      ...(coverUrl !== undefined ? { cover_url: coverUrl || null } : {}),
     },
   })
 
@@ -148,6 +174,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { course
     status: updated.status,
     visibility: updated.visibility,
     publishedAt: updated.published_at,
+    coverUrl: updated.cover_url,
   }, { status: 200 })
 }
 

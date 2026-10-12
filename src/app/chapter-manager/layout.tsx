@@ -4,6 +4,14 @@ import { apiFetch } from '@/lib/api/client';
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
+function applyPreferredChapter(user: any, preferredChapterId?: string | null) {
+  const chapters = user?.managedChapters || [];
+  const selected = chapters.find((chapter: any) => chapter.id === preferredChapterId)
+    || chapters.find((chapter: any) => chapter.id === user?.chapterId)
+    || chapters[0];
+  return selected ? { ...user, chapterId: selected.id, chapterName: selected.name, canManageMembers: selected.canManageMembers } : user;
+}
+
 /**
  * Layout dùng chung cho các trang BĐHU: Sidebar cố định (không remount khi chuyển tab)
  * + bảo vệ quyền truy cập vai trò BĐHU + idle prefetch dữ liệu.
@@ -50,12 +58,20 @@ function ChapterManagerLayoutInner({ children }: { children: React.ReactNode }) 
       if (!token || !u) {
         fetch('/api/v1/auth/refresh', { method: 'POST' })
           .then((res) => res.json())
-          .then((data) => {
+          .then(async (data) => {
             if (data?.accessToken && data?.user) {
               localStorage.setItem('accessToken', data.accessToken);
               localStorage.setItem('user', JSON.stringify(data.user));
               setUser(data.user);
               if (data.user.role === 'CHAPTER_LEADER' || data.user.role === 'ADMIN') {
+                setIsAuthorized(true);
+                return;
+              }
+              const effective = await apiFetch('/api/v1/auth/me', { noCache: true });
+              if (effective.ok && effective.data?.user?.isChapterManager) {
+                const scopedUser = applyPreferredChapter(effective.data.user, u?.chapterId);
+                localStorage.setItem('user', JSON.stringify(scopedUser));
+                setUser(scopedUser);
                 setIsAuthorized(true);
                 return;
               }
@@ -68,12 +84,26 @@ function ChapterManagerLayoutInner({ children }: { children: React.ReactNode }) 
         return;
       }
 
-      if (u.role !== 'CHAPTER_LEADER' && u.role !== 'ADMIN') {
-        router.replace('/student/dashboard');
+      if (u.role === 'CHAPTER_LEADER' || u.role === 'ADMIN') {
+        setIsAuthorized(true);
         return;
       }
 
-      setIsAuthorized(true);
+      // A manager can be appointed through PositionAssignment without changing
+      // the legacy role on the User record. Ask the server for that effective scope.
+      apiFetch('/api/v1/auth/me', { noCache: true })
+        .then((result) => {
+          const effectiveUser = result.data?.user
+          if (result.ok && effectiveUser?.isChapterManager) {
+            const scopedUser = applyPreferredChapter(effectiveUser, u?.chapterId);
+            localStorage.setItem('user', JSON.stringify(scopedUser));
+            setUser(scopedUser);
+            setIsAuthorized(true);
+            return;
+          }
+          router.replace('/student/dashboard');
+        })
+        .catch(() => router.replace('/student/dashboard'));
     }
   }, [router]);
 
@@ -107,8 +137,29 @@ function ChapterManagerLayoutInner({ children }: { children: React.ReactNode }) 
 
   return (
     <div className="min-h-screen bg-[#f8f9ff] flex">
-      <Sidebar role="CHAPTER_LEADER" user={{ email: user?.email, chapterName: user?.chapterName }} />
-      <main className="ml-64 flex-1 px-8 py-10 w-full min-w-0">{children}</main>
+      <Sidebar role="CHAPTER_LEADER" user={{ email: user?.email, chapterName: user?.chapterName, canManageMembers: user?.canManageMembers }} />
+      <main className="ml-64 flex-1 px-8 py-10 w-full min-w-0">
+        {user?.managedChapters?.length > 1 && (
+          <div className="mb-5 flex flex-wrap items-center justify-end gap-2">
+            <label htmlFor="managed-chapter" className="text-xs font-semibold text-[#596174]">Đang quản lý Chapter</label>
+            <select
+              id="managed-chapter"
+              value={user.chapterId || ''}
+              onChange={(event) => {
+                const chapter = user.managedChapters.find((item: any) => item.id === event.target.value);
+                if (!chapter) return;
+                const scopedUser = { ...user, chapterId: chapter.id, chapterName: chapter.name, canManageMembers: chapter.canManageMembers };
+                localStorage.setItem('user', JSON.stringify(scopedUser));
+                window.location.reload();
+              }}
+              className="rounded-lg border border-[#cbdbf5] bg-white px-3 py-2 text-sm font-semibold text-[#172554]"
+            >
+              {user.managedChapters.map((chapter: any) => <option key={chapter.id} value={chapter.id}>{chapter.name}</option>)}
+            </select>
+          </div>
+        )}
+        {children}
+      </main>
     </div>
   );
 }

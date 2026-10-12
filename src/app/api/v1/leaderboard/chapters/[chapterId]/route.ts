@@ -1,62 +1,89 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
+import { canAccessChapterPermission } from '@/lib/authorization'
+import { getOrganizationUnitTreeIds } from '@/lib/learning-assignments'
 import { prisma } from '@/lib/prisma'
-import { getPublishedSystemData, calculateBatchUsersProgress } from '@/lib/progress/calculator'
+import { calculateBatchUsersProgress, getPublishedSystemData } from '@/lib/progress/calculator'
 
-/**
- * GET /api/v1/leaderboard/chapters/[chapterId]
- * Bảng xếp hạng thành viên trong một chapter — cùng công thức với /api/v1/leaderboard (global)
- */
+/** Individual member standings are ordered by Star balance, with learning progress as tie-break. */
 export async function GET(request: NextRequest, { params }: { params: { chapterId: string } }) {
   const auth = await authenticate(request)
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: 401 })
-  const userRole = (auth as any).context!.role
-  const userId = (auth as any).context!.userId
 
-  if (userRole === 'MEMBER' || userRole === 'CHAPTER_LEADER') {
-    const membership = await prisma.chapterMember.findFirst({ where: { chapter_id: params.chapterId, user_id: userId } })
-    if (!membership && userRole !== 'ADMIN') {
+  const chapter = await prisma.chapter.findUnique({ where: { id: params.chapterId }, select: { id: true, organization_unit_id: true } })
+  if (!chapter) return NextResponse.json({ error: { code: 'ChapterNotFound', message: 'Không tìm thấy chapter' } }, { status: 404 })
+
+  const context = auth.context!
+  if (context.role !== 'ADMIN') {
+    const unitIds = chapter.organization_unit_id ? await getOrganizationUnitTreeIds(chapter.organization_unit_id) : []
+    const [hasProgressPermission, legacyMembership, organizationMembership] = await Promise.all([
+      canAccessChapterPermission(context, chapter.id, 'VIEW_MEMBER_PROGRESS'),
+      prisma.chapterMember.findFirst({ where: { chapter_id: chapter.id, user_id: context.userId }, select: { id: true } }),
+      unitIds.length
+        ? prisma.organizationMembership.findFirst({
+            where: {
+              user_id: context.userId,
+              unit_id: { in: unitIds },
+              status: 'ACTIVE',
+              starts_at: { lte: new Date() },
+              OR: [{ ends_at: null }, { ends_at: { gt: new Date() } }],
+            },
+            select: { id: true },
+          })
+        : Promise.resolve(null),
+    ])
+    if (!hasProgressPermission && !legacyMembership && !organizationMembership) {
       return NextResponse.json({ error: { code: 'AccessDenied', message: 'Không có quyền truy cập chapter này' } }, { status: 403 })
     }
   }
 
-  const members = await prisma.user.findMany({
-    where: { status: 'ACTIVE', role: 'MEMBER', chapter_members: { some: { chapter_id: params.chapterId } } },
-    include: {
-      attempts: {
-        where: { status: { in: ['SUBMITTED', 'AUTO_SUBMITTED'] } },
-        select: { score: true },
+  const now = new Date()
+  const unitIds = chapter.organization_unit_id ? await getOrganizationUnitTreeIds(chapter.organization_unit_id) : []
+  const memberScope: any[] = [{ chapter_members: { some: { chapter_id: chapter.id } } }]
+  if (unitIds.length) {
+    memberScope.push({
+      organization_memberships: {
+        some: {
+          unit_id: { in: unitIds },
+          status: 'ACTIVE',
+          starts_at: { lte: now },
+          OR: [{ ends_at: null }, { ends_at: { gt: now } }],
+        },
       },
-    },
-    take: 50,
+    })
+  }
+
+  const members = await prisma.user.findMany({
+    where: { status: 'ACTIVE', role: 'MEMBER', OR: memberScope },
+    select: { id: true, email: true },
+    take: 500,
   })
 
-  const memberIds = members.map((m) => m.id)
-  const sys = await getPublishedSystemData()
-  const progressMap = await calculateBatchUsersProgress(memberIds, sys)
+  const memberIds = members.map((member) => member.id)
+  if (!memberIds.length) return NextResponse.json({ chapterId: chapter.id, items: [] })
 
-  const results = members.map((m) => {
-    const p = progressMap.get(m.id)
-    const completedLessons = p?.completedLessons || 0
-    const courseProgress = p?.overallProgressPercent || 0
-    const avgScore = p?.avgQuizScore || 0
-    const leaderboardPoint = p?.leaderboardPoint || 0
+  const [system, starRows] = await Promise.all([
+    getPublishedSystemData(),
+    prisma.starLedger.groupBy({ where: { user_id: { in: memberIds } }, by: ['user_id'], _sum: { amount: true } }),
+  ])
+  const progressMap = await calculateBatchUsersProgress(memberIds, system)
+  const starsByUser = new Map(starRows.map((row) => [row.user_id, row._sum.amount || 0]))
 
+  const items = members.map((member) => {
+    const progress = progressMap.get(member.id)
     return {
-      userId: m.id,
-      email: m.email,
-      completedLessons,
-      totalLessons: sys.totalLessons,
-      completedCourses: p?.completedCourses || 0,
-      totalCourses: sys.totalCourses,
-      courseProgress,
-      avgScore,
-      avgQuizScore: avgScore,
-      assessmentAverageScore: avgScore,
-      leaderboardPoint,
+      userId: member.id,
+      email: member.email,
+      stars: starsByUser.get(member.id) || 0,
+      completedLessons: progress?.completedLessons || 0,
+      totalLessons: system.totalLessons,
+      completedCourses: progress?.completedCourses || 0,
+      totalCourses: system.totalCourses,
+      courseProgress: progress?.overallProgressPercent || 0,
+      avgScore: progress?.avgQuizScore || 0,
+      avgQuizScore: progress?.avgQuizScore || 0,
     }
-  })
+  }).sort((a, b) => b.stars - a.stars || b.courseProgress - a.courseProgress || b.avgQuizScore - a.avgQuizScore)
 
-  results.sort((a, b) => b.leaderboardPoint - a.leaderboardPoint)
-  return NextResponse.json({ chapterId: params.chapterId, items: results })
+  return NextResponse.json({ chapterId: chapter.id, items })
 }

@@ -41,7 +41,7 @@ export default function PlayerPage({ params }: { params: { lessonId: string } })
             initialPosition={0}
             initialFurthest={0}
             durationSeconds={596}
-            onComplete={() => setCompletionMsg('🎉 Hoàn thành bài học (≥85%)')}
+            onComplete={() => setCompletionMsg('🎉 Hoàn thành bài học (100%)')}
           />
         </Card>
 
@@ -57,7 +57,7 @@ export default function PlayerPage({ params }: { params: { lessonId: string } })
             <li>Heartbeat mỗi 12s gửi positionSeconds + furthestWatchedPositionSeconds</li>
             <li>Server-side seek-ahead check (BR-03) — client bị reject nếu tua tới</li>
             <li>Client seek-lock: nếu currentTime vượt furthest + 5s buffer → tự seekTo() về furthest</li>
-            <li>Auto-complete khi ≥85% (BR-03)</li>
+            <li>Auto-complete khi xem hết 100% (BR-03)</li>
             <li>Playback rate 1.5x / 2x</li>
             <li>UI controls ẩn thanh tua mặc định, custom control bar</li>
           </ul>

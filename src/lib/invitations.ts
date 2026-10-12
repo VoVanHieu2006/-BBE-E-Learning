@@ -1,6 +1,7 @@
 import { prisma } from './prisma'
 import { hashToken, generateToken } from './tokens'
 import { sendInvitationEmail } from './email'
+import { reconcileLearningAssignmentsForUser } from './learning-assignments'
 type UserRole = 'ADMIN' | 'CHAPTER_LEADER' | 'MEMBER';
 type InvitationRole = 'CHAPTER_LEADER' | 'MEMBER';
 type InvitationStatus = 'PENDING' | 'ACCEPTED' | 'EXPIRED' | 'CANCELLED';
@@ -9,14 +10,16 @@ import bcrypt from 'bcryptjs'
 export interface SendInvitationOptions {
   email: string
   role: InvitationRole
-  chapterId: string
+  chapterId?: string
+  organizationUnitId?: string
   invitedBy: string
 }
 
 export interface SendInvitationResult {
   ok: true
   invitationId: string
-  chapterId: string
+  chapterId?: string
+  organizationUnitId?: string
   status: InvitationStatus
   expiresAt: Date
   // Token is only returned here for email sending - it's sent in plain
@@ -47,6 +50,9 @@ export async function emailHasAnyAccount(email: string): Promise<boolean> {
 export async function sendMemberInvitation(
   opts: SendInvitationOptions
 ): Promise<SendInvitationResult | SendInvitationError> {
+  if (Boolean(opts.chapterId) === Boolean(opts.organizationUnitId)) {
+    return { ok: false, code: 'ValidationError', message: 'Choose exactly one Chapter or Organization Unit scope.' }
+  }
   // BR-02 (issue #10): no invitation if email already belongs to ANY account (Active or Inactive)
   if (await emailHasAnyAccount(opts.email)) {
     const user = await prisma.user.findUnique({ where: { email: opts.email } })
@@ -77,7 +83,8 @@ export async function sendMemberInvitation(
     data: {
       email: opts.email,
       role: opts.role,
-      chapter_id: opts.chapterId,
+      chapter_id: opts.chapterId || null,
+      organization_unit_id: opts.organizationUnitId || null,
       invited_by: opts.invitedBy,
       token_hash: tokenHash,
       status: 'PENDING',
@@ -97,6 +104,7 @@ export async function sendMemberInvitation(
     ok: true,
     invitationId: invitation.id,
     chapterId: opts.chapterId,
+    organizationUnitId: opts.organizationUnitId,
     status: 'PENDING',
     expiresAt,
     token, // return plain token for email
@@ -199,7 +207,8 @@ export async function sendChapterLeaderInvitation(
 export async function resendInvitation(
   invitationId: string,
   actorId: string,
-  actorRole: UserRole
+  actorRole: UserRole,
+  hasScopedManagePermission = false,
 ): Promise<{ ok: true; invitationId: string; status: InvitationStatus; expiresAt: Date; token: string; emailSent: boolean; emailError?: string } | SendInvitationError> {
   const invitation = await prisma.invitation.findUnique({ where: { id: invitationId } })
 
@@ -208,7 +217,7 @@ export async function resendInvitation(
   }
 
   // Authorization: Admin can resend any invitation; BĐHU only their own
-  if (actorRole !== 'ADMIN' && invitation.invited_by !== actorId) {
+  if (actorRole !== 'ADMIN' && !hasScopedManagePermission && invitation.invited_by !== actorId) {
     return { ok: false, code: 'AccessDenied', message: 'Không có quyền resend invitation này' }
   }
 
@@ -247,7 +256,8 @@ export async function resendInvitation(
 export async function cancelInvitation(
   invitationId: string,
   actorId: string,
-  actorRole: UserRole
+  actorRole: UserRole,
+  hasScopedManagePermission = false,
 ): Promise<{ ok: true; invitationId: string; status: InvitationStatus } | SendInvitationError> {
   const invitation = await prisma.invitation.findUnique({ where: { id: invitationId } })
 
@@ -255,7 +265,7 @@ export async function cancelInvitation(
     return { ok: false, code: 'InvitationNotFound', message: 'Invitation không tồn tại' }
   }
 
-  if (actorRole !== 'ADMIN' && invitation.invited_by !== actorId) {
+  if (actorRole !== 'ADMIN' && !hasScopedManagePermission && invitation.invited_by !== actorId) {
     return { ok: false, code: 'AccessDenied', message: 'Không có quyền hủy invitation này' }
   }
 
@@ -275,13 +285,13 @@ export async function cancelInvitation(
 export async function validateInvitationToken(
   token: string
 ): Promise<
-  | { ok: true; email: string; role: InvitationRole; chapterName: string; expiresAt: Date }
+  | { ok: true; email: string; role: InvitationRole; chapterName: string; organizationUnitId?: string; expiresAt: Date }
   | SendInvitationError
 > {
   const tokenHash = hashToken(token)
   const invitation = await prisma.invitation.findUnique({
     where: { token_hash: tokenHash },
-    include: { chapter: { select: { name: true } } },
+    include: { chapter: { select: { name: true } }, organization_unit: { select: { id: true, name: true } } },
   })
 
   if (!invitation) {
@@ -301,7 +311,8 @@ export async function validateInvitationToken(
     ok: true,
     email: invitation.email,
     role: invitation.role as InvitationRole,
-    chapterName: invitation.chapter.name,
+    chapterName: invitation.chapter?.name || invitation.organization_unit?.name || 'BBE',
+    organizationUnitId: invitation.organization_unit_id || undefined,
     expiresAt: invitation.expires_at,
   }
 }
@@ -331,7 +342,7 @@ export async function acceptInvitation(
   const passwordHash = await bcrypt.hash(password, 12)
 
   // Use transaction: create user + link to chapter + update invitation
-  return await prisma.$transaction(async (tx) => {
+  const accepted = await prisma.$transaction(async (tx) => {
     const user = await tx.user.create({
       data: {
         email: invitation.email,
@@ -342,13 +353,71 @@ export async function acceptInvitation(
       },
     })
 
-    // Create chapter membership
-    await tx.chapterMember.create({
-      data: {
-        chapter_id: invitation.chapter_id,
-        user_id: user.id,
-      },
-    })
+    let chapterId = invitation.chapter_id
+    let organizationUnitId = invitation.organization_unit_id
+    if (chapterId) {
+      const chapter = await tx.chapter.findUnique({ where: { id: chapterId }, select: { id: true, name: true, organization_unit_id: true } })
+      if (!chapter) throw new Error('Invitation Chapter no longer exists')
+      if (!organizationUnitId) organizationUnitId = chapter.organization_unit_id
+      if (!organizationUnitId) {
+        const unit = await tx.organizationUnit.create({ data: { name: chapter.name, type: 'CHAPTER' } })
+        organizationUnitId = unit.id
+        await tx.chapter.update({ where: { id: chapter.id }, data: { organization_unit_id: organizationUnitId } })
+      }
+    } else if (organizationUnitId) {
+      let currentId: string | null = organizationUnitId
+      const visited = new Set<string>()
+      while (currentId && !visited.has(currentId)) {
+        visited.add(currentId)
+        const unit = await tx.organizationUnit.findUnique({ where: { id: currentId }, select: { id: true, type: true, parent_id: true, chapter: { select: { id: true } } } })
+        if (!unit) throw new Error('Invitation organization unit no longer exists')
+        if (unit.type === 'CHAPTER' && unit.chapter) {
+          chapterId = unit.chapter.id
+          break
+        }
+        currentId = unit.parent_id
+      }
+    }
+    if (!organizationUnitId) throw new Error('Invitation has no valid organization scope')
+
+    // Retain the legacy Chapter index where one exists; OrganizationMembership
+    // is the source of truth for Chapter, Department, and DNA scopes.
+    if (chapterId) {
+      await tx.chapterMember.upsert({
+        where: { chapter_id_user_id: { chapter_id: chapterId, user_id: user.id } },
+        create: { chapter_id: chapterId, user_id: user.id },
+        update: {},
+      })
+    }
+    await tx.organizationMembership.create({ data: { user_id: user.id, unit_id: organizationUnitId } })
+
+    if (invitation.role === 'CHAPTER_LEADER') {
+      const position = await tx.position.upsert({
+        where: { code: 'CHAPTER_MANAGER' },
+        update: {},
+        create: { code: 'CHAPTER_MANAGER', name: 'Chapter Manager', scope: 'CHAPTER', is_manager: true },
+      })
+      const existingPrimary = await tx.positionAssignment.findFirst({ where: { unit_id: organizationUnitId, is_primary: true, starts_at: { lte: new Date() }, OR: [{ ends_at: null }, { ends_at: { gt: new Date() } }] }, select: { id: true } })
+      await tx.positionAssignment.create({
+        data: { user_id: user.id, position_id: position.id, unit_id: organizationUnitId, is_primary: !existingPrimary, starts_at: new Date(), appointed_by: invitation.invited_by },
+      })
+      const progressPermission = await tx.permission.upsert({
+        where: { code: 'VIEW_MEMBER_PROGRESS' }, update: {},
+        create: { code: 'VIEW_MEMBER_PROGRESS', description: 'View detailed learning progress within a scoped Chapter.' },
+      })
+      await tx.positionPermission.upsert({
+        where: { position_id_permission_id: { position_id: position.id, permission_id: progressPermission.id } },
+        update: {}, create: { position_id: position.id, permission_id: progressPermission.id },
+      })
+      const managePermission = await tx.permission.upsert({
+        where: { code: 'MANAGE_CHAPTER_MEMBERS' }, update: {},
+        create: { code: 'MANAGE_CHAPTER_MEMBERS', description: 'Manage members within a scoped Chapter.' },
+      })
+      await tx.positionPermission.upsert({
+        where: { position_id_permission_id: { position_id: position.id, permission_id: managePermission.id } },
+        update: {}, create: { position_id: position.id, permission_id: managePermission.id },
+      })
+    }
 
     // Update invitation status
     await tx.invitation.update({
@@ -366,6 +435,16 @@ export async function acceptInvitation(
       status: 'ACTIVE' as const,
     }
   })
+  if (accepted.ok) {
+    try {
+      await reconcileLearningAssignmentsForUser(accepted.userId)
+    } catch (error) {
+      // Account creation is already committed; progression retries reconciliation
+      // on first lesson access, so do not make an accepted invitation appear failed.
+      console.error('[INVITATION] Learning assignment reconciliation failed:', error)
+    }
+  }
+  return accepted
 }
 
 /** Get invitations list with pagination */
@@ -374,10 +453,11 @@ export async function getInvitations(params: {
   actorRole: UserRole
   status?: InvitationStatus
   chapterId?: string
+  organizationUnitId?: string
   page: number
   limit: number
 }) {
-  const { actorId, actorRole, status, chapterId, page, limit } = params
+  const { actorId, actorRole, status, chapterId, organizationUnitId, page, limit } = params
   const skip = (page - 1) * limit
 
   // Đánh dấu các lời mời PENDING đã quá hạn thành EXPIRED để bộ lọc/trạng thái hiển thị đúng
@@ -393,7 +473,7 @@ export async function getInvitations(params: {
   if (status) where.status = status
 
   // BĐHU chỉ được xem lời mời trong chapter của mình (chapterId do auth context cung cấp)
-  if (actorRole !== 'ADMIN' && !chapterId) {
+  if (actorRole !== 'ADMIN' && !chapterId && !organizationUnitId) {
     return { items: [], totalItems: 0, totalPages: 0 }
   }
 
@@ -401,12 +481,16 @@ export async function getInvitations(params: {
   if (chapterId) {
     where.chapter_id = chapterId
   }
+  if (organizationUnitId) {
+    where.organization_unit_id = organizationUnitId
+  }
 
   const [invitations, totalItems] = await Promise.all([
     prisma.invitation.findMany({
       where,
       include: {
         chapter: { select: { id: true, name: true } },
+        organization_unit: { select: { id: true, name: true, type: true } },
         invited_by_user: { select: { id: true, email: true } },
       },
       orderBy: { created_at: 'desc' },
@@ -423,7 +507,9 @@ export async function getInvitations(params: {
       email: inv.email,
       role: inv.role,
       chapterId: inv.chapter_id,
-      chapterName: inv.chapter?.name || 'N/A',
+      organizationUnitId: inv.organization_unit_id,
+      organizationUnitType: inv.organization_unit?.type || null,
+      chapterName: inv.chapter?.name || inv.organization_unit?.name || 'N/A',
       invitedBy: inv.invited_by,
       invitedByEmail: inv.invited_by_user?.email || 'N/A',
       status: inv.status,

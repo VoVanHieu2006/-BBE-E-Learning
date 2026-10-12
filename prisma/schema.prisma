@@ -81,6 +81,13 @@ enum QuestionType {
   @@map("question_type")
 }
 
+enum AssessmentType {
+  LESSON
+  COURSE_FINAL
+
+  @@map("assessment_type")
+}
+
 enum AttemptStatus {
   IN_PROGRESS
   SUBMITTED
@@ -94,6 +101,69 @@ enum VideoProvider {
   YOUTUBE
 
   @@map("video_provider")
+}
+
+enum OrganizationUnitType {
+  ROOT
+  DNA
+  CHAPTER
+  DEPARTMENT
+
+  @@map("organization_unit_type")
+}
+
+enum OrganizationMembershipStatus {
+  ACTIVE
+  ENDED
+
+  @@map("organization_membership_status")
+}
+
+enum PositionScope {
+  PLATFORM
+  DNA
+  CHAPTER
+  DEPARTMENT
+
+  @@map("position_scope")
+}
+
+enum LearningAssignmentStatus {
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  OVERDUE
+  WAIVED
+  ENDED
+
+  @@map("learning_assignment_status")
+}
+
+enum RestrictionType {
+  DIRECT_ADMIN
+  DEADLINE
+  CHAPTER_CASCADE
+
+  @@map("restriction_type")
+}
+
+enum KpiStatus {
+  RED
+  YELLOW
+  GREEN
+
+  @@map("kpi_status")
+}
+
+enum StarReason {
+  VIDEO_COMPLETION
+  MODULE_QUIZ_PASS
+  MODULE_QUIZ_BONUS
+  COURSE_FINAL_PASS
+  COURSE_FINAL_BONUS
+  ADMIN_ADJUSTMENT
+
+  @@map("star_reason")
 }
 
 // ============================================================
@@ -110,6 +180,7 @@ model User {
   locked_until     DateTime?  @db.Timestamp
   created_at       DateTime   @default(now()) @db.Timestamp
   updated_at       DateTime   @updatedAt @db.Timestamp
+  auth_version     Int        @default(1)
 
   chapter_members  ChapterMember[]
   invitations      Invitation[] @relation("InvitedBy")
@@ -121,6 +192,14 @@ model User {
   created_assessments   Assessment[]
   refresh_tokens        RefreshToken[]
   comments              LessonComment[]
+  organization_memberships OrganizationMembership[]
+  position_assignments   PositionAssignment[]
+  learning_assignments   UserLearningAssignment[]
+  stars                  StarLedger[]
+  restrictions           AccessRestriction[] @relation("RestrictedUser")
+  restrictions_created   AccessRestriction[] @relation("RestrictionCreatedBy")
+  restrictions_lifted    AccessRestriction[] @relation("RestrictionLiftedBy")
+  kpi_configurations     ChapterMonthlyKpi[] @relation("KpiConfiguredBy")
 
   @@map("users")
   @@index([email])
@@ -135,9 +214,12 @@ model Chapter {
   status      ChapterStatus @default(ACTIVE)
   created_at  DateTime   @default(now()) @db.Timestamp
   updated_at  DateTime   @updatedAt @db.Timestamp
+  organization_unit_id String? @unique @db.Uuid
 
   chapter_members ChapterMember[]
   invitations     Invitation[]
+  organization_unit OrganizationUnit? @relation(fields: [organization_unit_id], references: [id], onDelete: SetNull)
+  monthly_kpis ChapterMonthlyKpi[]
 
   @@map("chapters")
   @@index([status])
@@ -161,7 +243,8 @@ model Invitation {
   id            String            @id @default(uuid()) @db.Uuid
   email         String            @db.VarChar(255)
   role          InvitationRole
-  chapter_id    String            @db.Uuid
+  chapter_id    String?           @db.Uuid
+  organization_unit_id String?     @db.Uuid
   invited_by    String            @db.Uuid
   token_hash    String            @unique @db.VarChar(255)
   status        InvitationStatus  @default(PENDING)
@@ -170,7 +253,8 @@ model Invitation {
   cancelled_at  DateTime?         @db.Timestamp
   created_at    DateTime          @default(now()) @db.Timestamp
 
-  chapter       Chapter           @relation(fields: [chapter_id], references: [id], onDelete: Cascade)
+  chapter       Chapter?          @relation(fields: [chapter_id], references: [id], onDelete: Cascade)
+  organization_unit OrganizationUnit? @relation(fields: [organization_unit_id], references: [id], onDelete: Cascade)
   invited_by_user User            @relation(fields: [invited_by], references: [id], name: "InvitedBy", onDelete: Cascade)
 
   @@map("invitations")
@@ -178,6 +262,7 @@ model Invitation {
   @@index([status])
   @@index([expires_at])
   @@index([email, status])
+  @@index([organization_unit_id, status])
 }
 
 model Course {
@@ -190,9 +275,14 @@ model Course {
   published_at  DateTime?          @db.Timestamp
   created_at    DateTime           @default(now()) @db.Timestamp
   updated_at    DateTime           @updatedAt @db.Timestamp
+  cover_url     String?            @db.VarChar(1000)
+  cover_public_id String?          @db.VarChar(500)
 
   created_by_user User             @relation(fields: [created_by], references: [id], onDelete: Cascade)
   sessions      Session[]
+  final_assessment Assessment? @relation("CourseFinalAssessment")
+  learning_rules LearningRule[]
+  learning_assignments UserLearningAssignment[]
 
   @@map("courses")
   @@index([status, visibility])
@@ -291,17 +381,21 @@ model LessonProgress {
 
 model Assessment {
   id            String     @id @default(uuid()) @db.Uuid
-  lesson_id     String     @unique @db.Uuid
+  type          AssessmentType @default(LESSON)
+  lesson_id     String?    @unique @db.Uuid
+  course_id     String?    @unique @db.Uuid
   title         String     @db.VarChar(255)
   description   String?    @db.Text
   created_by    String     @db.Uuid
   created_at    DateTime   @default(now()) @db.Timestamp
   updated_at    DateTime   @updatedAt @db.Timestamp
 
-  lesson        Lesson     @relation(fields: [lesson_id], references: [id], onDelete: Cascade)
+  lesson        Lesson?    @relation(fields: [lesson_id], references: [id], onDelete: Cascade)
+  course        Course?    @relation("CourseFinalAssessment", fields: [course_id], references: [id], onDelete: Cascade)
   created_by_user User    @relation(fields: [created_by], references: [id], onDelete: Cascade)
   questions     Question[]
   attempts      Attempt[]
+  question_pools QuestionPool[]
 
   @@map("assessments")
 }
@@ -317,14 +411,17 @@ model Question {
   explanation     String?        @db.Text
   created_at      DateTime       @default(now()) @db.Timestamp
   updated_at      DateTime       @updatedAt @db.Timestamp
+  pool_id         String?        @db.Uuid
 
   assessment      Assessment     @relation(fields: [assessment_id], references: [id], onDelete: Cascade)
   options         QuestionOption[]
   attempt_questions AttemptQuestion[]
   attempt_answers  AttemptAnswer[]
+  pool             QuestionPool? @relation(fields: [pool_id], references: [id], onDelete: SetNull)
 
   @@map("questions")
   @@index([assessment_id, sort_order])
+  @@index([pool_id])
 }
 
 model QuestionOption {
@@ -466,4 +563,231 @@ model LessonComment {
   @@map("lesson_comments")
   @@index([lesson_id, created_at])
   @@index([parent_id])
+}
+
+// ---------------------------------------------------------------------------
+// Organization, learning entitlement, reward and ranking foundation.
+// These models are append-only so the current ChapterMember/User history stays
+// available while the application moves to assignment-based authorization.
+// ---------------------------------------------------------------------------
+
+model OrganizationUnit {
+  id          String               @id @default(uuid()) @db.Uuid
+  name        String               @db.VarChar(255)
+  type        OrganizationUnitType
+  parent_id   String?              @db.Uuid
+  status      ChapterStatus        @default(ACTIVE)
+  created_at  DateTime             @default(now()) @db.Timestamp
+  updated_at  DateTime             @updatedAt @db.Timestamp
+
+  parent      OrganizationUnit?    @relation("OrganizationTree", fields: [parent_id], references: [id], onDelete: Restrict)
+  children    OrganizationUnit[]   @relation("OrganizationTree")
+  chapter     Chapter?
+  memberships OrganizationMembership[]
+  positions   PositionAssignment[]
+  learning_rules LearningRule[]
+  restrictions AccessRestriction[] @relation("RestrictedOrganizationUnit")
+  invitations Invitation[]
+
+  @@unique([parent_id, name])
+  @@index([type, status])
+  @@index([parent_id])
+  @@map("organization_units")
+}
+
+model OrganizationMembership {
+  id          String                       @id @default(uuid()) @db.Uuid
+  user_id     String                       @db.Uuid
+  unit_id     String                       @db.Uuid
+  status      OrganizationMembershipStatus @default(ACTIVE)
+  starts_at   DateTime                     @default(now()) @db.Timestamp
+  ends_at     DateTime?                    @db.Timestamp
+  created_at  DateTime                     @default(now()) @db.Timestamp
+
+  user        User                         @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  unit        OrganizationUnit             @relation(fields: [unit_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id, status])
+  @@index([unit_id, status])
+  @@map("organization_memberships")
+}
+
+model Position {
+  id          String        @id @default(uuid()) @db.Uuid
+  code        String        @unique @db.VarChar(100)
+  name        String        @db.VarChar(255)
+  scope       PositionScope
+  is_manager  Boolean       @default(false)
+  created_at  DateTime      @default(now()) @db.Timestamp
+
+  assignments PositionAssignment[]
+  permissions PositionPermission[]
+  learning_rules LearningRule[]
+
+  @@map("positions")
+}
+
+model Permission {
+  id          String       @id @default(uuid()) @db.Uuid
+  code        String       @unique @db.VarChar(120)
+  description String?      @db.Text
+  created_at  DateTime     @default(now()) @db.Timestamp
+
+  positions   PositionPermission[]
+
+  @@map("permissions")
+}
+
+model PositionPermission {
+  position_id   String     @db.Uuid
+  permission_id String     @db.Uuid
+
+  position      Position   @relation(fields: [position_id], references: [id], onDelete: Cascade)
+  permission    Permission @relation(fields: [permission_id], references: [id], onDelete: Cascade)
+
+  @@id([position_id, permission_id])
+  @@map("position_permissions")
+}
+
+model PositionAssignment {
+  id          String           @id @default(uuid()) @db.Uuid
+  user_id     String           @db.Uuid
+  position_id String           @db.Uuid
+  unit_id     String           @db.Uuid
+  is_primary  Boolean          @default(false)
+  starts_at   DateTime         @default(now()) @db.Timestamp
+  ends_at     DateTime?        @db.Timestamp
+  appointed_by String?         @db.Uuid
+  created_at  DateTime         @default(now()) @db.Timestamp
+
+  user        User             @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  position    Position         @relation(fields: [position_id], references: [id], onDelete: Restrict)
+  unit        OrganizationUnit @relation(fields: [unit_id], references: [id], onDelete: Restrict)
+
+  @@index([user_id, starts_at, ends_at])
+  @@index([unit_id, position_id, starts_at, ends_at])
+  @@map("position_assignments")
+}
+
+model LearningRule {
+  id                String            @id @default(uuid()) @db.Uuid
+  course_id         String            @db.Uuid
+  organization_unit_id String?        @db.Uuid
+  position_id       String?           @db.Uuid
+  mandatory         Boolean           @default(true)
+  can_view          Boolean           @default(true)
+  can_assess        Boolean           @default(true)
+  can_earn_stars    Boolean           @default(true)
+    due_days          Int?
+  effective_from    DateTime          @default(now()) @db.Timestamp
+  effective_until   DateTime?         @db.Timestamp
+  created_at        DateTime          @default(now()) @db.Timestamp
+
+  course            Course            @relation(fields: [course_id], references: [id], onDelete: Cascade)
+  organization_unit OrganizationUnit? @relation(fields: [organization_unit_id], references: [id], onDelete: Cascade)
+  position          Position?         @relation(fields: [position_id], references: [id], onDelete: Cascade)
+  assignments       UserLearningAssignment[]
+
+  @@index([course_id, effective_from, effective_until])
+  @@index([organization_unit_id, position_id])
+  @@map("learning_rules")
+}
+
+model UserLearningAssignment {
+  id                String                   @id @default(uuid()) @db.Uuid
+  user_id           String                   @db.Uuid
+  course_id         String                   @db.Uuid
+  rule_id           String?                  @db.Uuid
+  mandatory         Boolean                  @default(true)
+  can_view          Boolean                  @default(true)
+  can_assess        Boolean                  @default(true)
+  can_earn_stars    Boolean                  @default(true)
+  due_at            DateTime?                @db.Timestamp
+  status            LearningAssignmentStatus @default(ASSIGNED)
+  assigned_at       DateTime                 @default(now()) @db.Timestamp
+  ended_at          DateTime?                @db.Timestamp
+  completed_at      DateTime?                @db.Timestamp
+
+  user              User                     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  course            Course                   @relation(fields: [course_id], references: [id], onDelete: Cascade)
+  rule              LearningRule?            @relation(fields: [rule_id], references: [id], onDelete: SetNull)
+
+  @@index([user_id, status, due_at])
+  @@index([course_id, status])
+  @@index([rule_id])
+  @@map("user_learning_assignments")
+}
+
+model AccessRestriction {
+  id                 String            @id @default(uuid()) @db.Uuid
+  user_id            String?           @db.Uuid
+  organization_unit_id String?         @db.Uuid
+  type               RestrictionType
+  reason             String            @db.Text
+  source_reference   String?           @db.VarChar(255)
+  created_by_user_id String?           @db.Uuid
+  lifted_by_user_id  String?           @db.Uuid
+  created_at         DateTime          @default(now()) @db.Timestamp
+  lifted_at          DateTime?         @db.Timestamp
+
+  user               User?             @relation("RestrictedUser", fields: [user_id], references: [id], onDelete: Cascade)
+  organization_unit  OrganizationUnit? @relation("RestrictedOrganizationUnit", fields: [organization_unit_id], references: [id], onDelete: Cascade)
+  created_by          User?             @relation("RestrictionCreatedBy", fields: [created_by_user_id], references: [id], onDelete: SetNull)
+  lifted_by           User?             @relation("RestrictionLiftedBy", fields: [lifted_by_user_id], references: [id], onDelete: SetNull)
+
+  @@index([user_id, lifted_at])
+  @@index([organization_unit_id, lifted_at])
+  @@index([type, created_at])
+  @@map("access_restrictions")
+}
+
+model StarLedger {
+  id          String     @id @default(uuid()) @db.Uuid
+  user_id     String     @db.Uuid
+  amount      Int
+  reason      StarReason
+  reward_key  String     @unique @db.VarChar(255)
+  source_type String     @db.VarChar(100)
+  source_id   String     @db.Uuid
+  metadata    Json?
+  awarded_at  DateTime   @default(now()) @db.Timestamp
+
+  user        User       @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id, awarded_at])
+  @@index([source_type, source_id])
+  @@map("star_ledger")
+}
+
+model QuestionPool {
+  id            String     @id @default(uuid()) @db.Uuid
+  assessment_id String     @db.Uuid
+  name          String     @db.VarChar(255)
+  sort_order    Int
+  created_at    DateTime   @default(now()) @db.Timestamp
+
+  assessment    Assessment @relation(fields: [assessment_id], references: [id], onDelete: Cascade)
+  questions     Question[]
+
+  @@unique([assessment_id, sort_order])
+  @@index([assessment_id])
+  @@map("question_pools")
+}
+
+model ChapterMonthlyKpi {
+  id                  String    @id @default(uuid()) @db.Uuid
+  chapter_id          String    @db.Uuid
+  month_start         DateTime  @db.Date
+  status              KpiStatus
+  configured_by_user_id String  @db.Uuid
+  note                String?   @db.Text
+  created_at          DateTime  @default(now()) @db.Timestamp
+  updated_at          DateTime  @updatedAt @db.Timestamp
+
+  chapter             Chapter   @relation(fields: [chapter_id], references: [id], onDelete: Cascade)
+  configured_by       User      @relation("KpiConfiguredBy", fields: [configured_by_user_id], references: [id], onDelete: Restrict)
+
+  @@unique([chapter_id, month_start])
+  @@index([month_start, status])
+  @@map("chapter_monthly_kpis")
 }

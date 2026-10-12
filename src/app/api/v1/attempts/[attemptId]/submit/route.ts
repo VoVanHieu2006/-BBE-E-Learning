@@ -1,152 +1,219 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { awardStars, canEarnStarsForCourse, starsForQuizScore } from '@/lib/stars'
+import { syncCourseAssignmentCompletion } from '@/lib/learning-assignments'
+import { checkCourseFinalProgression, checkLessonProgression } from '@/lib/progression'
+import { QUIZ_PASS_PERCENT } from '@/lib/config/quiz'
+import { gradeQuizAttempt, validateAttemptAnswerSelections } from '@/lib/quiz-attempt-rules'
 
-/**
- * POST /api/v1/attempts/{attemptId}/submit
- * Submit attempt — BR-04 (passed=true → full results; passed=false → chỉ đúng/sai, không lộ đáp án)
- */
+/** Submit and grade an attempt once, serializing answer writes against submission. */
 export async function POST(request: NextRequest, { params }: { params: { attemptId: string } }) {
   const auth = await authenticate(request)
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: 401 })
 
   const userId = (auth as any).context!.userId
-
-  const attempt = await prisma.attempt.findUnique({ where: { id: params.attemptId } })
+  const attempt = await prisma.attempt.findUnique({
+    where: { id: params.attemptId },
+    include: { assessment: { select: { type: true, lesson_id: true, course_id: true } } },
+  })
   if (!attempt) return NextResponse.json({ error: { code: 'AttemptNotFound' } }, { status: 404 })
   if (attempt.user_id !== userId) return NextResponse.json({ error: { code: 'AccessDenied' } }, { status: 403 })
-  if (attempt.status !== 'IN_PROGRESS') return NextResponse.json({ error: { code: 'AttemptNotInProgress' } }, { status: 400 })
 
-  const body = await request.json().catch(() => ({}))
-  const clientAnswers = body?.answers || {}
-
-  // Upsert any answers submitted in body with batch lookup to eliminate N+1
-  if (clientAnswers && typeof clientAnswers === 'object') {
-    const validEntries = Object.entries(clientAnswers).filter(
-      ([_, optId]) => typeof optId === 'string' && optId
-    ) as [string, string][]
-
-    if (validEntries.length > 0) {
-      const optIds = Array.from(new Set(validEntries.map(([_, optId]) => optId)))
-      const options = await prisma.questionOption.findMany({
-        where: { id: { in: optIds } },
-        select: { id: true, is_correct: true },
-      })
-      const optMap = new Map(options.map((o) => [o.id, o.is_correct]))
-
-      await Promise.all(
-        validEntries.map(([qId, optId]) => {
-          const isCorrect = optMap.get(optId) || false
-          return prisma.attemptAnswer.upsert({
-            where: { attempt_id_question_id: { attempt_id: params.attemptId, question_id: qId } },
-            create: {
-              attempt_id: params.attemptId,
-              question_id: qId,
-              selected_option_id: optId,
-              is_correct: isCorrect,
-              answered_at: new Date(),
-            },
-            update: {
-              selected_option_id: optId,
-              is_correct: isCorrect,
-              answered_at: new Date(),
-            },
-          })
-        })
-      )
-    }
+  const progression = attempt.assessment.type === 'COURSE_FINAL' && attempt.assessment.course_id
+    ? await checkCourseFinalProgression(userId, attempt.assessment.course_id, (auth as any).context!.role === 'ADMIN')
+    : attempt.assessment.lesson_id
+      ? await checkLessonProgression(userId, attempt.assessment.lesson_id, 'ASSESS', (auth as any).context!.role === 'ADMIN')
+      : { ok: false as const, code: 'InvalidAssessmentOwner', message: 'Assessment owner is missing.' }
+  if (progression.ok === false) {
+    return NextResponse.json({ error: { code: progression.code, message: progression.message } }, { status: 403 })
   }
 
-  // Calculate score concurrently
-  const [answers, allQuestions] = await Promise.all([
-    prisma.attemptAnswer.findMany({
-      where: { attempt_id: params.attemptId },
-      include: { question: true, selected_option: true },
-    }),
-    prisma.attemptQuestion.findMany({
+  const body = await request.json().catch(() => ({}))
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return NextResponse.json({ error: { code: 'ValidationError', message: 'Request body must be an object' } }, { status: 400 })
+  }
+  const bodyRecord = body as Record<string, unknown>
+  const hasClientAnswers = Object.prototype.hasOwnProperty.call(bodyRecord, 'answers')
+  if (hasClientAnswers && (!bodyRecord.answers || typeof bodyRecord.answers !== 'object' || Array.isArray(bodyRecord.answers))) {
+    return NextResponse.json({ error: { code: 'ValidationError', message: 'answers must be an object keyed by questionId' } }, { status: 400 })
+  }
+  const submittedEntries = hasClientAnswers
+    ? Object.entries(bodyRecord.answers as Record<string, unknown>)
+    : []
+  const optionIds = Array.from(new Set(submittedEntries
+    .map(([, optionId]) => optionId)
+    .filter((optionId): optionId is string => typeof optionId === 'string' && optionId.length > 0)))
+
+  // All answer writes, grading and the status transition happen while holding a
+  // row lock. An answer-save request either finishes before grading or sees the
+  // submitted status and is rejected; it cannot silently race the final score.
+  const submission = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM attempts WHERE id = ${params.attemptId}::uuid FOR UPDATE`
+    const currentAttempt = await tx.attempt.findUnique({
+      where: { id: params.attemptId },
+      select: { user_id: true, status: true, expires_at: true },
+    })
+    if (!currentAttempt) return { error: 'AttemptNotFound' as const }
+    if (currentAttempt.user_id !== userId) return { error: 'AccessDenied' as const }
+    if (currentAttempt.status !== 'IN_PROGRESS') return { error: 'AttemptNotInProgress' as const }
+    if (currentAttempt.expires_at <= new Date()) return { error: 'AttemptExpired' as const }
+
+    const attemptQuestions = await tx.attemptQuestion.findMany({
       where: { attempt_id: params.attemptId },
       include: { question: { include: { options: true } } },
       orderBy: { display_order: 'asc' },
-    }),
-  ])
+    })
+    if (attemptQuestions.length === 0) return { error: 'AttemptHasNoQuestions' as const }
 
-  let totalPoints = 0
-  let score = 0
-  for (const q of allQuestions) {
-    totalPoints += Number(q.question.points || 1)
-  }
+    if (hasClientAnswers) {
+      const options = optionIds.length > 0
+        ? await tx.questionOption.findMany({
+            where: { id: { in: optionIds } },
+            select: { id: true, question_id: true, is_correct: true },
+          })
+        : []
+      const optionById = new Map(options.map((option) => [option.id, option]))
+      const validation = validateAttemptAnswerSelections(
+        attemptQuestions.map(({ question_id }) => question_id),
+        new Map(options.map(({ id, question_id }) => [id, question_id])),
+        submittedEntries,
+      )
+      if (validation.ok === false) return { error: validation.code }
 
-  for (const ans of answers) {
-    const isCorrect = ans.selected_option?.is_correct || false
-    if (isCorrect) {
-      score += Number(ans.question.points || 1)
+      const answeredAt = new Date()
+      await Promise.all(validation.answers.map(({ questionId, selectedOptionId }) => {
+        const option = optionById.get(selectedOptionId)!
+        return tx.attemptAnswer.upsert({
+          where: { attempt_id_question_id: { attempt_id: params.attemptId, question_id: questionId } },
+          create: {
+            attempt_id: params.attemptId,
+            question_id: questionId,
+            selected_option_id: selectedOptionId,
+            is_correct: option.is_correct,
+            answered_at: answeredAt,
+          },
+          update: {
+            selected_option_id: selectedOptionId,
+            is_correct: option.is_correct,
+            answered_at: answeredAt,
+          },
+        })
+      }))
     }
-  }
 
-  const scoreRatio = totalPoints > 0 ? score / totalPoints : 0
-  const passed = scoreRatio >= 0.85
+    const answers = await tx.attemptAnswer.findMany({ where: { attempt_id: params.attemptId } })
+    const grading = gradeQuizAttempt(
+      attemptQuestions.map((attemptQuestion) => ({
+        id: attemptQuestion.question_id,
+        points: Number(attemptQuestion.question.points || 1),
+        explanation: attemptQuestion.question.explanation,
+        options: attemptQuestion.question.options.map((option) => ({
+          id: option.id,
+          text: option.option_text,
+          correct: option.is_correct,
+        })),
+      })),
+      answers.map((answer) => ({
+        questionId: answer.question_id,
+        selectedOptionId: answer.selected_option_id,
+      })),
+      QUIZ_PASS_PERCENT / 100,
+    )
 
-  // Atomic conditional update — chỉ update nếu attempt vẫn còn IN_PROGRESS
-  // Ngăn chặn race condition (TOCTOU) khi nhiều requests nộp bài cùng lúc
-  const updateResult = await prisma.attempt.updateMany({
-    where: {
-      id: params.attemptId,
-      status: 'IN_PROGRESS', // Atomic guard
-    },
-    data: { status: 'SUBMITTED', submitted_at: new Date(), score: scoreRatio, passed },
+    const updateResult = await tx.attempt.updateMany({
+      where: {
+        id: params.attemptId,
+        user_id: userId,
+        status: 'IN_PROGRESS',
+        expires_at: { gt: new Date() },
+      },
+      data: { status: 'SUBMITTED', submitted_at: new Date(), score: grading.scoreRatio, passed: grading.passed },
+    })
+    if (updateResult.count === 0) return { error: 'AttemptNotInProgress' as const }
+
+    return { grading }
   })
 
-  if (updateResult.count === 0) {
-    return NextResponse.json(
-      { error: { code: 'AttemptNotInProgress', message: 'Bài thi đã được nộp từ trước hoặc không còn hiệu lực' } },
-      { status: 400 }
-    )
+  if ('error' in submission) {
+    const status = submission.error === 'AttemptNotFound' ? 404 : submission.error === 'AccessDenied' ? 403 : 400
+    return NextResponse.json({ error: { code: submission.error } }, { status })
   }
 
-  // If passed, auto-complete the lesson associated with this assessment
+  const { score, totalPoints, scoreRatio, passed, results } = submission.grading
+  let starRewardAmount = 0
   if (passed) {
     const assess = await prisma.assessment.findUnique({
       where: { id: attempt.assessment_id },
-      select: { lesson_id: true },
+      select: {
+        type: true,
+        lesson_id: true,
+        course_id: true,
+        lesson: { select: { session: { select: { course_id: true } } } },
+      },
     })
-    if (assess?.lesson_id) {
+    if (assess?.type === 'LESSON' && assess.lesson_id && assess.lesson) {
       await prisma.lessonProgress.upsert({
-        where: {
-          user_id_lesson_id: {
-            user_id: userId,
-            lesson_id: assess.lesson_id,
-          },
-        },
-        create: {
-          user_id: userId,
-          lesson_id: assess.lesson_id,
-          completed: true,
-          completed_at: new Date(),
-        },
-        update: {
-          completed: true,
-          completed_at: new Date(),
-        },
+        where: { user_id_lesson_id: { user_id: userId, lesson_id: assess.lesson_id } },
+        create: { user_id: userId, lesson_id: assess.lesson_id, completed: true, completed_at: new Date() },
+        update: { completed: true, completed_at: new Date() },
       })
+      await syncCourseAssignmentCompletion(userId, assess.lesson.session.course_id)
+
+      if (await canEarnStarsForCourse(userId, assess.lesson.session.course_id)) {
+        const quizStarTotal = starsForQuizScore(scoreRatio, QUIZ_PASS_PERCENT / 100)
+        const bonus = Math.max(0, quizStarTotal - 2)
+        const starAwards = await Promise.all([
+          awardStars({
+            userId,
+            amount: 2,
+            reason: 'MODULE_QUIZ_PASS',
+            rewardKey: `module-quiz-pass:${userId}:${attempt.assessment_id}`,
+            sourceType: 'ASSESSMENT',
+            sourceId: attempt.assessment_id,
+            metadata: { attemptId: attempt.id, scoreRatio },
+          }),
+          ...(bonus > 0 ? [awardStars({
+            userId,
+            amount: bonus,
+            reason: 'MODULE_QUIZ_BONUS',
+            rewardKey: `module-quiz-bonus:${userId}:${attempt.assessment_id}`,
+            sourceType: 'ASSESSMENT',
+            sourceId: attempt.assessment_id,
+            metadata: { attemptId: attempt.id, scoreRatio },
+          })] : []),
+        ])
+        starRewardAmount = starAwards.reduce((sum, award) => sum + (award.awarded ? award.amount : 0), 0)
+      }
+    } else if (assess?.type === 'COURSE_FINAL' && assess.course_id) {
+      await syncCourseAssignmentCompletion(userId, assess.course_id)
+      if (await canEarnStarsForCourse(userId, assess.course_id)) {
+        const { starsForCourseFinalScore } = await import('@/lib/reward-rules')
+        const { passStars, bonusStars } = starsForCourseFinalScore(scoreRatio, QUIZ_PASS_PERCENT / 100)
+        const awards = await Promise.all([
+          awardStars({
+            userId,
+            amount: passStars,
+            reason: 'COURSE_FINAL_PASS',
+            rewardKey: `course-final-pass:${userId}:${attempt.assessment_id}`,
+            sourceType: 'ASSESSMENT',
+            sourceId: attempt.assessment_id,
+            metadata: { attemptId: attempt.id, scoreRatio },
+          }),
+          ...(bonusStars > 0 ? [awardStars({
+            userId,
+            amount: bonusStars,
+            reason: 'COURSE_FINAL_BONUS',
+            rewardKey: `course-final-bonus:${userId}:${attempt.assessment_id}`,
+            sourceType: 'ASSESSMENT',
+            sourceId: attempt.assessment_id,
+            metadata: { attemptId: attempt.id, scoreRatio },
+          })] : []),
+        ])
+        starRewardAmount = awards.reduce((sum, award) => sum + (award.awarded ? award.amount : 0), 0)
+      }
     }
   }
-
-  // For response: return all attempt questions in order
-  const resultAnswers = allQuestions.map((aq) => {
-    const ans = answers.find((a) => a.question_id === aq.question_id)
-    const isCorrect = ans?.selected_option?.is_correct || false
-    const correctOption = aq.question.options.find((o) => o.is_correct) || null
-
-    return {
-      questionId: aq.question_id,
-      isCorrect,
-      selectedOptionId: ans?.selected_option_id || null,
-      ...(passed ? {
-        correctOptionId: correctOption?.id || null,
-        explanation: aq.question.explanation || (correctOption ? `Đáp án đúng: ${correctOption.option_text}` : null),
-      } : {}),
-    }
-  })
 
   return NextResponse.json({
     attemptId: attempt.id,
@@ -154,6 +221,12 @@ export async function POST(request: NextRequest, { params }: { params: { attempt
     scorePercent: Math.round(scoreRatio * 100),
     totalPoints,
     passed,
-    answers: resultAnswers,
+    starReward: starRewardAmount > 0 ? { awarded: true, amount: starRewardAmount } : { awarded: false, amount: 0 },
+    answers: results.map((result) => ({
+      questionId: result.questionId,
+      isCorrect: result.isCorrect,
+      selectedOptionId: result.selectedOptionId,
+      ...(passed ? { correctOptionId: result.correctOptionId, explanation: result.explanation } : {}),
+    })),
   })
 }

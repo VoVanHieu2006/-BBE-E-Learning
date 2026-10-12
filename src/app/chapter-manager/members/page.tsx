@@ -19,6 +19,7 @@ export default function ChapterManagerMembersPage() {
   const [actionUserId, setActionUserId] = useState<string | null>(null);
   const [confirmToggle, setConfirmToggle] = useState<{ userId: string; email: string; currentStatus: string } | null>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
+  const canManageMembers = user?.role === 'CHAPTER_LEADER' || user?.canManageMembers === true;
 
   const showToast = (type: 'success' | 'error' | 'info', message: string, title?: string) => {
     setToast({ type, message, title });
@@ -84,7 +85,7 @@ export default function ChapterManagerMembersPage() {
 
     const res = await apiFetch('/api/v1/invitations/member', {
       method: 'POST',
-      body: JSON.stringify({ email: inviteEmail.trim() }),
+      body: JSON.stringify({ email: inviteEmail.trim(), chapterId: user?.chapterId }),
     });
 
     if (res.ok) {
@@ -99,7 +100,12 @@ export default function ChapterManagerMembersPage() {
   };
 
   const handleToggleStatus = async (userId: string, currentStatus: string) => {
-    const nextStatus = currentStatus === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+    if (!canManageMembers || currentStatus !== 'ACTIVE') {
+      showToast('info', 'Chỉ Admin mới được mở khóa hoặc kích hoạt lại tài khoản.');
+      setConfirmToggle(null);
+      return;
+    }
+    const nextStatus = 'INACTIVE';
 
     setActionUserId(userId);
     setMembers((prev) =>
@@ -110,7 +116,7 @@ export default function ChapterManagerMembersPage() {
     clearApiCache('/api/v1/users');
     const res = await apiFetch(`/api/v1/users/${userId}`, {
       method: 'PATCH',
-      body: JSON.stringify({ status: nextStatus }),
+      body: JSON.stringify({ status: nextStatus, chapterId: user?.chapterId }),
     });
 
     if (res.ok) {
@@ -124,12 +130,6 @@ export default function ChapterManagerMembersPage() {
           'error',
           'Thành viên đã bị vô hiệu hóa. Người dùng sẽ bị chặn đăng nhập và ngừng toàn bộ quyền truy cập học tập.',
           '⚠️ Đã vô hiệu hóa thành viên'
-        );
-      } else {
-        showToast(
-          'success',
-          'Thành viên đã được kích hoạt lại thành công.',
-          '✅ Đã kích hoạt thành viên'
         );
       }
       clearApiCache('/api/v1/chapters');
@@ -186,12 +186,16 @@ export default function ChapterManagerMembersPage() {
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <Link href="/chapter-manager/invitations">
-              <Button variant="secondary">✉️ Danh sách lời mời</Button>
-            </Link>
-            <Button onClick={() => setShowInviteModal(true)}>
-              ＋ Mời thành viên mới
-            </Button>
+            {canManageMembers && (
+              <>
+                <Link href="/chapter-manager/invitations">
+                  <Button variant="secondary">✉️ Danh sách lời mời</Button>
+                </Link>
+                <Button onClick={() => setShowInviteModal(true)}>
+                  ＋ Mời thành viên mới
+                </Button>
+              </>
+            )}
           </div>
         </div>
 
@@ -239,10 +243,12 @@ export default function ChapterManagerMembersPage() {
           ) : memberRows.length === 0 ? (
             <div className="text-center py-16 text-[#737686]">
               <p className="text-lg font-semibold text-[#172554] mb-1">Chưa có thành viên nào</p>
-              <p className="text-sm">Hãy gửi lời mời thành viên đầu tiên tham gia Chapter của bạn.</p>
-              <Button size="sm" onClick={() => setShowInviteModal(true)} className="mt-4">
-                ＋ Mời thành viên ngay
-              </Button>
+              <p className="text-sm">{canManageMembers ? 'Hãy gửi lời mời thành viên đầu tiên tham gia Chapter của bạn.' : 'Chapter hiện chưa có thành viên để hiển thị.'}</p>
+              {canManageMembers && (
+                <Button size="sm" onClick={() => setShowInviteModal(true)} className="mt-4">
+                  ＋ Mời thành viên ngay
+                </Button>
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -313,26 +319,27 @@ export default function ChapterManagerMembersPage() {
                               Chi tiết
                             </Link>
 
-                            <button
-                              disabled={isBusy}
-                              onClick={() =>
-                                setConfirmToggle({ userId: mId, email: m.email, currentStatus: m.status })
-                              }
-                              className={`whitespace-nowrap px-2.5 py-1 text-xs font-semibold rounded-lg transition ${
-                                isActive
-                                  ? 'text-red-600 hover:bg-red-50'
-                                  : 'text-green-700 hover:bg-green-50'
-                              }`}
-                            >
-                              {isActive ? 'Vô hiệu hóa' : 'Kích hoạt lại'}
-                            </button>
-                            <button
-                              onClick={() => handleRemoveMember(mId, m.email)}
-                              className="text-slate-400 hover:text-red-600 p-1 rounded-lg"
-                              title="Xóa khỏi chapter"
-                            >
-                              ✕
-                            </button>
+                            {canManageMembers && isActive && (
+                              <button
+                                disabled={isBusy}
+                                onClick={() => setConfirmToggle({ userId: mId, email: m.email, currentStatus: m.status })}
+                                className="whitespace-nowrap px-2.5 py-1 text-xs font-semibold rounded-lg text-red-600 hover:bg-red-50 transition"
+                              >
+                                Vô hiệu hóa
+                              </button>
+                            )}
+                            {canManageMembers && !isActive && (
+                              <span className="text-[11px] text-slate-500">Chỉ Admin mở khóa</span>
+                            )}
+                            {canManageMembers && (
+                              <button
+                                onClick={() => handleRemoveMember(mId, m.email)}
+                                className="text-slate-400 hover:text-red-600 p-1 rounded-lg"
+                                title="Kết thúc membership tại Chapter"
+                              >
+                                ✕
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -346,7 +353,7 @@ export default function ChapterManagerMembersPage() {
 
         {/* Modal: Invite Member */}
         <Modal
-          isOpen={showInviteModal}
+          isOpen={showInviteModal && canManageMembers}
           onClose={() => setShowInviteModal(false)}
           maxWidth="max-w-md"
         >
@@ -386,7 +393,7 @@ export default function ChapterManagerMembersPage() {
           </div>
         </Modal>
 
-        {/* Modal: Xác nhận vô hiệu hóa / kích hoạt tài khoản */}
+        {/* Modal: Xác nhận vô hiệu hóa tài khoản */}
         <Modal
           isOpen={!!confirmToggle}
           onClose={() => setConfirmToggle(null)}
@@ -394,12 +401,10 @@ export default function ChapterManagerMembersPage() {
         >
           <div className="p-6 space-y-4">
             <h3 className="text-xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
-              {confirmToggle?.currentStatus === 'ACTIVE' ? 'Vô hiệu hóa tài khoản?' : 'Kích hoạt lại tài khoản?'}
+              Vô hiệu hóa tài khoản?
             </h3>
             <p className="text-sm text-[#737686]">
-              {confirmToggle?.currentStatus === 'ACTIVE'
-                ? `Thành viên ${confirmToggle?.email} sẽ không thể đăng nhập và ngừng toàn bộ quyền truy cập học tập.`
-                : `Thành viên ${confirmToggle?.email} sẽ được cấp lại quyền đăng nhập và học tập bình thường.`}
+              {`Thành viên ${confirmToggle?.email} sẽ không thể đăng nhập và ngừng toàn bộ quyền truy cập học tập. Chỉ Admin mới có thể mở khóa.`}
             </p>
             <div className="flex justify-end gap-3 pt-2">
               <Button variant="outline" type="button" onClick={() => setConfirmToggle(null)}>

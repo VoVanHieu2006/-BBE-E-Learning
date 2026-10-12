@@ -11,7 +11,7 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 /**
  * GET /api/v1/lessons/{lessonId}/assessment
  * Lấy bài kiểm tra của bài học
- * Admin và Chapter Leader có thể xem đáp án và giải thích
+ * Chỉ Admin được xem ngân hàng câu hỏi/đáp án để biên tập.
  */
 export async function GET(
   request: NextRequest,
@@ -29,6 +29,16 @@ export async function GET(
     ok: false,
     error: { code: 'UNAUTHORIZED' },
   }));
+
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: 401 });
+  }
+  if ((auth as any).context!.role !== 'ADMIN') {
+    return NextResponse.json(
+      { error: { code: 'AccessDenied', message: 'Chỉ Admin được xem ngân hàng câu hỏi.' } },
+      { status: 403 },
+    );
+  }
 
   const assessment = await prisma.assessment.findUnique({
     where: { lesson_id: lessonId },
@@ -49,9 +59,6 @@ export async function GET(
     );
   }
 
-  const role = (auth as any).context?.role;
-  const canSeeCorrect = auth.ok && (role === 'ADMIN' || role === 'CHAPTER_LEADER');
-
   return NextResponse.json(
     {
       assessmentId: assessment.id,
@@ -68,12 +75,13 @@ export async function GET(
         points: Number(q.points),
         durationSeconds: q.duration_seconds,
         sortOrder: q.sort_order,
-        ...(canSeeCorrect ? { explanation: q.explanation || '' } : {}),
+        poolId: q.pool_id,
+        explanation: q.explanation || '',
         options: q.options.map((o) => ({
           optionId: o.id,
           id: o.id,
           optionText: o.option_text,
-          ...(canSeeCorrect ? { isCorrect: o.is_correct } : {}),
+          isCorrect: o.is_correct,
         })),
       })),
     },
@@ -124,7 +132,7 @@ export async function POST(
     }
 
     const body = await request.json().catch(() => ({}));
-    const { title, description, questions } = body || {};
+    const { title, description, questions, pools } = body || {};
 
     if (
       !title ||
@@ -143,6 +151,23 @@ export async function POST(
         { status: 400 }
       );
     }
+    const usesPools = pools !== undefined;
+    if (usesPools) {
+      if (!Array.isArray(pools) || pools.length !== 5 || pools.some((pool: unknown) => typeof pool !== 'string' || !pool.trim())) {
+        return NextResponse.json({ error: { code: 'ValidationError', message: 'Quiz pool phải gồm đúng 5 tên pool.' } }, { status: 400 });
+      }
+      const poolCounts = [0, 0, 0, 0, 0];
+      for (const question of questions) {
+        const poolIndex = Number((question as any).poolIndex);
+        if (!Number.isInteger(poolIndex) || poolIndex < 0 || poolIndex > 4) {
+          return NextResponse.json({ error: { code: 'ValidationError', message: 'Mỗi câu hỏi phải thuộc một trong năm pool.' } }, { status: 400 });
+        }
+        poolCounts[poolIndex]++;
+      }
+      if (poolCounts.some((count) => count < 3)) {
+        return NextResponse.json({ error: { code: 'QuestionPoolIncomplete', message: 'Mỗi pool cần ít nhất 3 câu hỏi.' } }, { status: 400 });
+      }
+    }
 
     // Loại câu hỏi Đúng/Sai đã ngừng sử dụng
     if (questions.some((q: any) => (q.questionType || q.type) === 'TRUE_FALSE')) {
@@ -157,7 +182,13 @@ export async function POST(
       );
     }
 
+    const existingAssessment = await prisma.assessment.findUnique({ where: { lesson_id: lessonId }, select: { id: true, _count: { select: { attempts: true } } } });
+    if (existingAssessment?._count.attempts) {
+      return NextResponse.json({ error: { code: 'AssessmentVersionRequired', message: 'Quiz đã có lượt làm; không thể thay đổi để tránh mất lịch sử.' } }, { status: 409 });
+    }
+
     const assessmentId = crypto.randomUUID();
+    const preparedPools = usesPools ? pools.map((name: string, sortOrder: number) => ({ id: crypto.randomUUID(), assessment_id: assessmentId, name: name.trim(), sort_order: sortOrder })) : [];
 
     // Prepare questions and options with pre-generated UUIDs for batch createMany
     const preparedQuestions = questions.map((q: any, i: number) => {
@@ -200,6 +231,7 @@ export async function POST(
           duration_seconds: qDuration,
           explanation: qExplanation,
           sort_order: i,
+          pool_id: usesPools ? preparedPools[Number(q.poolIndex)].id : null,
         },
         options,
       };
@@ -217,20 +249,9 @@ export async function POST(
         });
 
         if (existing) {
-          // Clean attempts & related questions
-          const attempts = await tx.attempt.findMany({
-            where: { assessment_id: existing.id },
-            select: { id: true },
-          });
-          const attemptIds = attempts.map((a) => a.id);
-          if (attemptIds.length > 0) {
-            await tx.attemptAnswer.deleteMany({ where: { attempt_id: { in: attemptIds } } });
-            await tx.attemptQuestion.deleteMany({ where: { attempt_id: { in: attemptIds } } });
-            await tx.attempt.deleteMany({ where: { id: { in: attemptIds } } });
-          }
-
           await tx.questionOption.deleteMany({ where: { question: { assessment_id: existing.id } } });
           await tx.question.deleteMany({ where: { assessment_id: existing.id } });
+          await tx.questionPool.deleteMany({ where: { assessment_id: existing.id } });
           await tx.assessment.delete({ where: { id: existing.id } });
         }
 
@@ -245,6 +266,7 @@ export async function POST(
           },
         });
 
+        if (preparedPools.length) await tx.questionPool.createMany({ data: preparedPools });
         // Batch insert questions & options
         await tx.question.createMany({ data: allQuestionRows });
         if (allOptionRows.length > 0) {
@@ -265,6 +287,7 @@ export async function POST(
         title: title.trim(),
         description: description?.trim() || null,
         questionCount: preparedQuestions.length,
+        pools: preparedPools.map((pool) => ({ poolId: pool.id, name: pool.name, sortOrder: pool.sort_order })),
         questions: preparedQuestions.map(({ question: q, options: opts }) => ({
           questionId: q.id,
           id: q.id,
@@ -274,6 +297,7 @@ export async function POST(
           durationSeconds: q.duration_seconds,
           sortOrder: q.sort_order,
           explanation: q.explanation || '',
+          poolId: q.pool_id,
           options: opts.map((o) => ({
             optionId: o.id,
             id: o.id,
@@ -320,7 +344,7 @@ export async function DELETE(
 
   const existing = await prisma.assessment.findUnique({
     where: { lesson_id: lessonId },
-    select: { id: true },
+    select: { id: true, _count: { select: { attempts: true } } },
   });
 
   if (!existing) {
@@ -329,22 +353,15 @@ export async function DELETE(
       { status: 404 }
     );
   }
+  if (existing._count.attempts) {
+    return NextResponse.json({ error: { code: 'AssessmentVersionRequired', message: 'Quiz đã có lượt làm; không thể xóa để tránh mất lịch sử.' } }, { status: 409 })
+  }
 
   await prisma.$transaction(
     async (tx) => {
-      const attempts = await tx.attempt.findMany({
-        where: { assessment_id: existing.id },
-        select: { id: true },
-      });
-      const attemptIds = attempts.map((a) => a.id);
-      if (attemptIds.length > 0) {
-        await tx.attemptAnswer.deleteMany({ where: { attempt_id: { in: attemptIds } } });
-        await tx.attemptQuestion.deleteMany({ where: { attempt_id: { in: attemptIds } } });
-        await tx.attempt.deleteMany({ where: { id: { in: attemptIds } } });
-      }
-
       await tx.questionOption.deleteMany({ where: { question: { assessment_id: existing.id } } });
       await tx.question.deleteMany({ where: { assessment_id: existing.id } });
+      await tx.questionPool.deleteMany({ where: { assessment_id: existing.id } });
       await tx.assessment.delete({ where: { id: existing.id } });
     },
     {

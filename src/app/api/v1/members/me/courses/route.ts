@@ -42,11 +42,14 @@ export async function GET(request: NextRequest) {
     totalLessons: c.totalLessons,
     completedLessons: c.completedLessons,
     hasAssessment: c.hasAssessment,
+    hasFinalAssessment: c.hasFinalAssessment,
+    hasLessonAssessments: c.hasLessonAssessments,
+    lessonAssessmentsPassed: c.lessonAssessmentsPassed,
     assessmentId: c.assessmentId,
     isCompleted: c.isCompleted,
     state: c.state,
     latestAttempt: c.latestAttempt ? {
-      score: c.latestAttempt.score,
+      score: c.latestAttempt.score === null ? null : Math.round(Number(c.latestAttempt.score) * 100),
       passed: c.latestAttempt.passed,
       submittedAt: c.latestAttempt.submittedAt,
     } : null,
@@ -63,7 +66,6 @@ export async function GET(request: NextRequest) {
       completedCourses: userSummary.completedCourses,
       totalCourses: userSummary.totalCourses,
       avgQuizScore: userSummary.avgQuizScore,
-      leaderboardPoint: userSummary.leaderboardPoint,
     },
   })
 }

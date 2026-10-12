@@ -67,7 +67,7 @@ export default function ChapterManagerInvitationsPage() {
 
     const res = await apiFetch('/api/v1/invitations/member', {
       method: 'POST',
-      body: JSON.stringify({ email: inviteEmail.trim() }),
+      body: JSON.stringify({ email: inviteEmail.trim(), chapterId: user?.chapterId }),
     });
 
     if (res.ok) {
@@ -239,7 +239,7 @@ export default function ChapterManagerInvitationsPage() {
                         {inv.expiresAt ? new Date(inv.expiresAt).toLocaleDateString('vi-VN') : '—'}
                       </td>
                       <td className="px-6 py-4 text-right">
-                        {inv.status === 'PENDING' && (
+                        {inv.status === 'PENDING' && inv.invitedBy === user?.id && (
                           <div className="flex items-center justify-end gap-2">
                             <button
                               onClick={() => handleResend(inv.id)}
@@ -258,6 +258,7 @@ export default function ChapterManagerInvitationsPage() {
                             </button>
                           </div>
                         )}
+                        {inv.status === 'PENDING' && inv.invitedBy !== user?.id && <span className="text-xs text-[#737686]">Chỉ người gửi mới sửa được</span>}
                       </td>
                     </tr>
                   ))}

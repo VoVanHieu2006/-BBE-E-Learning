@@ -3,7 +3,6 @@ import { useEffect, useState } from 'react';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
-import YouTubePlayer from '@/components/YouTubePlayer';
 import { apiFetch, getCachedApiData } from '@/lib/api/client';
 
 const STATE_META: Record<string, { label: string; badge: string; bar: string }> = {
@@ -26,12 +25,6 @@ export default function ChapterManagerCoursesPage() {
   // Modal: Nội dung khóa học + xem trước video
   const [contentModal, setContentModal] = useState<any | null>(null);
   const [contentLoading, setContentLoading] = useState(false);
-  const [videoLesson, setVideoLesson] = useState<any | null>(null);
-
-  // Modal: Bài kiểm tra (đáp án + giải thích)
-  const [quizModal, setQuizModal] = useState<any | null>(null);
-  const [assessment, setAssessment] = useState<any | null>(null);
-  const [assessmentLoading, setAssessmentLoading] = useState(false);
 
   useEffect(() => {
     let currentChapter = 'me';
@@ -97,22 +90,6 @@ export default function ChapterManagerCoursesPage() {
       setContentModal(res.data);
     }
     setContentLoading(false);
-  };
-
-  const openVideoPreview = (lesson: any) => {
-    setVideoLesson(lesson);
-  };
-
-  // ─── Modal 3: Bài kiểm tra + đáp án + giải thích từng bài học ──────────────
-  const openLessonQuiz = async (lessonId: string, lessonTitle: string) => {
-    setQuizModal({ title: lessonTitle });
-    setAssessment(null);
-    setAssessmentLoading(true);
-    const res = await apiFetch(`/api/v1/lessons/${lessonId}/assessment`);
-    if (res.ok && res.data) {
-      setAssessment(res.data);
-    }
-    setAssessmentLoading(false);
   };
 
   const formatDuration = (sec?: number) => {
@@ -252,7 +229,7 @@ export default function ChapterManagerCoursesPage() {
           </div>
         </Modal>
 
-        {/* Modal: Nội dung khóa học (sessions & lessons) */}
+        {/* Modal: Nội dung khóa học (outline only; media is progression-gated) */}
         <Modal
           isOpen={!!contentModal}
           onClose={() => setContentModal(null)}
@@ -262,10 +239,10 @@ export default function ChapterManagerCoursesPage() {
             <div className="flex justify-between items-center border-b border-[#eff4ff] pb-3">
               <div>
                 <h3 className="text-xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
-                  ▶ Nội dung — {contentModal?.title}
+                  📚 Nội dung — {contentModal?.title}
                 </h3>
                 <p className="text-xs text-[#737686] mt-1">
-                  Xem trước video đã xuất bản — tua tự do, không ghi nhận tiến độ
+                  Video và tài liệu được mở trong lộ trình học theo thứ tự.
                 </p>
               </div>
               <button
@@ -296,7 +273,6 @@ export default function ChapterManagerCoursesPage() {
                       <div className="divide-y divide-[#eff4ff]">
                         {session.lessons.map((lesson: any, lIdx: number) => {
                           const lId = lesson.lessonId || lesson.id;
-                          const vidId = lesson.video?.youtubeVideoId || lesson.youtubeVideoId;
                           const durSec = lesson.video?.durationSeconds || lesson.durationSeconds || 0;
                           return (
                             <div key={lId} className="px-4 py-3 flex items-center justify-between gap-3">
@@ -311,29 +287,12 @@ export default function ChapterManagerCoursesPage() {
                               </div>
                               <div className="flex items-center gap-2 shrink-0">
                                 {lesson.assessment && (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => openLessonQuiz(lId, lesson.title)}
-                                    className="!bg-amber-50 !text-amber-800 !border-amber-300 hover:!bg-amber-100"
-                                  >
-                                    📝 Đáp án Quiz ({lesson.assessment.questionCount || lesson.assessment._count?.questions || 0} câu)
-                                  </Button>
+                                  <span className="text-xs text-slate-500">
+                                    📝 Quiz: {lesson.assessment.questionCount || lesson.assessment._count?.questions || 0} câu
+                                  </span>
                                 )}
-                                {vidId && (
-                                  <Button
-                                    size="sm"
-                                    onClick={() =>
-                                      openVideoPreview({
-                                        lessonId: lId,
-                                        title: lesson.title,
-                                        youtubeVideoId: vidId,
-                                        durationSeconds: durSec,
-                                      })
-                                    }
-                                  >
-                                    ▶ Xem video
-                                  </Button>
+                                {lesson.hasVideo && (
+                                  <span className="text-xs text-slate-500">▶ Video</span>
                                 )}
                               </div>
                             </div>
@@ -354,119 +313,6 @@ export default function ChapterManagerCoursesPage() {
           </div>
         </Modal>
 
-        {/* Modal: Xem trước video (BĐHU) — tua tự do, không ghi tiến độ */}
-        <Modal
-          isOpen={!!videoLesson}
-          onClose={() => setVideoLesson(null)}
-          maxWidth="max-w-3xl"
-        >
-          {videoLesson && (
-            <div className="p-6 space-y-4">
-              <div className="flex justify-between items-center border-b border-[#eff4ff] pb-3">
-                <h3 className="text-lg font-bold text-[#172554] truncate" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
-                  {videoLesson.title}
-                </h3>
-                <button
-                  onClick={() => setVideoLesson(null)}
-                  className="text-[#737686] hover:text-[#172554] text-xl font-bold p-1 rounded-lg hover:bg-slate-100 transition"
-                >
-                  ✕
-                </button>
-              </div>
-
-              <YouTubePlayer
-                youtubeVideoId={videoLesson.youtubeVideoId}
-                lessonId={videoLesson.lessonId}
-                allowFreeSeek={true}
-                initialFurthest={videoLesson.durationSeconds || 0}
-                durationSeconds={videoLesson.durationSeconds || 0}
-              />
-
-              <p className="text-xs text-[#737686]">
-                Chế độ xem trước của Ban Định Hướng: thanh tiến độ mặc định 100%, được tua tới bất kỳ vị trí nào và không
-                ghi nhận tiến độ học.
-              </p>
-            </div>
-          )}
-        </Modal>
-
-        {/* Modal: Bài kiểm tra — đáp án + giải thích */}
-        <Modal
-          isOpen={!!quizModal}
-          onClose={() => setQuizModal(null)}
-          maxWidth="max-w-2xl"
-        >
-          <div className="p-6 space-y-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center border-b border-[#eff4ff] pb-3">
-              <div>
-                <h3 className="text-xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
-                  📝 Bài kiểm tra — {quizModal?.title}
-                </h3>
-                <p className="text-xs text-[#737686] mt-1">Đáp án đúng và giải thích của từng câu hỏi</p>
-              </div>
-              <button
-                onClick={() => setQuizModal(null)}
-                className="text-[#737686] hover:text-[#172554] text-xl font-bold p-1 rounded-lg hover:bg-slate-100 transition"
-              >
-                ✕
-              </button>
-            </div>
-
-            {assessmentLoading ? (
-              <div className="py-12 text-center text-[#737686]">Đang tải bài kiểm tra...</div>
-            ) : !assessment ? (
-              <div className="text-center py-10 text-[#737686]">Bài học này chưa có bài kiểm tra.</div>
-            ) : (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-bold text-sm text-[#172554]">{assessment.title}</h4>
-                  <span className="text-xs font-bold px-2.5 py-0.5 bg-[#eff4ff] text-[#2563EB] rounded-full">
-                    {assessment.questions?.length || 0} câu hỏi
-                  </span>
-                </div>
-
-                {assessment.questions?.map((q: any, qIdx: number) => (
-                  <div key={q.questionId || q.id || qIdx} className="p-4 bg-[#f8f9ff] rounded-xl border border-[#eff4ff] space-y-2">
-                    <div className="flex items-start justify-between gap-2">
-                      <span className="font-bold text-sm text-[#172554]">
-                        Câu {qIdx + 1}: {q.questionText}
-                      </span>
-                      <span className="text-xs font-bold px-2 py-0.5 bg-[#eff4ff] text-[#2563EB] rounded-full shrink-0">
-                        {q.points || 10} điểm
-                      </span>
-                    </div>
-                    <div className="grid sm:grid-cols-2 gap-2 pt-1">
-                      {q.options?.map((opt: any, oIdx: number) => (
-                        <div
-                          key={opt.optionId || opt.id || oIdx}
-                          className={`p-2.5 rounded-lg border text-xs flex items-center justify-between ${
-                            opt.isCorrect
-                              ? 'bg-green-50 border-green-300 text-green-800 font-semibold'
-                              : 'bg-white border-slate-200 text-slate-700'
-                          }`}
-                        >
-                          <span>{opt.optionText}</span>
-                          {opt.isCorrect && <span className="text-green-600 font-bold">✓</span>}
-                        </div>
-                      ))}
-                    </div>
-                    {q.explanation && (
-                      <p className="text-xs text-[#434655] bg-amber-50 border border-amber-200 rounded-lg p-2.5">
-                        💡 Giải thích: {q.explanation}
-                      </p>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div className="flex justify-end pt-2">
-              <Button variant="secondary" onClick={() => setQuizModal(null)}>
-                Đóng
-              </Button>
-            </div>
-          </div>
-        </Modal>
       </main>
     </div>
   );

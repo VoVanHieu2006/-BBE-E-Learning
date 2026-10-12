@@ -149,7 +149,6 @@ export async function GET(request: NextRequest) {
     const avgProgress = isLeader ? 100 : (p?.overallProgressPercent || 0)
     const avgCourseProgress = isLeader ? 100 : (p?.avgCourseProgressPercent || 0)
     const avgScore = isLeader ? 100 : (p?.avgQuizScore || 0)
-    const leaderboardPoint = isLeader ? 100 : (p?.leaderboardPoint || 0)
 
     const primaryChapter = u.chapter_members?.[0]?.chapter
 
@@ -170,7 +169,6 @@ export async function GET(request: NextRequest) {
       avgProgress,
       avgCourseProgress,
       avgQuizScore: avgScore,
-      leaderboardPoint,
     }
   })
 

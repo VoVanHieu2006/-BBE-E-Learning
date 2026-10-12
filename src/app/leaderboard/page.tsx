@@ -15,6 +15,7 @@ export default function LeaderboardPage() {
 
   const [members, setMembers] = useState<any[]>([]);
   const [chapters, setChapters] = useState<any[]>([]);
+  const [leaderboardMonth, setLeaderboardMonth] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Chapter Drill-down Modal
@@ -78,6 +79,7 @@ export default function LeaderboardPage() {
     }
     if (chaptersRes.ok && chaptersRes.data) {
       setChapters(chaptersRes.data.items || []);
+      setLeaderboardMonth(chaptersRes.data.month || null);
     }
     setLoading(false);
   }
@@ -118,8 +120,8 @@ export default function LeaderboardPage() {
         </h1>
         <p className="text-sm text-[#737686]">
           {isScopedView
-            ? `Thành viên xuất sắc của ${user?.chapterName || 'chapter của bạn'} — theo tiến độ khóa học và điểm bài kiểm tra`
-            : 'Ghi nhận nỗ lực học tập, tiến độ khóa học và điểm số bài kiểm tra của các thành viên BBE'}
+            ? `Thành viên ${user?.chapterName || 'chapter của bạn'} — xếp theo ⭐, completion và điểm quiz`
+            : 'Vinh danh Star học tập; BXH Chapter kết hợp độ đồng đều, KPI và quy mô'}
         </p>
         <div className="pt-1">
           <button
@@ -127,7 +129,7 @@ export default function LeaderboardPage() {
             onClick={() => setShowExplainModal(true)}
             className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#2563EB] bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-full transition cursor-pointer"
           >
-            <span>💡</span> Điểm thi đua được tính như thế nào?
+            <span>💡</span> Cách tính BXH
           </button>
         </div>
       </div>
@@ -183,7 +185,7 @@ export default function LeaderboardPage() {
                 {!isScopedView && (
                   <div className="text-[11px] text-[#737686] truncate mb-2">{topThree[1].chapterName || 'BBE Club'}</div>
                 )}
-                <div className="text-base font-extrabold text-[#2563EB]">{topThree[1].points || topThree[1].leaderboardPoint || 0} đ</div>
+                <div className="text-base font-extrabold text-[#2563EB]">{topThree[1].stars || 0} ⭐</div>
               </Card>
 
               {/* Rank 1 */}
@@ -196,7 +198,7 @@ export default function LeaderboardPage() {
                 {!isScopedView && (
                   <div className="text-xs text-[#737686] truncate mb-2">{topThree[0].chapterName || 'BBE Club'}</div>
                 )}
-                <div className="text-xl font-extrabold text-amber-600">{topThree[0].points || topThree[0].leaderboardPoint || 0} đ</div>
+                <div className="text-xl font-extrabold text-amber-600">{topThree[0].stars || 0} ⭐</div>
               </Card>
 
               {/* Rank 3 */}
@@ -206,7 +208,7 @@ export default function LeaderboardPage() {
                 {!isScopedView && (
                   <div className="text-[11px] text-[#737686] truncate mb-2">{topThree[2].chapterName || 'BBE Club'}</div>
                 )}
-                <div className="text-base font-extrabold text-[#2563EB]">{topThree[2].points || topThree[2].leaderboardPoint || 0} đ</div>
+                <div className="text-base font-extrabold text-[#2563EB]">{topThree[2].stars || 0} ⭐</div>
               </Card>
             </div>
           )}
@@ -221,7 +223,7 @@ export default function LeaderboardPage() {
                   {!isScopedView && <th className="px-6 py-4">Chapter</th>}
                   <th className="px-6 py-4 text-center">Bài học</th>
                   <th className="px-6 py-4 text-center">Điểm Quiz TB</th>
-                  <th className="px-6 py-4 text-right">Điểm thi đua</th>
+                  <th className="px-6 py-4 text-right">⭐ Star</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#eff4ff]">
@@ -247,7 +249,7 @@ export default function LeaderboardPage() {
                         : '—'}
                     </td>
                     <td className="px-6 py-4 text-right font-extrabold text-[#2563EB] text-base">
-                      {m.points || m.leaderboardPoint || 0} điểm
+                      {m.stars || 0} ⭐
                     </td>
                   </tr>
                 ))}
@@ -269,8 +271,10 @@ export default function LeaderboardPage() {
                     <th className="px-6 py-4 w-16 text-center">Hạng</th>
                     <th className="px-6 py-4">Chapter</th>
                     <th className="px-6 py-4 text-center">Thành viên</th>
-                    <th className="px-6 py-4 text-center">Bài học hoàn thành</th>
-                    <th className="px-6 py-4 text-right">Điểm TB Chapter</th>
+                    <th className="px-6 py-4 text-center">Completion TB / trung vị</th>
+                    <th className="px-6 py-4 text-center">⭐ / thành viên</th>
+                    <th className="px-6 py-4 text-center">KPI</th>
+                    <th className="px-6 py-4 text-right">Điểm BXH / 100</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#eff4ff]">
@@ -295,10 +299,19 @@ export default function LeaderboardPage() {
                         </span>
                       </td>
                       <td className="px-6 py-4 text-center text-[#172554] font-semibold">
-                        {ch.totalCompletedLessons} bài
+                        <div>{ch.completion?.averagePercent || 0}% / {ch.completion?.medianPercent || 0}%</div>
+                        <div className="text-[11px] text-[#737686]">≥70%: {ch.completion?.atLeast70Percent || 0}%</div>
+                      </td>
+                      <td className="px-6 py-4 text-center font-extrabold text-[#2563EB] text-base">
+                        {ch.stars?.averagePerMember || 0} ⭐
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${ch.kpi?.status === 'GREEN' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-800'}`}>
+                          {ch.kpi?.status === 'GREEN' ? 'Xanh' : 'Vàng'}
+                        </span>
                       </td>
                       <td className="px-6 py-4 text-right font-extrabold text-[#2563EB] text-base">
-                        {ch.avgPoints} điểm
+                        {ch.score} / 100
                       </td>
                     </tr>
                   ))}
@@ -348,13 +361,13 @@ export default function LeaderboardPage() {
                       <div>
                         <div className="font-semibold text-[#172554]">{m.email}</div>
                         <div className="text-xs text-[#737686]">
-                          Đã học: {m.completedLessons || 0} / {m.totalLessons || 0} bài • Điểm Quiz: {m.avgScore ?? m.avgQuizScore ?? m.assessmentAverageScore ?? 0}%
+                          Đã học: {m.completedLessons || 0} / {m.totalLessons || 0} bài • Quiz: {m.avgScore ?? m.avgQuizScore ?? m.assessmentAverageScore ?? 0}%
                         </div>
                       </div>
                     </div>
                     <div className="text-right">
-                      <span className="font-bold text-[#2563EB] text-base">{m.leaderboardPoint || 0}</span>
-                      <span className="text-xs text-[#737686] ml-1">điểm</span>
+                      <span className="font-bold text-[#2563EB] text-base">{m.stars || 0}</span>
+                      <span className="text-xs text-[#737686] ml-1">⭐</span>
                     </div>
                   </div>
                 ))}
@@ -370,7 +383,7 @@ export default function LeaderboardPage() {
         )}
       </Modal>
 
-      {/* Modal: Giải thích cách tính điểm thi đua */}
+      {/* Modal: Giải thích cách tính bảng xếp hạng */}
       <Modal
         isOpen={showExplainModal}
         onClose={() => setShowExplainModal(false)}
@@ -381,7 +394,7 @@ export default function LeaderboardPage() {
             <div className="flex items-center gap-2">
               <span className="text-xl">💡</span>
               <h3 className="text-lg font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
-                Cách tính điểm thi đua BBE
+                Cách tính BXH BBE
               </h3>
             </div>
             <button
@@ -393,31 +406,22 @@ export default function LeaderboardPage() {
           </div>
 
           <div className="space-y-3 text-sm text-[#434655]">
-            <p className="leading-relaxed">
-              Điểm thi đua được tính dựa trên 2 yếu tố: <strong>Tiến độ hoàn thành bài học</strong> và <strong>Kết quả làm bài kiểm tra</strong>.
-            </p>
-
-            <div className="p-3.5 sm:p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-2xl space-y-2">
-              <div className="font-bold text-[#2563EB] text-xs uppercase tracking-wide">Công thức chuẩn hóa:</div>
-              <div className="text-xs sm:text-sm md:text-base font-extrabold text-[#172554] bg-white p-3 sm:p-3.5 rounded-xl border border-blue-200 text-center leading-relaxed break-words shadow-xs">
-                Điểm thi đua = (Tiến độ bài học × 40%) + (Điểm Quiz TB × 60%)
+            {activeTab === 'chapters' && !isScopedView ? (
+              <div className="space-y-3 text-sm text-[#434655]">
+                {leaderboardMonth && <p className="text-xs text-[#737686]">Kỳ xếp hạng: {new Date(leaderboardMonth).toLocaleDateString('vi-VN', { month: 'long', year: 'numeric' })}</p>}
+                <p>Chapter chỉ được vào BXH khi có ít nhất <strong>20 thành viên hợp lệ</strong>, ít nhất <strong>50% đạt từ 70% completion</strong>, và KPI tháng không đỏ. DNA không được đưa vào BXH Chapter.</p>
+                <div className="rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs leading-6">
+                  <strong>Điểm tối đa 100:</strong> completion đồng đều 40 điểm + Star bình quân đã chuẩn hóa 25 điểm + quy mô căn bậc hai 15 điểm + KPI xanh 20 điểm.
+                  <br />Completion kết hợp average (45%), median (35%) và tỷ lệ thành viên ≥70% (20%). Star dùng bình quân/người, chuẩn hóa theo phân vị 90 và chặn ở 100.
+                </div>
+                <p className="text-xs">KPI vàng được tham gia nhưng không có bonus; KPI đỏ bị loại. Quy mô tăng theo căn bậc hai và đạt trần ở 50 thành viên nên không lấn át chất lượng học.</p>
               </div>
-            </div>
-
-            <div className="space-y-2 text-xs">
-              <div className="flex gap-2">
-                <span className="font-bold text-[#2563EB] shrink-0">1. Tiến độ bài học (40% trọng số):</span>
-                <span>Tỷ lệ số bài học bạn đã xem xong trên tổng số bài học hiện có trong toàn bộ khóa học công khai của hệ thống (Ví dụ: 9 / 23 bài = 39%).</span>
+            ) : (
+              <div className="space-y-3 text-sm text-[#434655]">
+                <p>Các bảng thành viên được xếp theo tổng <strong>⭐ Star</strong> đã ghi nhận. Nếu bằng Star, hệ thống ưu tiên completion cao hơn rồi đến điểm quiz trung bình.</p>
+                <p className="text-xs">Star chỉ được ghi khi hoàn tất điều kiện học tương ứng; làm lại quiz không tạo thưởng lặp cho cùng một nội dung.</p>
               </div>
-              <div className="flex gap-2">
-                <span className="font-bold text-[#2563EB] shrink-0">2. Điểm Quiz TB (60% trọng số):</span>
-                <span>Điểm số cao nhất bạn đạt được trong các bài kiểm tra đánh giá của các khóa học đã tham gia.</span>
-              </div>
-              <div className="flex gap-2">
-                <span className="font-bold text-[#2563EB] shrink-0">3. Điểm Chapter:</span>
-                <span>Điểm trung bình cộng điểm thi đua của tất cả thành viên trong Chapter đó.</span>
-              </div>
-            </div>
+            )}
 
             <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-900">
               📌 <strong>Quy tắc hoàn thành khóa học:</strong> Khóa học chỉ được tính là &quot;Hoàn thành&quot; khi thành viên xem đủ 100% video bài giảng VÀ đạt bài kiểm tra.

@@ -10,7 +10,8 @@ import { QUIZ_COOLDOWN_MS, QUIZ_COOLDOWN_HOURS } from '@/lib/config/quiz'
  */
 export async function POST(request: NextRequest, { params }: { params: { attemptId: string } }) {
   const auth = await authenticate(request)
-  const userId = auth.ok ? (auth as any).context?.userId : null
+  if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: 401 })
+  const userId = (auth as any).context!.userId
 
   const attempt = await prisma.attempt.findUnique({
     where: { id: params.attemptId },
@@ -22,7 +23,7 @@ export async function POST(request: NextRequest, { params }: { params: { attempt
   }
 
   // Nếu có xác thực, kiểm tra quyền sở hữu bài thi
-  if (userId && attempt.user_id !== userId) {
+  if (attempt.user_id !== userId) {
     return NextResponse.json({ error: { code: 'AccessDenied', message: 'Bạn không có quyền hủy bài thi này' } }, { status: 403 })
   }
 

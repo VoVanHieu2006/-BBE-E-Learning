@@ -33,7 +33,7 @@ interface Props {
   initialPosition?: number;
   initialFurthest?: number;
   durationSeconds?: number;
-  onProgress?: (p: { currentTime: number; duration: number; furthest: number }) => void;
+  onProgress?: (p: { currentTime: number; duration: number; furthest: number }) => void | Promise<void>;
   onComplete?: () => void;
 }
 
@@ -78,6 +78,19 @@ export default function YouTubePlayer({
   const controlsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const completedFiredRef = useRef(false);
 
+  // Reset all video progress and completion flags immediately when lesson or video changes
+  useEffect(() => {
+    setIsCompleted(false);
+    completedFiredRef.current = false;
+    setCurrentTime(initialPosition || 0);
+    setFurthest(initialFurthest || 0);
+    furthestRef.current = initialFurthest || 0;
+    durationRef.current = durationSeconds || 0;
+    setDuration(durationSeconds || 0);
+    setVideoError('');
+    setIsPlaying(false);
+  }, [lessonId, youtubeVideoId]);
+
   // Hẹn giờ tự ẩn thanh điều khiển (thanh tua) sau 3s khi đang phát.
   // Được gọi từ handleMouseMove VÀ từ onStateChange(YT_PLAYING) —
   // tránh việc thanh tua kẹt hiện mãi khi user bấm play mà không rê chuột sau đó.
@@ -102,18 +115,23 @@ export default function YouTubePlayer({
       if (!accessToken) return;
       try {
         const d = durationRef.current || duration || 1;
-        const isDone = forceCompleted || (d > 0 && ft / d >= 0.85);
+        const isDone = forceCompleted || (d > 0 && ft >= d);
 
-        await apiFetch(`/api/v1/lessons/${lessonId}/progress`, {
-          method: 'PATCH',
-          body: JSON.stringify({
-            positionSeconds: Math.round(ct),
-            furthestWatchedPositionSeconds: Math.round(ft),
-            completed: isDone,
-          }),
-        });
-
-        onProgress?.({ currentTime: Math.round(ct), duration: Math.round(d), furthest: Math.round(ft) });
+        const event = { currentTime: Math.round(ct), duration: Math.round(d), furthest: Math.round(ft) };
+        // The learning page owns the API request so it can consume server-authoritative
+        // completion/reward data. Preview/debug consumers retain this safe fallback.
+        if (onProgress) {
+          await onProgress(event);
+        } else {
+          await apiFetch(`/api/v1/lessons/${lessonId}/progress`, {
+            method: 'PATCH',
+            body: JSON.stringify({
+              positionSeconds: event.currentTime,
+              furthestWatchedPositionSeconds: event.furthest,
+              completed: isDone,
+            }),
+          });
+        }
       } catch {}
     },
     [lessonId, accessToken, duration, onProgress]
@@ -203,6 +221,10 @@ export default function YouTubePlayer({
                 } catch {}
                 startUiTimer();
                 startHeartbeat();
+                // Establish a server timestamp at playback start. This allows
+                // elapsed-time validation without granting a free first jump.
+                const ct = playerRef.current?.getCurrentTime?.() || 0;
+                sendProgress(ct, Math.max(furthestRef.current, ct));
               } else if (e.data === YT_PAUSED) {
                 setIsPlaying(false);
                 stopUiTimer();
@@ -316,8 +338,9 @@ export default function YouTubePlayer({
         setCurrentTime(ct);
         setFurthest(newFurthest);
 
-        // Progress >= 85% marks completed (only for members with account)
-        if (!isGuest && !completedFiredRef.current && d > 0 && newFurthest / d >= 0.85) {
+        // Completion requires the exact end timestamp; the YT_ENDED event also
+        // sends the provider's final duration as a second completion signal.
+        if (!isGuest && !completedFiredRef.current && d > 0 && newFurthest >= d) {
           completedFiredRef.current = true;
           setIsCompleted(true);
           sendProgress(ct, newFurthest, true);
@@ -488,7 +511,7 @@ export default function YouTubePlayer({
       {/* Completion Banner (only for logged-in accounts) */}
       {!isGuest && isCompleted && (
         <div className="absolute top-4 left-4 z-20 bg-green-900/90 border border-green-500/40 text-white px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-lg backdrop-blur-sm animate-fade-in">
-          <span>✓</span> Đã hoàn thành bài học (≥ 85%)
+          <span>✓</span> Đã hoàn thành bài học (100%)
         </div>
       )}
 

@@ -11,6 +11,7 @@ export default function StudentDashboard() {
   const [user, setUser] = useState<any>(null);
   const [courses, setCourses] = useState<any[]>([]);
   const [streak, setStreak] = useState<any>(null);
+  const [stars, setStars] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
 
@@ -30,6 +31,7 @@ export default function StudentDashboard() {
       // Read cache immediately on client mount
       const cachedCourses = getCachedApiData<any>('/api/v1/members/me/courses');
       const cachedStreak = getCachedApiData<any>('/api/v1/streak');
+      const cachedStars = getCachedApiData<any>('/api/v1/stars/me');
       if (cachedCourses?.items) {
         setCourses(cachedCourses.items);
         setLoading(false);
@@ -37,14 +39,16 @@ export default function StudentDashboard() {
       if (cachedStreak) {
         setStreak(cachedStreak);
       }
+      if (cachedStars) setStars(cachedStars.balance || 0);
     }
     loadData();
   }, [router]);
 
   async function loadData() {
-    const [coursesRes, streakRes] = await Promise.all([
+    const [coursesRes, streakRes, starsRes] = await Promise.all([
       apiFetch('/api/v1/members/me/courses'),
       apiFetch('/api/v1/streak'),
+      apiFetch('/api/v1/stars/me'),
     ]);
 
     if (coursesRes.ok && coursesRes.data) {
@@ -53,6 +57,7 @@ export default function StudentDashboard() {
     if (streakRes.ok && streakRes.data) {
       setStreak(streakRes.data);
     }
+    if (starsRes.ok && starsRes.data) setStars(starsRes.data.balance || 0);
     setLoading(false);
   }
 
@@ -84,7 +89,12 @@ export default function StudentDashboard() {
       </div>
 
         {/* Stats Grid */}
-        <div className="grid md:grid-cols-3 gap-6 mb-10">
+        <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-6 mb-10">
+          <Card shadow="md">
+            <div className="text-sm font-semibold text-amber-700 mb-1">⭐ Star của bạn</div>
+            <div className="text-3xl font-bold text-amber-500 mb-1">{stars}</div>
+            <div className="text-xs text-[#737686]">Nhận khi hoàn thành video và quiz</div>
+          </Card>
           <Card shadow="md">
             <div className="text-sm font-semibold text-[#737686] mb-1">Khóa học của bạn</div>
             <div className="text-3xl font-bold text-[#172554] mb-1">

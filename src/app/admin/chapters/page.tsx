@@ -12,6 +12,7 @@ export default function AdminChaptersProgressPage() {
   const { mounted } = useAdmin();
 
   const [chapters, setChapters] = useState<any[]>([]);
+  const [excludedChapters, setExcludedChapters] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedChapter, setSelectedChapter] = useState<any | null>(null);
   const [chapterMembers, setChapterMembers] = useState<any[]>([]);
@@ -35,6 +36,7 @@ export default function AdminChaptersProgressPage() {
     const res = await apiFetch('/api/v1/leaderboard/chapters');
     if (res.ok && res.data) {
       setChapters(res.data.items || []);
+      setExcludedChapters(res.data.excluded || []);
     }
     setLoading(false);
   }
@@ -64,7 +66,12 @@ export default function AdminChaptersProgressPage() {
   };
 
   const totalMembersAll = chapters.reduce((sum, ch) => sum + (ch.memberCount || 0), 0);
-  const totalCompletedLessonsAll = chapters.reduce((sum, ch) => sum + (ch.totalCompletedLessons || 0), 0);
+  const averageChapterCompletion = chapters.length
+    ? Math.round(chapters.reduce((sum, chapter) => sum + (chapter.completion?.averagePercent || 0), 0) / chapters.length)
+    : 0;
+  const averageStarsPerMember = totalMembersAll
+    ? Math.round(chapters.reduce((sum, chapter) => sum + (chapter.stars?.averagePerMember || 0) * (chapter.memberCount || 0), 0) / totalMembersAll * 10) / 10
+    : 0;
 
   return (
     <>
@@ -77,7 +84,7 @@ export default function AdminChaptersProgressPage() {
             Xếp hạng & Tiến trình Chapter
           </h1>
           <p className="text-[#737686] mt-1 text-sm">
-            Bảng xếp hạng thi đua giữa các Chapter, theo dõi tiến độ học tập và chi tiết từng thành viên
+            Xếp hạng theo độ đồng đều học tập, ⭐ bình quân/thành viên, KPI và quy mô Chapter
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -91,11 +98,11 @@ export default function AdminChaptersProgressPage() {
       </div>
 
       {/* Stat Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
         <Card shadow="md" className="p-4 border border-[#eff4ff]">
-          <div className="text-xs font-semibold text-[#737686]">Tổng số Chapter</div>
+          <div className="text-xs font-semibold text-[#737686]">Chapter đủ điều kiện BXH</div>
           <div className="text-2xl font-bold text-[#172554] mt-1">{chapters.length}</div>
-          <div className="text-[11px] text-[#737686] mt-0.5">Khu vực hoạt động</div>
+          <div className="text-[11px] text-[#737686] mt-0.5">Chapter đỏ/thiếu điều kiện bị loại</div>
         </Card>
         <Card shadow="md" className="p-4 border border-[#eff4ff]">
           <div className="text-xs font-semibold text-blue-700">Tổng thành viên</div>
@@ -103,19 +110,24 @@ export default function AdminChaptersProgressPage() {
           <div className="text-[11px] text-[#737686] mt-0.5">Học viên tham gia</div>
         </Card>
         <Card shadow="md" className="p-4 border border-[#eff4ff]">
-          <div className="text-xs font-semibold text-green-700">Bài học hoàn thành</div>
-          <div className="text-2xl font-bold text-green-700 mt-1">{totalCompletedLessonsAll}</div>
-          <div className="text-[11px] text-[#737686] mt-0.5">Tổng lượt học</div>
+          <div className="text-xs font-semibold text-green-700">Completion TB Chapter</div>
+          <div className="text-2xl font-bold text-green-700 mt-1">{averageChapterCompletion}%</div>
+          <div className="text-[11px] text-[#737686] mt-0.5">Trung bình các Chapter đủ điều kiện</div>
         </Card>
         <Card shadow="md" className="p-4 border border-[#eff4ff]">
-          <div className="text-xs font-semibold text-amber-700">Chapter Dẫn Đầu</div>
+          <div className="text-xs font-semibold text-amber-700">⭐ Bình quân / thành viên</div>
+          <div className="text-2xl font-bold text-amber-600 mt-1">{averageStarsPerMember} ⭐</div>
+          <div className="text-[11px] text-[#737686] mt-0.5">Không dùng tổng Star để so quy mô</div>
+        </Card>
+        <Card shadow="md" className="p-4 border border-[#eff4ff]">
+          <div className="text-xs font-semibold text-amber-700">Chapter dẫn đầu</div>
           <div
             className="text-base lg:text-lg font-bold text-amber-600 mt-1 line-clamp-1 break-words"
             title={chapters[0]?.name || 'Chưa có'}
           >
             {chapters[0]?.name || '—'}
           </div>
-          <div className="text-[11px] text-[#737686] mt-0.5">{chapters[0]?.avgPoints || 0} điểm thi đua</div>
+          <div className="text-[11px] text-[#737686] mt-0.5">Điểm BXH: {chapters[0]?.score || 0} / 100</div>
         </Card>
       </div>
 
@@ -140,8 +152,10 @@ export default function AdminChaptersProgressPage() {
                   <th className="px-6 py-4 w-16 text-center">Hạng</th>
                   <th className="px-6 py-4">Tên Chapter</th>
                   <th className="px-6 py-4 text-center">Thành viên</th>
-                  <th className="px-6 py-4 text-center">Bài học đã học</th>
-                  <th className="px-6 py-4 text-center">Điểm thi đua</th>
+                  <th className="px-6 py-4 text-center">Completion bình quân / trung vị</th>
+                  <th className="px-6 py-4 text-center">⭐ / thành viên</th>
+                  <th className="px-6 py-4 text-center">KPI tháng</th>
+                  <th className="px-6 py-4 text-center">Điểm BXH</th>
                   <th className="px-6 py-4 text-right">Chi tiết</th>
                 </tr>
               </thead>
@@ -167,10 +181,19 @@ export default function AdminChaptersProgressPage() {
                       </span>
                     </td>
                     <td className="px-6 py-4 text-center text-[#172554] font-semibold">
-                      {ch.totalCompletedLessons} bài
+                      <div>{ch.completion?.averagePercent || 0}% / {ch.completion?.medianPercent || 0}%</div>
+                      <div className="text-[11px] text-[#737686]">≥70%: {ch.completion?.atLeast70Percent || 0}% thành viên</div>
                     </td>
                     <td className="px-6 py-4 text-center font-extrabold text-[#2563EB] text-base">
-                      {ch.avgPoints} <span className="text-xs font-normal text-[#737686]">điểm</span>
+                      {ch.stars?.averagePerMember || 0} ⭐
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${ch.kpi?.status === 'GREEN' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-800'}`}>
+                        {ch.kpi?.status === 'GREEN' ? 'Xanh +20' : 'Vàng +0'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-center font-extrabold text-[#172554] text-base">
+                      {ch.score} <span className="text-xs font-normal text-[#737686]">/ 100</span>
                     </td>
                     <td className="px-6 py-4 text-right">
                       <button
@@ -190,6 +213,20 @@ export default function AdminChaptersProgressPage() {
           </div>
         )}
       </Card>
+
+      {excludedChapters.length > 0 && (
+        <Card className="mt-6 border border-amber-200 bg-amber-50/50 shadow-sm">
+          <h2 className="font-bold text-[#172554]">Chưa đủ điều kiện tham gia BXH</h2>
+          <p className="mt-1 text-xs text-[#737686]">Admin có thể dùng danh sách này để theo dõi Chapter cần hỗ trợ.</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {excludedChapters.map((chapter) => (
+              <span key={chapter.chapterId} className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-xs text-[#434655]">
+                <strong>{chapter.name}</strong> · {chapter.reason === 'KPI_RED' ? 'KPI đỏ' : chapter.reason === 'MINIMUM_MEMBERS' ? `Dưới 20 thành viên (${chapter.memberCount})` : `Chưa đạt 50% thành viên ≥70% (${chapter.atLeast70Percent}%)`}
+              </span>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {/* Modal / Drill-down: Chapter Members & Individual Progress */}
       <Modal
@@ -254,6 +291,8 @@ export default function AdminChaptersProgressPage() {
                           </div>
                           <div className="text-xs text-[#737686] flex flex-wrap items-center gap-x-3 gap-y-1">
                             <span>Khóa học: <strong className="text-[#172554]">{m.completedCourses || 0} / {m.totalCourses || 0}</strong></span>
+                            <span>•</span>
+                            <span>⭐ <strong className="text-amber-600">{m.stars || 0}</strong></span>
                             <span>•</span>
                             <span>Bài học: <strong className="text-[#2563EB]">{m.completedLessons || 0} / {m.totalLessons || 0}</strong> bài</span>
                             <span>•</span>

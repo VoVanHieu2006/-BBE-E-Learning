@@ -6,6 +6,7 @@ import Button from '@/components/ui/Button';
 import Toast, { ToastMessage } from '@/components/ui/Toast';
 import YouTubePlayer from '@/components/YouTubePlayer';
 import LessonComments from '@/components/lesson/LessonComments';
+import StarRewardCelebration from '@/components/StarRewardCelebration';
 import { apiFetch, ApiResponse } from '@/lib/api/client';
 
 export default function LearningVideoPage({ params }: { params: { lessonId: string } }) {
@@ -13,6 +14,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
   const [user, setUser] = useState<any>(null);
   const [lesson, setLesson] = useState<any>(null);
   const [progress, setProgress] = useState<any>(null);
+  const [starReward, setStarReward] = useState<number | null>(null);
   const [courseData, setCourseData] = useState<any>(null);
   const [courseProgress, setCourseProgress] = useState<any>(null);
   const [loadingLesson, setLoadingLesson] = useState(true);
@@ -23,6 +25,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
   const [openSessions, setOpenSessions] = useState<Record<string, boolean>>({});
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [toast, setToast] = useState<ToastMessage | null>(null);
+  const switchReqIdRef = useRef(0);
 
   const showToast = (type: 'success' | 'error' | 'info', message: string, title?: string) => {
     setToast({ type, message, title });
@@ -77,7 +80,9 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
         }
 
         if (lessonProgRes && lessonProgRes.ok && lessonProgRes.data) {
-          setProgress(lessonProgRes.data);
+          setProgress({ ...lessonProgRes.data, lessonId });
+        } else {
+          setProgress({ lessonId, completed: false, progressPercentage: 0 });
         }
       }
     } else if (!activeToken && (lessonRes.status === 401 || lessonRes.status === 403)) {
@@ -91,11 +96,15 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
     setLoadingCourse(false);
   }
 
-  // Fast In-Place Lesson Switch (Request 3: ZERO reload of the course playlist!)
+  // Fast In-Place Lesson Switch with Zero Stale Data and Race Condition Protection
   async function switchLesson(newLessonId: string) {
     if (newLessonId === currentLessonId) return;
 
+    const reqId = ++switchReqIdRef.current;
     setCurrentLessonId(newLessonId);
+    // CRITICAL: Immediately clear lesson and progress to eliminate stale UI & completion infection
+    setLesson(null);
+    setProgress(null);
     setLoadingLesson(true);
     setActiveTab('desc'); // Reset tab to description when switching lessons
 
@@ -110,6 +119,9 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
       activeToken ? apiFetch(`/api/v1/lessons/${newLessonId}/progress`, { noCache: true }) : Promise.resolve<ApiResponse<any>>({ ok: false, status: 0 }),
     ]);
 
+    // Ignore if a newer lesson switch request has already fired
+    if (reqId !== switchReqIdRef.current) return;
+
     if (lessonRes.ok && lessonRes.data) {
       setLesson(lessonRes.data);
     } else if (!activeToken && (lessonRes.status === 401 || lessonRes.status === 403)) {
@@ -120,9 +132,9 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
     }
 
     if (lessonProgRes && lessonProgRes.ok && lessonProgRes.data) {
-      setProgress(lessonProgRes.data);
+      setProgress({ ...lessonProgRes.data, lessonId: newLessonId });
     } else {
-      setProgress(null);
+      setProgress({ lessonId: newLessonId, completed: false, progressPercentage: 0 });
     }
 
     setLoadingLesson(false);
@@ -141,10 +153,16 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
     if (res.ok && res.data) {
       setProgress((prev: any) => ({
         ...prev,
+        lessonId: currentLessonId,
         completed: res.data.completed,
         progressPercentage: res.data.progressPercentage,
         watchedUntil: furthest,
       }));
+
+      if (res.data.starReward?.awarded && Number(res.data.starReward.amount) > 0) {
+        setStarReward(Number(res.data.starReward.amount));
+        window.setTimeout(() => setStarReward(null), 3600);
+      }
 
       // Đánh dấu bài hiện tại hoàn thành ngay trong courseProgress (chỉ tăng đếm 1 lần duy nhất)
       if (res.data.completed) {
@@ -236,22 +254,22 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
   const nextLesson = currentIndex >= 0 && currentIndex < allCourseLessons.length - 1 ? allCourseLessons[currentIndex + 1] : null;
 
   const courseId = lesson?.session?.courseId;
-  const isLeaderOrAdmin = user?.role === 'ADMIN' || user?.role === 'CHAPTER_LEADER';
+  const isAdmin = user?.role === 'ADMIN';
+  const isLeaderOrAdmin = isAdmin;
   const isGuest = !token;
-  const allowFreeSeek = isLeaderOrAdmin || isGuest;
+  const allowFreeSeek = isGuest;
 
   const totalLessonsCount = allCourseLessons.length || 1;
-  const completedLessonsCount = isLeaderOrAdmin
-    ? totalLessonsCount
-    : courseProgress?.completedLessons ?? (progress?.completed ? 1 : 0);
+  const completedLessonsCount = courseProgress?.completedLessons ?? (progress?.completed ? 1 : 0);
   const overallPercent = Math.round((completedLessonsCount / totalLessonsCount) * 100);
-  const hasQuiz = Boolean(lesson?.assessment);
-  const isLessonPassed = Boolean(progress?.completed) || isLeaderOrAdmin;
-  const canGoNext = isGuest || isLeaderOrAdmin || Boolean(progress?.completed);
+  // Independent check: only true if current lesson data has loaded and matches currentLessonId
+  const hasQuiz = Boolean(!loadingLesson && lesson?.id === currentLessonId && lesson?.assessment);
+  const isLessonPassed = Boolean(!loadingLesson && progress?.lessonId === currentLessonId && progress?.completed) || isAdmin;
+  const canGoNext = !loadingLesson && (isGuest || isAdmin || Boolean(progress?.lessonId === currentLessonId && progress?.completed));
 
   const handleLessonComplete = () => {
     if (!isGuest) {
-      if (hasQuiz && !progress?.completed && !isLeaderOrAdmin) {
+      if (hasQuiz && !progress?.completed && !isAdmin) {
         setActiveTab('quiz');
         showToast(
           'info',
@@ -259,7 +277,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
           'Làm bài kiểm tra'
         );
       } else {
-        setProgress((prev: any) => ({ ...prev, completed: true, progressPercentage: 100 }));
+        setProgress((prev: any) => ({ ...prev, lessonId: currentLessonId, completed: true, progressPercentage: 100 }));
         if (nextLesson) {
           showToast('success', `Đã hoàn thành bài học! Bạn có thể bấm "Bài tiếp theo →" để học tiếp.`, 'Hoàn thành bài học');
         } else {
@@ -271,6 +289,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
 
   return (
     <div className="min-h-screen bg-[#f8f9ff] text-[#0b1c30] flex flex-col">
+      {starReward !== null && <StarRewardCelebration amount={starReward} message="Hoàn thành video, nhận Star thôi!" />}
       <Toast toast={toast} onClose={() => setToast(null)} />
 
       {/* Top Classroom Header with Official Theme: Navy #172554, Blue #2563EB, White #ffffff */}
@@ -289,7 +308,9 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
             </h1>
             <p className="text-[11px] text-[#737686] truncate">
               {lesson?.session?.title && `${lesson.session.title} • `}
-              <span className="text-[#2563EB] font-bold">{lesson?.title || 'Đang tải bài giảng...'}</span>
+              <span className="text-[#2563EB] font-bold">
+                {loadingLesson ? 'Đang tải bài giảng...' : (lesson?.title || 'Bài học')}
+              </span>
             </p>
           </div>
         </div>
@@ -299,12 +320,12 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
           {!isGuest && (
             <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-[#eff4ff] border border-[#cbdbf5] rounded-xl text-xs">
               <span className="text-[#172554] font-semibold">
-                {isLeaderOrAdmin ? '👑 BĐHU / Quản trị' : `${completedLessonsCount}/${totalLessonsCount} bài hoàn thành`}
+                {isAdmin ? '👑 Quản trị (chế độ xem)' : `${completedLessonsCount}/${totalLessonsCount} bài hoàn thành`}
               </span>
               <div className="w-20 h-2 bg-[#cbdbf5] rounded-full overflow-hidden">
                 <div
                   className="h-full bg-[#2563EB] rounded-full transition-all duration-300"
-                  style={{ width: `${isLeaderOrAdmin ? 100 : overallPercent}%` }}
+                  style={{ width: `${isAdmin ? 100 : overallPercent}%` }}
                 />
               </div>
             </div>
@@ -348,6 +369,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
               </div>
             ) : lesson.video ? (
               <YouTubePlayer
+                key={currentLessonId}
                 lessonId={currentLessonId}
                 youtubeVideoId={lesson.video.youtubeVideoId}
                 accessToken={token}
@@ -374,8 +396,9 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
             <div className="flex items-center gap-3">
               {previousLesson ? (
                 <button
+                  disabled={loadingLesson}
                   onClick={() => switchLesson(previousLesson.lessonId || previousLesson.id)}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#eff4ff] hover:bg-[#cbdbf5] text-[#172554] text-xs font-bold transition shadow-xs"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#eff4ff] hover:bg-[#cbdbf5] disabled:opacity-50 text-[#172554] text-xs font-bold transition shadow-xs"
                 >
                   ← Bài trước
                 </button>
@@ -386,14 +409,16 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
               {nextLesson && (
                 canGoNext ? (
                   <button
+                    disabled={loadingLesson}
                     onClick={() => switchLesson(nextLesson.lessonId || nextLesson.id)}
-                    className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-[#F97316] hover:bg-[#ea580c] text-white text-xs font-bold shadow-md transition hover:scale-[1.02] active:scale-[0.98]"
+                    className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-[#F97316] hover:bg-[#ea580c] disabled:opacity-50 text-white text-xs font-bold shadow-md transition hover:scale-[1.02] active:scale-[0.98]"
                   >
                     Bài tiếp theo →
                   </button>
                 ) : (
                   <button
                     type="button"
+                    disabled={loadingLesson}
                     onClick={() => {
                       if (hasQuiz) {
                         setActiveTab('quiz');
@@ -410,7 +435,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                         );
                       }
                     }}
-                    className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-500 text-xs font-bold transition shadow-2xs"
+                    className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-slate-200 hover:bg-slate-300 disabled:opacity-50 text-slate-500 text-xs font-bold transition shadow-2xs"
                     title={hasQuiz ? 'Cần hoàn thành bài kiểm tra để tiếp tục' : 'Cần xem video trước'}
                   >
                     <span>🔒 Bài tiếp theo →</span>
@@ -470,7 +495,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
               >
                 <span>💬 Hỏi đáp</span>
               </button>
-              {hasQuiz && (
+              {!loadingLesson && hasQuiz && (
                 <button
                   onClick={() => setActiveTab('quiz')}
                   className={`pb-3 text-sm font-bold border-b-2 transition flex items-center gap-1.5 ${
@@ -493,7 +518,12 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
               )}
             </div>
 
-            {activeTab === 'desc' ? (
+            {loadingLesson ? (
+              <Card className="p-8 border border-[#eff4ff] shadow-sm flex flex-col items-center justify-center py-12 text-slate-400 gap-3">
+                <div className="w-8 h-8 border-3 border-[#2563EB] border-t-transparent rounded-full animate-spin"></div>
+                <span className="text-xs font-medium text-slate-500">Đang tải nội dung bài giảng...</span>
+              </Card>
+            ) : activeTab === 'desc' ? (
               <Card className="p-6 border border-[#eff4ff] shadow-sm space-y-3">
                 <h2 className="text-xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
                   {lesson?.title}
@@ -553,7 +583,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                 accessToken={token}
                 onToast={showToast}
               />
-            ) : activeTab === 'quiz' && hasQuiz ? (
+            ) : activeTab === 'quiz' && hasQuiz && !loadingLesson && lesson?.id === currentLessonId ? (
               <Card className="p-6 border border-[#eff4ff] shadow-sm">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div className="space-y-1">
@@ -566,7 +596,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                         : 'Hoàn thành bài kiểm tra (đạt từ 85%) để vượt qua bài học. Trang làm bài sẽ tách riêng để bạn tập trung.'}
                     </p>
                   </div>
-                  {isLeaderOrAdmin || Boolean(progress?.completed) || (progress?.progressPercentage ?? 0) >= 85 || !(lesson?.video?.durationSeconds || lesson?.video?.duration_seconds) ? (
+                  {isAdmin || Boolean(progress?.completed) || (progress?.progressPercentage ?? 0) >= 100 || !(lesson?.video?.durationSeconds || lesson?.video?.duration_seconds) ? (
                     <Link href={`/student/learning/${currentLessonId}/quiz`} className="shrink-0">
                       <Button variant="primary">
                         {progress?.completed ? 'Xem bài kiểm tra →' : 'Vào làm bài kiểm tra →'}
@@ -579,10 +609,10 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                         disabled
                         className="!bg-slate-100 !text-slate-400 !border-slate-200 cursor-not-allowed font-bold"
                       >
-                        🔒 Cần xem video trước ({progress?.progressPercentage || 0}%/85%)
+                        🔒 Cần xem video trước ({progress?.progressPercentage || 0}%/100%)
                       </Button>
                       <span className="text-[10px] text-amber-700 font-medium">
-                        Cần xem đạt tối thiểu 85% video để mở khóa bài kiểm tra
+                        Cần xem hết 100% video để mở khóa bài kiểm tra
                       </span>
                     </div>
                   )}
@@ -645,10 +675,12 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                           const isCurrent = lId === currentLessonId;
                           const isLessonDone =
                             isLeaderOrAdmin ||
-                            (courseProgress?.sessions
-                              ?.find((ps: any) => ps.sessionId === sId)
-                              ?.lessons?.find((pl: any) => pl.lessonId === lId)?.completed) ||
-                            (isCurrent && progress?.completed);
+                            Boolean(
+                              courseProgress?.sessions
+                                ?.find((ps: any) => ps.sessionId === sId)
+                                ?.lessons?.find((pl: any) => pl.lessonId === lId)?.completed
+                            ) ||
+                            (isCurrent && !loadingLesson && progress?.lessonId === lId && Boolean(progress?.completed));
 
                           return (
                             <button

@@ -212,15 +212,67 @@ export default function MemberDetailPage({ params }: { params: { userId: string 
               </Card>
 
               <Card shadow="md" className="border border-[#eff4ff]">
-                <div className="text-xs font-semibold text-amber-700 mb-1">Điểm thi đua & Điểm Quiz</div>
+                <div className="text-xs font-semibold text-amber-700 mb-1">⭐ Tổng sao đã nhận</div>
                 <div className="text-2xl font-bold text-amber-600">
-                  {data?.summary?.leaderboardPoint || 0} <span className="text-sm font-normal text-[#737686]">điểm</span>
+                  {data?.summary?.stars || 0} <span className="text-sm font-normal text-[#737686]">⭐</span>
                 </div>
                 <div className="text-[11px] text-[#737686] mt-1">
-                  Quiz TB: {data?.summary?.avgQuizScore || 0}% • Tiến độ: {data?.summary?.avgProgress || 0}%
+                  Điểm quiz TB: {data?.summary?.avgQuizScore || 0}% • Tiến độ: {data?.summary?.avgProgress || 0}%
                 </div>
               </Card>
             </div>
+
+            {Array.isArray(data?.learningDetail) && data.learningDetail.length > 0 && (
+              <Card className="border border-[#eff4ff] shadow-sm overflow-hidden">
+                <div className="px-5 py-3 border-b border-[#eff4ff] bg-[#f8f9ff]">
+                  <h2 className="font-bold text-[#172554] text-sm">Chi tiết bài học, video và bài kiểm tra</h2>
+                </div>
+                <div className="divide-y divide-[#eff4ff]">
+                  {data.learningDetail.map((course: any) => (
+                    <details key={course.courseId} className="group px-5 py-3">
+                      <summary className="cursor-pointer list-none flex items-center justify-between gap-3 font-semibold text-[#172554]">
+                        <span>{course.title}</span>
+                        <span className="text-xs text-[#2563EB] group-open:hidden">Xem chi tiết ↓</span>
+                      </summary>
+                      <div className="mt-4 space-y-3">
+                        {course.finalAssessment && (
+                          <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-3 text-xs">
+                            <p className="font-semibold text-[#172554]">Bài thi cuối khóa: {course.finalAssessment.title}</p>
+                            <p className="mt-1 text-[#596174]">
+                              {course.finalAssessment.latestAttempt
+                                ? `Lần ${course.finalAssessment.latestAttempt.number}/${course.finalAssessment.attemptCount} · ${course.finalAssessment.latestAttempt.scorePercent ?? '—'}% · ${course.finalAssessment.latestAttempt.passed ? 'Đạt' : 'Chưa đạt'} · ${course.finalAssessment.latestAttempt.status}`
+                                : `Chưa nộp bài (${course.finalAssessment.attemptCount} lần)`}
+                              {' · '}⭐ {course.finalAssessment.stars || 0}
+                            </p>
+                            {course.finalAssessment.latestAttempt?.submittedAt && <p className="mt-1 text-[11px] text-[#737686]">Nộp lúc {new Date(course.finalAssessment.latestAttempt.submittedAt).toLocaleString('vi-VN')}</p>}
+                          </div>
+                        )}
+                        {(course.modules || []).map((module: any) => (
+                          <div key={module.moduleId} className="rounded-xl border border-[#eff4ff] p-3">
+                            <p className="text-xs font-bold text-[#2563EB]">Module {Number(module.order) + 1}: {module.title}</p>
+                            {(module.lessons || []).map((lesson: any) => (
+                              <div key={lesson.lessonId} className="mt-2 grid grid-cols-1 gap-1 border-t border-[#f1f5f9] pt-2 text-xs sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center sm:gap-3">
+                                <span className="font-medium text-[#172554]">{lesson.title}</span>
+                                <span className={lesson.video?.completed ? 'text-emerald-700' : 'text-amber-700'}>
+                                  📹 {lesson.video ? `${lesson.video.watchedPercent}% ${lesson.video.completed ? '✓' : ''} · ⭐ ${lesson.video.stars || 0}` : 'Không có video'}
+                                </span>
+                                {lesson.quiz ? (
+                                  <span className={lesson.quiz.latestAttempt?.passed ? 'text-emerald-700' : 'text-[#737686]'}>
+                                    📝 {lesson.quiz.latestAttempt
+                                      ? `Lần ${lesson.quiz.latestAttempt.number}/${lesson.quiz.attemptCount} · ${lesson.quiz.latestAttempt.scorePercent ?? 0}% · ${lesson.quiz.latestAttempt.passed ? 'Đạt' : 'Chưa đạt'} · ⭐ ${lesson.quiz.stars || 0}`
+                                      : `Chưa làm (${lesson.quiz.attemptCount} lần) · ⭐ ${lesson.quiz.stars || 0}`}
+                                  </span>
+                                ) : <span className="text-[#737686]">Không có quiz</span>}
+                              </div>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  ))}
+                </div>
+              </Card>
+            )}
 
             {courses.length === 0 ? (
               <Card className="text-center py-10 border border-[#eff4ff]">

@@ -62,6 +62,16 @@ export default function LoginPage() {
         document.cookie = `userRole=${data.user.role}; path=/; max-age=604800; SameSite=Lax`;
 
         const role = data.user.role;
+        if (role !== 'ADMIN' && role !== 'CHAPTER_LEADER') {
+          try {
+            const effectiveResponse = await fetch('/api/v1/auth/me', { headers: { Authorization: `Bearer ${data.accessToken}`, 'Cache-Control': 'no-cache' } });
+            const effectiveData = await effectiveResponse.json();
+            if (effectiveResponse.ok && effectiveData?.user) {
+              data.user = { ...data.user, ...effectiveData.user };
+              localStorage.setItem('user', JSON.stringify(data.user));
+            }
+          } catch {}
+        }
         const params = new URLSearchParams(window.location.search);
         const callbackUrl = params.get('callbackUrl');
 
@@ -70,7 +80,11 @@ export default function LoginPage() {
             router.replace(callbackUrl);
             return;
           }
-          if (callbackUrl.startsWith('/chapter-manager') && (role === 'CHAPTER_LEADER' || role === 'ADMIN')) {
+          if (callbackUrl.startsWith('/chapter-manager') && (role === 'CHAPTER_LEADER' || role === 'ADMIN' || data.user.isChapterManager)) {
+            router.replace(callbackUrl);
+            return;
+          }
+          if (callbackUrl.startsWith('/organization-manager') && data.user.isOrganizationManager) {
             router.replace(callbackUrl);
             return;
           }
@@ -82,6 +96,7 @@ export default function LoginPage() {
 
         if (role === 'ADMIN') router.replace('/admin/dashboard');
         else if (role === 'CHAPTER_LEADER') router.replace('/chapter-manager/dashboard');
+        else if (data.user.isOrganizationManager) router.replace('/organization-manager');
         else router.replace('/student/dashboard');
       } else {
         setError('Phản hồi từ máy chủ không hợp lệ.');

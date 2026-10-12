@@ -29,6 +29,12 @@ export async function PUT(request: NextRequest, { params }: { params: { attemptI
   if (!selectedOptionId) return NextResponse.json({ error: { code: 'ValidationError', message: 'selectedOptionId bắt buộc' } }, { status: 400 })
 
   // Upsert answer (no is_correct calculation here — server time is final)
+  const option = await prisma.questionOption.findFirst({
+    where: { id: selectedOptionId, question_id: params.questionId },
+    select: { id: true },
+  })
+  if (!option) return NextResponse.json({ error: { code: 'OptionNotInQuestion', message: 'Invalid option for question' } }, { status: 400 })
+
   await prisma.attemptAnswer.upsert({
     where: { attempt_id_question_id: { attempt_id: params.attemptId, question_id: params.questionId } },
     create: { attempt_id: params.attemptId, question_id: params.questionId, selected_option_id: selectedOptionId },
