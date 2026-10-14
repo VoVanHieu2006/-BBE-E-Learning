@@ -90,33 +90,50 @@ export async function listManagedOrganizationUnits(
   context: LegacyAuthContext,
   permissionCode = 'VIEW_MEMBER_PROGRESS',
 ): Promise<ManagedOrganizationUnit[]> {
-  const units = context.role === 'ADMIN'
-    ? await prisma.organizationUnit.findMany({
-        where: { type: { in: ['DNA', 'DNA_GROUP', 'CHAPTER', 'DEPARTMENT'] }, status: 'ACTIVE' },
-        include: { chapter: { select: { id: true } } },
-        orderBy: [{ type: 'asc' }, { name: 'asc' }],
-      })
-    : await prisma.organizationUnit.findMany({
-        where: {
-          status: 'ACTIVE',
-          type: { in: ['DNA', 'DNA_GROUP', 'CHAPTER', 'DEPARTMENT'] },
-        },
-        include: { chapter: { select: { id: true } } },
-        orderBy: [{ type: 'asc' }, { name: 'asc' }],
-      })
-
-  const result = (await Promise.all(units.map(async (unit) => {
-    const canView = context.role === 'ADMIN' || await canAccessOrganizationUnitPermission(context, unit.id, permissionCode)
-    if (!canView) return null
-    return {
+  const now = new Date()
+  const [units, assignments] = await Promise.all([
+    prisma.organizationUnit.findMany({
+      where: { status: 'ACTIVE' },
+      select: { id: true, name: true, type: true, parent_id: true, chapter: { select: { id: true } } },
+      orderBy: [{ type: 'asc' }, { name: 'asc' }],
+    }),
+    context.role === 'ADMIN' ? Promise.resolve([]) : prisma.positionAssignment.findMany({
+      where: { user_id: context.userId, starts_at: { lte: now }, OR: [{ ends_at: null }, { ends_at: { gt: now } }] },
+      select: { unit_id: true, position: { select: { permissions: { select: { permission: { select: { code: true } } } } } } },
+    }),
+  ])
+  const byId = new Map(units.map((unit) => [unit.id, unit]))
+  const grants = assignments.map((assignment) => ({ unitId: assignment.unit_id, codes: new Set(assignment.position.permissions.map((grant) => grant.permission.code)) }))
+  const ancestors = (unitId: string) => {
+    const ids: string[] = []
+    const seen = new Set<string>()
+    let current = byId.get(unitId)
+    while (current && !seen.has(current.id)) {
+      ids.push(current.id); seen.add(current.id)
+      current = current.parent_id ? byId.get(current.parent_id) : undefined
+    }
+    return ids
+  }
+  const owningChapter = (unitId: string) => {
+    for (const id of ancestors(unitId)) {
+      const chapterId = byId.get(id)?.chapter?.id
+      if (chapterId) return chapterId
+    }
+    return null
+  }
+  return units.filter((unit) => unit.type !== 'ROOT').flatMap((unit) => {
+    const ancestorIds = ancestors(unit.id)
+    const legacy = context.role === 'CHAPTER_LEADER' && context.chapterId && owningChapter(unit.id) === context.chapterId
+    const has = (code: string) => context.role === 'ADMIN' || grants.some((grant) => ancestorIds.includes(grant.unitId) && grant.codes.has(code))
+    if (!has(permissionCode) && !(legacy && isLegacyChapterCompatibilityPermission(permissionCode))) return []
+    return [{
       id: unit.id,
       name: unit.name,
       type: unit.type as ManagedOrganizationUnit['type'],
-      chapterId: unit.chapter?.id || await getOwningChapterId(unit.id),
-      canManageMembers: context.role === 'ADMIN' || await canAccessOrganizationUnitPermission(context, unit.id, memberManagementPermission(unit.type)),
-    }
-  }))).filter((unit): unit is NonNullable<typeof unit> => Boolean(unit))
-  return result
+      chapterId: unit.chapter?.id || owningChapter(unit.id),
+      canManageMembers: has(memberManagementPermission(unit.type)) || Boolean(legacy),
+    }]
+  })
 }
 
 /** RBAC permission checked through an active, scoped position assignment. */

@@ -71,6 +71,7 @@ export async function GET(request: NextRequest) {
   const role = url.searchParams.get('role') || ''
   const status = url.searchParams.get('status') || ''
   const chapterId = url.searchParams.get('chapterId') || ''
+  const compact = url.searchParams.get('compact') === '1'
   const page = Math.max(parseInt(url.searchParams.get('page') || '1', 10), 1)
   const limit = Math.min(Math.max(parseInt(url.searchParams.get('limit') || '20', 10), 1), 100)
   const skip = (page - 1) * limit
@@ -109,6 +110,28 @@ export async function GET(request: NextRequest) {
     where.chapter_members = {
       some: { chapter_id: chapterId },
     }
+  }
+
+  // Picker mode avoids progress, assessment and global-stat queries. It is
+  // used by organization forms that only need identity fields.
+  if (compact) {
+    const [items, totalItems] = await Promise.all([
+      prisma.user.findMany({
+        where,
+        select: { id: true, email: true, display_name: true, role: true, status: true },
+        orderBy: [{ display_name: 'asc' }, { email: 'asc' }],
+        skip,
+        take: limit,
+      }),
+      prisma.user.count({ where }),
+    ])
+    return NextResponse.json({
+      items: items.map((user) => ({ userId: user.id, id: user.id, email: user.email, displayName: user.display_name, role: user.role, status: user.status })),
+      totalItems,
+      totalPages: Math.ceil(totalItems / limit),
+      page,
+      limit,
+    }, { headers: { 'Cache-Control': 'private, max-age=30, stale-while-revalidate=120' } })
   }
 
   const [

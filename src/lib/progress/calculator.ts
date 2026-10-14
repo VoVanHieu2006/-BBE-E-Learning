@@ -250,7 +250,8 @@ export async function calculateBatchUsersProgress(
 
   if (userIds.length === 0) return resultMap
 
-  const [allProgress, allAttempts] = await Promise.all([
+  const assessmentIds = sys.courses.flatMap((course) => [...course.lessonAssessmentIds, ...(course.finalAssessmentId ? [course.finalAssessmentId] : [])])
+  const [allProgress, latestAttempts, passedAttempts] = await Promise.all([
     prisma.lessonProgress.findMany({
       where: {
         user_id: { in: userIds },
@@ -259,9 +260,10 @@ export async function calculateBatchUsersProgress(
       },
       select: { user_id: true, lesson_id: true },
     }),
-    prisma.attempt.findMany({
+    assessmentIds.length ? prisma.attempt.findMany({
       where: {
         user_id: { in: userIds },
+        assessment_id: { in: assessmentIds },
         status: { in: ['SUBMITTED', 'AUTO_SUBMITTED'] },
       },
       select: {
@@ -271,8 +273,19 @@ export async function calculateBatchUsersProgress(
         passed: true,
         submitted_at: true,
       },
-      orderBy: { submitted_at: 'desc' },
-    }),
+      orderBy: [{ user_id: 'asc' }, { assessment_id: 'asc' }, { submitted_at: 'desc' }],
+      distinct: ['user_id', 'assessment_id'],
+    }) : Promise.resolve([]),
+    assessmentIds.length ? prisma.attempt.findMany({
+      where: {
+        user_id: { in: userIds },
+        assessment_id: { in: assessmentIds },
+        status: { in: ['SUBMITTED', 'AUTO_SUBMITTED'] },
+        passed: true,
+      },
+      select: { user_id: true, assessment_id: true },
+      distinct: ['user_id', 'assessment_id'],
+    }) : Promise.resolve([]),
   ])
 
   // Group progress by user
@@ -286,10 +299,11 @@ export async function calculateBatchUsersProgress(
     set.add(p.lesson_id)
   }
 
-  // Group attempts by user & assessment (allAttempts are sorted by submitted_at desc)
+  // Only the latest attempt and distinct passed assessments are loaded. This
+  // keeps account and leaderboard pages fast as attempt history grows.
   const userAttemptsMap = new Map<string, Map<string, any>>()
   const userPassedAssessmentMap = new Map<string, Set<string>>()
-  for (const a of allAttempts) {
+  for (const a of latestAttempts) {
     let uAssessMap = userAttemptsMap.get(a.user_id)
     if (!uAssessMap) {
       uAssessMap = new Map()
@@ -298,14 +312,14 @@ export async function calculateBatchUsersProgress(
     if (!uAssessMap.has(a.assessment_id)) {
       uAssessMap.set(a.assessment_id, a)
     }
-    if (a.passed) {
-      let passed = userPassedAssessmentMap.get(a.user_id)
-      if (!passed) {
-        passed = new Set()
-        userPassedAssessmentMap.set(a.user_id, passed)
-      }
-      passed.add(a.assessment_id)
+  }
+  for (const a of passedAttempts) {
+    let passed = userPassedAssessmentMap.get(a.user_id)
+    if (!passed) {
+      passed = new Set()
+      userPassedAssessmentMap.set(a.user_id, passed)
     }
+    passed.add(a.assessment_id)
   }
 
   for (const uid of userIds) {

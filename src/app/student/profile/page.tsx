@@ -10,7 +10,7 @@ export default function ProfilePage() {
   const [displayName, setDisplayName] = useState('')
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState<ToastMessage | null>(null)
-  useEffect(() => { apiFetch('/api/v1/users/me', { noCache: true }).then((res) => {
+  useEffect(() => { apiFetch('/api/v1/users/me').then((res) => {
     if (res.ok) { setProfile(res.data); setDisplayName(res.data?.displayName || '') }
   }) }, [])
   async function save(event: FormEvent) {

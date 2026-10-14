@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
-import { apiFetch } from '@/lib/api/client';
+import { apiFetch, clearApiCache } from '@/lib/api/client';
 
 type Unit = { id: string; name: string; type: string; chapterId: string | null; canManageMembers: boolean };
 type Pagination = { page: number; limit: number; total: number; totalPages: number };
@@ -34,8 +34,8 @@ export default function OrganizationManagerPage() {
     let cancelled = false;
     const initialize = async () => {
       const [profileResult, unitResult] = await Promise.all([
-        apiFetch('/api/v1/auth/me', { noCache: true }),
-        apiFetch('/api/v1/organization/managed-units', { noCache: true }),
+        apiFetch('/api/v1/auth/me'),
+        apiFetch('/api/v1/organization/managed-units'),
       ]);
       if (cancelled) return;
       const currentUser = profileResult.data?.user;
@@ -67,8 +67,8 @@ export default function OrganizationManagerPage() {
       if (profile?.role === 'CHAPTER_LEADER' && selected.type === 'CHAPTER' && selected.chapterId) invitationParams.set('chapterId', selected.chapterId);
       else invitationParams.set('organizationUnitId', selected.id);
       const [roster, inviteList] = await Promise.all([
-        apiFetch(`/api/v1/organization/units/${selected.id}/members?${params.toString()}`, { noCache: true }),
-        selected.canManageMembers ? apiFetch(`/api/v1/invitations?${invitationParams.toString()}`, { noCache: true }) : Promise.resolve(null),
+        apiFetch(`/api/v1/organization/units/${selected.id}/members?${params.toString()}`),
+        selected.canManageMembers ? apiFetch(`/api/v1/invitations?${invitationParams.toString()}`) : Promise.resolve(null),
       ]);
       if (roster.ok && roster.data) {
         setMembers(roster.data.items || []);
@@ -97,6 +97,7 @@ export default function OrganizationManagerPage() {
     event.preventDefault();
     if (!selectedUnit || !addEmail.trim()) return;
     setBusy(true);
+    clearApiCache(`/api/v1/organization/units/${selectedUnit.id}/members`);
     setMessage('');
     const result = await apiFetch(`/api/v1/organization/units/${selectedUnit.id}/members`, {
       method: 'POST',
@@ -116,6 +117,7 @@ export default function OrganizationManagerPage() {
     event.preventDefault();
     if (!selectedUnit || !inviteEmail.trim()) return;
     setBusy(true);
+    clearApiCache('/api/v1/invitations');
     setMessage('');
     const body = profile?.role === 'CHAPTER_LEADER' && selectedUnit.type === 'CHAPTER' && selectedUnit.chapterId
       ? { email: inviteEmail.trim(), chapterId: selectedUnit.chapterId }
@@ -135,6 +137,7 @@ export default function OrganizationManagerPage() {
   const removeMember = async (member: any) => {
     if (!selectedUnit || !window.confirm(`Kết thúc membership của ${member.email} trong phạm vi ${selectedUnit.name}?`)) return;
     setBusy(true);
+    clearApiCache(`/api/v1/organization/units/${selectedUnit.id}/members`);
     const result = await apiFetch(`/api/v1/organization/units/${selectedUnit.id}/members`, {
       method: 'POST', body: JSON.stringify({ action: 'REMOVE_MEMBER', userId: member.userId }), noCache: true,
     });

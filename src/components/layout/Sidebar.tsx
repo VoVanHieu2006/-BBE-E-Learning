@@ -55,7 +55,7 @@ const adminNav: NavItem[] = [
   { label: 'Khóa học & lộ trình', href: '/admin/courses', icon: '📚', prefetchUrls: ['/api/v1/courses', '/api/v1/admin/learning-rules'] },
   { label: 'Mời BĐHU', href: '/admin/invitations', icon: '✉️', prefetchUrls: ['/api/v1/invitations'] },
   { label: 'Tiến trình Chapter', href: '/admin/chapters', icon: '🏆', prefetchUrls: ['/api/v1/leaderboard/chapters'] },
-  { label: 'Quản lý tài khoản', href: '/admin/users', icon: '👤' },
+  { label: 'Quản lý tài khoản', href: '/admin/users', icon: '👤', prefetchUrls: ['/api/v1/users?page=1&limit=20', '/api/v1/chapters'] },
 ];
 
 const chapterManagerNav: NavItem[] = [
@@ -224,6 +224,7 @@ export default function Sidebar({
               key={item.href}
               href={item.href}
               onMouseEnter={() => {
+                router.prefetch(item.href);
                 if (item.prefetchUrls) {
                   item.prefetchUrls.forEach((url) => apiFetch(url).catch(() => {}));
                 }

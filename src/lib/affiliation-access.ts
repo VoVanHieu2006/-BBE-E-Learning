@@ -10,18 +10,18 @@ type Db = Prisma.TransactionClient | typeof prisma
 export async function hasActiveAffiliation(userId: string, role: string, db: Db = prisma): Promise<boolean> {
   if (role === 'ADMIN') return true
   const now = new Date()
-  const [membership, position, legacyChapter] = await Promise.all([
-    db.organizationMembership.findFirst({
-      where: { user_id: userId, status: 'ACTIVE', starts_at: { lte: now }, OR: [{ ends_at: null }, { ends_at: { gt: now } }] },
-      select: { id: true },
-    }),
-    db.positionAssignment.findFirst({
-      where: { user_id: userId, starts_at: { lte: now }, OR: [{ ends_at: null }, { ends_at: { gt: now } }] },
-      select: { id: true },
-    }),
-    db.chapterMember.findFirst({ where: { user_id: userId }, select: { id: true } }),
-  ])
-  return Boolean(membership || position || legacyChapter)
+  const user = await db.user.findFirst({
+    where: {
+      id: userId,
+      OR: [
+        { organization_memberships: { some: { status: 'ACTIVE', starts_at: { lte: now }, OR: [{ ends_at: null }, { ends_at: { gt: now } }] } } },
+        { position_assignments: { some: { starts_at: { lte: now }, OR: [{ ends_at: null }, { ends_at: { gt: now } }] } } },
+        { chapter_members: { some: {} } },
+      ],
+    },
+    select: { id: true },
+  })
+  return Boolean(user)
 }
 
 /** Active DNA membership grants the full learner capability set. */

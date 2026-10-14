@@ -18,6 +18,11 @@ const PREFETCH_URLS = [
   '/api/v1/users?page=1&limit=20',
   '/api/v1/invitations',
   '/api/v1/chapters',
+  '/api/v1/admin/organization',
+  '/api/v1/admin/learning-rules',
+  '/api/v1/users?compact=1&page=1&limit=100',
+  '/api/v1/admin/restrictions?limit=50',
+  '/api/v1/courses?limit=100',
 ];
 
 function AdminLayoutInner({ children }: { children: React.ReactNode }) {
@@ -94,9 +99,9 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
     };
 
     if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-      (window as any).requestIdleCallback(prefetchAll, { timeout: 3000 });
+      (window as any).requestIdleCallback(prefetchAll, { timeout: 1200 });
     } else {
-      setTimeout(prefetchAll, 1500);
+      setTimeout(prefetchAll, 500);
     }
   }, [isAuthorized]);
 

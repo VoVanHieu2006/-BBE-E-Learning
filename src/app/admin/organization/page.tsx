@@ -4,7 +4,7 @@ import { FormEvent, useCallback, useEffect, useState } from 'react';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Toast, { ToastMessage } from '@/components/ui/Toast';
-import { apiFetch } from '@/lib/api/client';
+import { apiFetch, clearApiCache, getCachedApiData } from '@/lib/api/client';
 import { orderOrganizationTree, organizationParentTypeMatches, organizationSubtreeIds } from '@/lib/organization-scope';
 
 export default function AdminOrganizationPage() {
@@ -48,21 +48,37 @@ export default function AdminOrganizationPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const orgParams = new URLSearchParams({
-      membershipPage: String(membershipPage), membershipLimit: '20', membershipSearch: membershipFilter.search,
-      membershipUnitId: membershipFilter.unitId, membershipStatus: membershipFilter.status,
-      assignmentPage: String(assignmentPage), assignmentLimit: '20', assignmentSearch: assignmentFilter.search,
-      assignmentUnitId: assignmentFilter.unitId, assignmentPositionId: assignmentFilter.positionId,
-      assignmentStatus: assignmentFilter.status,
-    });
-    const ruleParams = new URLSearchParams({ page: String(rulePage), limit: '20', search: ruleSearch });
-    const [org, learningRules, courseList, userList, chapterList, restrictionList] = await Promise.all([
-      apiFetch(`/api/v1/admin/organization?${orgParams.toString()}`, { noCache: true }),
-      apiFetch(`/api/v1/admin/learning-rules?${ruleParams.toString()}`, { noCache: true }),
-      apiFetch('/api/v1/courses?limit=100', { noCache: true }),
-      apiFetch(`/api/v1/users?page=1&limit=100&search=${encodeURIComponent(userSearch)}`, { noCache: true }),
-      apiFetch('/api/v1/chapters', { noCache: true }),
-      apiFetch('/api/v1/admin/restrictions?limit=50', { noCache: true }),
+    const orgParams = new URLSearchParams();
+    if (membershipPage > 1) orgParams.set('membershipPage', String(membershipPage));
+    if (membershipFilter.search) orgParams.set('membershipSearch', membershipFilter.search);
+    if (membershipFilter.unitId) orgParams.set('membershipUnitId', membershipFilter.unitId);
+    if (membershipFilter.status !== 'ALL') orgParams.set('membershipStatus', membershipFilter.status);
+    if (assignmentPage > 1) orgParams.set('assignmentPage', String(assignmentPage));
+    if (assignmentFilter.search) orgParams.set('assignmentSearch', assignmentFilter.search);
+    if (assignmentFilter.unitId) orgParams.set('assignmentUnitId', assignmentFilter.unitId);
+    if (assignmentFilter.positionId) orgParams.set('assignmentPositionId', assignmentFilter.positionId);
+    if (assignmentFilter.status !== 'ALL') orgParams.set('assignmentStatus', assignmentFilter.status);
+    const ruleParams = new URLSearchParams();
+    if (rulePage > 1) ruleParams.set('page', String(rulePage));
+    if (ruleSearch) ruleParams.set('search', ruleSearch);
+    const orgUrl = `/api/v1/admin/organization${orgParams.size ? `?${orgParams.toString()}` : ''}`;
+    const ruleUrl = `/api/v1/admin/learning-rules${ruleParams.size ? `?${ruleParams.toString()}` : ''}`;
+    const cachedOrg = getCachedApiData<any>(orgUrl);
+    if (cachedOrg) {
+      setData(cachedOrg);
+      setMemberships(cachedOrg.memberships || []);
+      setPositionAssignments(cachedOrg.positionAssignments || []);
+      setRecentKpis(cachedOrg.recentKpis || []);
+      setLoading(false);
+    }
+    const auxiliary = Promise.all([
+      apiFetch('/api/v1/courses?limit=100'),
+      apiFetch('/api/v1/chapters'),
+      apiFetch('/api/v1/admin/restrictions?limit=50'),
+    ]);
+    const [org, learningRules] = await Promise.all([
+      apiFetch(orgUrl),
+      apiFetch(ruleUrl),
     ]);
     if (org.ok && org.data) {
       setData(org.data);
@@ -77,22 +93,27 @@ export default function AdminOrganizationPage() {
       setRules(learningRules.data.items || []);
       if (learningRules.data.pagination) setRulePagination(learningRules.data.pagination);
     }
+    setLoading(false);
+    const [courseList, chapterList, restrictionList] = await auxiliary;
     if (courseList.ok && courseList.data) setCourses(courseList.data.items || []);
-    if (userList.ok && userList.data) setUsers(userList.data.items || []);
     if (chapterList.ok && chapterList.data) setChapters(chapterList.data.items || []);
     if (restrictionList.ok && restrictionList.data) {
       setRestrictionHistory(restrictionList.data.items || []);
       setRestrictionTotal(restrictionList.data.total || 0);
     }
-    setLoading(false);
-  }, [membershipPage, membershipFilter, assignmentPage, assignmentFilter, rulePage, ruleSearch, userSearch]);
+  }, [membershipPage, membershipFilter, assignmentPage, assignmentFilter, rulePage, ruleSearch]);
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    const url = `/api/v1/users?compact=1&page=1&limit=100${userSearch ? `&search=${encodeURIComponent(userSearch)}` : ''}`;
+    void apiFetch(url).then((result) => { if (result.ok) setUsers(result.data?.items || []); });
+  }, [userSearch]);
 
   const orgAction = async (body: any) => {
     setSaving(true);
     const result = await apiFetch('/api/v1/admin/organization', { method: 'POST', body: JSON.stringify(body), noCache: true });
     setSaving(false);
     if (!result.ok) { notify('error', result.error?.message || 'Không thể lưu thay đổi.'); return false; }
+    clearApiCache('/api/v1/admin/organization');
     await load(); return true;
   };
   const createUnit = async (event: FormEvent) => {
@@ -118,6 +139,7 @@ export default function AdminOrganizationPage() {
     const result = await apiFetch('/api/v1/admin/learning-rules', { method: 'POST', noCache: true, body: JSON.stringify({ courseId: ruleForm.courseId, organizationUnitId: ruleForm.organizationUnitId || null, positionId: ruleForm.positionId || null, dueDays: ruleForm.dueDays ? Number(ruleForm.dueDays) : null, canAssess: ruleForm.canAssess, canEarnStars: ruleForm.canAssess && ruleForm.canEarnStars }) });
     setSaving(false);
     if (!result.ok) { notify('error', result.error?.message || 'Không thể tạo learning rule.'); return; }
+    clearApiCache('/api/v1/admin/learning-rules');
     notify('success', 'Đã tạo rule. Hãy bấm gán để materialize.'); await load();
   };
   const materialize = async (ruleId: string) => {
@@ -136,6 +158,7 @@ export default function AdminOrganizationPage() {
     const result = await apiFetch(`/api/v1/admin/learning-rules/${ruleId}`, { method: 'PATCH', body: JSON.stringify({ action: 'DEACTIVATE' }), noCache: true });
     setSaving(false);
     if (!result.ok) { notify('error', result.error?.message || 'Không thể ngừng learning rule.'); return; }
+    clearApiCache('/api/v1/admin/learning-rules');
     notify('success', `Đã ngừng rule; kết thúc ${result.data?.endedAssignments || 0} assignment đang hoạt động.`);
     await load();
   };

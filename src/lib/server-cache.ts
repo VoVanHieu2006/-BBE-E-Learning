@@ -114,3 +114,19 @@ export function setInvitationsServerCache(key: string, data: any) {
 export function invalidateInvitationsServerCache() {
   invitationsServerCache.clear()
 }
+
+// 6. Organization admin cache. The page is query heavy but changes rarely.
+const organizationServerCache = new Map<string, CacheEntry>()
+
+export function getOrganizationServerCache(key: string, ttlMs: number) {
+  const entry = organizationServerCache.get(key)
+  return entry && Date.now() - entry.timestamp < ttlMs ? entry.data : null
+}
+
+export function setOrganizationServerCache(key: string, data: any) {
+  organizationServerCache.set(key, { data, timestamp: Date.now() })
+}
+
+export function invalidateOrganizationServerCache() {
+  organizationServerCache.clear()
+}

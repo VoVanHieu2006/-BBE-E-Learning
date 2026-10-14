@@ -5,6 +5,9 @@ import { prisma } from '@/lib/prisma'
 import { reconcileLearningAssignmentsForUser } from '@/lib/learning-assignments'
 import { organizationParentTypeMatches, organizationSubtreeIds, positionScopeMatchesUnitType, validateOrganizationMove } from '@/lib/organization-scope'
 import { isOrganizationId, normalizeOrganizationPagination, normalizeOrganizationSearch, parseAssignmentFilterStatus, parseMembershipFilterStatus } from '@/lib/organization-admin-rules'
+import { getOrganizationServerCache, invalidateOrganizationServerCache, setOrganizationServerCache } from '@/lib/server-cache'
+
+const ORGANIZATION_CACHE_TTL = 30_000
 
 async function getChapterIdForUnit(unitId: string): Promise<string | null> {
   let currentId: string | null = unitId
@@ -38,6 +41,9 @@ export async function GET(request: NextRequest) {
   if (auth.context?.role !== 'ADMIN') return NextResponse.json({ error: { code: 'AccessDenied' } }, { status: 403 })
 
   const params = new URL(request.url).searchParams
+  const cacheKey = params.toString()
+  const cached = getOrganizationServerCache(cacheKey, ORGANIZATION_CACHE_TTL)
+  if (cached) return NextResponse.json(cached, { headers: { 'Cache-Control': 'private, max-age=15, stale-while-revalidate=60' } })
   const now = new Date()
   const membershipSearch = normalizeOrganizationSearch(params.get('membershipSearch'))
   const membershipUnitId = params.get('membershipUnitId') || ''
@@ -110,7 +116,7 @@ export async function GET(request: NextRequest) {
       take: assignmentPagination.limit,
     }),
   ])
-  return NextResponse.json({
+  const payload = {
     units,
     positions,
     permissions,
@@ -120,13 +126,16 @@ export async function GET(request: NextRequest) {
     membershipPagination: { page: membershipPagination.page, limit: membershipPagination.limit, total: membershipPagination.total, totalPages: membershipPagination.totalPages },
     assignmentPagination: { page: assignmentPagination.page, limit: assignmentPagination.limit, total: assignmentPagination.total, totalPages: assignmentPagination.totalPages },
     recentKpis: recentKpis.map((item) => ({ id: item.id, chapterName: item.chapter.name, month: item.month_start, status: item.status, note: item.note, updatedAt: item.updated_at, configuredBy: item.configured_by.email })),
-  })
+  }
+  setOrganizationServerCache(cacheKey, payload)
+  return NextResponse.json(payload, { headers: { 'Cache-Control': 'private, max-age=15, stale-while-revalidate=60' } })
 }
 
 export async function POST(request: NextRequest) {
   const auth = await authenticate(request)
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: 401 })
   if (auth.context?.role !== 'ADMIN') return NextResponse.json({ error: { code: 'AccessDenied' } }, { status: 403 })
+  invalidateOrganizationServerCache()
   const body = await request.json().catch(() => null)
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
     return NextResponse.json({ error: { code: 'ValidationError', message: 'Request body must be an object.' } }, { status: 400 })

@@ -389,6 +389,7 @@ model LessonProgress {
   @@map("lesson_progress")
   @@unique([user_id, lesson_id])
   @@index([user_id, lesson_id])
+  @@index([user_id, completed, lesson_id])
   @@index([user_id])
   @@index([lesson_id])
 }
@@ -475,6 +476,7 @@ model Attempt {
 
   @@map("attempts")
   @@index([user_id, assessment_id])
+  @@index([user_id, status, assessment_id, submitted_at])
   @@index([assessment_id, user_id, created_at])
   @@index([status])
 }
@@ -624,6 +626,7 @@ model OrganizationMembership {
   unit        OrganizationUnit             @relation(fields: [unit_id], references: [id], onDelete: Cascade)
 
   @@index([user_id, status])
+  @@index([user_id, status, starts_at, ends_at])
   @@index([unit_id, status])
   @@map("organization_memberships")
 }
