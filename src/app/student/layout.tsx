@@ -1,5 +1,6 @@
 'use client';
 import Sidebar from '@/components/layout/Sidebar';
+import PageTransition from '@/components/layout/PageTransition';
 import { apiFetch } from '@/lib/api/client';
 import { useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
@@ -95,7 +96,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
       return (
         <div className="min-h-screen bg-[#f8f9ff] flex">
           <Sidebar role={user?.role || 'MEMBER'} user={{ email: user?.email, chapterName: user?.chapterName }} />
-          <main className="ml-64 flex-1 max-w-5xl mx-auto px-8 py-10 w-full min-w-0">{children}</main>
+          <main className="ml-64 flex-1 max-w-5xl mx-auto px-8 py-10 w-full min-w-0"><PageTransition>{children}</PageTransition></main>
         </div>
       );
     }
@@ -106,7 +107,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
   return (
     <div className="min-h-screen bg-[#f8f9ff] flex">
       <Sidebar role={user?.role || 'MEMBER'} user={{ email: user?.email, chapterName: user?.chapterName }} />
-      <main className="ml-64 flex-1 max-w-5xl mx-auto px-8 py-10 w-full min-w-0">{children}</main>
+      <main className="ml-64 flex-1 max-w-5xl mx-auto px-8 py-10 w-full min-w-0"><PageTransition>{children}</PageTransition></main>
     </div>
   );
 }

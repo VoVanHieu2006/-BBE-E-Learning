@@ -74,6 +74,7 @@ export async function GET(request: NextRequest) {
   const page = Math.max(parseInt(url.searchParams.get('page') || '1', 10), 1)
   const limit = Math.min(Math.max(parseInt(url.searchParams.get('limit') || '20', 10), 1), 100)
   const skip = (page - 1) * limit
+  const now = new Date()
 
   // Check query cache
   const cacheKey = `${search}:${role}:${status}:${chapterId}:${page}:${limit}`
@@ -126,6 +127,19 @@ export async function GET(request: NextRequest) {
               },
             },
           },
+          position_assignments: {
+            where: { starts_at: { lte: now }, OR: [{ ends_at: null }, { ends_at: { gt: now } }] },
+            select: {
+              is_primary: true,
+              position: { select: { code: true, name: true, scope: true } },
+              unit: { select: { id: true, name: true, type: true } },
+            },
+            orderBy: { is_primary: 'desc' },
+          },
+          organization_memberships: {
+            where: { status: 'ACTIVE', starts_at: { lte: now }, OR: [{ ends_at: null }, { ends_at: { gt: now } }] },
+            select: { unit: { select: { id: true, name: true, type: true, parent: { select: { id: true, name: true, type: true } } } } },
+          },
         },
         orderBy: { created_at: 'desc' },
         skip,
@@ -151,17 +165,36 @@ export async function GET(request: NextRequest) {
     const avgScore = isLeader ? 100 : (p?.avgQuizScore || 0)
 
     const primaryChapter = u.chapter_members?.[0]?.chapter
+    const department = u.organization_memberships.find(({ unit }) => unit.type === 'DEPARTMENT')?.unit
+    const dnaMembership = u.organization_memberships.find(({ unit }) => unit.type === 'DNA' || unit.type === 'DNA_GROUP')?.unit
 
     return {
       userId: u.id,
       id: u.id,
       email: u.email,
+      displayName: u.display_name,
       role: u.role,
       status: u.status,
+      effectivePositions: u.position_assignments.map((assignment) => ({
+        code: assignment.position.code,
+        name: assignment.position.name,
+        scope: assignment.position.scope,
+        unitId: assignment.unit.id,
+        unitName: assignment.unit.name,
+        unitType: assignment.unit.type,
+        isPrimary: assignment.is_primary,
+      })),
       createdAt: u.created_at,
       chapter: primaryChapter
         ? { chapterId: primaryChapter.id, id: primaryChapter.id, name: primaryChapter.name }
         : null,
+      department: department ? { id: department.id, name: department.name } : null,
+      dna: dnaMembership ? {
+        active: true,
+        name: dnaMembership.type === 'DNA' ? dnaMembership.name : dnaMembership.parent?.name,
+        group: dnaMembership.type === 'DNA_GROUP' ? dnaMembership.name : null,
+        role: u.position_assignments.some((assignment) => assignment.position.code === 'DNA_LEAD') ? 'Lead DNA' : 'Thành viên DNA',
+      } : { active: false, name: null, group: null, role: null },
       completedCourses: completedCoursesCount,
       totalCourses: sys.totalCourses,
       completedLessons: completedLessonsCount,

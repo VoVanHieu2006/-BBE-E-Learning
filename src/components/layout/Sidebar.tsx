@@ -44,14 +44,15 @@ function getStudentNav(chapterId?: string | null, isOrganizationManager = false)
       prefetchUrls: chapterId ? [`/api/v1/leaderboard/chapters/${chapterId}`] : ['/api/v1/leaderboard'],
     },
   ];
-  if (isOrganizationManager) items.splice(1, 0, { label: 'Quản lý DNA / Chapter / Ban', href: '/organization-manager', icon: 'ORG' });
+  items.push({ label: 'Hồ sơ cá nhân', href: '/student/profile', icon: '👤', prefetchUrls: ['/api/v1/users/me'] });
+  if (isOrganizationManager) items.splice(1, 0, { label: 'Đội ngũ phụ trách', href: '/organization-manager', icon: '🏢' });
   return items;
 }
 
 const adminNav: NavItem[] = [
-  { label: 'Organization & learning', href: '/admin/organization', icon: 'ORG', prefetchUrls: ['/api/v1/admin/organization', '/api/v1/admin/learning-rules'] },
+  { label: 'Cơ cấu & chức vụ', href: '/admin/organization', icon: '🏢', prefetchUrls: ['/api/v1/admin/organization'] },
   { label: 'Tổng quan', href: '/admin/dashboard', icon: '📊', prefetchUrls: ['/api/v1/admin/overview'] },
-  { label: 'Quản lý khóa học', href: '/admin/courses', icon: '📚', prefetchUrls: ['/api/v1/courses'] },
+  { label: 'Khóa học & lộ trình', href: '/admin/courses', icon: '📚', prefetchUrls: ['/api/v1/courses', '/api/v1/admin/learning-rules'] },
   { label: 'Mời BĐHU', href: '/admin/invitations', icon: '✉️', prefetchUrls: ['/api/v1/invitations'] },
   { label: 'Tiến trình Chapter', href: '/admin/chapters', icon: '🏆', prefetchUrls: ['/api/v1/leaderboard/chapters'] },
   { label: 'Quản lý tài khoản', href: '/admin/users', icon: '👤' },

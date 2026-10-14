@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { authenticate, invalidateUserAuthCache } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { canAccessOrganizationUnitPermission } from '@/lib/authorization'
+import { canAccessOrganizationUnitPermission, memberManagementPermission } from '@/lib/authorization'
 import { getOrganizationUnitTreeIds, reconcileLearningAssignmentsForUser } from '@/lib/learning-assignments'
 import { listChapterMembers } from '@/lib/chapter-members'
 import { isOrganizationId, normalizeOrganizationPagination, normalizeOrganizationSearch } from '@/lib/organization-admin-rules'
@@ -98,18 +98,35 @@ export async function GET(request: NextRequest, { params }: { params: { unitId: 
   const pageMembers = members.slice(pagination.skip, pagination.skip + pagination.limit)
   const userIds = pageMembers.map((member) => member.userId)
   const system = await getPublishedSystemData()
-  const [progress, starRows, canManageMembers] = await Promise.all([
+  const [progress, starRows, canManageMembers, affiliationRows, positionRows, userRows] = await Promise.all([
     calculateBatchUsersProgress(userIds, system),
     userIds.length
       ? prisma.starLedger.groupBy({ where: { user_id: { in: userIds } }, by: ['user_id'], _sum: { amount: true } })
       : Promise.resolve([]),
-    canAccessOrganizationUnitPermission(auth.context!, unit.id, 'MANAGE_CHAPTER_MEMBERS'),
+    canAccessOrganizationUnitPermission(auth.context!, unit.id, memberManagementPermission(unit.type)),
+    prisma.organizationMembership.findMany({
+      where: { user_id: { in: userIds }, status: 'ACTIVE', starts_at: { lte: now }, OR: [{ ends_at: null }, { ends_at: { gt: now } }] },
+      select: { user_id: true, unit: { select: { id: true, name: true, type: true, parent: { select: { id: true, name: true, type: true } } } } },
+    }),
+    prisma.positionAssignment.findMany({
+      where: { user_id: { in: userIds }, starts_at: { lte: now }, OR: [{ ends_at: null }, { ends_at: { gt: now } }] },
+      select: { user_id: true, position: { select: { code: true, name: true, scope: true } }, unit: { select: { id: true, name: true, type: true } } },
+    }),
+    prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, display_name: true } }),
   ])
   const starsByUser = new Map(starRows.map((row) => [row.user_id, row._sum.amount || 0]))
+  const namesByUser = new Map(userRows.map((row) => [row.id, row.display_name]))
   const items = pageMembers.map((member) => {
     const summary = progress.get(member.userId)
+    const affiliations = affiliationRows.filter((row) => row.user_id === member.userId).map((row) => row.unit)
+    const department = affiliations.find((candidate) => candidate.type === 'DEPARTMENT')
+    const dna = affiliations.find((candidate) => candidate.type === 'DNA' || candidate.type === 'DNA_GROUP')
     return {
       ...member,
+      displayName: namesByUser.get(member.userId) || null,
+      department: department ? { id: department.id, name: department.name } : null,
+      dna: dna ? { active: true, name: dna.type === 'DNA' ? dna.name : dna.parent?.name, group: dna.type === 'DNA_GROUP' ? dna.name : null } : { active: false, name: null, group: null },
+      positions: positionRows.filter((row) => row.user_id === member.userId).map((row) => ({ ...row.position, unitName: row.unit.name })),
       completedCourses: summary?.completedCourses || 0,
       totalCourses: system.totalCourses,
       completedLessons: summary?.completedLessons || 0,
@@ -132,14 +149,14 @@ export async function POST(request: NextRequest, { params }: { params: { unitId:
   const auth = await authenticate(request)
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: 401 })
   if (!isOrganizationId(params.unitId)) return NextResponse.json({ error: { code: 'ValidationError' } }, { status: 400 })
-  if (!await canAccessOrganizationUnitPermission(auth.context!, params.unitId, 'MANAGE_CHAPTER_MEMBERS')) {
-    return NextResponse.json({ error: { code: 'AccessDenied' } }, { status: 403 })
-  }
   const body = await request.json().catch(() => null)
   if (!body || typeof body !== 'object' || Array.isArray(body)) return NextResponse.json({ error: { code: 'ValidationError' } }, { status: 400 })
 
   const unit = await prisma.organizationUnit.findUnique({ where: { id: params.unitId }, select: { id: true, type: true, status: true } })
   if (!unit || unit.status !== 'ACTIVE') return NextResponse.json({ error: { code: 'OrganizationUnitNotFound' } }, { status: 404 })
+  if (!await canAccessOrganizationUnitPermission(auth.context!, unit.id, memberManagementPermission(unit.type))) {
+    return NextResponse.json({ error: { code: 'AccessDenied' } }, { status: 403 })
+  }
   const unitIds = await getOrganizationUnitTreeIds(unit.id)
   const parentChapter = await findParentChapter(unit.id)
 
@@ -154,6 +171,13 @@ export async function POST(request: NextRequest, { params }: { params: { unitId:
       select: { id: true },
     })
     if (existing) return NextResponse.json({ error: { code: 'MembershipExists' } }, { status: 409 })
+    if (parentChapter) {
+      const otherChapter = await prisma.chapterMember.findFirst({
+        where: { user_id: user.id, chapter_id: { not: parentChapter.id } },
+        select: { chapter: { select: { name: true } } },
+      })
+      if (otherChapter) return NextResponse.json({ error: { code: 'ChapterMembershipConflict', message: `Email này đã thuộc ${otherChapter.chapter.name}; mỗi tài khoản chỉ được thuộc một Chapter.` } }, { status: 409 })
+    }
     try {
       const membership = await prisma.$transaction(async (tx) => {
         const created = await tx.organizationMembership.create({ data: { user_id: user.id, unit_id: unit.id } })

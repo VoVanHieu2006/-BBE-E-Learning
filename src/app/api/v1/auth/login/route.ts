@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
 import { SignJWT } from 'jose'
 import crypto from 'crypto'
+import { hasActiveAffiliation } from '@/lib/affiliation-access'
 
 const JWT_ACCESS_SECRET = process.env.JWT_ACCESS_SECRET || ''
 const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || ''
@@ -45,6 +46,10 @@ export async function POST(request: NextRequest) {
 
     if (user.status === 'LOCKED') {
       return NextResponse.json({ error: { code: 'AccountLocked', message: 'Tài khoản đã bị khóa do nhập sai quá nhiều lần' } }, { status: 403 })
+    }
+
+    if (!await hasActiveAffiliation(user.id, user.role)) {
+      return NextResponse.json({ error: { code: 'NoActiveAffiliation', message: 'Tài khoản không còn tư cách Chapter hoặc DNA đang hoạt động.' } }, { status: 403 })
     }
 
     // Verify password

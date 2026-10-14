@@ -35,8 +35,22 @@ h1, h2, h3, h4, h5, h6 {
   }
 }
 
-main {
-  animation: fadeInPage 0.15s ease-out;
+.page-transition {
+  animation: page-enter 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.page-loading > * {
+  animation: loading-pulse 1.2s ease-in-out infinite alternate;
+}
+
+@keyframes page-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes loading-pulse {
+  from { opacity: 0.55; }
+  to { opacity: 0.95; }
 }
 
 /* Micro-interaction hover transitions */
@@ -111,6 +125,10 @@ main {
   .star-reward-card,
   .star-reward-main,
   .star-reward-particle {
+    animation: none !important;
+  }
+  .page-transition,
+  .page-loading > * {
     animation: none !important;
   }
 }

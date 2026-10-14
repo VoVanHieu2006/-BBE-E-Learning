@@ -20,6 +20,9 @@ export async function applyDueChapterReorganizations(now = new Date()): Promise<
       if (!chapter?.organization_unit_id) throw new Error('ChapterOrganizationUnitNotFound')
       const unitIds = await getOrganizationUnitTreeIds(chapter.organization_unit_id)
       const userIds = batch.items.map((item) => item.user_id)
+      for (const item of batch.items) {
+        if (item.display_name) await tx.user.update({ where: { id: item.user_id }, data: { display_name: item.display_name } })
+      }
       await tx.organizationMembership.updateMany({
         where: { user_id: { in: userIds }, unit_id: { in: unitIds }, status: 'ACTIVE', ends_at: null },
         data: { status: 'ENDED', ends_at: now },

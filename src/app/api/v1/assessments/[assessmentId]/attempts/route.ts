@@ -38,6 +38,8 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
       type: true,
       lesson_id: true,
       course_id: true,
+      question_count: true,
+      duration_minutes: true,
       lesson: {
         select: {
           id: true,
@@ -203,17 +205,18 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
     questionPools,
     questions.map((question) => ({ ...question, poolId: question.pool_id })),
     shuffleSecurely,
+    assessment.question_count,
   )
   if (poolSelection.ok === false) {
     const messages = {
-      QuestionPoolCountInvalid: 'A pooled quiz must have exactly five question pools.',
-      QuestionPoolQuestionUnassigned: 'Every question must belong to one of the five configured pools.',
-      QuestionPoolIncomplete: 'Each of the five question pools needs at least three questions.',
+      QuestionPoolCountInvalid: 'Bài kiểm tra cần từ 1 đến 20 nhóm câu hỏi.',
+      QuestionPoolQuestionUnassigned: 'Mỗi câu hỏi phải thuộc một nhóm đã cấu hình.',
+      QuestionPoolIncomplete: 'Mỗi nhóm phải có ít nhất một câu hỏi.',
     }
     return NextResponse.json({ error: { code: poolSelection.code, message: messages[poolSelection.code] } }, { status: 422 })
   }
   const selectedQuestions = poolSelection.questions
-  const expiresAt = new Date(Date.now() + Math.max(5, selectedQuestions.length * 2) * 60 * 1000)
+  const expiresAt = new Date(Date.now() + assessment.duration_minutes * 60 * 1000)
 
   const attempt = await prisma.$transaction(async (tx) => {
     // Do not discard a resumable attempt until every prerequisite and the full

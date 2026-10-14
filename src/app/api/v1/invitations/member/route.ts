@@ -3,7 +3,7 @@ import { authenticate } from '@/lib/auth'
 import { sendMemberInvitation } from '@/lib/invitations'
 import { invalidateInvitationsServerCache } from '@/lib/server-cache'
 import { canAccessChapterPermission } from '@/lib/authorization'
-import { canAccessOrganizationUnitPermission } from '@/lib/authorization'
+import { canAccessOrganizationUnitPermission, memberManagementPermission } from '@/lib/authorization'
 import { prisma } from '@/lib/prisma'
 import { isOrganizationId } from '@/lib/organization-admin-rules'
 
@@ -33,10 +33,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: { code: 'ValidationError', message: 'Choose one valid organization unit scope.' } }, { status: 400 })
     }
     const unit = await prisma.organizationUnit.findUnique({ where: { id: body.organizationUnitId }, select: { id: true, type: true, status: true } })
-    if (!unit || unit.status !== 'ACTIVE' || !['DNA', 'CHAPTER', 'DEPARTMENT'].includes(unit.type)) {
+    if (!unit || unit.status !== 'ACTIVE' || !['DNA', 'DNA_GROUP', 'CHAPTER', 'DEPARTMENT'].includes(unit.type)) {
       return NextResponse.json({ error: { code: 'OrganizationUnitNotFound' } }, { status: 404 })
     }
-    if (!await canAccessOrganizationUnitPermission(context, unit.id, 'MANAGE_CHAPTER_MEMBERS')) {
+    if (!await canAccessOrganizationUnitPermission(context, unit.id, memberManagementPermission(unit.type))) {
       return NextResponse.json({ error: { code: 'AccessDenied' } }, { status: 403 })
     }
     organizationUnitId = unit.id

@@ -132,7 +132,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: { code: 'ValidationError', message: 'Request body must be an object.' } }, { status: 400 })
   }
   if (body.action === 'CREATE_UNIT') {
-    if (typeof body.name !== 'string' || !['ROOT', 'DNA', 'CHAPTER', 'DEPARTMENT'].includes(body.type)) return NextResponse.json({ error: { code: 'ValidationError' } }, { status: 400 })
+    if (typeof body.name !== 'string' || !['ROOT', 'DNA', 'DNA_GROUP', 'CHAPTER', 'DEPARTMENT'].includes(body.type)) return NextResponse.json({ error: { code: 'ValidationError' } }, { status: 400 })
     const name = body.name.trim()
     if (name.length > 255) return NextResponse.json({ error: { code: 'ValidationError', message: 'Organization name is too long.' } }, { status: 400 })
     if (!name) return NextResponse.json({ error: { code: 'ValidationError', message: 'Tên đơn vị không được để trống.' } }, { status: 400 })
@@ -141,7 +141,7 @@ export async function POST(request: NextRequest) {
     const parent = body.parentId ? await prisma.organizationUnit.findUnique({ where: { id: body.parentId }, select: { id: true, type: true } }) : null
     if (body.parentId && !parent) return NextResponse.json({ error: { code: 'OrganizationParentNotFound' } }, { status: 404 })
     if (!organizationParentTypeMatches(body.type, parent?.type || null)) {
-      return NextResponse.json({ error: { code: 'OrganizationParentTypeInvalid', message: 'DNA và Chapter phải thuộc Root; Ban phải thuộc trực tiếp một Chapter.' } }, { status: 400 })
+      return NextResponse.json({ error: { code: 'OrganizationParentTypeInvalid', message: 'DNA và Chapter thuộc Root; nhóm DNA thuộc DNA; Ban thuộc trực tiếp một Chapter.' } }, { status: 400 })
     }
     try {
       const result = await prisma.$transaction(async (tx) => {
@@ -311,6 +311,13 @@ export async function POST(request: NextRequest) {
     }
     const duplicate = await prisma.organizationMembership.findFirst({ where: { user_id: user.id, unit_id: unit.id, status: 'ACTIVE', ends_at: null } })
     if (duplicate) return NextResponse.json({ error: { code: 'MembershipExists', message: 'Người dùng đã thuộc đơn vị này.' } }, { status: 409 })
+    if (chapterId) {
+      const otherChapter = await prisma.chapterMember.findFirst({
+        where: { user_id: user.id, chapter_id: { not: chapterId } },
+        select: { chapter: { select: { name: true } } },
+      })
+      if (otherChapter) return NextResponse.json({ error: { code: 'ChapterMembershipConflict', message: `Email này đã thuộc ${otherChapter.chapter.name}; mỗi tài khoản chỉ được thuộc một Chapter.` } }, { status: 409 })
+    }
     const membership = await prisma.$transaction(async (tx) => {
       const created = await tx.organizationMembership.create({ data: { user_id: user.id, unit_id: unit.id, starts_at: startsAt } })
       if (chapterId) {

@@ -1,5 +1,5 @@
 export type PositionScope = 'PLATFORM' | 'DNA' | 'CHAPTER' | 'DEPARTMENT'
-export type OrganizationUnitKind = 'ROOT' | 'DNA' | 'CHAPTER' | 'DEPARTMENT'
+export type OrganizationUnitKind = 'ROOT' | 'DNA' | 'DNA_GROUP' | 'CHAPTER' | 'DEPARTMENT'
 
 export interface OrganizationNodeRef {
   id: string
@@ -40,6 +40,7 @@ export type OrganizationMoveValidation =
 export function organizationParentTypeMatches(childType: string, parentType: string | null): boolean {
   if (childType === 'ROOT') return parentType === null
   if (childType === 'DNA' || childType === 'CHAPTER') return parentType === null || parentType === 'ROOT'
+  if (childType === 'DNA_GROUP') return parentType === 'DNA'
   if (childType === 'DEPARTMENT') return parentType === 'CHAPTER'
   return false
 }

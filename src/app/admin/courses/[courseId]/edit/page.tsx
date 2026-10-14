@@ -95,6 +95,8 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
   const [assessmentForm, setAssessmentForm] = useState({
     title: 'Bài kiểm tra bài học',
     description: 'Đạt từ 85% điểm để hoàn thành bài học',
+    questionCount: 10,
+    durationMinutes: 30,
     questions: [
       {
         questionText: 'Câu hỏi 1: ',
@@ -173,6 +175,8 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
       setAssessmentForm({
         title: assessData.title || `Bài kiểm tra: ${lesson.title}`,
         description: assessData.description || '',
+        questionCount: assessData?.questionCount || 1,
+        durationMinutes: assessData?.durationMinutes || 30,
         questions: assessData.questions.map((q: any, idx: number) => ({
           questionText: q.questionText || q.question_text || `Câu hỏi ${idx + 1}`,
           // Loại Đúng/Sai đã ngừng dùng: quy về 1 đáp án để form không lỗi khi đọc dữ liệu cũ
@@ -191,6 +195,8 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
       setAssessmentForm({
         title: `Bài kiểm tra: ${lesson.title}`,
         description: 'Vui lòng hoàn thành bài kiểm tra để tiếp tục bài học tiếp theo.',
+        questionCount: assessData?.questionCount || 1,
+        durationMinutes: assessData?.durationMinutes || 30,
         questions: [
           {
             questionText: 'Câu hỏi 1: Nội dung bài học này nói về điều gì?',
@@ -232,6 +238,8 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
       setAssessmentForm({
         title: assessData.title || 'Bài thi cuối khóa',
         description: assessData.description || '',
+        questionCount: assessData?.questionCount || 1,
+        durationMinutes: assessData?.durationMinutes || 30,
         questions: assessData.questions.map((question: any, index: number) => ({
           questionText: question.questionText || '',
           type: question.type === 'MULTIPLE_CHOICE' ? 'MULTIPLE_CHOICE' : 'SINGLE_CHOICE',
@@ -249,6 +257,8 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
       setAssessmentForm({
         title: 'Bài thi cuối khóa',
         description: 'Đạt tối thiểu 85% để hoàn thành khóa học.',
+        questionCount: assessData?.questionCount || 1,
+        durationMinutes: assessData?.durationMinutes || 30,
         questions: Array.from({ length: 15 }, (_, index) => ({
           questionText: '',
           type: 'SINGLE_CHOICE' as const,
@@ -1203,13 +1213,14 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
         points: q.points || 1,
         durationSeconds: prev.questions[0]?.durationSeconds ?? 120,
         explanation: q.explanation || '',
-        poolIndex: idx % 5,
+        poolIndex: Number.isInteger(q.poolIndex) ? q.poolIndex : idx % Math.max(1, (res.data.pools || quizPoolNames).length),
         options: (q.options || []).map((o: any) => ({
           optionText: o.optionText,
           isCorrect: Boolean(o.isCorrect),
         })),
       })),
     }));
+    if (Array.isArray(res.data.pools) && res.data.pools.length) setQuizPoolNames(res.data.pools);
     setQuizImportErrors(res.data.errors || []);
 
     const errorCount = (res.data.errors || []).length;
@@ -1244,9 +1255,9 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
         return;
       }
     }
-    const poolCounts = [0, 0, 0, 0, 0];
+    const poolCounts = Array.from({ length: quizPoolNames.length }, () => 0);
     for (const question of assessmentForm.questions) poolCounts[question.poolIndex ?? 0]++;
-    if (quizPoolNames.some((name) => !name.trim()) || poolCounts.some((count) => count < 3)) {
+    if (!quizPoolNames.length || quizPoolNames.some((name) => !name.trim()) || poolCounts.some((count) => count < 1) || assessmentForm.questionCount < quizPoolNames.length || assessmentForm.questionCount > assessmentForm.questions.length) {
       const msg = 'Quiz cần đúng 5 pool có tên và mỗi pool ít nhất 3 câu hỏi.';
       setAssessmentFormError(msg);
       showToast('error', msg);
@@ -1270,6 +1281,8 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
         title: assessmentForm.title.trim(),
         description: assessmentForm.description.trim(),
         pools: quizPoolNames,
+        questionCount: assessmentForm.questionCount,
+        durationMinutes: assessmentForm.durationMinutes,
         questions: assessmentForm.questions.map((q, idx) => ({
           questionText: q.questionText.trim(),
           questionType: q.type,
@@ -2090,6 +2103,11 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
                 </div>
               </div>
 
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="text-sm font-semibold text-[#172554]">Số câu mỗi lượt<input type="number" min={1} max={assessmentForm.questions.length} value={assessmentForm.questionCount} onChange={(e) => setAssessmentForm({ ...assessmentForm, questionCount: Number(e.target.value) })} className="mt-1 w-full rounded-xl border border-[#cbdbf5] px-3 py-2 font-normal"/></label>
+                <label className="text-sm font-semibold text-[#172554]">Thời gian (phút)<input type="number" min={1} max={240} value={assessmentForm.durationMinutes} onChange={(e) => setAssessmentForm({ ...assessmentForm, durationMinutes: Number(e.target.value) })} className="mt-1 w-full rounded-xl border border-[#cbdbf5] px-3 py-2 font-normal"/></label>
+              </div>
+
               <div className="rounded-2xl border border-[#cbdbf5] bg-blue-50/40 p-4 space-y-3">
                 <div><h4 className="text-sm font-bold text-[#172554]">5 pool câu hỏi</h4><p className="text-xs text-[#737686]">Mỗi pool tối thiểu 3 câu. Mỗi lượt làm lấy ngẫu nhiên 3 câu từ từng pool.</p></div>
                 <div className="grid gap-2 sm:grid-cols-5">{quizPoolNames.map((name, index) => <input key={index} value={name} onChange={(e) => setQuizPoolNames((previous) => previous.map((item, itemIndex) => itemIndex === index ? e.target.value : item))} placeholder={`Pool ${index + 1}`} className="min-w-0 rounded-xl border border-[#cbdbf5] bg-white px-2 py-2 text-xs" />)}</div>
@@ -2148,7 +2166,9 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
                 </div>
 
                 {assessmentForm.questions.map((q, qIdx) => (
-                  <div key={qIdx} className="p-4 bg-[#f8f9ff] rounded-2xl border border-[#eff4ff] space-y-3">
+                  <details key={qIdx} className="group rounded-2xl border border-[#eff4ff] bg-[#f8f9ff]">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-[#172554]"><span>{quizPoolNames[q.poolIndex ?? 0] || 'Chưa có nhóm'} · Câu {qIdx + 1}</span><span className="max-w-[65%] truncate text-xs font-normal text-[#737686]">{q.questionText || 'Chưa nhập nội dung'}</span></summary>
+                  <div className="space-y-3 border-t border-[#eff4ff] p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-center gap-1.5 shrink-0 mt-1">
                         <span className="font-bold text-sm text-[#2563EB]">Câu {qIdx + 1}</span>
@@ -2316,6 +2336,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
                       </button>
                     </div>
                   </div>
+                  </details>
                 ))}
               </div>
 

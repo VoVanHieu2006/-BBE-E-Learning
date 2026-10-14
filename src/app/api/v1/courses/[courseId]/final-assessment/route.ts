@@ -17,7 +17,9 @@ function formatAssessment(assessment: any) {
     courseId: assessment.course_id,
     title: assessment.title,
     description: assessment.description,
-    questionCount: assessment.questions.length,
+    questionCount: assessment.question_count,
+    durationMinutes: assessment.duration_minutes,
+    totalQuestionCount: assessment.questions.length,
     pools: assessment.question_pools?.map((pool: any) => ({ poolId: pool.id, name: pool.name, sortOrder: pool.sort_order })) || [],
     questions: assessment.questions.map((question: any) => ({
       questionId: question.id,
@@ -144,18 +146,24 @@ export async function POST(request: NextRequest, { params }: { params: { courseI
   const description = typeof body?.description === 'string' ? body.description.trim() : ''
   const questions = body?.questions
   const pools = body?.pools
+  const questionCount = Number.parseInt(String(body?.questionCount ?? 10), 10)
+  const durationMinutes = Number.parseInt(String(body?.durationMinutes ?? 30), 10)
   if (title.length < 2 || title.length > 255) return jsonError('ValidationError', 'Tiêu đề phải dài từ 2 đến 255 ký tự.', 400)
-  if (!Array.isArray(questions) || questions.length < 15 || questions.length > 100) {
+  if (!Array.isArray(questions) || questions.length < 1 || questions.length > 100) {
     return jsonError('ValidationError', 'Bài thi cuối khóa cần 15–100 câu hỏi để đủ 5 pool, mỗi pool tối thiểu 3 câu.', 400)
   }
-  if (!Array.isArray(pools) || pools.length !== 5 || pools.some((name: unknown) => typeof name !== 'string' || !name.trim())) {
+  if (!Array.isArray(pools) || pools.length < 1 || pools.length > 20 || pools.some((name: unknown) => typeof name !== 'string' || !name.trim())) {
     return jsonError('ValidationError', 'Bài thi cần đúng 5 pool có tên.', 400)
   }
-  const poolCounts = [0, 0, 0, 0, 0]
+  if (!Number.isInteger(questionCount) || questionCount < pools.length || questionCount > questions.length ||
+      !Number.isInteger(durationMinutes) || durationMinutes < 1 || durationMinutes > 240) {
+    return jsonError('ValidationError', 'Số câu mỗi lượt phải nằm trong ngân hàng và không ít hơn số nhóm; thời gian từ 1 đến 240 phút.', 400)
+  }
+  const poolCounts = Array.from({ length: pools.length }, () => 0)
   for (let index = 0; index < questions.length; index++) {
     const question = questions[index]
     const poolIndex = Number(question?.poolIndex)
-    if (!Number.isInteger(poolIndex) || poolIndex < 0 || poolIndex > 4) return jsonError('ValidationError', `Câu ${index + 1} chưa thuộc một trong 5 pool.`, 400)
+    if (!Number.isInteger(poolIndex) || poolIndex < 0 || poolIndex >= pools.length) return jsonError('ValidationError', `Câu ${index + 1} chưa thuộc một trong 5 pool.`, 400)
     poolCounts[poolIndex]++
     const questionText = typeof question?.questionText === 'string' ? question.questionText.trim() : ''
     const options = question?.options
@@ -171,7 +179,7 @@ export async function POST(request: NextRequest, { params }: { params: { courseI
       return jsonError('ValidationError', `Câu ${index + 1} có lựa chọn trống.`, 400)
     }
   }
-  if (poolCounts.some((count) => count < 3)) return jsonError('QuestionPoolIncomplete', 'Mỗi pool cần tối thiểu 3 câu hỏi.', 400)
+  if (poolCounts.some((count) => count < 1)) return jsonError('QuestionPoolIncomplete', 'Mỗi pool cần tối thiểu 3 câu hỏi.', 400)
 
   const existing = await prisma.assessment.findUnique({ where: { course_id: course.id }, select: { id: true, _count: { select: { attempts: true } } } })
   if (existing?._count.attempts) return jsonError('AssessmentVersionRequired', 'Bài thi đã có attempt; hãy giữ nguyên đề thi để bảo toàn lịch sử.', 409)
@@ -209,6 +217,8 @@ export async function POST(request: NextRequest, { params }: { params: { courseI
         lesson_id: null,
         title,
         description: description || null,
+        question_count: questionCount,
+        duration_minutes: durationMinutes,
         created_by: (auth as any).context!.userId,
       },
     })

@@ -467,7 +467,10 @@ export default function AdminUsersPage() {
                     return (
                       <tr key={uId} className="hover:bg-[#f8f9ff] transition">
                         <td className="px-6 py-4">
-                          <div className="font-semibold text-[#172554]">{u.email}</div>
+                          <div className="font-semibold text-[#172554]">{u.displayName || u.email}</div>
+                          {u.displayName && <div className="text-xs text-[#737686]">{u.email}</div>}
+                          {u.effectivePositions?.length > 0 && <div className="mt-1 flex flex-wrap gap-1">{u.effectivePositions.map((position: any) => <span key={`${position.code}:${position.unitId}`} className="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold text-indigo-700">{position.name} · {position.unitName}</span>)}</div>}
+                          <div className="mt-1 flex flex-wrap gap-1">{u.department && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700">Ban · {u.department.name}</span>}{u.dna?.active && <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">{u.dna.role || 'DNA'}{u.dna.group ? ` · ${u.dna.group}` : ''}</span>}</div>
                           <div className="text-[11px] text-[#737686]" suppressHydrationWarning>
                             Tham gia: {u.createdAt ? new Date(u.createdAt).toLocaleDateString('vi-VN') : '—'}
                           </div>
@@ -707,6 +710,7 @@ export default function AdminUsersPage() {
               </div>
 
               <div className="space-y-4">
+                <div className="flex flex-wrap gap-2 rounded-xl border border-[#eff4ff] p-3 text-xs"><span className="font-semibold text-[#172554]">Phạm vi hiện tại:</span><span>{selectedUserDetail.chapter?.name || 'Không thuộc Chapter'}</span><span>·</span><span>{selectedUserDetail.department ? `Ban ${selectedUserDetail.department.name}` : 'Không thuộc Ban'}</span><span>·</span><span>{selectedUserDetail.dna?.active ? `DNA ${selectedUserDetail.dna.group ? `(${selectedUserDetail.dna.group})` : ''}` : 'Không thuộc DNA'}</span></div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="p-3 bg-[#f8f9ff] rounded-xl">
                     <span className="text-xs text-[#737686] block">Vai trò</span>

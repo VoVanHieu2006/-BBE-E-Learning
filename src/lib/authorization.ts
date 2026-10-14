@@ -6,9 +6,13 @@ type LegacyAuthContext = { userId: string; role: 'ADMIN' | 'CHAPTER_LEADER' | 'M
 export interface ManagedOrganizationUnit {
   id: string
   name: string
-  type: 'DNA' | 'CHAPTER' | 'DEPARTMENT'
+  type: 'DNA' | 'DNA_GROUP' | 'CHAPTER' | 'DEPARTMENT'
   canManageMembers: boolean
   chapterId: string | null
+}
+
+export function memberManagementPermission(unitType: string): 'MANAGE_DNA_MEMBERS' | 'MANAGE_CHAPTER_MEMBERS' {
+  return unitType === 'DNA' || unitType === 'DNA_GROUP' ? 'MANAGE_DNA_MEMBERS' : 'MANAGE_CHAPTER_MEMBERS'
 }
 
 /** Resolves the target unit and all ancestors, which are the only assignment scopes that can grant access downward. */
@@ -88,14 +92,14 @@ export async function listManagedOrganizationUnits(
 ): Promise<ManagedOrganizationUnit[]> {
   const units = context.role === 'ADMIN'
     ? await prisma.organizationUnit.findMany({
-        where: { type: { in: ['DNA', 'CHAPTER', 'DEPARTMENT'] }, status: 'ACTIVE' },
+        where: { type: { in: ['DNA', 'DNA_GROUP', 'CHAPTER', 'DEPARTMENT'] }, status: 'ACTIVE' },
         include: { chapter: { select: { id: true } } },
         orderBy: [{ type: 'asc' }, { name: 'asc' }],
       })
     : await prisma.organizationUnit.findMany({
         where: {
           status: 'ACTIVE',
-          type: { in: ['DNA', 'CHAPTER', 'DEPARTMENT'] },
+          type: { in: ['DNA', 'DNA_GROUP', 'CHAPTER', 'DEPARTMENT'] },
         },
         include: { chapter: { select: { id: true } } },
         orderBy: [{ type: 'asc' }, { name: 'asc' }],
@@ -109,7 +113,7 @@ export async function listManagedOrganizationUnits(
       name: unit.name,
       type: unit.type as ManagedOrganizationUnit['type'],
       chapterId: unit.chapter?.id || await getOwningChapterId(unit.id),
-      canManageMembers: context.role === 'ADMIN' || await canAccessOrganizationUnitPermission(context, unit.id, 'MANAGE_CHAPTER_MEMBERS'),
+      canManageMembers: context.role === 'ADMIN' || await canAccessOrganizationUnitPermission(context, unit.id, memberManagementPermission(unit.type)),
     }
   }))).filter((unit): unit is NonNullable<typeof unit> => Boolean(unit))
   return result

@@ -66,7 +66,9 @@ export async function GET(
       lessonId: assessment.lesson_id,
       title: assessment.title,
       description: assessment.description,
-      questionCount: assessment.questions.length,
+      questionCount: assessment.question_count,
+      durationMinutes: assessment.duration_minutes,
+      totalQuestionCount: assessment.questions.length,
       questions: assessment.questions.map((q) => ({
         questionId: q.id,
         id: q.id,
@@ -133,6 +135,8 @@ export async function POST(
 
     const body = await request.json().catch(() => ({}));
     const { title, description, questions, pools } = body || {};
+    const questionCount = Number.parseInt(String(body?.questionCount ?? questions?.length), 10);
+    const durationMinutes = Number.parseInt(String(body?.durationMinutes ?? 30), 10);
 
     if (
       !title ||
@@ -151,20 +155,25 @@ export async function POST(
         { status: 400 }
       );
     }
+    if (!Number.isInteger(questionCount) || questionCount < 1 || questionCount > questions.length ||
+        !Number.isInteger(durationMinutes) || durationMinutes < 1 || durationMinutes > 240) {
+      return NextResponse.json({ error: { code: 'ValidationError', message: 'Số câu mỗi lượt phải nằm trong ngân hàng đề; thời gian phải từ 1 đến 240 phút.' } }, { status: 400 });
+    }
     const usesPools = pools !== undefined;
     if (usesPools) {
-      if (!Array.isArray(pools) || pools.length !== 5 || pools.some((pool: unknown) => typeof pool !== 'string' || !pool.trim())) {
+      if (!Array.isArray(pools) || pools.length < 1 || pools.length > 20 || pools.some((pool: unknown) => typeof pool !== 'string' || !pool.trim())) {
         return NextResponse.json({ error: { code: 'ValidationError', message: 'Quiz pool phải gồm đúng 5 tên pool.' } }, { status: 400 });
       }
-      const poolCounts = [0, 0, 0, 0, 0];
+      if (questionCount < pools.length) return NextResponse.json({ error: { code: 'ValidationError', message: 'Số câu mỗi lượt không thể ít hơn số nhóm.' } }, { status: 400 });
+      const poolCounts = Array.from({ length: pools.length }, () => 0);
       for (const question of questions) {
         const poolIndex = Number((question as any).poolIndex);
-        if (!Number.isInteger(poolIndex) || poolIndex < 0 || poolIndex > 4) {
+        if (!Number.isInteger(poolIndex) || poolIndex < 0 || poolIndex >= pools.length) {
           return NextResponse.json({ error: { code: 'ValidationError', message: 'Mỗi câu hỏi phải thuộc một trong năm pool.' } }, { status: 400 });
         }
         poolCounts[poolIndex]++;
       }
-      if (poolCounts.some((count) => count < 3)) {
+      if (poolCounts.some((count) => count < 1)) {
         return NextResponse.json({ error: { code: 'QuestionPoolIncomplete', message: 'Mỗi pool cần ít nhất 3 câu hỏi.' } }, { status: 400 });
       }
     }
@@ -262,6 +271,8 @@ export async function POST(
             lesson_id: lessonId,
             title: title.trim(),
             description: description?.trim() || null,
+            question_count: questionCount,
+            duration_minutes: durationMinutes,
             created_by: (auth as any).context!.userId,
           },
         });

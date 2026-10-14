@@ -12,7 +12,7 @@ require("dotenv").config({ path: ".env" });
 
 const prisma = new PrismaClient();
 
-const SHARED_PASSWORD = "Password123!";
+const SHARED_PASSWORD = "Demo@123456";
 
 // ---------- Helpers ----------
 function daysAgo(n: number, hour = 9): Date {
@@ -31,6 +31,18 @@ async function wipeAll(): Promise<void> {
   console.log("🧹 Wiping all records (FK-safe order)...");
   // Con -> cha
   await prisma.auditLog.deleteMany();
+  await prisma.chapterReorganizationItem.deleteMany();
+  await prisma.chapterReorganization.deleteMany();
+  await prisma.chapterMonthlyKpi.deleteMany();
+  await prisma.starLedger.deleteMany();
+  await prisma.accessRestriction.deleteMany();
+  await prisma.userLearningAssignment.deleteMany();
+  await prisma.learningRule.deleteMany();
+  await prisma.positionAssignment.deleteMany();
+  await prisma.positionPermission.deleteMany();
+  await prisma.permission.deleteMany();
+  await prisma.position.deleteMany();
+  await prisma.organizationMembership.deleteMany();
   await prisma.refreshToken.deleteMany();
   await prisma.passwordResetToken.deleteMany();
   await prisma.attemptAnswer.deleteMany();
@@ -48,6 +60,7 @@ async function wipeAll(): Promise<void> {
   await prisma.invitation.deleteMany();
   await prisma.chapterMember.deleteMany();
   await prisma.chapter.deleteMany();
+  await prisma.organizationUnit.deleteMany();
   await prisma.user.deleteMany();
 }
 
@@ -62,8 +75,8 @@ interface UserSpec {
 async function main(): Promise<void> {
   console.log("🌱 Starting full seed...");
 
-  const adminEmail = process.env.ADMIN_EMAIL || "bbetrainerteam@gmail.com";
-  const adminPassword = process.env.ADMIN_PASSWORD || "Admin@123!";
+  const adminEmail = "admin.demo@bbe.vn";
+  const adminPassword = SHARED_PASSWORD;
 
   await wipeAll();
 
@@ -106,6 +119,7 @@ async function main(): Promise<void> {
   const admin = await prisma.user.create({
     data: {
       email: adminEmail,
+      display_name: "Quản trị viên Demo",
       password_hash: adminHash,
       role: "ADMIN",
       status: "ACTIVE",
@@ -114,6 +128,11 @@ async function main(): Promise<void> {
   });
 
   const userSpecs: UserSpec[] = [
+    { name: "Lead DNA Demo", email: "dna.lead.demo@bbe.vn", role: "MEMBER", chapter: hn.id },
+    { name: "Lead Chapter Demo", email: "chapter.lead.demo@bbe.vn", role: "CHAPTER_LEADER", chapter: hn.id },
+    { name: "LT Ban Demo", email: "department.lead.demo@bbe.vn", role: "MEMBER", chapter: hn.id },
+    { name: "Thành viên Demo", email: "member.demo@bbe.vn", role: "MEMBER", chapter: hn.id },
+    { name: "Thành viên DNA Demo", email: "dna.member.demo@bbe.vn", role: "MEMBER", chapter: hn.id },
     { name: "Nguyễn Phương Hoa", email: "phuong.hoa@bbe.vn", role: "CHAPTER_LEADER", chapter: hn.id },
     { name: "Trần Quốc Bảo", email: "quoc.bao@bbe.vn", role: "CHAPTER_LEADER", chapter: hcm.id },
     { name: "Lê Thị Mai Anh", email: "mai.anh@bbe.vn", role: "CHAPTER_LEADER", chapter: dn.id },
@@ -133,6 +152,7 @@ async function main(): Promise<void> {
     const u = await prisma.user.create({
       data: {
         email: spec.email,
+        display_name: spec.name,
         password_hash: passwordHash,
         role: spec.role,
         status: "ACTIVE",
@@ -165,6 +185,45 @@ async function main(): Promise<void> {
   // ==========================================================
   // 3. COURSES → SESSIONS → LESSONS (Video/Document)
   // ==========================================================
+  console.log("Creating organization and demo role assignments...");
+  const rootUnit = await prisma.organizationUnit.create({ data: { name: "BBE Việt Nam", type: "ROOT" } });
+  const dnaUnit = await prisma.organizationUnit.create({ data: { name: "DNA Điều hành", type: "DNA", parent_id: rootUnit.id } });
+  const dnaGroups = await Promise.all(["TT", "LDC", "SGDC"].map((name) => prisma.organizationUnit.create({ data: { name, type: "DNA_GROUP", parent_id: dnaUnit.id } })));
+  const chapterUnits = await Promise.all(chapters.map((chapter) => prisma.organizationUnit.create({ data: { name: chapter.name, type: "CHAPTER", parent_id: rootUnit.id } })));
+  await Promise.all(chapters.map((chapter, index) => prisma.chapter.update({ where: { id: chapter.id }, data: { organization_unit_id: chapterUnits[index].id } })));
+  const departments = await Promise.all(["Ban Nội dung", "Ban Truyền thông", "Ban Đối ngoại"].map((name) => prisma.organizationUnit.create({ data: { name, type: "DEPARTMENT", parent_id: chapterUnits[0].id } })));
+  const [dnaLeadPosition, chapterLeadPosition, departmentLeadPosition, memberPosition] = await Promise.all([
+    prisma.position.create({ data: { code: "DNA_LEAD", name: "Lead DNA", scope: "DNA", is_manager: true } }),
+    prisma.position.create({ data: { code: "CHAPTER_LEAD", name: "Trưởng Chapter", scope: "CHAPTER", is_manager: true } }),
+    prisma.position.create({ data: { code: "DEPARTMENT_LEAD", name: "LT Ban", scope: "DEPARTMENT", is_manager: true } }),
+    prisma.position.create({ data: { code: "MEMBER", name: "Thành viên", scope: "DEPARTMENT", is_manager: false } }),
+  ]);
+  const permissions = await Promise.all([
+    prisma.permission.create({ data: { code: "VIEW_MEMBER_PROGRESS", description: "Xem tiến độ thành viên trong phạm vi" } }),
+    prisma.permission.create({ data: { code: "MANAGE_CHAPTER_MEMBERS", description: "Quản lý thành viên Chapter" } }),
+    prisma.permission.create({ data: { code: "MANAGE_DNA_MEMBERS", description: "Quản lý thành viên DNA" } }),
+  ]);
+  await prisma.positionPermission.createMany({ data: [
+    { position_id: dnaLeadPosition.id, permission_id: permissions[0].id },
+    { position_id: dnaLeadPosition.id, permission_id: permissions[2].id },
+    { position_id: chapterLeadPosition.id, permission_id: permissions[0].id },
+    { position_id: chapterLeadPosition.id, permission_id: permissions[1].id },
+    { position_id: departmentLeadPosition.id, permission_id: permissions[0].id },
+  ] });
+  const demoAssignments = [
+    { email: "dna.lead.demo@bbe.vn", unit: dnaUnit, position: dnaLeadPosition },
+    { email: "chapter.lead.demo@bbe.vn", unit: chapterUnits[0], position: chapterLeadPosition },
+    { email: "department.lead.demo@bbe.vn", unit: departments[0], position: departmentLeadPosition },
+    { email: "member.demo@bbe.vn", unit: departments[0], position: memberPosition },
+    { email: "dna.member.demo@bbe.vn", unit: departments[0], position: memberPosition },
+  ];
+  for (const item of demoAssignments) {
+    const user = users[item.email];
+    await prisma.organizationMembership.create({ data: { user_id: user.id, unit_id: item.unit.id } });
+    await prisma.positionAssignment.create({ data: { user_id: user.id, unit_id: item.unit.id, position_id: item.position.id, is_primary: true, appointed_by: admin.id } });
+  }
+  await prisma.organizationMembership.create({ data: { user_id: users["dna.member.demo@bbe.vn"].id, unit_id: dnaGroups[0].id } });
+
   console.log("🎓 Creating courses, sessions, lessons...");
   const yt = (id: string, dur: number, title: string) => ({ id, dur, title });
 
@@ -181,6 +240,7 @@ async function main(): Promise<void> {
     visibility: "PUBLIC" | "PRIVATE";
     sessions: { title: string; lessons: LessonSpec[] }[];
     publishedAgo?: number;
+    coverUrl?: string;
   }
 
   const courseSpecs: CourseSpec[] = [
@@ -307,6 +367,30 @@ async function main(): Promise<void> {
         },
       ],
     },
+    {
+      title: "Văn hóa tổ chức và hành trình BBE",
+      description: "Khóa nhập môn về giá trị cốt lõi, cách phối hợp và hành trình phát triển dành cho mọi thành viên.",
+      status: "PUBLISHED", visibility: "PUBLIC", publishedAgo: 12, coverUrl: "/images/course-covers/organization-culture.png",
+      sessions: [{ title: "Bắt đầu cùng BBE", lessons: [{ title: "Giá trị cốt lõi trong hành động", desc: "Hiểu cách đưa giá trị chung vào công việc hằng ngày.", video: yt("S-QqTDbsuBA", 480, "Văn hóa BBE") }] }],
+    },
+    {
+      title: "Tư duy phản biện và giải quyết vấn đề",
+      description: "Nhận diện vấn đề, kiểm chứng giả định và đưa ra quyết định có cơ sở.",
+      status: "PUBLISHED", visibility: "PUBLIC", publishedAgo: 10, coverUrl: "/images/course-covers/digital-productivity.png",
+      sessions: [{ title: "Tư duy có cấu trúc", lessons: [{ title: "Từ triệu chứng đến nguyên nhân gốc", desc: "Kỹ thuật đặt câu hỏi và phân tích nguyên nhân.", video: yt("S-QqTDbsuBA", 660, "Tư duy phản biện") }] }],
+    },
+    {
+      title: "Làm việc nhóm và phản hồi hiệu quả",
+      description: "Xây dựng niềm tin, giao việc rõ ràng và phản hồi giúp đồng đội tiến bộ.",
+      status: "PUBLISHED", visibility: "PRIVATE", publishedAgo: 8, coverUrl: "/images/course-covers/communication-leadership.png",
+      sessions: [{ title: "Phối hợp trong đội nhóm", lessons: [{ title: "Phản hồi theo mô hình SBI", desc: "Thực hành phản hồi cụ thể, tôn trọng và hướng tới hành động.", video: yt("S-QqTDbsuBA", 540, "Phản hồi hiệu quả") }] }],
+    },
+    {
+      title: "Quản lý dự án dành cho thành viên",
+      description: "Lập kế hoạch, theo dõi rủi ro và hoàn thành cam kết trong dự án Chapter.",
+      status: "PUBLISHED", visibility: "PRIVATE", publishedAgo: 6, coverUrl: "/images/course-covers/organization-culture.png",
+      sessions: [{ title: "Dự án từ đầu đến cuối", lessons: [{ title: "Mục tiêu, đầu việc và người phụ trách", desc: "Biến mục tiêu thành kế hoạch có thể theo dõi.", video: yt("S-QqTDbsuBA", 720, "Quản lý dự án") }] }],
+    },
   ];
 
   const courses: Record<string, string> = {}; // title -> id
@@ -322,7 +406,11 @@ async function main(): Promise<void> {
         visibility: cs.visibility,
         created_by: admin.id,
         // Temporary seed cover; replace through the Admin course cover uploader.
-        cover_url: "https://images.unsplash.com/photo-1501504905252-473c47e087f8?auto=format&fit=crop&w=1200&q=80",
+        cover_url: cs.coverUrl || [
+          "/images/course-covers/digital-productivity.png",
+          "/images/course-covers/communication-leadership.png",
+          "/images/course-covers/organization-culture.png",
+        ][Object.keys(courses).length % 3],
         published_at: cs.publishedAgo ? daysAgo(cs.publishedAgo) : null,
         created_at: daysAgo((cs.publishedAgo || 40) + 14),
       },
@@ -784,6 +872,14 @@ async function main(): Promise<void> {
   console.table(counts);
   console.log(`\n👑 Admin: ${adminEmail} / ${adminPassword}`);
   console.log(`🔑 Shared password for other accounts: ${SHARED_PASSWORD}`);
+  console.table([
+    { role: "ADMIN", email: adminEmail, password: SHARED_PASSWORD },
+    { role: "LEAD_DNA", email: "dna.lead.demo@bbe.vn", password: SHARED_PASSWORD },
+    { role: "LEAD_CHAPTER", email: "chapter.lead.demo@bbe.vn", password: SHARED_PASSWORD },
+    { role: "LT_BAN", email: "department.lead.demo@bbe.vn", password: SHARED_PASSWORD },
+    { role: "THANH_VIEN", email: "member.demo@bbe.vn", password: SHARED_PASSWORD },
+    { role: "THANH_VIEN_DNA", email: "dna.member.demo@bbe.vn", password: SHARED_PASSWORD },
+  ]);
 }
 
 main()

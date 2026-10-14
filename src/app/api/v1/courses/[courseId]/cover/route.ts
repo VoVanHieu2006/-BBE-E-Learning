@@ -10,7 +10,9 @@ const MAX_IMAGE_BYTES = 8 * 1024 * 1024
 const ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
 
 function cloudinaryConfig() {
-  const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME
+  // This route runs only on the server, so the Cloudinary account name does
+  // not need to be exposed in the browser bundle.
+  const cloudName = process.env.CLOUDINARY_CLOUD_NAME
   const apiKey = process.env.CLOUDINARY_API_KEY
   const apiSecret = process.env.CLOUDINARY_API_SECRET
   if (!cloudName || !apiKey || !apiSecret) return null

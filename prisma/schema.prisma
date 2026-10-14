@@ -106,6 +106,7 @@ enum VideoProvider {
 enum OrganizationUnitType {
   ROOT
   DNA
+  DNA_GROUP
   CHAPTER
   DEPARTMENT
 
@@ -183,6 +184,7 @@ enum StarReason {
 model User {
   id               String     @id @default(uuid()) @db.Uuid
   email            String     @unique @db.VarChar(255)
+  display_name     String?    @db.VarChar(120)
   password_hash    String     @db.VarChar(255)
   role             UserRole
   status           UserStatus @default(ACTIVE)
@@ -246,12 +248,14 @@ model ChapterMember {
 
   @@map("chapter_members")
   @@unique([chapter_id, user_id])
+  @@unique([user_id])
   @@index([chapter_id, user_id])
 }
 
 model Invitation {
   id            String            @id @default(uuid()) @db.Uuid
   email         String            @db.VarChar(255)
+  display_name  String?           @db.VarChar(120)
   role          InvitationRole
   chapter_id    String?           @db.Uuid
   organization_unit_id String?     @db.Uuid
@@ -396,6 +400,8 @@ model Assessment {
   course_id     String?    @unique @db.Uuid
   title         String     @db.VarChar(255)
   description   String?    @db.Text
+  question_count Int       @default(10)
+  duration_minutes Int     @default(30)
   created_by    String     @db.Uuid
   created_at    DateTime   @default(now()) @db.Timestamp
   updated_at    DateTime   @updatedAt @db.Timestamp
@@ -827,6 +833,7 @@ model ChapterReorganizationItem {
   id                    String                  @id @default(uuid()) @db.Uuid
   reorganization_id     String                  @db.Uuid
   user_id               String                  @db.Uuid
+  display_name          String?                 @db.VarChar(120)
   department_unit_id    String                  @db.Uuid
   position_id           String?                 @db.Uuid
   is_primary            Boolean                 @default(true)

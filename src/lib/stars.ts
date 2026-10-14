@@ -1,8 +1,10 @@
 import { StarReason } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { hasActiveDnaAffiliation } from '@/lib/affiliation-access'
 export { starsForVideoDuration, starsForQuizScore } from '@/lib/reward-rules'
 
 export async function canEarnStarsForCourse(userId: string, courseId: string): Promise<boolean> {
+  if (await hasActiveDnaAffiliation(userId)) return true
   const assignments = await prisma.userLearningAssignment.findMany({
     where: { user_id: userId, course_id: courseId, ended_at: null },
     select: { can_earn_stars: true },

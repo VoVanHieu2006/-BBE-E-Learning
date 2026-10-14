@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { jwtVerify } from 'jose'
 import { prisma } from './prisma'
 import { resolveLegacyChapterMembershipScope } from './authorization-rules'
+import { hasActiveAffiliation } from './affiliation-access'
 
 type UserRole = 'ADMIN' | 'CHAPTER_LEADER' | 'MEMBER';
 
@@ -81,7 +82,7 @@ export async function authenticate(request: NextRequest): Promise<AuthResult> {
             where: { id: userId },
             select: { id: true, status: true, role: true, chapter_members: { take: 1, orderBy: { joined_at: 'asc' }, select: { chapter_id: true } } },
           })
-          if (user && user.status === 'ACTIVE') {
+          if (user && user.status === 'ACTIVE' && await hasActiveAffiliation(user.id, user.role)) {
             const chapterId = resolveLegacyChapterMembershipScope(user.chapter_members.map((member) => member.chapter_id))
             userStatusCache.set(userId, { id: user.id, status: user.status, role: user.role, chapterId, timestamp: now })
             return { ok: true, context: { userId: user.id, role: user.role, chapterId } }
@@ -113,7 +114,7 @@ export async function authenticate(request: NextRequest): Promise<AuthResult> {
       select: { id: true, status: true, role: true, chapter_members: { take: 1, orderBy: { joined_at: 'asc' }, select: { chapter_id: true } } },
     })
 
-    if (!user || user.status !== 'ACTIVE') {
+    if (!user || user.status !== 'ACTIVE' || !await hasActiveAffiliation(user.id, user.role)) {
       if (user) {
         userStatusCache.set(userId, { id: user.id, status: user.status, role: user.role, timestamp: now })
       }
@@ -142,7 +143,7 @@ export async function authenticate(request: NextRequest): Promise<AuthResult> {
             where: { id: userId },
             select: { id: true, status: true, role: true, chapter_members: { take: 1, orderBy: { joined_at: 'asc' }, select: { chapter_id: true } } },
           })
-          if (user && user.status === 'ACTIVE') {
+          if (user && user.status === 'ACTIVE' && await hasActiveAffiliation(user.id, user.role)) {
             const chapterId = resolveLegacyChapterMembershipScope(user.chapter_members.map((member) => member.chapter_id))
             userStatusCache.set(userId, { id: user.id, status: user.status, role: user.role, chapterId, timestamp: now })
             return { ok: true, context: { userId: user.id, role: user.role, chapterId } }

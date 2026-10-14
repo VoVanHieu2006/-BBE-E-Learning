@@ -26,6 +26,9 @@ export default function OrganizationManagerPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+  const [rosterUrl, setRosterUrl] = useState('');
+  const [effectiveAt, setEffectiveAt] = useState('');
+  const [rosterPreview, setRosterPreview] = useState<any>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -152,6 +155,31 @@ export default function OrganizationManagerPage() {
     setInvitations((current) => current.map((item) => item.id === invitation.id ? { ...item, status: action === 'cancel' ? 'CANCELLED' : 'PENDING' } : item));
   };
 
+  const previewRoster = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!selectedUnit?.chapterId || !rosterUrl.trim()) return;
+    setBusy(true); setMessage('');
+    const result = await apiFetch(`/api/v1/chapters/${selectedUnit.chapterId}/reorganizations/parse-sheet`, { method: 'POST', noCache: true, body: JSON.stringify({ url: rosterUrl.trim() }) });
+    setBusy(false);
+    if (!result.ok) { setRosterPreview(null); setMessage(result.error?.message || 'Không đọc được danh sách phân ban.'); return; }
+    setRosterPreview(result.data);
+  };
+
+  const scheduleRoster = async () => {
+    if (!selectedUnit?.chapterId || !rosterPreview?.valid || !effectiveAt) return;
+    setBusy(true);
+    const result = await apiFetch(`/api/v1/chapters/${selectedUnit.chapterId}/reorganizations`, {
+      method: 'POST', noCache: true, body: JSON.stringify({
+        sourceUrl: rosterUrl, effectiveAt: new Date(effectiveAt).toISOString(),
+        items: rosterPreview.items.map((item: any) => ({ userId: item.userId, displayName: item.displayName, departmentUnitId: item.departmentUnitId, positionId: item.positionId, isPrimary: item.isLead })),
+      }),
+    });
+    setBusy(false);
+    if (!result.ok) { setMessage(result.error?.message || 'Không thể lên lịch phân ban.'); return; }
+    setMessage('Đã lên lịch đổi Ban, LT và tên hiển thị. Hệ thống sẽ áp dụng đúng ngày hiệu lực.');
+    setRosterPreview(null); setRosterUrl(''); setEffectiveAt('');
+  };
+
   if (loading && !units.length) return <div className="text-sm text-[#737686]">Đang tải phạm vi quản lý…</div>;
   if (!units.length) return <Card className="p-8"><h1 className="text-2xl font-bold text-[#172554]">Chưa có phạm vi quản lý</h1><p className="mt-2 text-sm text-[#737686]">Admin cần bổ nhiệm bạn vào DNA, Chapter hoặc Ban và gán quyền xem tiến trình.</p></Card>;
 
@@ -168,6 +196,17 @@ export default function OrganizationManagerPage() {
     </header>
 
     {message && <div role="status" className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800">{message}</div>}
+
+    {canManage && selectedUnit?.type === 'CHAPTER' && selectedUnit.chapterId && <Card className="space-y-4 border border-[#eff4ff]">
+      <div><h2 className="font-bold text-[#172554]">Phân Ban cuối nhiệm kỳ từ Google Sheet</h2><p className="mt-1 text-xs text-[#737686]">Tên cột phải trùng tên Ban. Mỗi ô dùng “Họ tên (email)”; người đầu tiên trong cột được gán LT. Hệ thống đối chiếu bằng email trước khi cho xác nhận.</p></div>
+      <form onSubmit={previewRoster} className="grid gap-3 md:grid-cols-[1fr_auto]"><input required value={rosterUrl} onChange={(event) => setRosterUrl(event.target.value)} placeholder="Dán link Google Sheet danh sách cuối nhiệm kỳ" className="rounded-xl border border-[#cbdbf5] px-3 py-2 text-sm"/><Button type="submit" loading={busy}>Đọc và kiểm tra</Button></form>
+      {rosterPreview && <div className="space-y-3">
+        <div className={`rounded-xl px-4 py-3 text-sm ${rosterPreview.valid ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>{rosterPreview.valid ? `Hợp lệ: ${rosterPreview.summary.members} thành viên, ${rosterPreview.summary.leads} LT.` : `Cần sửa ${rosterPreview.errors.length} lỗi trước khi xác nhận.`}</div>
+        {rosterPreview.errors?.length > 0 && <details className="rounded-xl border border-red-100 p-3"><summary className="cursor-pointer text-sm font-semibold text-red-700">Xem lỗi đối chiếu</summary><ul className="mt-2 space-y-1 text-xs text-red-700">{rosterPreview.errors.map((error: any, index: number) => <li key={index}>Dòng {error.row}, {error.column}: {error.message} ({error.value})</li>)}</ul></details>}
+        <details className="rounded-xl border border-[#eff4ff] p-3" open><summary className="cursor-pointer text-sm font-semibold text-[#172554]">Xem trước theo Ban</summary><div className="mt-3 max-h-72 overflow-auto divide-y">{rosterPreview.items.map((item: any, index: number) => <div key={index} className="flex justify-between gap-3 py-2 text-xs"><span><b>{item.displayName}</b> · {item.email}</span><span>{item.departmentName}{item.isLead ? ' · LT' : ''}</span></div>)}</div></details>
+        <div className="flex flex-wrap items-end gap-3"><label className="text-xs font-semibold text-[#172554]">Ngày hiệu lực<input required type="datetime-local" value={effectiveAt} onChange={(event) => setEffectiveAt(event.target.value)} className="mt-1 block rounded-xl border border-[#cbdbf5] px-3 py-2 text-sm"/></label><Button type="button" disabled={!rosterPreview.valid || !effectiveAt || busy} onClick={() => void scheduleRoster()}>Xác nhận và lên lịch</Button></div>
+      </div>}
+    </Card>}
 
     {canManage && profile?.role !== 'ADMIN' && <div className="grid gap-4 lg:grid-cols-2">
       <Card className="space-y-3 border border-[#eff4ff]">
@@ -191,7 +230,7 @@ export default function OrganizationManagerPage() {
           <tbody className="divide-y divide-[#eff4ff]">
             {loading ? <tr><td colSpan={5} className="px-5 py-8 text-center text-[#737686]">Đang tải…</td></tr>
               : members.length ? members.map((member) => <tr key={member.userId}>
-                <td className="px-5 py-3"><p className="font-semibold text-[#172554]">{member.email}</p><p className="text-xs text-[#737686]">{member.status}</p></td>
+                <td className="px-5 py-3"><p className="font-semibold text-[#172554]">{member.displayName || member.email}</p><p className="text-xs text-[#737686]">{member.email}</p><div className="mt-1 flex flex-wrap gap-1 text-[11px]"><span className="rounded-full bg-slate-100 px-2 py-0.5 text-slate-700">{member.status}</span>{member.department && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-blue-700">Ban: {member.department.name}</span>}{member.positions?.map((position: any) => <span key={`${position.code}-${position.unitName}`} className="rounded-full bg-violet-50 px-2 py-0.5 text-violet-700">{position.name}</span>)}{member.dna?.active && <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-emerald-700">DNA{member.dna.group ? ` · ${member.dna.group}` : ''}</span>}</div></td>
                 <td className="px-5 py-3"><p className="font-semibold text-[#172554]">{member.progressPercent}%</p><p className="text-xs text-[#737686]">{member.completedCourses}/{member.totalCourses} khóa · {member.completedLessons}/{member.totalLessons} bài</p></td>
                 <td className="px-5 py-3 font-bold text-amber-600">⭐ {member.stars}</td>
                 <td className="px-5 py-3 text-xs text-[#596174]">{new Date(member.joinedAt).toLocaleDateString('vi-VN')}</td>

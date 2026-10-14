@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { reconcileLearningAssignmentsForUser } from '@/lib/learning-assignments'
 import { hasWatchedFullVideo } from '@/lib/video-progress-rules'
 import { evaluateCourseFinalRequirements } from '@/lib/course-final-assessment-rules'
+import { hasActiveDnaAffiliation } from '@/lib/affiliation-access'
 
 export type ProgressionAction = 'VIEW' | 'WATCH' | 'ASSESS'
 
@@ -46,14 +47,14 @@ export async function checkCourseFinalProgression(
   if (isAdmin) return { ok: true, courseId, canEarnStars: false }
 
   await reconcileLearningAssignmentsForUser(userId)
-  const assignments = await prisma.userLearningAssignment.findMany({
+  const [assignments, dnaAccess] = await Promise.all([prisma.userLearningAssignment.findMany({
     where: { user_id: userId, course_id: courseId, ended_at: null },
     select: { can_view: true, can_assess: true, can_earn_stars: true },
-  })
-  if (!assignments.length || !assignments.every((assignment) => assignment.can_view)) {
+  }), hasActiveDnaAffiliation(userId)])
+  if (!dnaAccess && (!assignments.length || !assignments.every((assignment) => assignment.can_view))) {
     return { ok: false, code: 'NotAssigned', message: 'Khóa học chưa được gán vào lộ trình học của bạn.' }
   }
-  if (!assignments.every((assignment) => assignment.can_assess)) {
+  if (!dnaAccess && !assignments.every((assignment) => assignment.can_assess)) {
     return { ok: false, code: 'AssessmentNotAllowed', message: 'Bạn chưa được cấp quyền làm bài thi trong khóa học này.' }
   }
 
@@ -91,7 +92,7 @@ export async function checkCourseFinalProgression(
     passedAssessmentIds,
   )
   if (requirements.ok === false) return requirements
-  return { ok: true, courseId, canEarnStars: assignments.every((assignment) => assignment.can_earn_stars) }
+  return { ok: true, courseId, canEarnStars: dnaAccess || assignments.every((assignment) => assignment.can_earn_stars) }
 }
 
 /**
@@ -116,14 +117,14 @@ export async function checkLessonProgression(
   if (isAdmin) return { ok: true, courseId, canEarnStars: false }
 
   await reconcileLearningAssignmentsForUser(userId)
-  const assignments = await prisma.userLearningAssignment.findMany({
+  const [assignments, dnaAccess] = await Promise.all([prisma.userLearningAssignment.findMany({
     where: { user_id: userId, course_id: courseId, ended_at: null },
     select: { can_view: true, can_assess: true, can_earn_stars: true },
-  })
-  if (assignments.length === 0 || !assignments.every((assignment) => assignment.can_view)) {
+  }), hasActiveDnaAffiliation(userId)])
+  if (!dnaAccess && (assignments.length === 0 || !assignments.every((assignment) => assignment.can_view))) {
     return { ok: false, code: 'NotAssigned', message: 'Nội dung này chưa được gán vào lộ trình học của bạn' }
   }
-  if (action === 'ASSESS' && !assignments.every((assignment) => assignment.can_assess)) {
+  if (!dnaAccess && action === 'ASSESS' && !assignments.every((assignment) => assignment.can_assess)) {
     return { ok: false, code: 'AssessmentNotAllowed', message: 'Bạn chỉ được xem nội dung này, chưa có quyền làm bài kiểm tra' }
   }
 
@@ -187,5 +188,5 @@ export async function checkLessonProgression(
     return { ok: false, code: 'LessonVideoIncomplete', message: 'Hãy hoàn thành toàn bộ video trong module trước khi làm quiz' }
   }
 
-  return { ok: true, courseId, canEarnStars: assignments.every((assignment) => assignment.can_earn_stars) }
+  return { ok: true, courseId, canEarnStars: dnaAccess || assignments.every((assignment) => assignment.can_earn_stars) }
 }
