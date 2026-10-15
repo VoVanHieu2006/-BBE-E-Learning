@@ -368,8 +368,8 @@ describe('Chapter leaderboard scoring', () => {
   it('scales size influence until 51 members and caps it afterwards', () => {
     const chapter30 = calculateChapterLeaderboardMetrics(Array(30).fill(80), 10, 'YELLOW')
     const chapter50 = calculateChapterLeaderboardMetrics(Array(51).fill(80), 10, 'YELLOW')
-    const score30 = scoreChapterLeaderboard(chapter30, 10)
-    const score50 = scoreChapterLeaderboard(chapter50, 10)
+    const score30 = scoreChapterLeaderboard(chapter30)
+    const score50 = scoreChapterLeaderboard(chapter50)
 
     assert.equal(chapter30.averageCompletion, chapter50.averageCompletion)
     assert.equal(chapter30.averageStars, chapter50.averageStars)
@@ -398,16 +398,17 @@ describe('Chapter leaderboard scoring', () => {
     assert.equal(calculateChapterLeaderboardMetrics(Array(20).fill(70), 5, 'YELLOW').eligible, true)
   })
 
-  it('normalizes Stars per member, caps outliers, and awards only green KPI bonus', () => {
+  it('uses uncapped average Stars and awards only the green KPI bonus', () => {
     const baseline = calculateChapterLeaderboardMetrics(Array(20).fill(70), 20, 'GREEN')
     const outlier = calculateChapterLeaderboardMetrics(Array(20).fill(70), 100, 'YELLOW')
-    const greenScore = scoreChapterLeaderboard(baseline, 10)
-    const yellowScore = scoreChapterLeaderboard({ ...baseline, kpiStatus: 'YELLOW' }, 10)
-    const outlierScore = scoreChapterLeaderboard(outlier, 10)
+    const greenScore = scoreChapterLeaderboard(baseline)
+    const yellowScore = scoreChapterLeaderboard({ ...baseline, kpiStatus: 'YELLOW' })
+    const outlierScore = scoreChapterLeaderboard(outlier)
 
-    assert.equal(greenScore.starScore, 100)
+    assert.equal(greenScore.starScore, 20)
     assert.equal(greenScore.kpiBonus - yellowScore.kpiBonus, 20)
     assert.equal(outlierScore.starScore, 100)
+    assert.ok(scoreChapterLeaderboard(calculateChapterLeaderboardMetrics(Array(51).fill(100), 200, 'GREEN')).score > 100)
   })
 })
 
@@ -495,14 +496,14 @@ describe('Chapter leaderboard cache', () => {
   it('expires after its TTL and clears immediately after a KPI update', () => {
     invalidateChapterLeaderboardCache()
     const cached = { items: [{ chapterId: 'chapter-1', score: 50 }] }
-    setCachedChapterLeaderboard(cached, 1000)
-    assert.equal(getCachedChapterLeaderboard(1000), cached)
-    assert.equal(getCachedChapterLeaderboard(30_999), cached)
-    assert.equal(getCachedChapterLeaderboard(31_000), null)
+    setCachedChapterLeaderboard(cached, '2026-10', 1000)
+    assert.equal(getCachedChapterLeaderboard('2026-10', 1000), cached)
+    assert.equal(getCachedChapterLeaderboard('2026-10', 30_999), cached)
+    assert.equal(getCachedChapterLeaderboard('2026-10', 31_000), null)
 
-    setCachedChapterLeaderboard(cached, 2000)
+    setCachedChapterLeaderboard(cached, '2026-10', 2000)
     invalidateChapterLeaderboardCache()
-    assert.equal(getCachedChapterLeaderboard(2000), null)
+    assert.equal(getCachedChapterLeaderboard('2026-10', 2000), null)
   })
 })
 

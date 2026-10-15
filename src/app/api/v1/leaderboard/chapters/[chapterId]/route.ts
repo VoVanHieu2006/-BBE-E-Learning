@@ -64,10 +64,15 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
 
   const [system, starRows] = await Promise.all([
     getPublishedSystemData(),
-    prisma.starLedger.groupBy({ where: { user_id: { in: memberIds } }, by: ['user_id'], _sum: { amount: true } }),
+    prisma.starLedger.findMany({ where: { user_id: { in: memberIds } }, select: { user_id: true, amount: true, awarded_at: true } }),
   ])
   const progressMap = await calculateBatchUsersProgress(memberIds, system)
-  const starsByUser = new Map(starRows.map((row) => [row.user_id, row._sum.amount || 0]))
+  const starsByUser = new Map<string, number>()
+  const achievedAtByUser = new Map<string, Date>()
+  for (const row of starRows) {
+    starsByUser.set(row.user_id, (starsByUser.get(row.user_id) || 0) + row.amount)
+    if (row.amount > 0 && (!achievedAtByUser.has(row.user_id) || row.awarded_at > achievedAtByUser.get(row.user_id)!)) achievedAtByUser.set(row.user_id, row.awarded_at)
+  }
 
   const items = members.map((member) => {
     const progress = progressMap.get(member.id)
@@ -75,6 +80,7 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
       userId: member.id,
       email: member.email,
       stars: starsByUser.get(member.id) || 0,
+      starsAchievedAt: achievedAtByUser.get(member.id)?.toISOString() || null,
       completedLessons: progress?.completedLessons || 0,
       totalLessons: system.totalLessons,
       completedCourses: progress?.completedCourses || 0,
@@ -83,7 +89,7 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
       avgScore: progress?.avgQuizScore || 0,
       avgQuizScore: progress?.avgQuizScore || 0,
     }
-  }).sort((a, b) => b.stars - a.stars || b.courseProgress - a.courseProgress || b.avgQuizScore - a.avgQuizScore)
+  }).sort((a, b) => b.stars - a.stars || new Date(a.starsAchievedAt || 8640000000000000).getTime() - new Date(b.starsAchievedAt || 8640000000000000).getTime() || a.email.localeCompare(b.email))
 
   return NextResponse.json({ chapterId: chapter.id, items })
 }

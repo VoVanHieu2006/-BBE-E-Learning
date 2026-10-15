@@ -15,6 +15,8 @@ export default function LeaderboardPage() {
 
   const [members, setMembers] = useState<any[]>([]);
   const [chapters, setChapters] = useState<any[]>([]);
+  const [excludedChapters, setExcludedChapters] = useState<any[]>([]);
+  const [availableMonths, setAvailableMonths] = useState<string[]>([]);
   const [leaderboardMonth, setLeaderboardMonth] = useState<string | null>(null);
   const [leaderboardUpdatedAt, setLeaderboardUpdatedAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -80,8 +82,23 @@ export default function LeaderboardPage() {
     }
     if (chaptersRes.ok && chaptersRes.data) {
       setChapters(chaptersRes.data.items || []);
+      setExcludedChapters(chaptersRes.data.excluded || []);
+      setAvailableMonths(chaptersRes.data.availableMonths || []);
       setLeaderboardMonth(chaptersRes.data.month || null);
       setLeaderboardUpdatedAt(chaptersRes.data.updatedAt || null);
+    }
+    setLoading(false);
+  }
+
+  async function loadChapterMonth(month: string) {
+    setLoading(true);
+    const res = await apiFetch(`/api/v1/leaderboard/chapters?month=${month}`, { noCache: true });
+    if (res.ok && res.data) {
+      setChapters(res.data.items || []);
+      setExcludedChapters(res.data.excluded || []);
+      setAvailableMonths(res.data.availableMonths || []);
+      setLeaderboardMonth(res.data.month || null);
+      setLeaderboardUpdatedAt(res.data.updatedAt || null);
     }
     setLoading(false);
   }
@@ -262,6 +279,12 @@ export default function LeaderboardPage() {
         )
       ) : (
         /* Chapter Standings Table */
+        <div className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#eff4ff] bg-white p-4">
+          <strong className="text-sm text-[#172554]">Bảng xếp hạng theo tháng</strong>
+          <input type="month" value={leaderboardMonth?.slice(0, 7) || ''} onChange={(event) => void loadChapterMonth(event.target.value)} className="rounded-xl border border-[#cbdbf5] px-3 py-2 text-sm font-semibold" />
+          <span className="text-xs text-[#737686]">Có dữ liệu: {availableMonths.map((month) => month.split('-').reverse().join('/')).join(' · ') || 'chưa có'}</span>
+        </div>
         <Card className="p-0 overflow-hidden border border-[#eff4ff]">
           {chapters.length === 0 ? (
             <div className="text-center py-16 text-[#737686]">Chưa có dữ liệu xếp hạng Chapter</div>
@@ -273,10 +296,10 @@ export default function LeaderboardPage() {
                     <th className="px-6 py-4 w-16 text-center">Hạng</th>
                     <th className="px-6 py-4">Chapter</th>
                     <th className="px-6 py-4 text-center">Thành viên</th>
-                    <th className="px-6 py-4 text-center">Completion TB / trung vị</th>
+                    <th className="px-6 py-4 text-center">% đạt ≥70%</th>
                     <th className="px-6 py-4 text-center">⭐ / thành viên</th>
                     <th className="px-6 py-4 text-center">KPI</th>
-                    <th className="px-6 py-4 text-right">Điểm BXH / 100</th>
+                    <th className="px-6 py-4 text-right">Điểm BXH</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#eff4ff]">
@@ -301,8 +324,7 @@ export default function LeaderboardPage() {
                         </span>
                       </td>
                       <td className="px-6 py-4 text-center text-[#172554] font-semibold">
-                        <div>{ch.completion?.averagePercent || 0}% / {ch.completion?.medianPercent || 0}%</div>
-                        <div className="text-[11px] text-[#737686]">≥70%: {ch.completion?.atLeast70Percent || 0}%</div>
+                        <div className="text-green-700">{ch.completion?.atLeast70Percent || 0}%</div>
                       </td>
                       <td className="px-6 py-4 text-center font-extrabold text-[#2563EB] text-base">
                         {ch.stars?.averagePerMember || 0} ⭐
@@ -313,7 +335,7 @@ export default function LeaderboardPage() {
                         </span>
                       </td>
                       <td className="px-6 py-4 text-right font-extrabold text-[#2563EB] text-base">
-                        {ch.score} / 100
+                        {ch.score}
                       </td>
                     </tr>
                   ))}
@@ -322,6 +344,8 @@ export default function LeaderboardPage() {
             </div>
           )}
         </Card>
+        {excludedChapters.length > 0 && <Card className="border border-amber-200 bg-amber-50/50"><h3 className="font-bold text-[#172554]">Chapter chưa có mặt trên BXH</h3><p className="mt-1 text-xs text-[#737686]">Các điều kiện chưa đạt trong kỳ đang xem:</p><div className="mt-3 grid gap-3 md:grid-cols-2">{excludedChapters.map((chapter) => <div key={chapter.chapterId} className="rounded-xl border border-amber-200 bg-white p-3"><strong className="text-sm text-[#172554]">{chapter.name}</strong><div className="mt-2 flex flex-col gap-1">{(chapter.reasons || []).map((reason: string) => <span key={reason} className="rounded-lg bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800">{reason === 'KPI_MISSING' ? `📅 Chưa nhập KPI tháng ${leaderboardMonth ? new Date(leaderboardMonth).toLocaleDateString('vi-VN', { month: '2-digit', year: 'numeric' }) : ''}` : reason === 'MINIMUM_MEMBERS' ? `👥 Chưa đủ 20 thành viên (${chapter.memberCount})` : reason === 'COMPLETION_THRESHOLD' ? `📘 Chưa đạt 50% thành viên ≥70% (${chapter.atLeast70Percent}% đã đạt)` : reason === 'KPI_RED' ? '🔴 KPI Đỏ' : '⚫ KPI Đen'}</span>)}</div></div>)}</div></Card>}
+        </div>
       )}
 
       {/* Modal: Chapter Member Standings Drill-down */}
@@ -414,14 +438,14 @@ export default function LeaderboardPage() {
                 {leaderboardMonth && <p className="text-xs text-[#737686]">Kỳ xếp hạng: {new Date(leaderboardMonth).toLocaleDateString('vi-VN', { month: 'long', year: 'numeric' })}</p>}
                 <p>Chapter chỉ được vào BXH khi có ít nhất <strong>20 thành viên hợp lệ</strong>, ít nhất <strong>50% đạt từ 70% completion</strong>, và KPI tháng không đỏ. DNA không được đưa vào BXH Chapter.</p>
                 <div className="rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs leading-6">
-                  <strong>Điểm tối đa 100:</strong> completion đồng đều 40 điểm + Star bình quân đã chuẩn hóa 25 điểm + quy mô căn bậc hai 15 điểm + KPI xanh 20 điểm.
-                  <br />Completion kết hợp average (45%), median (35%) và tỷ lệ thành viên ≥70% (20%). Star dùng bình quân/người, chuẩn hóa theo phân vị 90 và chặn ở 100.
+                  <strong>Điểm có thể vượt 100:</strong> hoàn thành trung bình × 0,3 + Star tích lũy bình quân/người × 0,3 + điểm quy mô × 0,2 + KPI Xanh 20 điểm.
+                  <br />Điểm quy mô = min(100, số thành viên / 51 × 100). Thành viên bị vô hiệu hóa không tham gia bất kỳ phép tính nào.
                 </div>
                 <p className="text-xs">KPI vàng được tham gia nhưng không có bonus; KPI đỏ bị loại. Quy mô tăng theo căn bậc hai và đạt trần ở 50 thành viên nên không lấn át chất lượng học.</p>
               </div>
             ) : (
               <div className="space-y-3 text-sm text-[#434655]">
-                <p>Các bảng thành viên được xếp theo tổng <strong>⭐ Star</strong> đã ghi nhận. Nếu bằng Star, hệ thống ưu tiên completion cao hơn rồi đến điểm quiz trung bình.</p>
+                <p>Các bảng thành viên được xếp theo tổng <strong>⭐ Star</strong> đã ghi nhận. Nếu bằng Star, người đạt tổng Star đó sớm hơn đứng trên.</p>
                 <p className="text-xs">Star chỉ được ghi khi hoàn tất điều kiện học tương ứng; làm lại quiz không tạo thưởng lặp cho cùng một nội dung.</p>
               </div>
             )}

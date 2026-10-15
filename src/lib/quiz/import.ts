@@ -73,7 +73,7 @@ export function buildGoogleExportUrl(ref: GoogleDocRef): string {
     return `https://docs.google.com/spreadsheets/d/${ref.id}/export?format=csv&gid=${encodeURIComponent(ref.gid)}`
   }
   if (ref.sheetName) {
-    return `https://docs.google.com/spreadsheets/d/${ref.id}/gviz/tqx=out:csv&sheet=${encodeURIComponent(ref.sheetName)}`
+    return `https://docs.google.com/spreadsheets/d/${ref.id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(ref.sheetName)}`
   }
   return `https://docs.google.com/spreadsheets/d/${ref.id}/export?format=csv`
 }

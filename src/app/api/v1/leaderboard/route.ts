@@ -51,10 +51,15 @@ export async function GET(request: NextRequest) {
     const [progressMap, starRows] = await Promise.all([
       calculateBatchUsersProgress(memberUserIds, sys),
       memberUserIds.length
-        ? prisma.starLedger.groupBy({ where: { user_id: { in: memberUserIds } }, by: ['user_id'], _sum: { amount: true } })
+        ? prisma.starLedger.findMany({ where: { user_id: { in: memberUserIds } }, select: { user_id: true, amount: true, awarded_at: true } })
         : Promise.resolve([]),
     ])
-    const starsByUser = new Map(starRows.map((row) => [row.user_id, row._sum.amount || 0]))
+    const starsByUser = new Map<string, number>()
+    const achievedAtByUser = new Map<string, Date>()
+    for (const row of starRows) {
+      starsByUser.set(row.user_id, (starsByUser.get(row.user_id) || 0) + row.amount)
+      if (row.amount > 0 && (!achievedAtByUser.has(row.user_id) || row.awarded_at > achievedAtByUser.get(row.user_id)!)) achievedAtByUser.set(row.user_id, row.awarded_at)
+    }
 
     // 2. Format and compute leaderboard points for ALL members
     allResults = allMembers.map((m) => {
@@ -76,6 +81,7 @@ export async function GET(request: NextRequest) {
         avgScore,
         avgQuizScore: avgScore,
         stars: starsByUser.get(m.id) || 0,
+        starsAchievedAt: achievedAtByUser.get(m.id)?.toISOString() || null,
         completedLessons,
         totalLessons,
         completedCourses,
@@ -83,8 +89,8 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    // 3. Sort by Star balance, then learning progress and quiz average.
-    allResults.sort((a, b) => b.stars - a.stars || b.courseCompletionPercent - a.courseCompletionPercent || b.avgScore - a.avgScore)
+    // Equal Star balances are won by the member who reached that balance first.
+    allResults.sort((a, b) => b.stars - a.stars || new Date(a.starsAchievedAt || 8640000000000000).getTime() - new Date(b.starsAchievedAt || 8640000000000000).getTime() || a.email.localeCompare(b.email))
 
     leaderboardCache = {
       timestamp: now,

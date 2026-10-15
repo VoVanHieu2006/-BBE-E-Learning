@@ -143,10 +143,8 @@ export function calculateChapterLeaderboardMetrics(
 
 export function scoreChapterLeaderboard(
   metrics: ChapterLeaderboardMetrics,
-  rawStarBaseline: number,
 ): ChapterLeaderboardScore {
-  const starBaseline = Math.max(1, finiteNonNegative(rawStarBaseline))
-  const starScore = Math.min(100, (metrics.averageStars / starBaseline) * 100)
+  const starScore = metrics.averageStars
   const kpiBonus = metrics.kpiStatus === 'GREEN' ? CHAPTER_LEADERBOARD_WEIGHTS.greenKpiBonus : 0
   const score = metrics.completionScore * (CHAPTER_LEADERBOARD_WEIGHTS.completion / 100)
     + starScore * (CHAPTER_LEADERBOARD_WEIGHTS.stars / 100)

@@ -14,6 +14,8 @@ export default function AdminChaptersProgressPage() {
   const [chapters, setChapters] = useState<any[]>([]);
   const [excludedChapters, setExcludedChapters] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [leaderboardMonth, setLeaderboardMonth] = useState('');
+  const [availableMonths, setAvailableMonths] = useState<string[]>([]);
   const [selectedChapter, setSelectedChapter] = useState<any | null>(null);
   const [chapterMembers, setChapterMembers] = useState<any[]>([]);
   const [membersLoading, setMembersLoading] = useState(false);
@@ -35,24 +37,27 @@ export default function AdminChaptersProgressPage() {
     loadChapters();
   }, []);
 
-  async function loadChapters() {
-    const res = await apiFetch('/api/v1/leaderboard/chapters');
+  async function loadChapters(month?: string) {
+    const res = await apiFetch(`/api/v1/leaderboard/chapters${month ? `?month=${month}` : ''}`, { noCache: true });
     if (res.ok && res.data) {
       setChapters(res.data.items || []);
       setExcludedChapters(res.data.excluded || []);
+      setLeaderboardMonth(String(res.data.month || '').slice(0, 7));
+      setAvailableMonths(res.data.availableMonths || []);
     }
     setLoading(false);
   }
 
   async function handleOpenChapterDrillDown(chapter: any) {
     setSelectedChapter(chapter);
+    setKpiHistory([]);
     setMembersLoading(true);
     const chapterId = chapter.chapterId || chapter.id;
     const [res, kpiRes] = await Promise.all([
       apiFetch(`/api/v1/chapters/${chapterId}/dashboard/members`, { noCache: true }),
       apiFetch(`/api/v1/chapters/${chapterId}/kpi`, { noCache: true }),
     ]);
-    if (kpiRes.ok) setKpiHistory(kpiRes.data?.items || []);
+    if (kpiRes.ok) setKpiHistory(kpiRes.data?.items || []); else setKpiHistory([]);
     if (res.ok && res.data) {
       const items = (res.data.items || []).filter(
         (m: any) => m.role === 'MEMBER' || (!m.role && m.role !== 'CHAPTER_LEADER')
@@ -74,7 +79,7 @@ export default function AdminChaptersProgressPage() {
       showToast('success', 'Đã cập nhật KPI tháng.');
       const history = await apiFetch(`/api/v1/chapters/${chapterId}/kpi`, { noCache: true });
       if (history.ok) setKpiHistory(history.data?.items || []);
-      loadChapters();
+      loadChapters(leaderboardMonth);
     } else showToast('error', res.error?.message || 'Không cập nhật được KPI.');
     setKpiSaving(false);
   }
@@ -88,7 +93,7 @@ export default function AdminChaptersProgressPage() {
 
   const totalMembersAll = chapters.reduce((sum, ch) => sum + (ch.memberCount || 0), 0);
   const averageChapterCompletion = chapters.length
-    ? Math.round(chapters.reduce((sum, chapter) => sum + (chapter.completion?.averagePercent || 0), 0) / chapters.length)
+    ? Math.round(chapters.reduce((sum, chapter) => sum + (chapter.completion?.atLeast70Percent || 0), 0) / chapters.length)
     : 0;
   const averageStarsPerMember = totalMembersAll
     ? Math.round(chapters.reduce((sum, chapter) => sum + (chapter.stars?.averagePerMember || 0) * (chapter.memberCount || 0), 0) / totalMembersAll * 10) / 10
@@ -121,8 +126,18 @@ export default function AdminChaptersProgressPage() {
       <Card className="mb-6 border border-blue-200 bg-blue-50/60 p-5">
         <h2 className="font-bold text-[#172554]">Nhập KPI và cách tính điểm</h2>
         <p className="mt-2 text-sm text-[#434655]">Bấm “KPI & lịch sử” tại bất kỳ Chapter nào, kể cả Chapter chưa đủ điều kiện, để nhập KPI Đen, Đỏ, Vàng hoặc Xanh và xem các tháng trước.</p>
-        <p className="mt-2 text-xs leading-6 text-[#737686]">Điều kiện vào bảng: ít nhất 20 thành viên, ít nhất 50% thành viên đạt ≥70% lộ trình bắt buộc, KPI không Đen/Đỏ. Điểm = hoàn thành trung bình × 30% + điểm Star tương đối × 30% + điểm quy mô × 20% + 20 điểm nếu KPI Xanh. Điểm quy mô = min(100, số thành viên / 51 × 100); KPI Vàng cộng 0.</p>
+        <div className="mt-4 grid gap-2 rounded-2xl border border-blue-200 bg-white p-4 text-sm md:grid-cols-2">
+          <strong className="text-blue-700">📘 Hoàn thành TB × 0,3</strong><strong className="text-amber-600">⭐ Star TB/người × 0,3</strong>
+          <strong className="text-violet-700">👥 Quy mô × 0,2</strong><strong className="text-green-700">🟢 KPI Xanh +20 điểm</strong>
+          <p className="md:col-span-2 text-xs text-[#737686]">Quy mô = min(100, số thành viên / 51 × 100). KPI Vàng +0. Điểm tích lũy có thể vượt 100.</p>
+        </div>
       </Card>
+
+      <div className="mb-6 flex flex-wrap items-center gap-3 rounded-2xl border border-[#eff4ff] bg-white p-4 shadow-sm">
+        <strong className="text-sm text-[#172554]">Kỳ bảng xếp hạng</strong>
+        <input type="month" value={leaderboardMonth} onChange={(event) => { setLoading(true); void loadChapters(event.target.value) }} className="rounded-xl border border-[#cbdbf5] px-3 py-2 text-sm font-semibold" />
+        <span className="text-xs text-[#737686]">Có dữ liệu: {availableMonths.map((month) => month.split('-').reverse().join('/')).join(' · ') || 'chưa có'}</span>
+      </div>
 
       {/* Stat Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
@@ -137,7 +152,7 @@ export default function AdminChaptersProgressPage() {
           <div className="text-[11px] text-[#737686] mt-0.5">Học viên tham gia</div>
         </Card>
         <Card shadow="md" className="p-4 border border-[#eff4ff]">
-          <div className="text-xs font-semibold text-green-700">Completion TB Chapter</div>
+          <div className="text-xs font-semibold text-green-700">% thành viên đạt ≥70%</div>
           <div className="text-2xl font-bold text-green-700 mt-1">{averageChapterCompletion}%</div>
           <div className="text-[11px] text-[#737686] mt-0.5">Trung bình các Chapter đủ điều kiện</div>
         </Card>
@@ -149,15 +164,27 @@ export default function AdminChaptersProgressPage() {
         <Card shadow="md" className="p-4 border border-[#eff4ff]">
           <div className="text-xs font-semibold text-amber-700">Chapter dẫn đầu</div>
           <div
-            className="text-base lg:text-lg font-bold text-amber-600 mt-1 line-clamp-1 break-words"
+            className="text-sm lg:text-base font-bold text-amber-600 mt-1 break-words leading-snug"
             title={chapters[0]?.name || 'Chưa có'}
           >
             {chapters[0]?.name || '—'}
           </div>
-          <div className="text-[11px] text-[#737686] mt-0.5">Điểm BXH: {chapters[0]?.score || 0} / 100</div>
+          <div className="text-[11px] text-[#737686] mt-0.5">Điểm BXH: {chapters[0]?.score || 0}</div>
         </Card>
       </div>
 
+      <div className="grid items-start gap-6 xl:grid-cols-[300px_minmax(0,1fr)]">
+        <Card className="p-4 xl:sticky xl:top-24">
+          <h2 className="font-bold text-[#172554]">Tất cả Chapter</h2>
+          <p className="mb-3 mt-1 text-xs text-[#737686]">Chọn Chapter để nhập KPI và xem lịch sử.</p>
+          <div className="max-h-[620px] space-y-2 overflow-auto">
+            {[...chapters, ...excludedChapters].sort((a, b) => a.name.localeCompare(b.name, 'vi')).map((chapter) => <button key={chapter.chapterId} onClick={() => handleOpenChapterDrillDown(chapter)} className="flex w-full items-center justify-between gap-2 rounded-xl border border-[#eff4ff] p-3 text-left text-xs hover:border-blue-300 hover:bg-blue-50">
+              <span className="font-semibold text-[#172554]">{chapter.name}</span>
+              <span className={`shrink-0 rounded-full px-2 py-1 font-bold ${chapter.reasons?.length ? 'bg-amber-100 text-amber-800' : 'bg-green-100 text-green-700'}`}>{chapter.reasons?.length ? `${chapter.reasons.length} lý do` : `#${chapter.rank}`}</span>
+            </button>)}
+          </div>
+        </Card>
+        <div className="min-w-0">
       {/* Chapter Rankings Table */}
       <Card className="p-0 overflow-hidden border border-[#eff4ff] shadow-sm">
         {!mounted || (loading && chapters.length === 0) ? (
@@ -179,9 +206,9 @@ export default function AdminChaptersProgressPage() {
                   <th className="px-6 py-4 w-16 text-center">Hạng</th>
                   <th className="px-6 py-4">Tên Chapter</th>
                   <th className="px-6 py-4 text-center">Thành viên</th>
-                  <th className="px-6 py-4 text-center">Completion bình quân / trung vị</th>
+                  <th className="px-4 py-4 text-center">% đạt ≥70%</th>
                   <th className="px-6 py-4 text-center">⭐ / thành viên</th>
-                  <th className="px-6 py-4 text-center">KPI tháng</th>
+                  <th className="px-3 py-4 text-center whitespace-nowrap">KPI tháng</th>
                   <th className="px-6 py-4 text-center">Điểm BXH</th>
                   <th className="px-6 py-4 text-right">Chi tiết</th>
                 </tr>
@@ -207,20 +234,19 @@ export default function AdminChaptersProgressPage() {
                         {ch.memberCount} học viên
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-center text-[#172554] font-semibold">
-                      <div>{ch.completion?.averagePercent || 0}% / {ch.completion?.medianPercent || 0}%</div>
-                      <div className="text-[11px] text-[#737686]">≥70%: {ch.completion?.atLeast70Percent || 0}% thành viên</div>
+                    <td className="px-4 py-4 text-center text-[#172554] font-semibold">
+                      <div className="text-base text-green-700">{ch.completion?.atLeast70Percent || 0}%</div>
                     </td>
                     <td className="px-6 py-4 text-center font-extrabold text-[#2563EB] text-base">
                       {ch.stars?.averagePerMember || 0} ⭐
                     </td>
-                    <td className="px-6 py-4 text-center">
+                    <td className="px-3 py-4 text-center whitespace-nowrap">
                       <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${ch.kpi?.status === 'GREEN' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-800'}`}>
                         {ch.kpi?.status === 'GREEN' ? 'Xanh +20' : 'Vàng +0'}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-center font-extrabold text-[#172554] text-base">
-                      {ch.score} <span className="text-xs font-normal text-[#737686]">/ 100</span>
+                      {ch.score}
                     </td>
                     <td className="px-6 py-4 text-right">
                       <button
@@ -246,14 +272,16 @@ export default function AdminChaptersProgressPage() {
           <h2 className="font-bold text-[#172554]">Chưa đủ điều kiện tham gia BXH</h2>
           <p className="mt-1 text-xs text-[#737686]">Admin có thể dùng danh sách này để theo dõi Chapter cần hỗ trợ.</p>
           <div className="mt-3 flex flex-wrap gap-2">
-            {excludedChapters.map((chapter) => <button key={chapter.chapterId} onClick={() => handleOpenChapterDrillDown(chapter)} className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-left text-xs text-[#434655] hover:border-blue-300">
+            {excludedChapters.map((chapter) => <button key={chapter.chapterId} onClick={() => handleOpenChapterDrillDown(chapter)} className="min-w-[260px] rounded-xl border border-amber-200 bg-white px-4 py-3 text-left text-xs text-[#434655] hover:border-blue-300 hover:shadow-sm">
               <strong>{chapter.name}</strong>
-              <span className="mt-1 block">{(chapter.reasons || []).map((reason: string) => reason === 'MINIMUM_MEMBERS' ? `Chưa đủ 20 thành viên (${chapter.memberCount})` : reason === 'COMPLETION_THRESHOLD' ? `Chưa đạt 50% thành viên ≥70% (${chapter.atLeast70Percent}% đã đạt)` : reason === 'KPI_RED' ? 'KPI Đỏ' : 'KPI Đen').join(' · ')}</span>
+              <span className="mt-2 flex flex-col gap-1">{(chapter.reasons || []).map((reason: string) => <span key={reason} className={`rounded-lg px-2 py-1 font-semibold ${reason === 'KPI_MISSING' ? 'bg-slate-100 text-slate-700' : reason.startsWith('KPI_') ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-800'}`}>{reason === 'KPI_MISSING' ? `📅 Chưa nhập KPI tháng ${leaderboardMonth.split('-')[1]}/${leaderboardMonth.split('-')[0]}` : reason === 'MINIMUM_MEMBERS' ? `👥 Chưa đủ 20 thành viên (${chapter.memberCount})` : reason === 'COMPLETION_THRESHOLD' ? `📘 Chưa đạt 50% thành viên ≥70% (${chapter.atLeast70Percent}% đã đạt)` : reason === 'KPI_RED' ? '🔴 KPI Đỏ' : '⚫ KPI Đen'}</span>)}</span>
               <span className="mt-1 block font-semibold text-blue-700">KPI & lịch sử →</span>
             </button>)}
           </div>
         </Card>
       )}
+        </div>
+      </div>
 
       {/* Modal / Drill-down: Chapter Members & Individual Progress */}
       <Modal
