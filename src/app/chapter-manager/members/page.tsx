@@ -12,6 +12,8 @@ export default function ChapterManagerMembersPage() {
   const [members, setMembers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({ totalItems: 0, totalPages: 1 });
   const [mounted, setMounted] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
@@ -49,11 +51,11 @@ export default function ChapterManagerMembersPage() {
     loadMembers(currentChapter, search);
   }, []);
 
-  async function loadMembers(chapterId?: string, query?: string, noCache = false) {
+  async function loadMembers(chapterId?: string, query?: string, noCache = false, targetPage = page) {
     const targetChapter = chapterId || user?.chapterId || 'me';
     const searchQuery = query !== undefined ? query : search;
 
-    const url = `/api/v1/chapters/${targetChapter}/dashboard/members?search=${encodeURIComponent(searchQuery)}&includeInactive=1`;
+    const url = `/api/v1/chapters/${targetChapter}/dashboard/members?search=${encodeURIComponent(searchQuery)}&includeInactive=1&page=${targetPage}&limit=10`;
 
     // Cache-first: hiện dữ liệu cache ngay trong khi revalidate nền
     const cached = noCache ? null : getCachedApiData<any>(url);
@@ -65,6 +67,7 @@ export default function ChapterManagerMembersPage() {
     const res = await apiFetch(url, { noCache });
     if (res.ok && res.data) {
       setMembers(res.data.items || []);
+      setPagination({ totalItems: res.data.totalItems || 0, totalPages: res.data.totalPages || 1 });
     }
     setLoading(false);
   }
@@ -72,6 +75,7 @@ export default function ChapterManagerMembersPage() {
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setPage(1);
     loadMembers(user?.chapterId, search);
   };
 
@@ -212,6 +216,7 @@ export default function ChapterManagerMembersPage() {
             <Button type="submit">Tìm kiếm</Button>
           </form>
         </Card>
+        {pagination.totalPages > 1 && <div className="mt-5 flex items-center justify-between"><p className="text-sm text-[#737686]">Tổng {pagination.totalItems} thành viên · Trang {page}/{pagination.totalPages}</p><div className="flex gap-2"><Button variant="outline" disabled={page<=1} onClick={()=>{const p=page-1;setPage(p);void loadMembers(user?.chapterId,search,true,p)}}>← Trước</Button><Button variant="outline" disabled={page>=pagination.totalPages} onClick={()=>{const p=page+1;setPage(p);void loadMembers(user?.chapterId,search,true,p)}}>Tiếp →</Button></div></div>}
 
         {/* Members Table */}
         <Card className="p-0 overflow-hidden border border-[#eff4ff] shadow-sm">

@@ -50,8 +50,11 @@ function getStudentNav(chapterId?: string | null, isOrganizationManager = false)
 }
 
 const dnaLeadNav: NavItem[] = [
-  { label: 'Quản lý thành viên DNA', href: '/organization-manager', icon: '🏢', prefetchUrls: ['/api/v1/organization/managed-units'] },
+  { label: 'Tổng quan', href: '/organization-manager/dashboard', icon: '📊', prefetchUrls: ['/api/v1/organization/managed-units'] },
+  { label: 'Thành viên DNA', href: '/organization-manager', icon: '👥', prefetchUrls: ['/api/v1/organization/managed-units'] },
   { label: 'Bảng xếp hạng nội bộ DNA', href: '/organization-manager/leaderboard', icon: '🏆', prefetchUrls: ['/api/v1/organization/dna-leaderboard'] },
+  { label: 'Khóa học đã public', href: '/organization-manager/courses', icon: '📚', prefetchUrls: ['/api/v1/courses'] },
+  { label: 'Mời DNA', href: '/organization-manager/invitations', icon: '✉️' },
   { label: 'Hồ sơ quản lý', href: '/student/profile', icon: '👤', prefetchUrls: ['/api/v1/users/me'] },
 ];
 
@@ -69,7 +72,7 @@ const chapterManagerNav: NavItem[] = [
   { label: 'Bảng xếp hạng', href: '/leaderboard', icon: '🏆' },
   { label: 'Khóa học', href: '/chapter-manager/courses', icon: '📚' },
   { label: 'Mời thành viên', href: '/chapter-manager/invitations', icon: '✉️' },
-  { label: 'Chuyển giao nhiệm kỳ', href: '/organization-manager#term-transition', icon: '🔄' },
+  { label: 'Chuyển giao nhiệm kỳ', href: '/chapter-manager/term-transition', icon: '🔄' },
 ];
 
 function getNav(role: string, chapterId?: string | null, isOrganizationManager = false, managerKind?: string | null) {
@@ -112,7 +115,7 @@ function getNav(role: string, chapterId?: string | null, isOrganizationManager =
         icon: '✉️',
         prefetchUrls: [`/api/v1/invitations?chapterId=${chapterId}`],
       },
-      { label: 'Chuyển giao nhiệm kỳ', href: '/organization-manager#term-transition', icon: '🔄' },
+      { label: 'Chuyển giao nhiệm kỳ', href: '/chapter-manager/term-transition', icon: '🔄' },
     ];
   }
   return getStudentNav(chapterId, isOrganizationManager);
@@ -121,6 +124,7 @@ function getNav(role: string, chapterId?: string | null, isOrganizationManager =
 function isActive(href: string, pathname: string) {
   const dashboards = ['/student/dashboard', '/admin/dashboard', '/chapter-manager/dashboard'];
   if (dashboards.includes(href)) return pathname === href;
+  if (href === '/organization-manager') return pathname === href;
   return pathname === href || pathname.startsWith(href + '/');
 }
 

@@ -145,17 +145,17 @@ export default function LeaderboardPage() {
         </h1>
         <p className="text-sm text-[#737686]">
           {isScopedView
-            ? `Thành viên ${user?.chapterName || 'chapter của bạn'} — xếp theo ⭐, completion và điểm quiz`
+            ? 'Xếp hạng thành viên theo tổng ⭐ Star.'
             : 'Vinh danh Star học tập; BXH Chapter kết hợp độ đồng đều, KPI và quy mô'}
         </p>
         <div className="pt-1">
-          <button
+          {!isScopedView && <button
             type="button"
             onClick={() => setShowExplainModal(true)}
             className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#2563EB] bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-full transition cursor-pointer"
           >
             <span>💡</span> Cách tính BXH
-          </button>
+          </button>}
         </div>
       </div>
 

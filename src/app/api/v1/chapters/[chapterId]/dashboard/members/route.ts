@@ -31,7 +31,7 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
   const search = url.searchParams.get('search') || ''
   const includeInactive = url.searchParams.get('includeInactive') === '1'
   const page = Math.max(parseInt(url.searchParams.get('page') || '1', 10), 1)
-  const limit = Math.min(Math.max(parseInt(url.searchParams.get('limit') || '100', 10), 1), 500)
+  const limit = Math.min(Math.max(parseInt(url.searchParams.get('limit') || '20', 10), 1), 100)
   const skip = (page - 1) * limit
 
   const userFilter: any = {
