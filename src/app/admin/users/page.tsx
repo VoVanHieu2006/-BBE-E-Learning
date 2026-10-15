@@ -481,6 +481,12 @@ export default function AdminUsersPage() {
                         <td className="px-6 py-4">
                           <div className="font-semibold text-[#172554]">{u.displayName || u.email}</div>
                           {u.displayName && <div className="text-xs text-[#737686]">{u.email}</div>}
+                          <div className="text-[11px] text-[#737686]" suppressHydrationWarning>
+                            Tham gia: {u.createdAt ? new Date(u.createdAt).toLocaleDateString('vi-VN') : '—'}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div>{getRoleBadge(u.role)}</div>
                           <div className="mt-1 flex flex-wrap gap-1">
                             {u.effectivePositions?.some((position: any) => position.code === 'DNA_LEAD') ? (
                               <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">Lead DNA</span>
@@ -491,11 +497,7 @@ export default function AdminUsersPage() {
                             ) : null}
                             {u.dna?.active && !u.effectivePositions?.some((position: any) => position.code === 'DNA_LEAD') && <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">Thành viên DNA{u.dna.group ? ` · ${u.dna.group}` : ''}</span>}
                           </div>
-                          <div className="text-[11px] text-[#737686]" suppressHydrationWarning>
-                            Tham gia: {u.createdAt ? new Date(u.createdAt).toLocaleDateString('vi-VN') : '—'}
-                          </div>
                         </td>
-                        <td className="px-6 py-4">{getRoleBadge(u.role)}</td>
                         <td className="px-6 py-4">
                           {u.chapter ? (
                             <Link

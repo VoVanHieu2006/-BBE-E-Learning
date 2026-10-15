@@ -33,7 +33,17 @@ export default function MandatoryCourseMatrixPage() {
     setSaving(true)
     try {
       const res = await apiFetch('/api/v1/admin/mandatory-matrix', { method: 'PUT', body: JSON.stringify({ changes, rowDefaults }) })
-      if (res.ok) { setToast({ type: 'success', message: `Đã lưu cấu hình bắt buộc.` }); await load() }
+      if (res.ok) {
+        setData((current: any) => ({
+          ...current,
+          cells: structuredClone(draft),
+          courses: current.courses.map((course: any) => ({
+            ...course,
+            defaultDueDays: rowDays[course.id] || course.defaultDueDays,
+          })),
+        }))
+        setToast({ type: 'success', message: `Đã lưu cấu hình bắt buộc.` })
+      }
       else setToast({ type: 'error', message: res.error?.message || 'Không lưu được cấu hình.' })
     } finally { setSaving(false) }
   }

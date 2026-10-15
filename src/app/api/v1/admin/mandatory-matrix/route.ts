@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { reconcileLearningAssignmentsForUser } from '@/lib/learning-assignments'
+import { getOrganizationUnitTreeIds } from '@/lib/learning-assignments'
 
 const targets = [
   { key: 'CONTENT', label: 'Thành viên ban Nội dung', department: 'Nội dung' },
@@ -60,29 +60,69 @@ export async function GET(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   const guard = await requireAdmin(request); if ('error' in guard) return guard.error
   const body = await request.json().catch(() => null)
-  const raw = Array.isArray(body?.changes) ? body.changes : [body]
+  const raw = Array.isArray(body?.changes) ? body.changes : body?.courseId ? [body] : []
   const rowDefaults = Array.isArray(body?.rowDefaults) ? body.rowDefaults.map((item: any) => ({ courseId: String(item?.courseId || ''), dueDays: Number(item?.dueDays) })) : []
   const changes = raw.map((item: any) => ({ courseId: String(item?.courseId || ''), targetKey: String(item?.targetKey || ''), enabled: item?.enabled === true, dueDays: item?.enabled === true ? Number(item?.dueDays) : null }))
   if ((!changes.length && !rowDefaults.length) || changes.some((item: any) => !item.courseId || !targets.some((target) => target.key === item.targetKey) || (item.enabled && (!Number.isInteger(item.dueDays) || item.dueDays < 1 || item.dueDays > 3650))) || rowDefaults.some((item: any) => !item.courseId || !Number.isInteger(item.dueDays) || item.dueDays < 1 || item.dueDays > 3650)) return NextResponse.json({ error: { code: 'ValidationError', message: 'Cấu hình không hợp lệ.' } }, { status: 400 })
   const scopes = await resolveScopes()
   if (changes.some((item: any) => !(scopes.get(item.targetKey) || []).length)) return NextResponse.json({ error: { code: 'ScopeNotConfigured', message: 'Chưa có đơn vị hoặc chức vụ tương ứng.' } }, { status: 409 })
-  await prisma.$transaction(async (tx) => {
+  const createdRules = await prisma.$transaction(async (tx) => {
+    const created: Array<{ id: string; courseId: string; organizationUnitId: string | null; positionId: string | null; dueDays: number | null }> = []
     for (const row of rowDefaults) if (row.courseId && Number.isInteger(row.dueDays) && row.dueDays >= 1 && row.dueDays <= 3650) await tx.course.update({ where: { id: row.courseId }, data: { mandatory_default_due_days: row.dueDays } })
     for (const change of changes) for (const scope of scopes.get(change.targetKey) || []) {
       const existing = await tx.learningRule.findMany({ where: { course_id: change.courseId, organization_unit_id: scope.organizationUnitId, position_id: scope.positionId, effective_until: null }, select: { id: true } })
-      if (existing.length) await tx.userLearningAssignment.updateMany({ where: { rule_id: { in: existing.map((rule) => rule.id) }, status: { in: ['ASSIGNED', 'IN_PROGRESS'] } }, data: { mandatory: false, status: 'ENDED', due_at: null, ended_at: new Date() } })
+      if (existing.length) await tx.userLearningAssignment.updateMany({ where: { rule_id: { in: existing.map((rule) => rule.id) }, status: { in: ['ASSIGNED', 'IN_PROGRESS', 'OVERDUE'] } }, data: { mandatory: false, status: 'ENDED', due_at: null, ended_at: new Date() } })
       await tx.learningRule.deleteMany({ where: { course_id: change.courseId, organization_unit_id: scope.organizationUnitId, position_id: scope.positionId, effective_until: null } })
-      if (change.enabled) await tx.learningRule.create({ data: { course_id: change.courseId, organization_unit_id: scope.organizationUnitId, position_id: scope.positionId, mandatory: true, can_view: true, can_assess: true, can_earn_stars: true, due_days: change.dueDays } })
+      if (change.enabled) {
+        const rule = await tx.learningRule.create({ data: { course_id: change.courseId, organization_unit_id: scope.organizationUnitId, position_id: scope.positionId, mandatory: true, can_view: true, can_assess: true, can_earn_stars: true, due_days: change.dueDays }, select: { id: true } })
+        created.push({ id: rule.id, courseId: change.courseId, organizationUnitId: scope.organizationUnitId, positionId: scope.positionId, dueDays: change.dueDays })
+      }
     }
+    return created
   }, { timeout: 30000, maxWait: 10000 })
-  const changedScopes = changes.flatMap((change) => scopes.get(change.targetKey) || [])
-  const unitIds: string[] = Array.from(new Set<string>(changedScopes.flatMap((scope) => scope.organizationUnitId ? [scope.organizationUnitId] : [])))
-  const positionIds: string[] = Array.from(new Set<string>(changedScopes.flatMap((scope) => scope.positionId ? [scope.positionId] : [])))
-  const [memberships, assignments] = await Promise.all([
-    unitIds.length ? prisma.organizationMembership.findMany({ where: { unit_id: { in: unitIds }, status: 'ACTIVE' }, select: { user_id: true } }) : Promise.resolve([]),
-    positionIds.length ? prisma.positionAssignment.findMany({ where: { position_id: { in: positionIds }, ends_at: null }, select: { user_id: true } }) : Promise.resolve([]),
-  ])
-  const userIds = Array.from(new Set([...memberships.map((row) => row.user_id), ...assignments.map((row) => row.user_id)]))
-  await Promise.all(userIds.map((userId) => reconcileLearningAssignmentsForUser(userId)))
+
+  // Materialize only the newly-created rules. The old implementation reconciled
+  // every rule and all learning progress for every affected user in parallel,
+  // which overloaded the database and regularly made this request time out.
+  const now = new Date()
+  for (const rule of createdRules) {
+    const unitIds = rule.organizationUnitId ? await getOrganizationUnitTreeIds(rule.organizationUnitId) : []
+    const [memberships, positions] = await Promise.all([
+      rule.organizationUnitId
+        ? prisma.organizationMembership.findMany({ where: { unit_id: { in: unitIds }, status: 'ACTIVE', starts_at: { lte: now }, OR: [{ ends_at: null }, { ends_at: { gt: now } }] }, select: { user_id: true } })
+        : Promise.resolve([]),
+      rule.positionId
+        ? prisma.positionAssignment.findMany({ where: { position_id: rule.positionId, ...(rule.organizationUnitId ? { unit_id: { in: unitIds } } : {}), starts_at: { lte: now }, OR: [{ ends_at: null }, { ends_at: { gt: now } }] }, select: { user_id: true } })
+        : Promise.resolve([]),
+    ])
+    const memberIds = new Set(memberships.map((row) => row.user_id))
+    const positionIds = new Set(positions.map((row) => row.user_id))
+    const userIds = rule.organizationUnitId && rule.positionId
+      ? Array.from(memberIds).filter((userId) => positionIds.has(userId))
+      : Array.from(rule.organizationUnitId ? memberIds : positionIds)
+    if (!userIds.length) continue
+
+    const completed = await prisma.userLearningAssignment.findMany({
+      where: { user_id: { in: userIds }, course_id: rule.courseId, OR: [{ status: 'COMPLETED' }, { completed_at: { not: null } }] },
+      select: { user_id: true },
+      distinct: ['user_id'],
+    })
+    const completedUserIds = new Set(completed.map((row) => row.user_id))
+    await prisma.userLearningAssignment.createMany({ data: userIds.map((userId) => {
+      const isCompleted = completedUserIds.has(userId)
+      return {
+        user_id: userId,
+        course_id: rule.courseId,
+        rule_id: rule.id,
+        mandatory: true,
+        can_view: true,
+        can_assess: true,
+        can_earn_stars: true,
+        status: isCompleted ? 'COMPLETED' as const : 'ASSIGNED' as const,
+        completed_at: isCompleted ? now : null,
+        due_at: isCompleted || !rule.dueDays ? null : new Date(now.getTime() + rule.dueDays * 86400000),
+      }
+    }) })
+  }
   return NextResponse.json({ updated: changes.length })
 }

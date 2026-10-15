@@ -33,16 +33,20 @@ export default function AdminChaptersProgressPage() {
     const cached = getCachedApiData<any>('/api/v1/leaderboard/chapters');
     if (cached?.items) {
       setChapters(cached.items);
+      setExcludedChapters(cached.excluded || []);
+      setLeaderboardMonth(String(cached.month || '').slice(0, 7));
+      setAvailableMonths(cached.availableMonths || []);
       setLoading(false);
+    } else {
+      void loadChapters();
     }
-    loadChapters();
   }, []);
 
   async function loadChapters(month?: string) {
     if (loading && month !== undefined) return; // Không cho chuyển tháng liên tục
     setLoading(true);
     try {
-      const res = await apiFetch(`/api/v1/leaderboard/chapters${month ? `?month=${month}` : ''}`, { noCache: true });
+      const res = await apiFetch(`/api/v1/leaderboard/chapters${month ? `?month=${month}` : ''}`);
       if (res.ok && res.data) {
         setChapters(res.data.items || []);
         setExcludedChapters(res.data.excluded || []);
