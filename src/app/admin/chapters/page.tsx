@@ -69,7 +69,7 @@ export default function AdminChaptersProgressPage() {
     if (!selectedChapter) return;
     setKpiSaving(true);
     const chapterId = selectedChapter.chapterId || selectedChapter.id;
-    const res = await apiFetch(`/api/v1/chapters/${chapterId}/kpi`, { method: 'POST', body: JSON.stringify({ monthStart: `${kpiForm.month}-01T00:00:00.000Z`, status: kpiForm.status, note: kpiForm.note.trim() }) });
+    const res = await apiFetch(`/api/v1/chapters/${chapterId}/kpi`, { method: 'POST', body: JSON.stringify({ month: kpiForm.month, status: kpiForm.status, note: kpiForm.note.trim() }) });
     if (res.ok) {
       showToast('success', 'Đã cập nhật KPI tháng.');
       const history = await apiFetch(`/api/v1/chapters/${chapterId}/kpi`, { noCache: true });
@@ -117,6 +117,12 @@ export default function AdminChaptersProgressPage() {
           </Link>
         </div>
       </div>
+
+      <Card className="mb-6 border border-blue-200 bg-blue-50/60 p-5">
+        <h2 className="font-bold text-[#172554]">Nhập KPI và cách tính điểm</h2>
+        <p className="mt-2 text-sm text-[#434655]">Bấm “KPI & lịch sử” tại một Chapter để nhập KPI Đen, Đỏ, Vàng hoặc Xanh theo tháng và xem các tháng trước.</p>
+        <p className="mt-2 text-xs leading-6 text-[#737686]">Điều kiện vào bảng: ít nhất 20 thành viên, ít nhất 50% thành viên đạt ≥70% lộ trình bắt buộc, KPI không Đen/Đỏ. Điểm = hoàn thành trung bình × 30% + điểm Star tương đối × 30% + điểm quy mô × 20% + 20 điểm nếu KPI Xanh. Quy mô đạt tối đa tại 30 thành viên; KPI Vàng cộng 0.</p>
+      </Card>
 
       {/* Stat Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
@@ -224,7 +230,7 @@ export default function AdminChaptersProgressPage() {
                         }}
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#eff4ff] hover:bg-[#2563EB] text-[#2563EB] hover:text-white text-xs font-bold transition-all shadow-xs"
                       >
-                        🏛️ Xem tiến trình →
+                        KPI & lịch sử →
                       </button>
                     </td>
                   </tr>

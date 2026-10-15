@@ -57,7 +57,7 @@ export default function CourseDetailPage({ params }: { params: { courseId: strin
   const allLessonsDone = totalLessons > 0 && completedLessons >= totalLessons;
 
   const content = (
-    <div className="max-w-5xl mx-auto px-6 py-10 flex-1 w-full space-y-8">
+    <div className="max-w-7xl mx-auto px-6 py-10 flex-1 w-full space-y-8">
       <div className="mb-2">
         <Link
           href="/student/courses"

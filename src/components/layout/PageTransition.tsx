@@ -4,6 +4,7 @@ import { usePathname } from 'next/navigation'
 
 export default function PageTransition({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
+  const hasPersistentShell = ['/admin', '/student', '/chapter-manager', '/organization-manager'].some((prefix) => pathname.startsWith(prefix))
   const [navigating, setNavigating] = useState(false)
   useEffect(() => setNavigating(false), [pathname])
   useEffect(() => {
@@ -19,6 +20,6 @@ export default function PageTransition({ children }: { children: React.ReactNode
   }, [])
   return <>
     <div aria-hidden className={`route-progress ${navigating ? 'route-progress--active' : ''}`} />
-    <div key={pathname} className="page-transition min-w-0">{children}</div>
+    <div key={hasPersistentShell ? 'persistent-shell' : pathname} className={hasPersistentShell ? 'min-w-0' : 'page-transition min-w-0'}>{children}</div>
   </>
 }

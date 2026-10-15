@@ -27,7 +27,6 @@ export default function AdminInvitationsPage() {
   const [leaderForm, setLeaderForm] = useState({
     email: '',
     chapterName: '',
-    chapterDescription: '',
   });
 
   useEffect(() => {
@@ -63,7 +62,6 @@ export default function AdminInvitationsPage() {
       body: JSON.stringify({
         email: leaderForm.email.trim().toLowerCase(),
         chapterName: leaderForm.chapterName.trim(),
-        chapterDescription: leaderForm.chapterDescription.trim(),
       }),
     });
 
@@ -74,7 +72,7 @@ export default function AdminInvitationsPage() {
         showToast('success', `Đã gửi lời mời Trưởng Chapter đến ${leaderForm.email}!`);
       }
       setShowLeaderModal(false);
-      setLeaderForm({ email: '', chapterName: '', chapterDescription: '' });
+      setLeaderForm({ email: '', chapterName: '' });
       loadInvitations();
     } else {
       showToast('error', res.error?.message || 'Lỗi gửi lời mời Trưởng Chapter');
@@ -280,16 +278,6 @@ export default function AdminInvitationsPage() {
                   onChange={(e) => setLeaderForm({ ...leaderForm, chapterName: e.target.value })}
                   placeholder="Ví dụ: Chapter Hà Nội"
                   className="w-full px-4 py-2.5 border border-[#cbdbf5] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-[#172554] mb-1">Mô tả Chapter</label>
-                <textarea
-                  rows={2}
-                  value={leaderForm.chapterDescription}
-                  onChange={(e) => setLeaderForm({ ...leaderForm, chapterDescription: e.target.value })}
-                  placeholder="Mô tả khu vực hoặc nhóm hoạt động"
-                  className="w-full px-4 py-2 border border-[#cbdbf5] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
                 />
               </div>
               <div className="flex justify-end gap-3 pt-2">

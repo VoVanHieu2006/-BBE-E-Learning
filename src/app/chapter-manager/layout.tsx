@@ -1,5 +1,6 @@
 'use client';
 import Sidebar from '@/components/layout/Sidebar';
+import ContentTransition from '@/components/layout/ContentTransition';
 import { apiFetch } from '@/lib/api/client';
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -158,7 +159,7 @@ function ChapterManagerLayoutInner({ children }: { children: React.ReactNode }) 
             </select>
           </div>
         )}
-        {children}
+        <ContentTransition>{children}</ContentTransition>
       </main>
     </div>
   );

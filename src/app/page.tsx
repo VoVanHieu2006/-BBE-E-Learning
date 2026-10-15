@@ -113,24 +113,24 @@ export default function LandingPage() {
             <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-semibold text-blue-100 shadow-sm backdrop-blur">
               <span aria-hidden="true">✦</span> Nền tảng học tập nội bộ BBE
             </div>
-            <h1 className="mt-7 max-w-xl text-4xl font-extrabold leading-[1.34] tracking-tight sm:text-5xl sm:leading-[1.3] lg:text-6xl">
+            <h1 className="mt-7 max-w-xl overflow-visible text-4xl font-extrabold leading-[1.45] tracking-tight sm:text-5xl sm:leading-[1.4] lg:text-6xl">
               Học có lộ trình.
-              <span className="mt-6 block pb-2 bg-gradient-to-r from-orange-300 to-amber-200 bg-clip-text text-transparent">Tiến bộ mỗi ngày.</span>
+              <span className="mt-5 block overflow-visible py-3 bg-gradient-to-r from-orange-300 to-amber-200 bg-clip-text text-transparent">Tiến bộ mỗi ngày.</span>
             </h1>
             <p className="mt-6 max-w-xl text-base leading-7 text-blue-100/90 sm:text-lg sm:leading-8">
               Khám phá kiến thức, rèn kỹ năng và theo dõi hành trình phát triển của bạn trong một không gian học tập dành riêng cho cộng đồng BBE.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <Link href="/student/courses">
+              <Link href={isLoggedIn ? getDashboardHref() : '/student/courses'}>
                 <Button size="lg" className="w-full justify-center bg-orange-500 px-7 font-bold text-white shadow-lg shadow-orange-950/20 hover:bg-orange-400 sm:w-auto">
-                  Xem khóa học cho thành viên <span aria-hidden="true" className="ml-2">→</span>
+                  {isLoggedIn ? '← Quay lại' : 'Xem khóa học cho thành viên →'}
                 </Button>
               </Link>
-              <Link href="/login">
+              {!isLoggedIn && <Link href="/login">
                 <Button variant="outline" size="lg" className="w-full justify-center border-white/40 bg-white px-7 font-bold text-[#172554] hover:bg-blue-50 sm:w-auto">
                   Đăng nhập để xem nhiều khóa học hơn và lưu tiến độ
                 </Button>
-              </Link>
+              </Link>}
             </div>
             <div className="mt-9 flex flex-wrap gap-x-6 gap-y-3 text-xs font-medium text-blue-100/80 sm:text-sm">
               <span className="inline-flex items-center gap-2"><span className="text-emerald-300">✓</span> Học theo từng bước</span>

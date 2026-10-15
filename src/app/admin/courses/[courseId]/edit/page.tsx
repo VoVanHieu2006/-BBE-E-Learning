@@ -257,12 +257,12 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
   };
 
   // ─── Course Info Form ──────────────────────────────────────────────────────────
-  const handleSaveInfo = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSaveInfo = async (e?: React.FormEvent) => {
+    e?.preventDefault();
 
     if (form.status === 'PUBLISHED') {
       showToast('error', 'Khóa học đang công khai. Hãy Bỏ công khai trước rồi mới chỉnh sửa.');
-      return;
+      return false;
     }
 
     setSavingInfo(true);
@@ -288,6 +288,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
       showToast('error', res.error?.message || 'Không thể lưu thay đổi');
     }
     setSavingInfo(false);
+    return res.ok;
   };
 
   const handleCoverUpload = async (file?: File) => {
@@ -312,6 +313,10 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
 
   const handlePublish = async () => {
     setPublishLoading(true);
+    if (hasUnsavedCourseInfo) {
+      const saved = await handleSaveInfo();
+      if (!saved) { setPublishLoading(false); return; }
+    }
     clearApiCache('/api/v1/courses');
     clearApiCache(`/api/v1/courses/${params.courseId}`);
 
@@ -1371,7 +1376,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
     <>
         <Toast toast={toast} onClose={() => setToast(null)} />
 
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+        <div className="sticky top-3 z-30 flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 rounded-2xl border border-blue-100 bg-white/95 p-3 shadow-lg backdrop-blur">
           <Link
             href="/admin/courses"
             className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-white border border-[#cbdbf5] text-xs font-bold text-[#172554] hover:bg-[#eff4ff] hover:text-[#2563EB] hover:border-[#2563EB] shadow-xs transition-all w-fit"
@@ -1379,6 +1384,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
             ← Quay lại danh sách khóa học
           </Link>
           <div className="flex items-center gap-3">
+            {!isPublished && <Button variant="secondary" loading={savingInfo} onClick={() => void handleSaveInfo()}>{hasUnsavedCourseInfo ? 'Lưu thay đổi •' : 'Đã lưu'}</Button>}
             <span
               className={`whitespace-nowrap inline-flex items-center text-xs font-bold px-3 py-1 rounded-full ${
                 isPublished ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'

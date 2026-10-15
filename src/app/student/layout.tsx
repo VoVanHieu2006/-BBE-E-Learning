@@ -1,5 +1,6 @@
 'use client';
 import Sidebar from '@/components/layout/Sidebar';
+import ContentTransition from '@/components/layout/ContentTransition';
 import { apiFetch } from '@/lib/api/client';
 import { useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
@@ -83,7 +84,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
 
   // Trang học video (/student/learning) có giao diện rạp chiếu & header riêng, không bọc Sidebar học viên
   if (isLearningRoute) {
-    return <>{children}</>;
+    return <ContentTransition>{children}</ContentTransition>;
   }
 
   // Đối với route xem khóa học public (/student/courses), nếu là khách chưa đăng nhập thì không render Sidebar.
@@ -95,18 +96,18 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
       return (
         <div className="min-h-screen bg-[#f8f9ff] flex">
           <Sidebar role={user?.role || 'MEMBER'} user={{ email: user?.email, chapterName: user?.chapterName }} />
-          <main className="ml-64 flex-1 max-w-5xl mx-auto px-8 py-10 w-full min-w-0">{children}</main>
+          <main className="ml-64 flex-1 max-w-7xl mx-auto px-8 py-10 w-full min-w-0"><ContentTransition>{children}</ContentTransition></main>
         </div>
       );
     }
-    return <>{children}</>;
+    return <ContentTransition>{children}</ContentTransition>;
   }
 
   // Route student riêng tư (/student/* khác): cần đăng nhập — hiệu ứng auth check phía effect sẽ redirect khách về /login
   return (
     <div className="min-h-screen bg-[#f8f9ff] flex">
       <Sidebar role={user?.role || 'MEMBER'} user={{ email: user?.email, chapterName: user?.chapterName }} />
-      <main className="ml-64 flex-1 max-w-5xl mx-auto px-8 py-10 w-full min-w-0">{children}</main>
+      <main className="ml-64 flex-1 max-w-7xl mx-auto px-8 py-10 w-full min-w-0"><ContentTransition>{children}</ContentTransition></main>
     </div>
   );
 }
