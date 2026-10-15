@@ -55,7 +55,7 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
 
   const members = await prisma.user.findMany({
     where: { status: 'ACTIVE', role: 'MEMBER', OR: memberScope, position_assignments: { none: { position: { code: 'DNA_LEAD' }, starts_at: { lte: now }, OR: [{ ends_at: null }, { ends_at: { gt: now } }] } } },
-    select: { id: true, email: true },
+    select: { id: true, email: true, display_name: true },
     take: 500,
   })
 
@@ -79,6 +79,7 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
     return {
       userId: member.id,
       email: member.email,
+      displayName: member.display_name,
       stars: starsByUser.get(member.id) || 0,
       starsAchievedAt: achievedAtByUser.get(member.id)?.toISOString() || null,
       completedLessons: progress?.completedLessons || 0,

@@ -217,7 +217,7 @@ export default function MemberDetailPage({ params }: { params: { userId: string 
                   {data?.summary?.stars || 0} <span className="text-sm font-normal text-[#737686]">⭐</span>
                 </div>
                 <div className="text-[11px] text-[#737686] mt-1">
-                  Điểm quiz TB: {data?.summary?.avgQuizScore || 0}% • Tiến độ: {data?.summary?.avgProgress || 0}%
+                  Tiến độ khóa học: {data?.summary?.avgProgress || 0}%
                 </div>
               </Card>
             </div>

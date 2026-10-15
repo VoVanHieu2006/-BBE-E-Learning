@@ -247,7 +247,6 @@ export default function LeaderboardPage() {
                   <th className="px-6 py-4">Thành viên</th>
                   {!isScopedView && <th className="px-6 py-4">Chapter</th>}
                   <th className="px-6 py-4 text-center">Bài học</th>
-                  <th className="px-6 py-4 text-center">Điểm Quiz TB</th>
                   <th className="px-6 py-4 text-right">⭐ Star</th>
                 </tr>
               </thead>
@@ -258,7 +257,7 @@ export default function LeaderboardPage() {
                       {getMedal(idx)}
                     </td>
                     <td className="px-6 py-4 font-semibold text-[#172554]">
-                      {m.email}
+                      <span className="block">{m.displayName || 'Chưa cập nhật tên'}</span><span className="block text-xs font-normal text-[#737686]">{m.email}</span>
                     </td>
                     {!isScopedView && (
                       <td className="px-6 py-4 text-[#434655]">
@@ -267,11 +266,6 @@ export default function LeaderboardPage() {
                     )}
                     <td className="px-6 py-4 text-center text-[#434655] font-medium">
                       {m.completedLessons || 0} / {m.totalLessons || 0} bài
-                    </td>
-                    <td className="px-6 py-4 text-center font-semibold text-[#172554]">
-                      {typeof (m.avgScore ?? m.avgQuizScore ?? m.assessmentAverageScore) === 'number'
-                        ? `${m.avgScore ?? m.avgQuizScore ?? m.assessmentAverageScore}%`
-                        : '—'}
                     </td>
                     <td className="px-6 py-4 text-right font-extrabold text-[#2563EB] text-base">
                       {m.stars || 0} ⭐

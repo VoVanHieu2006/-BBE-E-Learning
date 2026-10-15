@@ -69,6 +69,7 @@ const chapterManagerNav: NavItem[] = [
   { label: 'Bảng xếp hạng', href: '/leaderboard', icon: '🏆' },
   { label: 'Khóa học', href: '/chapter-manager/courses', icon: '📚' },
   { label: 'Mời thành viên', href: '/chapter-manager/invitations', icon: '✉️' },
+  { label: 'Chuyển giao nhiệm kỳ', href: '/organization-manager#term-transition', icon: '🔄' },
 ];
 
 function getNav(role: string, chapterId?: string | null, isOrganizationManager = false, managerKind?: string | null) {
@@ -111,6 +112,7 @@ function getNav(role: string, chapterId?: string | null, isOrganizationManager =
         icon: '✉️',
         prefetchUrls: [`/api/v1/invitations?chapterId=${chapterId}`],
       },
+      { label: 'Chuyển giao nhiệm kỳ', href: '/organization-manager#term-transition', icon: '🔄' },
     ];
   }
   return getStudentNav(chapterId, isOrganizationManager);
@@ -254,7 +256,7 @@ export default function Sidebar({
       </nav>
 
       {/* User Info & Logout (Mounted client-side only to eliminate hydration mismatch) */}
-      <div className="p-4 border-t border-[#eff4ff] space-y-3">
+      <div className="shrink-0 p-4 border-t border-[#eff4ff] space-y-3 bg-white">
         {mounted && user?.email && (
           <div className="px-2">
             <div className="text-xs font-semibold text-[#172554] truncate">{user.email}</div>

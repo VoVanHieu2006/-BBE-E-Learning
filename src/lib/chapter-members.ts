@@ -23,7 +23,7 @@ export async function listChapterMembers(
   if (options.roles?.length) userWhere.role = { in: options.roles }
   if (options.status) userWhere.status = options.status
   const search = options.search?.trim().slice(0, 255)
-  if (search) userWhere.email = { contains: search, mode: 'insensitive' }
+  if (search) userWhere.OR = [{ email: { contains: search, mode: 'insensitive' } }, { display_name: { contains: search, mode: 'insensitive' } }]
   const relationFilter = Object.keys(userWhere).length ? { user: userWhere } : {}
   const now = new Date()
 
@@ -32,7 +32,7 @@ export async function listChapterMembers(
       where: { chapter_id: chapterId, ...relationFilter } as any,
       select: {
         joined_at: true,
-        user: { select: { id: true, email: true, status: true, role: true, created_at: true } },
+        user: { select: { id: true, email: true, display_name: true, status: true, role: true, created_at: true } },
       },
     }),
     unitIds.length
@@ -46,7 +46,8 @@ export async function listChapterMembers(
           } as any,
           select: {
             starts_at: true,
-            user: { select: { id: true, email: true, status: true, role: true, created_at: true } },
+            unit: { select: { id: true, name: true, type: true } },
+            user: { select: { id: true, email: true, display_name: true, status: true, role: true, created_at: true } },
           },
         })
       : Promise.resolve([]),
@@ -59,6 +60,7 @@ export async function listChapterMembers(
     role: row.user.role,
     createdAt: row.user.created_at,
     joinedAt: row.joined_at,
+    displayName: row.user.display_name,
   })
   const mapOrganization = (row: (typeof organizationRows)[number]): ChapterMemberRecord => ({
     userId: row.user.id,
@@ -67,6 +69,8 @@ export async function listChapterMembers(
     role: row.user.role,
     createdAt: row.user.created_at,
     joinedAt: row.starts_at,
+    displayName: row.user.display_name,
+    department: row.unit.type === 'DEPARTMENT' ? { id: row.unit.id, name: row.unit.name } : null,
   })
   return mergeChapterMemberRecords(legacyRows.map(mapLegacy), organizationRows.map(mapOrganization))
 }

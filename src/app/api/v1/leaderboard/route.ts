@@ -41,6 +41,7 @@ export async function GET(request: NextRequest) {
       select: {
         id: true,
         email: true,
+        display_name: true,
         chapter_members: {
           include: { chapter: true },
         },
@@ -75,6 +76,7 @@ export async function GET(request: NextRequest) {
       return {
         userId: m.id,
         email: m.email,
+        displayName: m.display_name,
         chapterName,
         courseCompletionPercent: courseProgress,
         assessmentAverageScore: avgScore,

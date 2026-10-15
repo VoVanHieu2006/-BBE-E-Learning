@@ -200,7 +200,7 @@ export default function OrganizationManagerPage() {
 
     {message && <div role="status" className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800">{message}</div>}
 
-    {canManage && selectedUnit?.type === 'CHAPTER' && selectedUnit.chapterId && <Card className="space-y-4 border border-[#eff4ff]">
+    {canManage && selectedUnit?.type === 'CHAPTER' && selectedUnit.chapterId && <Card id="term-transition" className="space-y-4 border border-[#eff4ff] scroll-mt-8">
       <div><h2 className="font-bold text-[#172554]">Phân Ban cuối nhiệm kỳ từ Google Sheet</h2><p className="mt-1 text-xs text-[#737686]">Tên cột phải trùng tên Ban. Mỗi ô dùng “Họ tên (email)”; người đầu tiên trong cột được gán LT. Hệ thống đối chiếu bằng email trước khi cho xác nhận.</p></div>
       <form onSubmit={previewRoster} className="grid gap-3 md:grid-cols-[1fr_auto]"><input required value={rosterUrl} onChange={(event) => setRosterUrl(event.target.value)} placeholder="Dán link Google Sheet danh sách cuối nhiệm kỳ" className="rounded-xl border border-[#cbdbf5] px-3 py-2 text-sm"/><Button type="submit" loading={busy}>Đọc và kiểm tra</Button></form>
       {rosterPreview && <div className="space-y-3">

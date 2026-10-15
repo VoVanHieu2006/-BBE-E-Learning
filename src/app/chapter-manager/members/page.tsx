@@ -142,25 +142,6 @@ export default function ChapterManagerMembersPage() {
     setConfirmToggle(null);
   };
 
-  const handleRemoveMember = async (userId: string, email: string) => {
-    if (!window.confirm(`Bạn có chắc chắn muốn xóa thành viên "${email}" khỏi chapter?`)) return;
-
-    setMembers((prev) => prev.filter((m) => (m.userId || m.id) !== userId));
-    clearApiCache('/api/v1/chapters');
-
-    const targetChapter = user?.chapterId || 'me';
-    const res = await apiFetch(`/api/v1/chapters/${targetChapter}/members/${userId}`, {
-      method: 'DELETE',
-    });
-
-    if (res.ok) {
-      showToast('success', `Đã xóa "${email}" khỏi chapter.`);
-    } else {
-      showToast('error', res.error?.message || 'Lỗi xóa thành viên');
-      loadMembers();
-    }
-  };
-
   // Chỉ hiển thị thành viên (MEMBER) — không hiện tài khoản BĐHU/Admin trong danh sách
   const memberRows = members.filter((m) => m.role === 'MEMBER');
   const activeCount = memberRows.filter((m) => m.status === 'ACTIVE').length;
@@ -276,8 +257,10 @@ export default function ChapterManagerMembersPage() {
                             href={`/chapter-manager/members/${mId}`}
                             className="font-semibold text-[#172554] hover:text-[#2563EB] transition"
                           >
-                            {m.email}
+                            {m.displayName || 'Chưa cập nhật tên'}
                           </Link>
+                          <p className="mt-0.5 text-xs text-[#737686]">{m.email}</p>
+                          <p className={`mt-1 text-xs font-semibold ${m.department ? 'text-blue-700' : 'text-amber-700'}`}>{m.department?.name || 'Không có Ban'}</p>
                         </td>
                         <td className="px-6 py-4 text-center font-medium text-[#172554]">
                           {m.completedCourses || 0} / {m.totalCourses || 0} khóa
@@ -330,15 +313,6 @@ export default function ChapterManagerMembersPage() {
                             )}
                             {canManageMembers && !isActive && (
                               <span className="text-[11px] text-slate-500">Chỉ Admin mở khóa</span>
-                            )}
-                            {canManageMembers && (
-                              <button
-                                onClick={() => handleRemoveMember(mId, m.email)}
-                                className="text-slate-400 hover:text-red-600 p-1 rounded-lg"
-                                title="Kết thúc membership tại Chapter"
-                              >
-                                ✕
-                              </button>
                             )}
                           </div>
                         </td>

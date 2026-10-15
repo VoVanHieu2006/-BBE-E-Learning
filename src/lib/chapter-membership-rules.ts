@@ -5,6 +5,8 @@ export interface ChapterMemberRecord {
   role: string
   createdAt: Date
   joinedAt: Date
+  displayName?: string | null
+  department?: { id: string; name: string } | null
 }
 
 /** Merge legacy and organization memberships without double-counting a learner. */
@@ -18,7 +20,9 @@ export function mergeChapterMemberRecords(...groups: ReadonlyArray<ReadonlyArray
         continue
       }
       if (record.joinedAt.getTime() < existing.joinedAt.getTime()) {
-        byUserId.set(record.userId, { ...existing, joinedAt: record.joinedAt })
+        byUserId.set(record.userId, { ...existing, ...record, joinedAt: record.joinedAt, department: record.department || existing.department })
+      } else {
+        byUserId.set(record.userId, { ...existing, displayName: record.displayName || existing.displayName, department: record.department || existing.department })
       }
     }
   }

@@ -31,7 +31,7 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
   const search = url.searchParams.get('search') || ''
   const includeInactive = url.searchParams.get('includeInactive') === '1'
   const page = Math.max(parseInt(url.searchParams.get('page') || '1', 10), 1)
-  const limit = Math.min(Math.max(parseInt(url.searchParams.get('limit') || '20', 10), 1), 100)
+  const limit = Math.min(Math.max(parseInt(url.searchParams.get('limit') || '100', 10), 1), 500)
   const skip = (page - 1) * limit
 
   const userFilter: any = {
@@ -73,6 +73,8 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
       userId: m.userId,
       id: m.userId,
       email: m.email,
+      displayName: m.displayName,
+      department: m.department,
       role: m.role,
       status: m.status,
       joinedAt: m.joinedAt,
@@ -82,7 +84,6 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
       totalLessons: sys.totalLessons,
       avgProgress: p?.overallProgressPercent || 0,
       avgCourseProgress: p?.avgCourseProgressPercent || 0,
-      avgQuizScore: p?.avgQuizScore || 0,
       stars: starsByUser.get(m.userId) || 0,
     }
   })

@@ -465,7 +465,6 @@ export default function AdminUsersPage() {
                     <th className="px-6 py-4 min-w-[180px]">Vai trò</th>
                     <th className="px-6 py-4 min-w-[160px]">Chapter</th>
                     <th className="px-6 py-4 text-center min-w-[190px]">Tiến độ khóa học</th>
-                    <th className="px-6 py-4 text-center min-w-[120px]">Điểm Quiz TB</th>
                     <th className="px-6 py-4 text-center min-w-[140px]">Trạng thái</th>
                     <th className="px-6 py-4 text-right min-w-[180px]">Thao tác</th>
                   </tr>
@@ -535,9 +534,6 @@ export default function AdminUsersPage() {
                               </div>
                             </div>
                           )}
-                        </td>
-                        <td className="px-6 py-4 text-center font-semibold text-[#172554]">
-                          {isLeader ? '—' : typeof u.avgQuizScore === 'number' ? `${u.avgQuizScore}%` : '—'}
                         </td>
                         <td className="px-6 py-4 text-center">
                           <span

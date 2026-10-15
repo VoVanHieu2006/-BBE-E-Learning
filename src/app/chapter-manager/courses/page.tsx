@@ -73,7 +73,8 @@ export default function ChapterManagerCoursesPage() {
     setStudents([]);
     setStudentsSummary(null);
     setStudentsLoading(true);
-    const res = await apiFetch(`/api/v1/courses/${course.courseId || course.id}/students`);
+    const chapterId = user?.chapterId || JSON.parse(localStorage.getItem('user') || '{}')?.chapterId;
+    const res = await apiFetch(`/api/v1/courses/${course.courseId || course.id}/students?chapterId=${encodeURIComponent(chapterId || '')}`);
     if (res.ok && res.data) {
       setStudents(res.data.items || []);
       setStudentsSummary(res.data.summary || null);
@@ -103,7 +104,8 @@ export default function ChapterManagerCoursesPage() {
       <div key={st.userId} className="px-5 py-3.5">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <p className="font-semibold text-[#172554] truncate">{st.email}</p>
+            <p className="font-semibold text-[#172554] truncate">{st.displayName || 'Chưa cập nhật tên'}</p>
+            <p className="text-[11px] text-[#737686] truncate">{st.email}</p>
             <p className="text-xs text-[#737686]">
               {st.completedLessons}/{st.totalLessons} bài học
             </p>

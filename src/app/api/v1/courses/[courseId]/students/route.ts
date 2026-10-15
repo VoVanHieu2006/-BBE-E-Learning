@@ -16,7 +16,10 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
 
   const context = auth.context!
   const isAdmin = context.role === 'ADMIN'
-  const accessibleChapterIds = isAdmin ? [] : await listAccessibleChapterIds(context, 'VIEW_MEMBER_PROGRESS')
+  const requestedChapterId = new URL(request.url).searchParams.get('chapterId')
+  const accessibleChapterIds = isAdmin ? [] : requestedChapterId
+    ? (await listAccessibleChapterIds(context, 'VIEW_MEMBER_PROGRESS')).filter((id) => id === requestedChapterId)
+    : await listAccessibleChapterIds(context, 'VIEW_MEMBER_PROGRESS')
   if (!isAdmin && accessibleChapterIds.length === 0) {
     return NextResponse.json({ error: { code: 'AccessDenied', message: 'Không có quyền' } }, { status: 403 })
   }
@@ -38,7 +41,7 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
 
   const lessonIds = course.sessions.flatMap((s) => s.lessons.map((l) => l.id))
 
-  let users: Array<{ id: string; email: string; status: string }>
+  let users: Array<{ id: string; email: string; display_name: string | null; status: string }>
 
   if (isAdmin) {
     const [assigned, withProgress] = await Promise.all([
@@ -57,7 +60,7 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
     users = userIds.length > 0
       ? await prisma.user.findMany({
           where: { id: { in: userIds }, role: 'MEMBER' },
-          select: { id: true, email: true, status: true },
+          select: { id: true, email: true, display_name: true, status: true },
           orderBy: { email: 'asc' },
         })
       : []
@@ -72,7 +75,7 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
     users = memberIds.length > 0
       ? await prisma.user.findMany({
           where: { id: { in: memberIds }, status: 'ACTIVE', role: 'MEMBER' },
-          select: { id: true, email: true, status: true },
+          select: { id: true, email: true, display_name: true, status: true },
           orderBy: { email: 'asc' },
         })
       : []
@@ -96,6 +99,7 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
     return {
       userId: u.id,
       email: u.email,
+      displayName: u.display_name,
       status: u.status,
       completedLessons,
       totalLessons: lessonIds.length,
