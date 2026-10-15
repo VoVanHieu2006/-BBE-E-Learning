@@ -3,7 +3,7 @@ import { hashToken, generateToken } from './tokens'
 import { sendInvitationEmail } from './email'
 import { reconcileLearningAssignmentsForUser } from './learning-assignments'
 type UserRole = 'ADMIN' | 'CHAPTER_LEADER' | 'MEMBER';
-type InvitationRole = 'CHAPTER_LEADER' | 'MEMBER';
+type InvitationRole = 'CHAPTER_LEADER' | 'DNA_LEAD' | 'MEMBER';
 type InvitationStatus = 'PENDING' | 'ACCEPTED' | 'EXPIRED' | 'CANCELLED';
 import bcrypt from 'bcryptjs'
 
@@ -203,6 +203,28 @@ export async function sendChapterLeaderInvitation(
   }
 }
 
+export async function sendDnaLeaderInvitation(email: string, invitedBy: string) {
+  const dnaUnit = await prisma.organizationUnit.findFirst({ where: { type: 'DNA' }, orderBy: { created_at: 'asc' } })
+  if (!dnaUnit) return { ok: false as const, code: 'DnaNotConfigured', message: 'Chưa có đơn vị DNA trong hệ thống.' }
+  const activeLead = await prisma.positionAssignment.findFirst({
+    where: { unit_id: dnaUnit.id, position: { code: 'DNA_LEAD' }, starts_at: { lte: new Date() }, OR: [{ ends_at: null }, { ends_at: { gt: new Date() } }] },
+  })
+  if (activeLead) return { ok: false as const, code: 'DnaLeadExists', message: 'Hệ thống đã có một Lead DNA đang hoạt động.' }
+  const existingUser = await prisma.user.findUnique({ where: { email } })
+  if (existingUser) {
+    if (existingUser.status !== 'ACTIVE') return { ok: false as const, code: 'AccountInactive', message: 'Tài khoản hiện có đang bị vô hiệu hóa.' }
+    const assignment = await prisma.$transaction(async (tx) => {
+      const membership = await tx.organizationMembership.findFirst({ where: { user_id: existingUser.id, unit_id: dnaUnit.id, status: 'ACTIVE', ends_at: null } })
+      if (!membership) await tx.organizationMembership.create({ data: { user_id: existingUser.id, unit_id: dnaUnit.id } })
+      const position = await tx.position.upsert({ where: { code: 'DNA_LEAD' }, update: { name: 'Lead DNA', scope: 'DNA', is_manager: true }, create: { code: 'DNA_LEAD', name: 'Lead DNA', scope: 'DNA', is_manager: true } })
+      return tx.positionAssignment.create({ data: { user_id: existingUser.id, position_id: position.id, unit_id: dnaUnit.id, is_primary: true, starts_at: new Date(), appointed_by: invitedBy } })
+    })
+    await reconcileLearningAssignmentsForUser(existingUser.id)
+    return { ok: true as const, invitationId: assignment.id, organizationUnitId: dnaUnit.id, status: 'ACCEPTED' as InvitationStatus, expiresAt: new Date(), token: '', emailSent: true, assignedExisting: true }
+  }
+  return sendMemberInvitation({ email, role: 'DNA_LEAD', organizationUnitId: dnaUnit.id, invitedBy })
+}
+
 /** Resend invitation — invalidates old token if PENDING, creates new token */
 export async function resendInvitation(
   invitationId: string,
@@ -347,7 +369,7 @@ export async function acceptInvitation(
       data: {
         email: invitation.email,
         password_hash: passwordHash,
-        role: invitation.role as UserRole,
+        role: (invitation.role === 'DNA_LEAD' ? 'MEMBER' : invitation.role) as UserRole,
         status: 'ACTIVE',
         failed_login_count: 0,
       },
@@ -395,7 +417,7 @@ export async function acceptInvitation(
       const position = await tx.position.upsert({
         where: { code: 'CHAPTER_MANAGER' },
         update: {},
-        create: { code: 'CHAPTER_MANAGER', name: 'Chapter Manager', scope: 'CHAPTER', is_manager: true },
+        create: { code: 'CHAPTER_MANAGER', name: 'Lead Chapter', scope: 'CHAPTER', is_manager: true },
       })
       const existingPrimary = await tx.positionAssignment.findFirst({ where: { unit_id: organizationUnitId, is_primary: true, starts_at: { lte: new Date() }, OR: [{ ends_at: null }, { ends_at: { gt: new Date() } }] }, select: { id: true } })
       await tx.positionAssignment.create({
@@ -408,6 +430,15 @@ export async function acceptInvitation(
       await tx.positionPermission.upsert({
         where: { position_id_permission_id: { position_id: position.id, permission_id: progressPermission.id } },
         update: {}, create: { position_id: position.id, permission_id: progressPermission.id },
+      })
+    } else if (invitation.role === 'DNA_LEAD') {
+      const position = await tx.position.upsert({
+        where: { code: 'DNA_LEAD' },
+        update: { name: 'Lead DNA', scope: 'DNA', is_manager: true },
+        create: { code: 'DNA_LEAD', name: 'Lead DNA', scope: 'DNA', is_manager: true },
+      })
+      await tx.positionAssignment.create({
+        data: { user_id: user.id, position_id: position.id, unit_id: organizationUnitId, is_primary: true, starts_at: new Date(), appointed_by: invitation.invited_by },
       })
       const managePermission = await tx.permission.upsert({
         where: { code: 'MANAGE_CHAPTER_MEMBERS' }, update: {},

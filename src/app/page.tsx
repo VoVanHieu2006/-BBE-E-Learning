@@ -113,9 +113,9 @@ export default function LandingPage() {
             <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-semibold text-blue-100 shadow-sm backdrop-blur">
               <span aria-hidden="true">✦</span> Nền tảng học tập nội bộ BBE
             </div>
-            <h1 className="mt-7 max-w-xl text-4xl font-extrabold leading-[1.22] tracking-tight sm:text-5xl sm:leading-[1.18] lg:text-6xl">
+            <h1 className="mt-7 max-w-xl text-4xl font-extrabold leading-[1.34] tracking-tight sm:text-5xl sm:leading-[1.3] lg:text-6xl">
               Học có lộ trình.
-              <span className="mt-4 block bg-gradient-to-r from-orange-300 to-amber-200 bg-clip-text text-transparent">Tiến bộ mỗi ngày.</span>
+              <span className="mt-6 block pb-2 bg-gradient-to-r from-orange-300 to-amber-200 bg-clip-text text-transparent">Tiến bộ mỗi ngày.</span>
             </h1>
             <p className="mt-6 max-w-xl text-base leading-7 text-blue-100/90 sm:text-lg sm:leading-8">
               Khám phá kiến thức, rèn kỹ năng và theo dõi hành trình phát triển của bạn trong một không gian học tập dành riêng cho cộng đồng BBE.
@@ -261,7 +261,7 @@ export default function LandingPage() {
             <p className="mt-3 text-sm leading-6 text-blue-100">Bắt đầu từ một bài học nhỏ và tiến từng bước trên hành trình của mình.</p>
           </div>
           <Link href="/login" className="shrink-0">
-            <Button size="lg" className="w-full justify-center bg-white px-6 font-bold text-blue-800 hover:bg-blue-50 sm:w-auto">
+            <Button size="lg" className="w-full justify-center !bg-white px-6 font-bold !text-blue-800 hover:!bg-blue-50 sm:w-auto">
               Khám phá ngay <span aria-hidden="true" className="ml-2">→</span>
             </Button>
           </Link>
@@ -271,7 +271,7 @@ export default function LandingPage() {
       <footer className="border-t border-white/10 bg-[#101f49] px-5 py-8 text-blue-100 sm:px-8">
         <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 text-center md:flex-row md:text-left">
           <div className="flex items-center gap-3">
-            <img src="/images/logo-transparent.png" alt="BBE" className="h-7 w-auto brightness-200" />
+            <img src="/images/logo-transparent.png" alt="BBE" className="h-7 w-auto" />
             <span className="text-xs font-semibold">© BBE E-Learning Platform</span>
           </div>
           <p className="text-xs text-blue-200/80">Học tập, phát triển và cùng nhau tiến xa hơn.</p>

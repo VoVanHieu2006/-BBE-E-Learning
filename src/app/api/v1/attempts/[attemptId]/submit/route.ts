@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { awardStars, canEarnStarsForCourse, starsForQuizScore } from '@/lib/stars'
+import { awardStars, canEarnStarsForCourse } from '@/lib/stars'
 import { syncCourseAssignmentCompletion } from '@/lib/learning-assignments'
 import { checkCourseFinalProgression, checkLessonProgression } from '@/lib/progression'
 import { QUIZ_PASS_PERCENT } from '@/lib/config/quiz'
@@ -141,6 +141,7 @@ export async function POST(request: NextRequest, { params }: { params: { attempt
   }
 
   const { score, totalPoints, scoreRatio, passed, results } = submission.grading
+  const correctAnswerCount = results.filter((result) => result.isCorrect).length
   let starRewardAmount = 0
   if (passed) {
     const assess = await prisma.assessment.findUnique({
@@ -161,55 +162,33 @@ export async function POST(request: NextRequest, { params }: { params: { attempt
       await syncCourseAssignmentCompletion(userId, assess.lesson.session.course_id)
 
       if (await canEarnStarsForCourse(userId, assess.lesson.session.course_id)) {
-        const quizStarTotal = starsForQuizScore(scoreRatio, QUIZ_PASS_PERCENT / 100)
-        const bonus = Math.max(0, quizStarTotal - 2)
-        const starAwards = await Promise.all([
+        const starAwards = await Promise.all(Array.from({ length: correctAnswerCount }, (_, index) =>
           awardStars({
             userId,
-            amount: 2,
+            amount: 1,
             reason: 'MODULE_QUIZ_PASS',
-            rewardKey: `module-quiz-pass:${userId}:${attempt.assessment_id}`,
+            rewardKey: `quiz-correct:${userId}:${attempt.assessment_id}:${index + 1}`,
             sourceType: 'ASSESSMENT',
             sourceId: attempt.assessment_id,
-            metadata: { attemptId: attempt.id, scoreRatio },
-          }),
-          ...(bonus > 0 ? [awardStars({
-            userId,
-            amount: bonus,
-            reason: 'MODULE_QUIZ_BONUS',
-            rewardKey: `module-quiz-bonus:${userId}:${attempt.assessment_id}`,
-            sourceType: 'ASSESSMENT',
-            sourceId: attempt.assessment_id,
-            metadata: { attemptId: attempt.id, scoreRatio },
-          })] : []),
-        ])
+            metadata: { attemptId: attempt.id, scoreRatio, correctOrdinal: index + 1 },
+          })
+        ))
         starRewardAmount = starAwards.reduce((sum, award) => sum + (award.awarded ? award.amount : 0), 0)
       }
     } else if (assess?.type === 'COURSE_FINAL' && assess.course_id) {
       await syncCourseAssignmentCompletion(userId, assess.course_id)
       if (await canEarnStarsForCourse(userId, assess.course_id)) {
-        const { starsForCourseFinalScore } = await import('@/lib/reward-rules')
-        const { passStars, bonusStars } = starsForCourseFinalScore(scoreRatio, QUIZ_PASS_PERCENT / 100)
-        const awards = await Promise.all([
+        const awards = await Promise.all(Array.from({ length: correctAnswerCount }, (_, index) =>
           awardStars({
             userId,
-            amount: passStars,
+            amount: 1,
             reason: 'COURSE_FINAL_PASS',
-            rewardKey: `course-final-pass:${userId}:${attempt.assessment_id}`,
+            rewardKey: `quiz-correct:${userId}:${attempt.assessment_id}:${index + 1}`,
             sourceType: 'ASSESSMENT',
             sourceId: attempt.assessment_id,
-            metadata: { attemptId: attempt.id, scoreRatio },
-          }),
-          ...(bonusStars > 0 ? [awardStars({
-            userId,
-            amount: bonusStars,
-            reason: 'COURSE_FINAL_BONUS',
-            rewardKey: `course-final-bonus:${userId}:${attempt.assessment_id}`,
-            sourceType: 'ASSESSMENT',
-            sourceId: attempt.assessment_id,
-            metadata: { attemptId: attempt.id, scoreRatio },
-          })] : []),
-        ])
+            metadata: { attemptId: attempt.id, scoreRatio, correctOrdinal: index + 1 },
+          })
+        ))
         starRewardAmount = awards.reduce((sum, award) => sum + (award.awarded ? award.amount : 0), 0)
       }
     }

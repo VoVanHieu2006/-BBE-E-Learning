@@ -11,6 +11,28 @@ async function fetchPublicText(url: string) {
   return text
 }
 
+function decodeSheetTitle(value: string) {
+  try { return JSON.parse(`"${value}"`) as string } catch { return value }
+}
+
+async function fetchSheetTitles(spreadsheetId: string): Promise<string[]> {
+  const html = await fetchPublicText(`https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`)
+  const titles = new Set<string>()
+  const patterns = [
+    /"title":"((?:\\.|[^"\\])+)"[^{}]{0,500}?"sheetId":\d+/g,
+    /"sheetId":\d+[^{}]{0,500}?"title":"((?:\\.|[^"\\])+)"/g,
+    /\\"name\\":\\"((?:\\.|[^"\\])+)\\"[^\n]{0,500}?\\"gid\\":\d+/g,
+  ]
+  for (const pattern of patterns) {
+    let match: RegExpExecArray | null
+    while ((match = pattern.exec(html)) !== null) {
+      const title = decodeSheetTitle(match[1]).trim()
+      if (title && title.length <= 100) titles.add(title)
+    }
+  }
+  return Array.from(titles)
+}
+
 /** Preview a public Sheet/Doc. Sheets named “Nhóm 1”…“Nhóm 20” become question pools. */
 export async function POST(request: NextRequest) {
   const auth = await authenticate(request)
@@ -33,23 +55,20 @@ export async function POST(request: NextRequest) {
     const pools: string[] = []
     const questions: Array<Record<string, unknown>> = []
     const errors: Array<{ row: number; message: string; poolName?: string }> = []
-    // The customer's bank uses contiguous tabs named Nhóm 1, Nhóm 2, …
-    for (let index = 1; index <= 20; index++) {
-      const poolName = `Nhóm ${index}`
+    const discoveredTitles = await fetchSheetTitles(ref.id).catch(() => [])
+    const sheetTitles = discoveredTitles.length ? discoveredTitles : (ref.sheetName ? [ref.sheetName] : [])
+    if (!sheetTitles.length) {
+      const fallback = parseQuizCsv(await fetchPublicText(buildGoogleExportUrl(ref)))
+      if (!fallback.questions.length) throw new Error('NoQuestionsParsed')
+      return NextResponse.json({ ...fallback, total: fallback.questions.length, pools: [] })
+    }
+    for (const poolName of sheetTitles) {
       const url = buildGoogleExportUrl({ kind: 'sheet', id: ref.id, sheetName: poolName })
       let parsed
       try {
         parsed = parseQuizCsv(await fetchPublicText(url))
-      } catch {
-        if (index === 1) {
-          // Preserve support for ordinary single-tab sheets and gid links.
-          const fallback = parseQuizCsv(await fetchPublicText(buildGoogleExportUrl(ref)))
-          if (!fallback.questions.length) throw new Error('NoQuestionsParsed')
-          return NextResponse.json({ ...fallback, total: fallback.questions.length, pools: [] })
-        }
-        break
-      }
-      if (!parsed.questions.length) break
+      } catch { continue }
+      if (!parsed.questions.length) continue
       const poolIndex = pools.length
       pools.push(poolName)
       questions.push(...parsed.questions.map((question) => ({ ...question, poolIndex, poolName })))
@@ -63,7 +82,7 @@ export async function POST(request: NextRequest) {
       error: {
         code: noQuestions ? 'NoQuestionsParsed' : 'DocumentNotPublic',
         message: noQuestions
-          ? 'Không đọc được câu hỏi. Kiểm tra cấu trúc cột và tên tab Nhóm 1, Nhóm 2…'
+          ? 'Không đọc được câu hỏi. Hãy kiểm tra 7 cột yêu cầu và dữ liệu trong các tab của Sheet.'
           : 'Không đọc được tài liệu. Hãy bật “Bất kỳ ai có liên kết – Người xem”.',
       },
     }, { status: 400 })

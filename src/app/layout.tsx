@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import PageTransition from "@/components/layout/PageTransition";
 
 export const metadata: Metadata = {
   title: "BBE E-Learning",
@@ -28,7 +29,7 @@ export default function RootLayout({
         />
       </head>
       <body className="antialiased bg-[#f8f9ff] text-[#0b1c30] min-h-screen" suppressHydrationWarning>
-        {children}
+        <PageTransition>{children}</PageTransition>
       </body>
     </html>
   );

@@ -91,7 +91,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
   const [quizImportUrl, setQuizImportUrl] = useState('');
   const [quizImporting, setQuizImporting] = useState(false);
   const [quizImportErrors, setQuizImportErrors] = useState<{ row: number; message: string }[]>([]);
-  const [quizPoolNames, setQuizPoolNames] = useState(['Pool 1', 'Pool 2', 'Pool 3', 'Pool 4', 'Pool 5']);
+  const [quizPoolNames, setQuizPoolNames] = useState(['Nhóm 1']);
   const [assessmentForm, setAssessmentForm] = useState({
     title: 'Bài kiểm tra bài học',
     description: 'Đạt từ 85% điểm để hoàn thành bài học',
@@ -101,7 +101,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
       {
         questionText: 'Câu hỏi 1: ',
         type: 'SINGLE_CHOICE' as 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE',
-        points: 10,
+        points: 1,
         durationSeconds: 120,
         explanation: '',
         options: [
@@ -117,6 +117,22 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
   useEffect(() => {
     loadCourse();
   }, [params.courseId]);
+
+  const hasUnsavedCourseInfo = Boolean(course) && (
+    form.title !== (course.title || '') ||
+    form.description !== (course.description || '') ||
+    form.visibility !== course.visibility
+  );
+
+  useEffect(() => {
+    const warn = (event: BeforeUnloadEvent) => {
+      if (!hasUnsavedCourseInfo) return;
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [hasUnsavedCourseInfo]);
 
   async function loadCourse() {
     const courseRes = await apiFetch(`/api/v1/courses/${params.courseId}`, { noCache: true });
@@ -151,12 +167,12 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
         assessData = res.data;
       }
     }
-    let poolNames = ['Pool 1', 'Pool 2', 'Pool 3', 'Pool 4', 'Pool 5'];
+    let poolNames = ['Nhóm 1'];
     const poolIndexById = new Map<string, number>();
     const assessmentId = assessData?.assessmentId || assessData?.id;
     if (assessmentId) {
       const poolsResult = await apiFetch(`/api/v1/assessments/${assessmentId}/pools`, { noCache: true });
-      if (poolsResult.ok && Array.isArray(poolsResult.data?.items) && poolsResult.data.items.length === 5) {
+      if (poolsResult.ok && Array.isArray(poolsResult.data?.items) && poolsResult.data.items.length > 0) {
         poolNames = poolsResult.data.items.map((pool: any) => pool.name);
         poolsResult.data.items.forEach((pool: any, index: number) => poolIndexById.set(pool.poolId, index));
       }
@@ -184,7 +200,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
           points: q.points || 10,
           durationSeconds: q.durationSeconds || q.duration_seconds || 120,
           explanation: q.explanation || '',
-           poolIndex: poolIndexById.get(q.poolId) ?? idx % 5,
+           poolIndex: poolIndexById.get(q.poolId) ?? idx % Math.max(1, poolNames.length),
           options: (q.options || []).map((opt: any, oIdx: number) => ({
             optionText: opt.optionText || opt.option_text || `Đáp án ${oIdx + 1}`,
             isCorrect: Boolean(opt.isCorrect ?? opt.is_correct),
@@ -201,7 +217,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
           {
             questionText: 'Câu hỏi 1: Nội dung bài học này nói về điều gì?',
             type: 'SINGLE_CHOICE' as 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE',
-            points: 10,
+            points: 1,
             durationSeconds: 120,
             explanation: '',
             options: [
@@ -228,53 +244,15 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
       return;
     }
     const assessData = result.data?.assessment || null;
-    const pools = assessData?.pools || [];
-    const poolNames = pools.length === 5 ? pools.map((pool: any) => pool.name) : ['Pool 1', 'Pool 2', 'Pool 3', 'Pool 4', 'Pool 5'];
-    const poolIndexById = new Map<string, number>();
-    pools.forEach((pool: any, index: number) => poolIndexById.set(pool.poolId, index));
-    setQuizPoolNames(poolNames);
+    setQuizPoolNames([]);
     setAssessment(assessData);
-    if (assessData?.questions?.length) {
-      setAssessmentForm({
-        title: assessData.title || 'Bài thi cuối khóa',
-        description: assessData.description || '',
+    setAssessmentForm({
+        title: assessData?.title || 'Bài thi cuối khóa',
+        description: assessData?.description || 'Đạt tối thiểu 85% để hoàn thành khóa học.',
         questionCount: assessData?.questionCount || 1,
         durationMinutes: assessData?.durationMinutes || 30,
-        questions: assessData.questions.map((question: any, index: number) => ({
-          questionText: question.questionText || '',
-          type: question.type === 'MULTIPLE_CHOICE' ? 'MULTIPLE_CHOICE' : 'SINGLE_CHOICE',
-          points: question.points || 10,
-          durationSeconds: question.durationSeconds || 120,
-          explanation: question.explanation || '',
-          poolIndex: poolIndexById.get(question.poolId) ?? index % 5,
-          options: (question.options || []).map((option: any) => ({
-            optionText: option.optionText || '',
-            isCorrect: Boolean(option.isCorrect),
-          })),
-        })),
-      });
-    } else {
-      setAssessmentForm({
-        title: 'Bài thi cuối khóa',
-        description: 'Đạt tối thiểu 85% để hoàn thành khóa học.',
-        questionCount: assessData?.questionCount || 1,
-        durationMinutes: assessData?.durationMinutes || 30,
-        questions: Array.from({ length: 15 }, (_, index) => ({
-          questionText: '',
-          type: 'SINGLE_CHOICE' as const,
-          points: 10,
-          durationSeconds: 120,
-          explanation: '',
-          poolIndex: index % 5,
-          options: [
-            { optionText: '', isCorrect: true },
-            { optionText: '', isCorrect: false },
-            { optionText: '', isCorrect: false },
-            { optionText: '', isCorrect: false },
-          ],
-        })),
-      });
-    }
+        questions: [],
+    });
     setShowAssessmentModal(true);
   };
 
@@ -1090,7 +1068,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
         {
           questionText: `Câu hỏi ${prev.questions.length + 1}: `,
           type: 'SINGLE_CHOICE',
-          points: 10,
+          points: 1,
           durationSeconds: 120,
           explanation: '',
           poolIndex: prev.questions.length % 5,
@@ -1239,7 +1217,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
       return;
     }
 
-    for (let i = 0; i < assessmentForm.questions.length; i++) {
+    if (activeAssessmentMode === 'LESSON') for (let i = 0; i < assessmentForm.questions.length; i++) {
       const q = assessmentForm.questions[i];
       if (!q.questionText.trim()) {
         const msg = `Vui lòng nhập nội dung câu hỏi số ${i + 1}`;
@@ -1257,8 +1235,8 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
     }
     const poolCounts = Array.from({ length: quizPoolNames.length }, () => 0);
     for (const question of assessmentForm.questions) poolCounts[question.poolIndex ?? 0]++;
-    if (!quizPoolNames.length || quizPoolNames.some((name) => !name.trim()) || poolCounts.some((count) => count < 1) || assessmentForm.questionCount < quizPoolNames.length || assessmentForm.questionCount > assessmentForm.questions.length) {
-      const msg = 'Quiz cần đúng 5 pool có tên và mỗi pool ít nhất 3 câu hỏi.';
+    if (activeAssessmentMode === 'LESSON' && (!quizPoolNames.length || quizPoolNames.some((name) => !name.trim()) || poolCounts.some((count) => count < 1) || assessmentForm.questionCount > assessmentForm.questions.length)) {
+      const msg = 'Mỗi nhóm phải có tên và ít nhất một câu; tổng ngân hàng phải đủ số câu mỗi lượt.';
       setAssessmentFormError(msg);
       showToast('error', msg);
       return;
@@ -1280,10 +1258,10 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
       body: JSON.stringify({
         title: assessmentForm.title.trim(),
         description: assessmentForm.description.trim(),
-        pools: quizPoolNames,
+        ...(activeAssessmentMode === 'LESSON' ? { pools: quizPoolNames } : {}),
         questionCount: assessmentForm.questionCount,
         durationMinutes: assessmentForm.durationMinutes,
-        questions: assessmentForm.questions.map((q, idx) => ({
+        ...(activeAssessmentMode === 'LESSON' ? { questions: assessmentForm.questions.map((q, idx) => ({
           questionText: q.questionText.trim(),
           questionType: q.type,
           points: q.points,
@@ -1296,12 +1274,12 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
             isCorrect: opt.isCorrect,
             sortOrder: oIdx,
           })),
-        })),
+        })) } : {}),
       }),
     });
 
     if (res.ok) {
-      showToast('success', `Đã lưu thành công bài kiểm tra (${assessmentForm.questions.length} câu hỏi)!`);
+      showToast('success', activeAssessmentMode === 'COURSE_FINAL' ? 'Đã lưu cấu hình bài thi cuối khóa.' : `Đã lưu thành công bài kiểm tra (${assessmentForm.questions.length} câu hỏi)!`);
       setShowAssessmentModal(false);
       setAssessment(res.data);
 
@@ -1481,6 +1459,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
               <h2 className="text-xl font-bold text-[#172554] mb-4" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
                 Thông tin chung khóa học
               </h2>
+              {hasUnsavedCourseInfo && <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-800">Bạn có thay đổi chưa lưu.</div>}
               <form onSubmit={handleSaveInfo} className="space-y-4">
                 <div>
                   <label className="block text-sm font-semibold text-[#172554] mb-1">Tiêu đề khóa học *</label>
@@ -2104,12 +2083,14 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2">
-                <label className="text-sm font-semibold text-[#172554]">Số câu mỗi lượt<input type="number" min={1} max={assessmentForm.questions.length} value={assessmentForm.questionCount} onChange={(e) => setAssessmentForm({ ...assessmentForm, questionCount: Number(e.target.value) })} className="mt-1 w-full rounded-xl border border-[#cbdbf5] px-3 py-2 font-normal"/></label>
+                <label className="text-sm font-semibold text-[#172554]">Số câu mỗi lượt<input type="number" min={1} max={activeAssessmentMode === 'COURSE_FINAL' ? 1000 : assessmentForm.questions.length} value={assessmentForm.questionCount} onChange={(e) => setAssessmentForm({ ...assessmentForm, questionCount: Number(e.target.value) })} className="mt-1 w-full rounded-xl border border-[#cbdbf5] px-3 py-2 font-normal"/></label>
                 <label className="text-sm font-semibold text-[#172554]">Thời gian (phút)<input type="number" min={1} max={240} value={assessmentForm.durationMinutes} onChange={(e) => setAssessmentForm({ ...assessmentForm, durationMinutes: Number(e.target.value) })} className="mt-1 w-full rounded-xl border border-[#cbdbf5] px-3 py-2 font-normal"/></label>
               </div>
 
+              {activeAssessmentMode === 'COURSE_FINAL' && <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">Câu hỏi cuối khóa được lấy đều từ quiz của tất cả bài học. Trong từng bài học, hệ thống chọn ngẫu nhiên giữa các nhóm câu hỏi.</div>}
+              {activeAssessmentMode === 'LESSON' && <>
               <div className="rounded-2xl border border-[#cbdbf5] bg-blue-50/40 p-4 space-y-3">
-                <div><h4 className="text-sm font-bold text-[#172554]">5 pool câu hỏi</h4><p className="text-xs text-[#737686]">Mỗi pool tối thiểu 3 câu. Mỗi lượt làm lấy ngẫu nhiên 3 câu từ từng pool.</p></div>
+                <div><h4 className="text-sm font-bold text-[#172554]">Nhóm câu hỏi</h4><p className="text-xs text-[#737686]">Mỗi tab Google Sheet là một nhóm. Hệ thống lấy đều giữa các nhóm và tự bù từ nhóm còn câu hỏi.</p></div>
                 <div className="grid gap-2 sm:grid-cols-5">{quizPoolNames.map((name, index) => <input key={index} value={name} onChange={(e) => setQuizPoolNames((previous) => previous.map((item, itemIndex) => itemIndex === index ? e.target.value : item))} placeholder={`Pool ${index + 1}`} className="min-w-0 rounded-xl border border-[#cbdbf5] bg-white px-2 py-2 text-xs" />)}</div>
               </div>
               {/* Dynamic Questions Builder with Up/Down buttons (Request 8) */}
@@ -2239,20 +2220,6 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
                         </select>
                       </div>
 
-                      <div>
-                        <label className="font-semibold text-[#434655] mr-1.5">Điểm số:</label>
-                        <input
-                          type="number"
-                          min={1}
-                          value={q.points}
-                          onChange={(e) => {
-                            const qs = [...assessmentForm.questions];
-                            qs[qIdx].points = Math.max(1, parseInt(e.target.value, 10) || 1);
-                            setAssessmentForm({ ...assessmentForm, questions: qs });
-                          }}
-                          className="w-16 px-2 py-1 border border-[#cbdbf5] rounded-lg bg-white"
-                        />
-                      </div>
                     </div>
 
                     {/* Explanation (hiện cho học viên khi đạt ≥85 điểm) */}
@@ -2339,6 +2306,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
                   </details>
                 ))}
               </div>
+              </>}
 
               <div className="flex items-center justify-between pt-3 border-t border-[#eff4ff]">
                 <div>

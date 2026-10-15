@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import crypto from 'crypto'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { checkCourseFinalProgression } from '@/lib/progression'
-import { QUIZ_COOLDOWN_HOURS, QUIZ_COOLDOWN_MS } from '@/lib/config/quiz'
+import { QUIZ_COOLDOWN_MINUTES, QUIZ_COOLDOWN_MS } from '@/lib/config/quiz'
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const jsonError = (code: string, message: string, status: number) =>
@@ -105,22 +104,18 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
       assessmentType: 'COURSE_FINAL',
       title: course.final_assessment.title,
       description: course.final_assessment.description,
-      questionCount: course.final_assessment._count.questions,
+      questionCount: course.final_assessment.question_count,
     },
-    canStart: gateReady && !passingAttempt && cooldownRemainingMs === 0,
+    canStart: gateReady && cooldownRemainingMs === 0,
     gateReady,
     alreadyPassed: Boolean(passingAttempt),
-    cooldownHours: QUIZ_COOLDOWN_HOURS,
+    cooldownMinutes: QUIZ_COOLDOWN_MINUTES,
     cooldownUntil: cooldownUntil?.toISOString() || null,
     cooldownRemainingMs,
-    gateCode: passingAttempt ? 'AssessmentAlreadyPassed' : gate.ok === true
-      ? (cooldownRemainingMs > 0 ? 'CooldownActive' : null)
-      : gate.code,
-    gateMessage: passingAttempt
-      ? 'Bạn đã đạt bài thi cuối khóa; chứng nhận và Star chỉ được ghi nhận một lần.'
-      : gate.ok === true
-        ? (cooldownRemainingMs > 0 ? `Bạn cần đợi ${QUIZ_COOLDOWN_HOURS} giờ giữa các lần làm bài.` : null)
-        : gate.message,
+    gateCode: gate.ok === true ? (cooldownRemainingMs > 0 ? 'CooldownActive' : null) : gate.code,
+    gateMessage: gate.ok === true
+      ? (cooldownRemainingMs > 0 ? `Bạn cần đợi ${QUIZ_COOLDOWN_MINUTES} phút giữa các lần làm bài.` : null)
+      : gate.message,
     attempts: attempts.map((attempt) => ({
       attemptId: attempt.id,
       attemptNumber: attempt.attempt_number,
@@ -144,97 +139,26 @@ export async function POST(request: NextRequest, { params }: { params: { courseI
   const body = await request.json().catch(() => null)
   const title = typeof body?.title === 'string' ? body.title.trim() : ''
   const description = typeof body?.description === 'string' ? body.description.trim() : ''
-  const questions = body?.questions
-  const pools = body?.pools
   const questionCount = Number.parseInt(String(body?.questionCount ?? 10), 10)
   const durationMinutes = Number.parseInt(String(body?.durationMinutes ?? 30), 10)
   if (title.length < 2 || title.length > 255) return jsonError('ValidationError', 'Tiêu đề phải dài từ 2 đến 255 ký tự.', 400)
-  if (!Array.isArray(questions) || questions.length < 1 || questions.length > 100) {
-    return jsonError('ValidationError', 'Bài thi cuối khóa cần 15–100 câu hỏi để đủ 5 pool, mỗi pool tối thiểu 3 câu.', 400)
+  const availableQuestions = await prisma.question.count({ where: { assessment: { type: 'LESSON', lesson: { session: { course_id: course.id } } } } })
+  if (!Number.isInteger(questionCount) || questionCount < 1 || questionCount > availableQuestions || !Number.isInteger(durationMinutes) || durationMinutes < 1 || durationMinutes > 240) {
+    return jsonError('ValidationError', `Số câu mỗi lượt phải từ 1 đến ${availableQuestions}; thời gian từ 1 đến 240 phút.`, 400)
   }
-  if (!Array.isArray(pools) || pools.length < 1 || pools.length > 20 || pools.some((name: unknown) => typeof name !== 'string' || !name.trim())) {
-    return jsonError('ValidationError', 'Bài thi cần đúng 5 pool có tên.', 400)
-  }
-  if (!Number.isInteger(questionCount) || questionCount < pools.length || questionCount > questions.length ||
-      !Number.isInteger(durationMinutes) || durationMinutes < 1 || durationMinutes > 240) {
-    return jsonError('ValidationError', 'Số câu mỗi lượt phải nằm trong ngân hàng và không ít hơn số nhóm; thời gian từ 1 đến 240 phút.', 400)
-  }
-  const poolCounts = Array.from({ length: pools.length }, () => 0)
-  for (let index = 0; index < questions.length; index++) {
-    const question = questions[index]
-    const poolIndex = Number(question?.poolIndex)
-    if (!Number.isInteger(poolIndex) || poolIndex < 0 || poolIndex >= pools.length) return jsonError('ValidationError', `Câu ${index + 1} chưa thuộc một trong 5 pool.`, 400)
-    poolCounts[poolIndex]++
-    const questionText = typeof question?.questionText === 'string' ? question.questionText.trim() : ''
-    const options = question?.options
-    if (!questionText || !Array.isArray(options) || options.length < 2 || options.length > 8) {
-      return jsonError('ValidationError', `Câu ${index + 1} cần nội dung và từ 2 đến 8 lựa chọn.`, 400)
-    }
-    const correctCount = options.filter((option: any) => Boolean(option?.isCorrect)).length
-    const type = question?.questionType || question?.type || 'SINGLE_CHOICE'
-    if (!['SINGLE_CHOICE', 'MULTIPLE_CHOICE'].includes(type) || correctCount < 1 || (type === 'SINGLE_CHOICE' && correctCount !== 1)) {
-      return jsonError('ValidationError', `Câu ${index + 1} có loại câu hỏi hoặc đáp án đúng không hợp lệ.`, 400)
-    }
-    if (options.some((option: any) => typeof option?.optionText !== 'string' || !option.optionText.trim())) {
-      return jsonError('ValidationError', `Câu ${index + 1} có lựa chọn trống.`, 400)
-    }
-  }
-  if (poolCounts.some((count) => count < 1)) return jsonError('QuestionPoolIncomplete', 'Mỗi pool cần tối thiểu 3 câu hỏi.', 400)
-
-  const existing = await prisma.assessment.findUnique({ where: { course_id: course.id }, select: { id: true, _count: { select: { attempts: true } } } })
-  if (existing?._count.attempts) return jsonError('AssessmentVersionRequired', 'Bài thi đã có attempt; hãy giữ nguyên đề thi để bảo toàn lịch sử.', 409)
-
-  const assessmentId = crypto.randomUUID()
-  const preparedPools = pools.map((name: string, sort_order: number) => ({ id: crypto.randomUUID(), assessment_id: assessmentId, name: name.trim(), sort_order }))
-  const preparedQuestions = questions.map((question: any, sort_order: number) => {
-    const questionId = crypto.randomUUID()
-    return {
-      row: {
-        id: questionId,
-        assessment_id: assessmentId,
-        question_text: question.questionText.trim(),
-        question_type: (question.questionType || question.type || 'SINGLE_CHOICE') as any,
-        points: Math.max(1, Math.min(1000, Number.parseInt(String(question.points), 10) || 10)),
-        duration_seconds: Math.max(10, Math.min(3600, Number.parseInt(String(question.durationSeconds), 10) || 120)),
-        sort_order,
-        explanation: typeof question.explanation === 'string' && question.explanation.trim() ? question.explanation.trim() : null,
-        pool_id: preparedPools[Number(question.poolIndex)].id,
-      },
-      options: question.options.map((option: any, optionOrder: number) => ({
-        id: crypto.randomUUID(), question_id: questionId, option_text: option.optionText.trim(),
-        is_correct: Boolean(option.isCorrect), sort_order: optionOrder,
-      })),
-    }
+  const assessment = await prisma.assessment.upsert({
+    where: { course_id: course.id },
+    update: { title, description: description || null, question_count: questionCount, duration_minutes: durationMinutes },
+    create: { type: 'COURSE_FINAL', course_id: course.id, lesson_id: null, title, description: description || null, question_count: questionCount, duration_minutes: durationMinutes, created_by: (auth as any).context!.userId },
   })
-
   await prisma.$transaction(async (tx) => {
-    if (existing) await tx.assessment.delete({ where: { id: existing.id } })
-    await tx.assessment.create({
-      data: {
-        id: assessmentId,
-        type: 'COURSE_FINAL',
-        course_id: course.id,
-        lesson_id: null,
-        title,
-        description: description || null,
-        question_count: questionCount,
-        duration_minutes: durationMinutes,
-        created_by: (auth as any).context!.userId,
-      },
-    })
-    await tx.questionPool.createMany({ data: preparedPools })
-    await tx.question.createMany({ data: preparedQuestions.map(({ row }) => row) })
-    await tx.questionOption.createMany({ data: preparedQuestions.flatMap(({ options }) => options) })
     await tx.userLearningAssignment.updateMany({
       where: { course_id: course.id, ended_at: null, status: 'COMPLETED' },
       data: { status: 'IN_PROGRESS', completed_at: null },
     })
   }, { timeout: 15000, maxWait: 5000 })
 
-  return NextResponse.json({
-    assessmentId, id: assessmentId, assessmentType: 'COURSE_FINAL', courseId: course.id,
-    title, description: description || null, questionCount: questions.length,
-  }, { status: 201 })
+  return NextResponse.json({ assessmentId: assessment.id, id: assessment.id, assessmentType: 'COURSE_FINAL', courseId: course.id, title, description: description || null, questionCount, availableQuestions }, { status: 200 })
 }
 
 export async function DELETE(request: NextRequest, { params }: { params: { courseId: string } }) {

@@ -17,6 +17,9 @@ export default function AdminChaptersProgressPage() {
   const [selectedChapter, setSelectedChapter] = useState<any | null>(null);
   const [chapterMembers, setChapterMembers] = useState<any[]>([]);
   const [membersLoading, setMembersLoading] = useState(false);
+  const [kpiHistory, setKpiHistory] = useState<any[]>([]);
+  const [kpiForm, setKpiForm] = useState({ month: new Date().toISOString().slice(0, 7), status: 'YELLOW', note: '' });
+  const [kpiSaving, setKpiSaving] = useState(false);
   const [toast, setToast] = useState<ToastMessage | null>(null);
 
   const showToast = (type: 'success' | 'error' | 'info', message: string) => {
@@ -45,7 +48,11 @@ export default function AdminChaptersProgressPage() {
     setSelectedChapter(chapter);
     setMembersLoading(true);
     const chapterId = chapter.chapterId || chapter.id;
-    const res = await apiFetch(`/api/v1/chapters/${chapterId}/dashboard/members`, { noCache: true });
+    const [res, kpiRes] = await Promise.all([
+      apiFetch(`/api/v1/chapters/${chapterId}/dashboard/members`, { noCache: true }),
+      apiFetch(`/api/v1/chapters/${chapterId}/kpi`, { noCache: true }),
+    ]);
+    if (kpiRes.ok) setKpiHistory(kpiRes.data?.items || []);
     if (res.ok && res.data) {
       const items = (res.data.items || []).filter(
         (m: any) => m.role === 'MEMBER' || (!m.role && m.role !== 'CHAPTER_LEADER')
@@ -56,6 +63,20 @@ export default function AdminChaptersProgressPage() {
       showToast('error', 'Không thể tải danh sách thành viên chapter.');
     }
     setMembersLoading(false);
+  }
+
+  async function saveKpi() {
+    if (!selectedChapter) return;
+    setKpiSaving(true);
+    const chapterId = selectedChapter.chapterId || selectedChapter.id;
+    const res = await apiFetch(`/api/v1/chapters/${chapterId}/kpi`, { method: 'POST', body: JSON.stringify({ monthStart: `${kpiForm.month}-01T00:00:00.000Z`, status: kpiForm.status, note: kpiForm.note.trim() }) });
+    if (res.ok) {
+      showToast('success', 'Đã cập nhật KPI tháng.');
+      const history = await apiFetch(`/api/v1/chapters/${chapterId}/kpi`, { noCache: true });
+      if (history.ok) setKpiHistory(history.data?.items || []);
+      loadChapters();
+    } else showToast('error', res.error?.message || 'Không cập nhật được KPI.');
+    setKpiSaving(false);
   }
 
   const getMedal = (rank: number) => {
@@ -81,7 +102,7 @@ export default function AdminChaptersProgressPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <div>
           <h1 className="text-3xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
-            Xếp hạng & Tiến trình Chapter
+            Bảng xếp hạng Chapter
           </h1>
           <p className="text-[#737686] mt-1 text-sm">
             Xếp hạng theo độ đồng đều học tập, ⭐ bình quân/thành viên, KPI và quy mô Chapter
@@ -92,7 +113,7 @@ export default function AdminChaptersProgressPage() {
             <Button variant="secondary">👥 Quản lý tài khoản</Button>
           </Link>
           <Link href="/admin/invitations">
-            <Button>✉️ Mời BĐHU</Button>
+            <Button>✉️ Mời Lead</Button>
           </Link>
         </div>
       </div>
@@ -326,6 +347,19 @@ export default function AdminChaptersProgressPage() {
               <Button variant="secondary" onClick={() => setSelectedChapter(null)}>
                 Đóng
               </Button>
+            </div>
+            <div className="rounded-2xl border border-[#eff4ff] p-4 space-y-3">
+              <h4 className="font-bold text-[#172554]">KPI Chapter theo tháng</h4>
+              <div className="grid gap-2 sm:grid-cols-3">
+                <input type="month" value={kpiForm.month} onChange={(e) => setKpiForm({ ...kpiForm, month: e.target.value })} className="rounded-xl border border-[#cbdbf5] px-3 py-2 text-sm" />
+                <select value={kpiForm.status} onChange={(e) => setKpiForm({ ...kpiForm, status: e.target.value })} className="rounded-xl border border-[#cbdbf5] px-3 py-2 text-sm"><option value="BLACK">Đen</option><option value="RED">Đỏ</option><option value="YELLOW">Vàng</option><option value="GREEN">Xanh</option></select>
+                <Button loading={kpiSaving} onClick={saveKpi}>Lưu KPI</Button>
+              </div>
+              <input value={kpiForm.note} onChange={(e) => setKpiForm({ ...kpiForm, note: e.target.value })} placeholder="Ghi chú KPI (tùy chọn)" className="w-full rounded-xl border border-[#cbdbf5] px-3 py-2 text-sm" />
+              <div className="max-h-40 overflow-auto divide-y divide-[#eff4ff] text-xs">
+                {kpiHistory.map((item, index) => <div key={`${item.month}-${index}`} className="flex items-center justify-between gap-3 py-2"><span>{new Date(item.month).toLocaleDateString('vi-VN', { month: '2-digit', year: 'numeric' })}</span><strong>{item.status}</strong><span className="text-[#737686]">Cập nhật {new Date(item.updatedAt).toLocaleString('vi-VN')}</span></div>)}
+                {!kpiHistory.length && <p className="py-2 text-[#737686]">Chưa có lịch sử KPI.</p>}
+              </div>
             </div>
           </div>
         )}

@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/layout/Sidebar';
-import PageTransition from '@/components/layout/PageTransition';
 import { apiFetch } from '@/lib/api/client';
 
 export default function OrganizationManagerLayout({ children }: { children: React.ReactNode }) {
@@ -34,6 +33,6 @@ export default function OrganizationManagerLayout({ children }: { children: Reac
   if (checking) return <div className="min-h-screen bg-[#f8f9ff] p-8 text-sm text-[#737686]">Đang kiểm tra phạm vi quản lý…</div>;
   return <div className="flex min-h-screen bg-[#f8f9ff]">
     <Sidebar role={user?.role || 'MEMBER'} user={{ email: user?.email, chapterName: user?.chapterName, isOrganizationManager: true }} />
-    <main className="ml-64 w-full min-w-0 px-5 py-8 md:px-8"><PageTransition>{children}</PageTransition></main>
+    <main className="ml-64 w-full min-w-0 px-5 py-8 md:px-8">{children}</main>
   </div>;
 }

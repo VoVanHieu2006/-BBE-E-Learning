@@ -1,7 +1,6 @@
 'use client';
 import { AdminProvider, useAdmin } from './AdminContext';
 import Sidebar from '@/components/layout/Sidebar';
-import PageTransition from '@/components/layout/PageTransition';
 import { apiFetch } from '@/lib/api/client';
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -111,7 +110,7 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-[#f8f9ff] flex">
       <Sidebar role={user?.role || 'ADMIN'} user={{ email: user?.email }} />
       <main className="ml-64 flex-1 px-8 py-10 w-full min-w-0">
-        <PageTransition>{children}</PageTransition>
+        {children}
       </main>
     </div>
   );

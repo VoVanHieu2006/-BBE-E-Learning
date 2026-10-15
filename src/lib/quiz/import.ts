@@ -155,9 +155,9 @@ export function parseQuizRows(rows: string[][]): ImportedQuiz {
 
   bodyRows.forEach((rawRow, index) => {
     // Cột: 0 Câu hỏi | 1-4 A-D | 5 Đáp án | 6 Điểm | 7 Giải thích
-    const row = normalizeRowWidth(rawRow, 8)
+    const row = normalizeRowWidth(rawRow, 7)
     const rowNumber = index + (rows.length > 0 && looksLikeHeader(rows[0]) ? 2 : 1)
-    const [questionText, a, b, c, d, answerRaw, pointsRaw, explanationRaw] = row
+    const [questionText, a, b, c, d, answerRaw, explanationRaw] = row
 
     if (!questionText) {
       errors.push({ row: rowNumber, message: 'Thiếu nội dung câu hỏi' })
@@ -200,20 +200,10 @@ export function parseQuizRows(rows: string[][]): ImportedQuiz {
       if (options[idx]) options[idx].isCorrect = true
     })
 
-    let points = 1
-    if (pointsRaw && pointsRaw.trim() !== '') {
-      const parsed = Number(pointsRaw.trim())
-      if (!Number.isFinite(parsed) || parsed < 1 || !Number.isInteger(parsed)) {
-        errors.push({ row: rowNumber, message: `Điểm "${pointsRaw}" không hợp lệ (số nguyên ≥ 1)` })
-        return
-      }
-      points = parsed
-    }
-
     questions.push({
       questionText: questionText.trim(),
       questionType: uniqueLetters.length > 1 ? 'MULTIPLE_CHOICE' : 'SINGLE_CHOICE',
-      points,
+      points: 1,
       explanation: (explanationRaw || '').trim(),
       options,
       sortOrder: questions.length,

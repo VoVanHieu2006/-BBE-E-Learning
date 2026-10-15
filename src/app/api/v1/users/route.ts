@@ -163,6 +163,12 @@ export async function GET(request: NextRequest) {
             where: { status: 'ACTIVE', starts_at: { lte: now }, OR: [{ ends_at: null }, { ends_at: { gt: now } }] },
             select: { unit: { select: { id: true, name: true, type: true, parent: { select: { id: true, name: true, type: true } } } } },
           },
+          restrictions: {
+            where: { lifted_at: null },
+            select: { type: true },
+            orderBy: { created_at: 'desc' },
+            take: 1,
+          },
         },
         orderBy: { created_at: 'desc' },
         skip,
@@ -198,6 +204,13 @@ export async function GET(request: NextRequest) {
       displayName: u.display_name,
       role: u.role,
       status: u.status,
+      accountState: u.status === 'INACTIVE'
+        ? 'INACTIVE'
+        : u.restrictions[0]?.type === 'DEADLINE'
+          ? 'OVERDUE_LOCK'
+          : u.status === 'LOCKED' || u.failed_login_count >= 10
+            ? 'PASSWORD_LOCK'
+            : 'ACTIVE',
       effectivePositions: u.position_assignments.map((assignment) => ({
         code: assignment.position.code,
         name: assignment.position.name,

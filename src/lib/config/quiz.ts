@@ -10,10 +10,11 @@
  *   - 0.1: Chờ 6 phút (dùng khi cần test nhanh)
  *   - 0  : Tắt hoàn toàn thời gian chờ
  */
-export const QUIZ_COOLDOWN_HOURS = Number(process.env.NEXT_PUBLIC_QUIZ_COOLDOWN_HOURS || 24);
+export const QUIZ_COOLDOWN_MINUTES = Number(process.env.NEXT_PUBLIC_QUIZ_COOLDOWN_MINUTES || 2);
+export const QUIZ_COOLDOWN_HOURS = QUIZ_COOLDOWN_MINUTES / 60;
 
 // Thời gian chờ tính bằng Mili-giây (milliseconds)
-export const QUIZ_COOLDOWN_MS = QUIZ_COOLDOWN_HOURS * 60 * 60 * 1000;
+export const QUIZ_COOLDOWN_MS = QUIZ_COOLDOWN_MINUTES * 60 * 1000;
 
 // Điểm tối thiểu để vượt qua bài kiểm tra (85%)
 export const QUIZ_PASS_PERCENT = 85;

@@ -50,11 +50,10 @@ function getStudentNav(chapterId?: string | null, isOrganizationManager = false)
 }
 
 const adminNav: NavItem[] = [
-  { label: 'Cơ cấu & chức vụ', href: '/admin/organization', icon: '🏢', prefetchUrls: ['/api/v1/admin/organization'] },
   { label: 'Tổng quan', href: '/admin/dashboard', icon: '📊', prefetchUrls: ['/api/v1/admin/overview'] },
   { label: 'Khóa học & lộ trình', href: '/admin/courses', icon: '📚', prefetchUrls: ['/api/v1/courses', '/api/v1/admin/learning-rules'] },
-  { label: 'Mời BĐHU', href: '/admin/invitations', icon: '✉️', prefetchUrls: ['/api/v1/invitations'] },
-  { label: 'Tiến trình Chapter', href: '/admin/chapters', icon: '🏆', prefetchUrls: ['/api/v1/leaderboard/chapters'] },
+  { label: 'Mời & quản lý Lead', href: '/admin/invitations', icon: '✉️', prefetchUrls: ['/api/v1/invitations'] },
+  { label: 'Bảng xếp hạng Chapter', href: '/admin/chapters', icon: '🏆', prefetchUrls: ['/api/v1/leaderboard/chapters'] },
   { label: 'Quản lý tài khoản', href: '/admin/users', icon: '👤', prefetchUrls: ['/api/v1/users?page=1&limit=20', '/api/v1/chapters'] },
 ];
 

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { QUIZ_COOLDOWN_MS, QUIZ_COOLDOWN_HOURS } from '@/lib/config/quiz'
+import { QUIZ_COOLDOWN_MS, QUIZ_COOLDOWN_MINUTES } from '@/lib/config/quiz'
 
 export async function GET(request: NextRequest, { params }: { params: { assessmentId: string } }) {
   const auth = await authenticate(request)
@@ -51,7 +51,7 @@ export async function GET(request: NextRequest, { params }: { params: { assessme
   }
 
   return NextResponse.json({
-    cooldownHours: QUIZ_COOLDOWN_HOURS,
+    cooldownMinutes: QUIZ_COOLDOWN_MINUTES,
     cooldownUntil,
     remainingMs,
     items: attempts.map((a: any) => ({

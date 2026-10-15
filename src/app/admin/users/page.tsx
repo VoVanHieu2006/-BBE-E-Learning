@@ -52,6 +52,11 @@ export default function AdminUsersPage() {
   const showToast = (type: 'success' | 'error' | 'info', message: string, title?: string) => {
     setToast({ type, message, title });
   };
+  const formatChapterName = (name?: string) => {
+    if (!name) return 'Chưa gán Chapter';
+    const core = name.replace(/^BBE\s+/i, '').replace(/^Chapter\s+/i, '').replace(/\s+Chapter$/i, '').trim();
+    return `BBE ${core} Chapter`;
+  };
 
   useEffect(() => {
     const cachedUsers = getCachedApiData<any>('/api/v1/users?page=1&limit=20');
@@ -249,17 +254,25 @@ export default function AdminUsersPage() {
     setActionUserId(null);
   };
 
+  const handleSendPasswordReset = async (user: any) => {
+    const userId = user.userId || user.id;
+    setActionUserId(userId);
+    const res = await apiFetch(`/api/v1/users/${userId}/password-reset`, { method: 'POST' });
+    showToast(res.ok ? 'success' : 'error', res.ok ? (res.data?.message || 'Đã gửi email đặt lại mật khẩu.') : (res.error?.message || 'Không gửi được email đặt lại mật khẩu.'));
+    setActionUserId(null);
+  };
+
   const getRoleBadge = (role: string) => {
     if (role === 'CHAPTER_LEADER') {
       return (
         <span className="whitespace-nowrap inline-flex items-center text-xs font-bold px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-700">
-          Trưởng Chapter (BĐHU)
+          Lead Chapter
         </span>
       );
     }
     return (
       <span className="whitespace-nowrap inline-flex items-center text-xs font-bold px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-700">
-        Học viên
+        Thành viên
       </span>
     );
   };
@@ -284,7 +297,7 @@ export default function AdminUsersPage() {
           </div>
           <div className="flex items-center gap-3">
             <Link href="/admin/invitations">
-              <Button variant="secondary">✉️ Mời BĐHU</Button>
+              <Button variant="secondary">✉️ Mời & quản lý Lead</Button>
             </Link>
             <Link href="/admin/chapters">
               <Button>📊 Xếp hạng Chapter</Button>
@@ -342,7 +355,7 @@ export default function AdminUsersPage() {
               >
                 <option value="">-- Tất cả vai trò --</option>
                 <option value="MEMBER">Học viên (Member)</option>
-                <option value="CHAPTER_LEADER">Trưởng Chapter (BĐHU)</option>
+                <option value="CHAPTER_LEADER">Lead Chapter</option>
               </select>
             </div>
             <div className="w-full lg:w-48">
@@ -469,8 +482,16 @@ export default function AdminUsersPage() {
                         <td className="px-6 py-4">
                           <div className="font-semibold text-[#172554]">{u.displayName || u.email}</div>
                           {u.displayName && <div className="text-xs text-[#737686]">{u.email}</div>}
-                          {u.effectivePositions?.length > 0 && <div className="mt-1 flex flex-wrap gap-1">{u.effectivePositions.map((position: any) => <span key={`${position.code}:${position.unitId}`} className="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold text-indigo-700">{position.name} · {position.unitName}</span>)}</div>}
-                          <div className="mt-1 flex flex-wrap gap-1">{u.department && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700">Ban · {u.department.name}</span>}{u.dna?.active && <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">{u.dna.role || 'DNA'}{u.dna.group ? ` · ${u.dna.group}` : ''}</span>}</div>
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {u.effectivePositions?.some((position: any) => position.code === 'DNA_LEAD') ? (
+                              <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">Lead DNA</span>
+                            ) : u.role === 'CHAPTER_LEADER' ? (
+                              <span className="rounded-full bg-purple-50 px-2 py-0.5 text-[10px] font-semibold text-purple-700">Lead Chapter · {formatChapterName(u.chapter?.name)}</span>
+                            ) : u.department ? (
+                              <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700">{u.effectivePositions?.some((position: any) => ['DEPARTMENT_LEAD', 'LT'].includes(position.code)) ? 'LT' : 'Thành viên'} · {u.department.name}</span>
+                            ) : null}
+                            {u.dna?.active && !u.effectivePositions?.some((position: any) => position.code === 'DNA_LEAD') && <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">Thành viên DNA{u.dna.group ? ` · ${u.dna.group}` : ''}</span>}
+                          </div>
                           <div className="text-[11px] text-[#737686]" suppressHydrationWarning>
                             Tham gia: {u.createdAt ? new Date(u.createdAt).toLocaleDateString('vi-VN') : '—'}
                           </div>
@@ -482,7 +503,7 @@ export default function AdminUsersPage() {
                               href="/admin/chapters"
                               className="text-xs font-semibold text-[#2563EB] hover:underline inline-flex items-center gap-1"
                             >
-                              <span>🏛️</span> {u.chapter.name}
+                              <span>🏛️</span> {formatChapterName(u.chapter.name)}
                             </Link>
                           ) : (
                             <span className="text-xs text-[#737686]">Chưa gán</span>
@@ -528,7 +549,7 @@ export default function AdminUsersPage() {
                                 : 'bg-red-100 text-red-700'
                             }`}
                           >
-                            {isActive ? '✓ Hoạt động' : u.status === 'LOCKED' ? 'Tạm khóa' : 'Vô hiệu hóa'}
+                            {u.accountState === 'OVERDUE_LOCK' ? 'OVERDUE LOCK' : u.accountState === 'PASSWORD_LOCK' ? 'PASSWORD LOCK' : isActive ? '✓ Hoạt động' : 'INACTIVE'}
                           </span>
                         </td>
                         <td className="px-6 py-4 text-right">
@@ -538,6 +559,14 @@ export default function AdminUsersPage() {
                               className="px-2.5 py-1 text-xs font-semibold text-[#2563EB] hover:bg-blue-50 rounded-lg transition"
                             >
                               Xem chi tiết
+                            </button>
+
+                            <button
+                              disabled={isBusy}
+                              onClick={() => void handleSendPasswordReset(u)}
+                              className="whitespace-nowrap px-2.5 py-1 text-xs font-semibold text-indigo-700 hover:bg-indigo-50 rounded-lg transition disabled:opacity-50"
+                            >
+                              Gửi link đặt lại mật khẩu
                             </button>
 
                             <button

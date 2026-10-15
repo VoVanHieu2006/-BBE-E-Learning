@@ -8,7 +8,7 @@ import Toast, { ToastMessage } from '@/components/ui/Toast';
 import LessonQuiz from '@/components/lesson/LessonQuiz';
 import StarRewardCelebration from '@/components/StarRewardCelebration';
 import { apiFetch } from '@/lib/api/client';
-import { QUIZ_COOLDOWN_MS, QUIZ_COOLDOWN_HOURS } from '@/lib/config/quiz';
+import { QUIZ_COOLDOWN_MS, QUIZ_COOLDOWN_MINUTES } from '@/lib/config/quiz';
 
 interface AttemptItem {
   attemptId: string;
@@ -325,7 +325,7 @@ export default function LessonQuizPage({ params }: { params: { lessonId: string 
                 <ul className="list-disc pl-5 space-y-1 text-slate-600">
                   <li>Khi đã bấm làm bài, bạn chỉ có 2 lựa chọn: <strong>Nộp bài</strong> hoặc <strong>Hủy bài</strong>.</li>
                   <li>Nếu đóng tab hoặc rời khỏi trang, bài thi sẽ <strong>tự động bị hủy</strong>.</li>
-                  <li>Mỗi lần làm bài (kể cả Nộp hay Hủy), bạn cần <strong>đợi {QUIZ_COOLDOWN_HOURS} giờ</strong> mới có thể làm lại lượt tiếp theo.</li>
+                  <li>Mỗi lần làm bài (kể cả Nộp hay Hủy), bạn cần <strong>đợi {QUIZ_COOLDOWN_MINUTES} phút</strong> mới có thể làm lại lượt tiếp theo.</li>
                 </ul>
               </div>
             </div>
@@ -337,7 +337,7 @@ export default function LessonQuizPage({ params }: { params: { lessonId: string 
                 <div className="space-y-1 text-xs text-amber-900">
                   <p className="font-bold text-sm">Đang trong thời gian giãn cách làm bài</p>
                   <p className="text-amber-800">
-                    Theo quy định, bạn cần chờ đủ <strong>{QUIZ_COOLDOWN_HOURS} giờ</strong> giữa các lần làm bài (kể cả Nộp bài hay Hủy bài).
+                    Theo quy định, bạn cần chờ đủ <strong>{QUIZ_COOLDOWN_MINUTES} phút</strong> giữa các lần làm bài (kể cả Nộp bài hay Hủy bài).
                   </p>
                   <div className="pt-1.5 flex items-center gap-2">
                     <span className="text-[#172554] font-semibold">Thời gian còn lại:</span>
@@ -442,7 +442,7 @@ export default function LessonQuizPage({ params }: { params: { lessonId: string 
                 <p>⚠️ <strong>Lưu ý:</strong></p>
                 <p>• Trong khi làm bài, bạn <strong>không thể quay lại</strong> nếu chưa <strong>Nộp</strong> hoặc <strong>Hủy bài</strong>.</p>
                 <p>• Đóng trình duyệt sẽ được tính là <strong>Hủy bài</strong>.</p>
-                <p>• Mỗi lần làm (dù Nộp hay Hủy) đều phải đợi <strong>{QUIZ_COOLDOWN_HOURS} giờ</strong> mới có thể làm lại.</p>
+                <p>• Mỗi lần làm (dù Nộp hay Hủy) đều phải đợi <strong>{QUIZ_COOLDOWN_MINUTES} phút</strong> mới có thể làm lại.</p>
               </div>
             </div>
             <div className="flex gap-2.5 pt-2">

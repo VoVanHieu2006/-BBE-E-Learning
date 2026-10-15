@@ -129,7 +129,7 @@ export default function AdminDashboard() {
               </span>
             </div>
             <p className="text-sm text-[#434655]">
-              Mời Trưởng Chapter (BĐHU), khởi tạo chapter mới và theo dõi trạng thái lời mời.
+              Mời Lead Chapter, khởi tạo chapter mới và theo dõi trạng thái lời mời.
             </p>
           </Card>
         </Link>

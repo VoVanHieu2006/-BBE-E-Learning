@@ -45,6 +45,7 @@ enum MembershipStatus {
 
 enum InvitationRole {
   CHAPTER_LEADER
+  DNA_LEAD
   MEMBER
 
   @@map("invitation_role")

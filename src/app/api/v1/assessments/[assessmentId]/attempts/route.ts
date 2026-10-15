@@ -58,14 +58,6 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
       : { ok: false as const, code: 'InvalidAssessmentOwner', message: 'Assessment owner is missing.' }
   if (gate.ok === false) return NextResponse.json({ error: { code: gate.code, message: gate.message } }, { status: 403 })
 
-  if (assessment.type === 'COURSE_FINAL') {
-    const alreadyPassed = await prisma.attempt.findFirst({
-      where: { assessment_id: assessmentId, user_id: userId, passed: true, status: { in: ['SUBMITTED', 'AUTO_SUBMITTED'] } },
-      select: { id: true },
-    })
-    if (alreadyPassed) return NextResponse.json({ error: { code: 'AssessmentAlreadyPassed', message: 'Bạn đã đạt bài thi cuối khóa này.' } }, { status: 409 })
-  }
-
   // No staff bypass: everyone must complete the prerequisite video.
   if (assessment.lesson_id && assessment.lesson) {
     const prog = await prisma.lessonProgress.findUnique({
@@ -87,7 +79,7 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
   }
 
   // 1. Kiểm tra Cooldown: Mỗi lần làm (dù nộp hay hủy) cần đợi khoảng thời gian quy định
-  const { QUIZ_COOLDOWN_MS, QUIZ_COOLDOWN_HOURS } = await import('@/lib/config/quiz')
+  const { QUIZ_COOLDOWN_MS, QUIZ_COOLDOWN_MINUTES } = await import('@/lib/config/quiz')
   if (QUIZ_COOLDOWN_MS > 0) {
     const lastAttempt = await prisma.attempt.findFirst({
       where: {
@@ -104,12 +96,11 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
       const elapsed = Date.now() - new Date(lastTime).getTime()
       if (elapsed < QUIZ_COOLDOWN_MS) {
         const remainingMs = QUIZ_COOLDOWN_MS - elapsed
-        const remainingHours = Math.floor(remainingMs / (60 * 60 * 1000))
-        const remainingMins = Math.ceil((remainingMs % (60 * 60 * 1000)) / (60 * 1000))
+        const remainingMins = Math.ceil(remainingMs / (60 * 1000))
         return NextResponse.json({
           error: {
             code: 'CooldownActive',
-            message: `Bạn cần đợi thêm ${remainingHours > 0 ? `${remainingHours} giờ ` : ''}${remainingMins} phút nữa mới có thể làm lại bài kiểm tra này (quy định giãn cách ${QUIZ_COOLDOWN_HOURS}h).`,
+            message: `Bạn cần đợi thêm ${remainingMins} phút nữa mới có thể làm lại bài kiểm tra này (quy định giãn cách ${QUIZ_COOLDOWN_MINUTES} phút).`,
             remainingMs,
             cooldownUntil: new Date(Date.now() + remainingMs).toISOString(),
           },
@@ -186,7 +177,9 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
   }
 
   const questions = await prisma.question.findMany({
-    where: { assessment_id: assessmentId },
+    where: assessment.type === 'COURSE_FINAL' && assessment.course_id
+      ? { assessment: { type: 'LESSON', lesson: { session: { course_id: assessment.course_id } } } }
+      : { assessment_id: assessmentId },
     include: { options: true },
     orderBy: { sort_order: 'asc' },
   })
@@ -196,17 +189,32 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
 
   // A configured assessment must have exactly five complete pools, and every
   // question must belong to one of them. Never silently fall back to a normal quiz.
-  const questionPools = await prisma.questionPool.findMany({
-    where: { assessment_id: assessmentId },
-    select: { id: true },
-    orderBy: { sort_order: 'asc' },
+  const questionPools = assessment.type === 'COURSE_FINAL' ? [] : await prisma.questionPool.findMany({
+    where: { assessment_id: assessmentId }, select: { id: true }, orderBy: { sort_order: 'asc' },
   })
-  const poolSelection = selectQuizQuestions(
-    questionPools,
-    questions.map((question) => ({ ...question, poolId: question.pool_id })),
-    shuffleSecurely,
-    assessment.question_count,
-  )
+  const poolSelection = assessment.type === 'COURSE_FINAL'
+    ? (() => {
+        const groups = new Map<string, typeof questions>()
+        for (const question of questions) groups.set(question.assessment_id, [...(groups.get(question.assessment_id) || []), question])
+        const queues: (typeof questions)[] = shuffleSecurely(Array.from(groups.values())).map((group) => shuffleSecurely(group))
+        const selected: typeof questions = []
+        while (selected.length < assessment.question_count && queues.some((queue) => queue.length > 0)) {
+          for (const queue of queues) {
+            const question = queue.shift()
+            if (question) selected.push(question)
+            if (selected.length >= assessment.question_count) break
+          }
+        }
+        return selected.length === assessment.question_count
+          ? { ok: true as const, questions: selected }
+          : { ok: false as const, code: 'QuestionPoolIncomplete' as const }
+      })()
+    : selectQuizQuestions(
+        questionPools,
+        questions.map((question) => ({ ...question, poolId: question.pool_id })),
+        shuffleSecurely,
+        assessment.question_count,
+      )
   if (poolSelection.ok === false) {
     const messages = {
       QuestionPoolCountInvalid: 'Bài kiểm tra cần từ 1 đến 20 nhóm câu hỏi.',
@@ -265,7 +273,7 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
     id: q.id,
     questionText: q.question_text,
     points: q.points,
-    options: shuffleSecurely(q.options).map((o) => ({
+    options: shuffleSecurely<(typeof questions)[number]['options'][number]>(q.options).map((o) => ({
       optionId: o.id,
       id: o.id,
       optionText: o.option_text,

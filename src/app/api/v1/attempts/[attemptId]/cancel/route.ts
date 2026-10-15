@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { QUIZ_COOLDOWN_MS, QUIZ_COOLDOWN_HOURS } from '@/lib/config/quiz'
+import { QUIZ_COOLDOWN_MS, QUIZ_COOLDOWN_MINUTES } from '@/lib/config/quiz'
 
 /**
  * POST /api/v1/attempts/[attemptId]/cancel
@@ -44,10 +44,10 @@ export async function POST(request: NextRequest, { params }: { params: { attempt
 
   return NextResponse.json({
     success: true,
-    message: `Đã hủy bài kiểm tra. Bạn cần đợi ${QUIZ_COOLDOWN_HOURS} giờ mới có thể làm lại.`,
+    message: `Đã hủy bài kiểm tra. Bạn cần đợi ${QUIZ_COOLDOWN_MINUTES} phút mới có thể làm lại.`,
     status: 'CANCELLED',
     cancelledAt: now.toISOString(),
-    cooldownHours: QUIZ_COOLDOWN_HOURS,
+    cooldownMinutes: QUIZ_COOLDOWN_MINUTES,
     cooldownUntil: new Date(now.getTime() + QUIZ_COOLDOWN_MS).toISOString(),
   })
 }

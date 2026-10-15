@@ -22,6 +22,8 @@ export default function AdminInvitationsPage() {
   // Modal Send Leader Invite
   const [showLeaderModal, setShowLeaderModal] = useState(false);
   const [leaderSending, setLeaderSending] = useState(false);
+  const [showDnaModal, setShowDnaModal] = useState(false);
+  const [dnaEmail, setDnaEmail] = useState('');
   const [leaderForm, setLeaderForm] = useState({
     email: '',
     chapterName: '',
@@ -80,6 +82,17 @@ export default function AdminInvitationsPage() {
     setLeaderSending(false);
   }
 
+  async function handleSendDnaInvite(e: React.FormEvent) {
+    e.preventDefault();
+    setLeaderSending(true);
+    const res = await apiFetch('/api/v1/invitations/dna-leader', { method: 'POST', body: JSON.stringify({ email: dnaEmail.trim().toLowerCase() }) });
+    if (res.ok) {
+      showToast('success', res.data?.assignedExisting ? `Đã gán quyền Lead DNA cho tài khoản ${dnaEmail}.` : `Đã gửi lời mời Lead DNA đến ${dnaEmail}.`);
+      setDnaEmail(''); setShowDnaModal(false); loadInvitations();
+    } else showToast('error', res.error?.message || 'Không gửi được lời mời Lead DNA.');
+    setLeaderSending(false);
+  }
+
   async function handleResend(invitationId: string) {
     setBusyAction(`${invitationId}:resend`);
     clearApiCache('/api/v1/invitations');
@@ -124,15 +137,16 @@ export default function AdminInvitationsPage() {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
           <div>
             <h1 className="text-3xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
-              Quản lý lời mời (BĐHU)
+              Mời & quản lý Lead
             </h1>
             <p className="text-[#737686] mt-1 text-sm">
-              Mời Ban Định Hướng (Trưởng Chapter) và khởi tạo Chapter hoạt động mới
+              Admin mời Lead Chapter để tạo Chapter mới và quản lý một Lead DNA duy nhất.
             </p>
           </div>
           <div className="flex items-center gap-3">
+            <Button variant="outline" onClick={() => setShowDnaModal(true)}>＋ Mời Lead DNA</Button>
             <Button onClick={() => setShowLeaderModal(true)}>
-              ＋ Mời Trưởng Chapter (BĐHU)
+              ＋ Mời Lead Chapter
             </Button>
           </div>
         </div>
@@ -148,7 +162,7 @@ export default function AdminInvitationsPage() {
           ) : items.length === 0 ? (
             <div className="text-center py-16 text-[#737686]">
               <p className="text-lg font-semibold text-[#172554] mb-1">Chưa có lời mời nào được gửi</p>
-              <p className="text-sm text-[#737686]">Bấm nút &quot;Mời Trưởng Chapter (BĐHU)&quot; ở trên để bắt đầu.</p>
+              <p className="text-sm text-[#737686]">Bấm nút &quot;Mời Lead Chapter&quot; ở trên để bắt đầu.</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -174,7 +188,7 @@ export default function AdminInvitationsPage() {
                         <td className="px-6 py-4 font-semibold text-[#172554]">{inv.email}</td>
                         <td className="px-6 py-4">
                           <span className="whitespace-nowrap inline-flex items-center text-xs font-bold px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-700">
-                            Trưởng Chapter (BĐHU)
+                            {inv.role === 'DNA_LEAD' ? 'Lead DNA' : 'Lead Chapter'}
                           </span>
                         </td>
                         <td className="px-6 py-4 text-[#434655]">{inv.chapterName || '—'}</td>
@@ -240,7 +254,7 @@ export default function AdminInvitationsPage() {
         >
           <div className="p-6 space-y-4">
             <h3 className="text-xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
-              Mời Trưởng Chapter (BĐHU)
+              Mời Lead Chapter
             </h3>
             <p className="text-xs text-[#737686]">
               Nhập email của Trưởng Chapter và tên Chapter mới cần khởi tạo.
@@ -293,6 +307,14 @@ export default function AdminInvitationsPage() {
               </div>
             </form>
           </div>
+        </Modal>
+        <Modal isOpen={showDnaModal} onClose={() => setShowDnaModal(false)} maxWidth="max-w-md">
+          <form onSubmit={handleSendDnaInvite} className="p-6 space-y-4">
+            <h3 className="text-xl font-bold text-[#172554]">Mời Lead DNA</h3>
+            <p className="text-sm text-[#737686]">Hệ thống chỉ cho phép một Lead DNA đang hoạt động.</p>
+            <input type="email" required value={dnaEmail} onChange={(e) => setDnaEmail(e.target.value)} placeholder="dna.lead@bbe.vn" className="w-full px-4 py-2.5 border border-[#cbdbf5] rounded-xl text-sm" />
+            <div className="flex justify-end gap-3"><Button variant="outline" type="button" onClick={() => setShowDnaModal(false)}>Hủy</Button><Button type="submit" loading={leaderSending}>Gửi lời mời</Button></div>
+          </form>
         </Modal>
     </>
   );
