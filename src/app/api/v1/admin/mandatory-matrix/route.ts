@@ -42,7 +42,7 @@ async function requireAdmin(request: NextRequest) {
 export async function GET(request: NextRequest) {
   const guard = await requireAdmin(request); if ('error' in guard) return guard.error
   const [courses, rules, scopes] = await Promise.all([
-    prisma.course.findMany({ orderBy: { title: 'asc' }, select: { id: true, title: true, status: true } }),
+    prisma.course.findMany({ orderBy: { title: 'asc' }, select: { id: true, title: true, status: true, mandatory_default_due_days: true } }),
     prisma.learningRule.findMany({ where: { effective_until: null }, select: { course_id: true, organization_unit_id: true, position_id: true, due_days: true } }),
     resolveScopes(),
   ])
@@ -54,26 +54,35 @@ export async function GET(request: NextRequest) {
       cells[course.id][target.key] = { enabled: matched.length > 0, dueDays: matched.find((rule) => rule.due_days)?.due_days || null }
     }
   }
-  return NextResponse.json({ courses, targets, cells })
+  return NextResponse.json({ courses: courses.map((course) => ({ ...course, defaultDueDays: course.mandatory_default_due_days })), targets, cells })
 }
 
 export async function PUT(request: NextRequest) {
   const guard = await requireAdmin(request); if ('error' in guard) return guard.error
   const body = await request.json().catch(() => null)
   const raw = Array.isArray(body?.changes) ? body.changes : [body]
+  const rowDefaults = Array.isArray(body?.rowDefaults) ? body.rowDefaults.map((item: any) => ({ courseId: String(item?.courseId || ''), dueDays: Number(item?.dueDays) })) : []
   const changes = raw.map((item: any) => ({ courseId: String(item?.courseId || ''), targetKey: String(item?.targetKey || ''), enabled: item?.enabled === true, dueDays: item?.enabled === true ? Number(item?.dueDays) : null }))
-  if (!changes.length || changes.some((item: any) => !item.courseId || !targets.some((target) => target.key === item.targetKey) || (item.enabled && (!Number.isInteger(item.dueDays) || item.dueDays < 1 || item.dueDays > 3650)))) return NextResponse.json({ error: { code: 'ValidationError', message: 'Cấu hình không hợp lệ.' } }, { status: 400 })
+  if ((!changes.length && !rowDefaults.length) || changes.some((item: any) => !item.courseId || !targets.some((target) => target.key === item.targetKey) || (item.enabled && (!Number.isInteger(item.dueDays) || item.dueDays < 1 || item.dueDays > 3650))) || rowDefaults.some((item: any) => !item.courseId || !Number.isInteger(item.dueDays) || item.dueDays < 1 || item.dueDays > 3650)) return NextResponse.json({ error: { code: 'ValidationError', message: 'Cấu hình không hợp lệ.' } }, { status: 400 })
   const scopes = await resolveScopes()
   if (changes.some((item: any) => !(scopes.get(item.targetKey) || []).length)) return NextResponse.json({ error: { code: 'ScopeNotConfigured', message: 'Chưa có đơn vị hoặc chức vụ tương ứng.' } }, { status: 409 })
   await prisma.$transaction(async (tx) => {
+    for (const row of rowDefaults) if (row.courseId && Number.isInteger(row.dueDays) && row.dueDays >= 1 && row.dueDays <= 3650) await tx.course.update({ where: { id: row.courseId }, data: { mandatory_default_due_days: row.dueDays } })
     for (const change of changes) for (const scope of scopes.get(change.targetKey) || []) {
       const existing = await tx.learningRule.findMany({ where: { course_id: change.courseId, organization_unit_id: scope.organizationUnitId, position_id: scope.positionId, effective_until: null }, select: { id: true } })
       if (existing.length) await tx.userLearningAssignment.updateMany({ where: { rule_id: { in: existing.map((rule) => rule.id) }, status: { in: ['ASSIGNED', 'IN_PROGRESS'] } }, data: { mandatory: false, status: 'ENDED', due_at: null, ended_at: new Date() } })
       await tx.learningRule.deleteMany({ where: { course_id: change.courseId, organization_unit_id: scope.organizationUnitId, position_id: scope.positionId, effective_until: null } })
       if (change.enabled) await tx.learningRule.create({ data: { course_id: change.courseId, organization_unit_id: scope.organizationUnitId, position_id: scope.positionId, mandatory: true, can_view: true, can_assess: true, can_earn_stars: true, due_days: change.dueDays } })
     }
-  })
-  const users = await prisma.user.findMany({ where: { role: { not: 'ADMIN' } }, select: { id: true } })
-  for (let index = 0; index < users.length; index += 10) await Promise.all(users.slice(index, index + 10).map((user) => reconcileLearningAssignmentsForUser(user.id)))
+  }, { timeout: 30000, maxWait: 10000 })
+  const changedScopes = changes.flatMap((change) => scopes.get(change.targetKey) || [])
+  const unitIds: string[] = Array.from(new Set<string>(changedScopes.flatMap((scope) => scope.organizationUnitId ? [scope.organizationUnitId] : [])))
+  const positionIds: string[] = Array.from(new Set<string>(changedScopes.flatMap((scope) => scope.positionId ? [scope.positionId] : [])))
+  const [memberships, assignments] = await Promise.all([
+    unitIds.length ? prisma.organizationMembership.findMany({ where: { unit_id: { in: unitIds }, status: 'ACTIVE' }, select: { user_id: true } }) : Promise.resolve([]),
+    positionIds.length ? prisma.positionAssignment.findMany({ where: { position_id: { in: positionIds }, ends_at: null }, select: { user_id: true } }) : Promise.resolve([]),
+  ])
+  const userIds = Array.from(new Set([...memberships.map((row) => row.user_id), ...assignments.map((row) => row.user_id)]))
+  await Promise.all(userIds.map((userId) => reconcileLearningAssignmentsForUser(userId)))
   return NextResponse.json({ updated: changes.length })
 }

@@ -292,6 +292,7 @@ model Course {
   updated_at    DateTime           @updatedAt @db.Timestamp
   cover_url     String?            @db.VarChar(1000)
   cover_public_id String?          @db.VarChar(500)
+  mandatory_default_due_days Int   @default(30)
 
   created_by_user User             @relation(fields: [created_by], references: [id], onDelete: Cascade)
   sessions      Session[]
