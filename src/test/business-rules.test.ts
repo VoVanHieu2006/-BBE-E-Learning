@@ -365,17 +365,17 @@ describe('Star reward rules', () => {
 })
 
 describe('Chapter leaderboard scoring', () => {
-  it('keeps 30 and 50 member Chapters comparable while capping size influence', () => {
+  it('scales size influence until 51 members and caps it afterwards', () => {
     const chapter30 = calculateChapterLeaderboardMetrics(Array(30).fill(80), 10, 'YELLOW')
-    const chapter50 = calculateChapterLeaderboardMetrics(Array(50).fill(80), 10, 'YELLOW')
+    const chapter50 = calculateChapterLeaderboardMetrics(Array(51).fill(80), 10, 'YELLOW')
     const score30 = scoreChapterLeaderboard(chapter30, 10)
     const score50 = scoreChapterLeaderboard(chapter50, 10)
 
     assert.equal(chapter30.averageCompletion, chapter50.averageCompletion)
     assert.equal(chapter30.averageStars, chapter50.averageStars)
-    assert.equal(chapter30.sizeScore, chapter50.sizeScore)
+    assert.ok(chapter30.sizeScore < chapter50.sizeScore)
     assert.equal(chapter50.sizeScore, 100)
-    assert.equal(score50.score, score30.score)
+    assert.ok(score50.score > score30.score)
   })
 
   it('penalizes uneven learning instead of letting a few high performers carry the Chapter', () => {
@@ -602,36 +602,40 @@ describe('quiz question pools', () => {
     poolIndex,
   })))
 
-  it('selects exactly three unique questions from each of five pools', () => {
+  it('selects the requested question count evenly from every pool', () => {
     const selection = selectQuizQuestions(pools, questions, identityShuffle)
     assert.equal(selection.ok, true)
     if (!selection.ok) return
     assert.equal(selection.mode, 'POOLED')
-    assert.equal(selection.questions.length, 15)
-    assert.equal(new Set(selection.questions.map((question) => question.id)).size, 15)
+    assert.equal(selection.questions.length, 20)
+    assert.equal(new Set(selection.questions.map((question) => question.id)).size, 20)
     for (const pool of pools) {
-      assert.equal(selection.questions.filter((question) => question.poolId === pool.id).length, 3)
+      assert.equal(selection.questions.filter((question) => question.poolId === pool.id).length, 4)
     }
   })
 
-  it('fails closed for a partial or oversized pool configuration', () => {
-    assert.deepEqual(selectQuizQuestions(pools.slice(0, 4), questions, identityShuffle), {
-      ok: false,
-      code: 'QuestionPoolCountInvalid',
-    })
-    assert.deepEqual(selectQuizQuestions([...pools, { id: 'pool-6' }], questions, identityShuffle), {
+  it('supports a variable number of pools and rejects more than twenty', () => {
+    const partial = selectQuizQuestions(pools.slice(0, 4), questions.filter((question) => question.poolId !== 'pool-5'), identityShuffle, 10)
+    assert.equal(partial.ok, true)
+    assert.deepEqual(selectQuizQuestions([...pools, ...Array.from({ length: 16 }, (_, index) => ({ id: `extra-${index}` }))], questions, identityShuffle), {
       ok: false,
       code: 'QuestionPoolCountInvalid',
     })
   })
 
-  it('rejects incomplete pools and unassigned configured-bank questions', () => {
-    assert.deepEqual(selectQuizQuestions(
+  it('redistributes from small pools and rejects empty or unassigned pools', () => {
+    const redistributed = selectQuizQuestions(
       pools,
       questions.filter((question) => question.poolId !== pools[0].id || question.id !== `${pools[0].id}-question-4`)
         .filter((question) => question.poolId !== pools[0].id || question.id !== `${pools[0].id}-question-3`),
       identityShuffle,
-    ), { ok: false, code: 'QuestionPoolIncomplete', poolId: pools[0].id })
+      15,
+    )
+    assert.equal(redistributed.ok, true)
+
+    assert.deepEqual(selectQuizQuestions(pools, questions.filter((question) => question.poolId !== pools[0].id), identityShuffle), {
+      ok: false, code: 'QuestionPoolIncomplete',
+    })
 
     assert.deepEqual(selectQuizQuestions(
       pools,
@@ -659,7 +663,7 @@ describe('quiz pool admin assignment validation', () => {
   const questionIds = Array.from({ length: 15 }, (_, index) => `question-${index + 1}`)
   const assignments = questionIds.map((questionId, index) => ({ questionId, poolIndex: Math.floor(index / 3) }))
 
-  it('accepts a complete mapping with at least three questions in each pool', () => {
+  it('accepts a complete mapping with at least one question in each pool', () => {
     const result = validateQuizPoolAssignments(5, questionIds, assignments)
     assert.equal(result.ok, true)
     if (result.ok) {
@@ -681,10 +685,7 @@ describe('quiz pool admin assignment validation', () => {
     assert.deepEqual(validateQuizPoolAssignments(5, questionIds, [
       ...assignments.slice(0, -1), { questionId: 'question-15', poolIndex: 5 },
     ]), { ok: false, code: 'QuestionPoolAssignmentInvalid' })
-    assert.deepEqual(validateQuizPoolAssignments(5, questionIds, [
-      ...assignments.slice(0, 3),
-      { questionId: 'question-4', poolIndex: 0 },
-      ...assignments.slice(4),
-    ]), { ok: false, code: 'QuestionPoolIncomplete' })
+    const emptyLastPool = assignments.map((item) => item.poolIndex === 4 ? { ...item, poolIndex: 3 } : item)
+    assert.deepEqual(validateQuizPoolAssignments(5, questionIds, emptyLastPool), { ok: false, code: 'QuestionPoolIncomplete' })
   })
 })

@@ -155,7 +155,7 @@ export async function GET(request: NextRequest) {
       completion: { averagePercent: Math.round(item.averageCompletion * 10) / 10, medianPercent: Math.round(item.medianCompletion * 10) / 10, atLeast70Percent: Math.round(item.at70Rate * 1000) / 10, score: Math.round(item.completionScore * 10) / 10 },
       stars: { averagePerMember: Math.round(item.averageStars * 10) / 10, score: Math.round(starScore * 10) / 10 },
       kpi: { status: item.kpiStatus, bonus: kpiBonus },
-      size: { score: Math.round(item.sizeScore * 10) / 10, cappedAt: 50 },
+      size: { score: Math.round(item.sizeScore * 10) / 10, cappedAt: 51 },
       score: Math.round(score * 10) / 10,
     }
   }).sort((a, b) => b.score - a.score).map((item, index) => ({ ...item, rank: index + 1 }))
@@ -166,11 +166,15 @@ export async function GET(request: NextRequest) {
     memberCount: item.memberCount,
     atLeast70Percent: Math.round(item.at70Rate * 1000) / 10,
     kpiStatus: item.kpiStatus,
-    reason: item.kpiStatus === 'RED' || item.kpiStatus === 'BLACK' ? `KPI_${item.kpiStatus}` : item.memberCount < 20 ? 'MINIMUM_MEMBERS' : 'COMPLETION_THRESHOLD',
+    reasons: [
+      ...(item.memberCount < 20 ? ['MINIMUM_MEMBERS'] : []),
+      ...(item.at70Rate < 0.5 ? ['COMPLETION_THRESHOLD'] : []),
+      ...(item.kpiStatus === 'RED' || item.kpiStatus === 'BLACK' ? [`KPI_${item.kpiStatus}`] : []),
+    ],
   }))
   const data = {
     month: monthStart.toISOString(),
-    formulaVersion: 'chapter-v4',
+    formulaVersion: 'chapter-v5',
     updatedAt: new Date().toISOString(),
     sourceUpdatedAt: kpis.reduce<string | null>((latest, kpi) => !latest || kpi.updated_at.toISOString() > latest ? kpi.updated_at.toISOString() : latest, null),
     weights: CHAPTER_LEADERBOARD_WEIGHTS,

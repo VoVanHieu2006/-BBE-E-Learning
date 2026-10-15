@@ -1065,7 +1065,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
   };
 
   // ─── Assessment Builder (Add/Remove/Move Questions & Options) ──────────────────
-  const handleAddQuestion = () => {
+  const handleAddQuestion = (poolIndex = 0) => {
     setAssessmentForm((prev) => ({
       ...prev,
       questions: [
@@ -1076,7 +1076,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
           points: 1,
           durationSeconds: 120,
           explanation: '',
-          poolIndex: prev.questions.length % 5,
+          poolIndex,
           options: [
             { optionText: 'Đáp án A (Đúng)', isCorrect: true },
             { optionText: 'Đáp án B', isCorrect: false },
@@ -1086,6 +1086,14 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
         },
       ],
     }));
+  };
+
+  const handleAddPool = () => setQuizPoolNames((previous) => [...previous, `Nhóm ${previous.length + 1}`]);
+  const handleRemovePool = (poolIndex: number) => {
+    if (quizPoolNames.length <= 1) return showToast('error', 'Quiz phải có ít nhất một nhóm.');
+    if (assessmentForm.questions.some((question) => (question.poolIndex ?? 0) === poolIndex)) return showToast('error', 'Hãy xóa hoặc chuyển các câu hỏi trong nhóm trước.');
+    setQuizPoolNames((previous) => previous.filter((_, index) => index !== poolIndex));
+    setAssessmentForm((previous) => ({ ...previous, questions: previous.questions.map((question) => ({ ...question, poolIndex: (question.poolIndex ?? 0) > poolIndex ? (question.poolIndex ?? 0) - 1 : question.poolIndex })) }));
   };
 
   const handleRemoveQuestion = (idx: number) => {
@@ -1383,7 +1391,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
           >
             ← Quay lại danh sách khóa học
           </Link>
-          <div className="flex items-center gap-3">
+          {course && <div className="flex items-center gap-3">
             {!isPublished && <Button variant="secondary" loading={savingInfo} onClick={() => void handleSaveInfo()}>{hasUnsavedCourseInfo ? 'Lưu thay đổi •' : 'Đã lưu'}</Button>}
             <span
               className={`whitespace-nowrap inline-flex items-center text-xs font-bold px-3 py-1 rounded-full ${
@@ -1402,7 +1410,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
                 Công khai khóa học
               </Button>
             )}
-          </div>
+          </div>}
         </div>
 
         {/* IMP-03: Unpublish Confirmation Modal */}
@@ -1538,11 +1546,6 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
                     </label>
                   </div>
 
-                  {!isPublished && (
-                    <Button type="submit" loading={savingInfo} loadingText="Đang lưu...">
-                      Lưu thông tin
-                    </Button>
-                  )}
                 </div>
               </form>
             </Card>
@@ -1596,8 +1599,8 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
                     const sId = session.sessionId || session.id;
 
                     return (
-                      <Card key={sId} className="p-6 border border-[#eff4ff] shadow-sm">
-                        <div className="flex items-start justify-between pb-4 mb-4 border-b border-[#eff4ff]">
+                      <details key={sId} className="rounded-2xl border border-[#eff4ff] bg-white p-6 shadow-sm">
+                        <summary className="flex cursor-pointer list-none items-start justify-between gap-4">
                           <div className="flex items-start gap-3">
                             <span className="w-7 h-7 bg-[#2563EB] text-white rounded-lg flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">
                               {sIdx + 1}
@@ -1611,7 +1614,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
                           </div>
 
                           {!isPublished && (
-                            <div className="flex items-center gap-2 shrink-0">
+                            <div className="flex items-center gap-2 shrink-0" onClick={(event) => { event.preventDefault(); event.stopPropagation(); }}>
                               {sIdx > 0 && (
                                 <button
                                   type="button"
@@ -1653,9 +1656,10 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
                               </button>
                             </div>
                           )}
-                        </div>
+                        </summary>
 
                         {/* Lessons in session with Move Up/Down (Request 1) */}
+                        <div className="mt-4 border-t border-[#eff4ff] pt-4">
                         {session.lessons?.length === 0 ? (
                           <div className="py-6 text-center text-xs text-[#737686] bg-[#f8f9ff] rounded-xl">
                             Chưa có bài học nào trong buổi này.
@@ -1815,7 +1819,8 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
                             })}
                           </div>
                         )}
-                      </Card>
+                        </div>
+                      </details>
                     );
                   })}
                 </div>
@@ -2095,19 +2100,11 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
 
               {activeAssessmentMode === 'COURSE_FINAL' && <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">Câu hỏi cuối khóa được lấy đều từ quiz của tất cả bài học. Trong từng bài học, hệ thống chọn ngẫu nhiên giữa các nhóm câu hỏi.</div>}
               {activeAssessmentMode === 'LESSON' && <>
-              <div className="rounded-2xl border border-[#cbdbf5] bg-blue-50/40 p-4 space-y-3">
-                <div><h4 className="text-sm font-bold text-[#172554]">Nhóm câu hỏi</h4><p className="text-xs text-[#737686]">Mỗi tab Google Sheet là một nhóm. Hệ thống lấy đều giữa các nhóm và tự bù từ nhóm còn câu hỏi.</p></div>
-                <div className="grid gap-2 sm:grid-cols-5">{quizPoolNames.map((name, index) => <input key={index} value={name} onChange={(e) => setQuizPoolNames((previous) => previous.map((item, itemIndex) => itemIndex === index ? e.target.value : item))} placeholder={`Pool ${index + 1}`} className="min-w-0 rounded-xl border border-[#cbdbf5] bg-white px-2 py-2 text-xs" />)}</div>
-              </div>
               {/* Dynamic Questions Builder with Up/Down buttons (Request 8) */}
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <h4 className="font-bold text-sm text-[#172554]">
-                    Danh sách câu hỏi ({assessmentForm.questions.length})
-                  </h4>
-                  <Button size="sm" variant="secondary" onClick={handleAddQuestion}>
-                    ＋ Thêm câu hỏi
-                  </Button>
+                  <h4 className="font-bold text-sm text-[#172554]">Ngân hàng câu hỏi ({quizPoolNames.length} nhóm · {assessmentForm.questions.length} câu)</h4>
+                  <Button size="sm" variant="secondary" onClick={handleAddPool}>＋ Tạo nhóm</Button>
                 </div>
 
                 {/* Import câu hỏi từ Google Sheet / Google Doc */}
@@ -2152,7 +2149,12 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
                   )}
                 </div>
 
-                {assessmentForm.questions.map((q, qIdx) => (
+                {quizPoolNames.map((poolName, poolIndex) => (
+                  <details key={`pool-${poolIndex}`} className="rounded-2xl border border-blue-200 bg-white">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 font-bold text-[#172554]"><span>{poolName} · {assessmentForm.questions.filter((question) => (question.poolIndex ?? 0) === poolIndex).length} câu</span><span className="text-xs font-normal text-blue-600">Mở nhóm ▾</span></summary>
+                    <div className="space-y-3 border-t border-blue-100 p-3">
+                      <div className="flex gap-2"><input value={poolName} onChange={(e) => setQuizPoolNames((previous) => previous.map((name, index) => index === poolIndex ? e.target.value : name))} className="flex-1 rounded-xl border border-[#cbdbf5] px-3 py-2 text-sm"/><Button size="sm" variant="secondary" onClick={() => handleAddQuestion(poolIndex)}>＋ Tạo câu hỏi</Button><button type="button" onClick={() => handleRemovePool(poolIndex)} className="rounded-lg px-2 text-red-600 hover:bg-red-50">Xóa nhóm</button></div>
+                {assessmentForm.questions.map((q, qIdx) => (q.poolIndex ?? 0) === poolIndex ? (
                   <details key={qIdx} className="group rounded-2xl border border-[#eff4ff] bg-[#f8f9ff]">
                     <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-[#172554]"><span>{quizPoolNames[q.poolIndex ?? 0] || 'Chưa có nhóm'} · Câu {qIdx + 1}</span><span className="max-w-[65%] truncate text-xs font-normal text-[#737686]">{q.questionText || 'Chưa nhập nội dung'}</span></summary>
                   <div className="space-y-3 border-t border-[#eff4ff] p-4">
@@ -2309,6 +2311,9 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
                       </button>
                     </div>
                   </div>
+                  </details>
+                ) : null)}
+                    </div>
                   </details>
                 ))}
               </div>

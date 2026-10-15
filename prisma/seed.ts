@@ -191,7 +191,7 @@ async function main(): Promise<void> {
   const dnaGroups = await Promise.all(["TT", "LDC", "SGDC"].map((name) => prisma.organizationUnit.create({ data: { name, type: "DNA_GROUP", parent_id: dnaUnit.id } })));
   const chapterUnits = await Promise.all(chapters.map((chapter) => prisma.organizationUnit.create({ data: { name: chapter.name, type: "CHAPTER", parent_id: rootUnit.id } })));
   await Promise.all(chapters.map((chapter, index) => prisma.chapter.update({ where: { id: chapter.id }, data: { organization_unit_id: chapterUnits[index].id } })));
-  const departments = await Promise.all(["Ban Nội dung", "Ban Truyền thông", "Ban Đối ngoại"].map((name) => prisma.organizationUnit.create({ data: { name, type: "DEPARTMENT", parent_id: chapterUnits[0].id } })));
+  const departments = await Promise.all(["Ban Chủ tịch", "Ban Nội dung", "Ban Khách mời", "Ban Thành viên", "Ban Chất lượng", "Ban TT&SK", "Ban Thư ký"].map((name) => prisma.organizationUnit.create({ data: { name, type: "DEPARTMENT", parent_id: chapterUnits[0].id } })));
   const [dnaLeadPosition, chapterLeadPosition, departmentLeadPosition, memberPosition] = await Promise.all([
     prisma.position.create({ data: { code: "DNA_LEAD", name: "Lead DNA", scope: "DNA", is_manager: true } }),
     prisma.position.create({ data: { code: "CHAPTER_LEAD", name: "Trưởng Chapter", scope: "CHAPTER", is_manager: true } }),

@@ -9,6 +9,7 @@ export default function StudentCoursesPage() {
   const [user, setUser] = useState<any>(null);
   const [courses, setCourses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deadlines, setDeadlines] = useState<Record<string, string | null>>({});
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -32,9 +33,15 @@ export default function StudentCoursesPage() {
   }, []);
 
   async function loadCourses() {
-    const res = await apiFetch('/api/v1/courses');
+    const [res, deadlineRes] = await Promise.all([
+      apiFetch('/api/v1/courses'),
+      apiFetch('/api/v1/members/me/deadlines', { noCache: true }),
+    ]);
     if (res.ok && res.data) {
       setCourses(res.data.items || []);
+    }
+    if (deadlineRes.ok && deadlineRes.data) {
+      setDeadlines(Object.fromEntries((deadlineRes.data.items || []).map((item: any) => [item.courseId, item.dueAt])));
     }
     setLoading(false);
   }
@@ -68,12 +75,17 @@ export default function StudentCoursesPage() {
               </Card>
             ) : (
               <div className="grid md:grid-cols-2 gap-6">
-                {courses.map((c) => (
+                {courses.map((c) => {
+                  const courseId = c.courseId || c.id;
+                  const dueAt = deadlines[courseId];
+                  const remainingDays = dueAt ? Math.ceil((new Date(dueAt).getTime() - Date.now()) / 86_400_000) : null;
+                  return (
                   <Link key={c.courseId || c.id} href={`/student/courses/${c.courseId || c.id}`}>
                     <Card className="hover:-translate-y-1 transition-all cursor-pointer group h-full overflow-hidden border border-[#eff4ff] p-0 shadow-sm hover:shadow-md">
                       {c.coverUrl ? <img src={c.coverUrl} alt={`Ảnh bìa ${c.title}`} className="h-40 w-full object-cover" /> : <div className="grid h-40 place-items-center bg-gradient-to-br from-[#172554] via-blue-700 to-indigo-500 text-4xl">📚</div>}
                       <div className="flex h-[calc(100%-10rem)] flex-col justify-between p-6">
                       <div>
+                        {courseId in deadlines && <span className={`mb-3 inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${remainingDays !== null && remainingDays < 0 ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-800'}`}>{remainingDays === null ? 'Khóa học bắt buộc' : remainingDays < 0 ? `Quá hạn ${Math.abs(remainingDays)} ngày` : `Bắt buộc · còn ${remainingDays} ngày`}</span>}
                         <div className="flex items-start justify-between mb-3">
                           <h3 className="text-xl font-bold text-[#172554] group-hover:text-[#2563EB] transition-colors">
                             {c.title}
@@ -101,7 +113,8 @@ export default function StudentCoursesPage() {
                       </div>
                     </Card>
                   </Link>
-                ))}
+                  );
+                })}
               </div>
             )}
         </div>

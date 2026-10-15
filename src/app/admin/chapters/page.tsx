@@ -69,7 +69,7 @@ export default function AdminChaptersProgressPage() {
     if (!selectedChapter) return;
     setKpiSaving(true);
     const chapterId = selectedChapter.chapterId || selectedChapter.id;
-    const res = await apiFetch(`/api/v1/chapters/${chapterId}/kpi`, { method: 'POST', body: JSON.stringify({ month: kpiForm.month, status: kpiForm.status, note: kpiForm.note.trim() }) });
+    const res = await apiFetch(`/api/v1/chapters/${chapterId}/kpi`, { method: 'PUT', body: JSON.stringify({ month: kpiForm.month, status: kpiForm.status, note: kpiForm.note.trim() }) });
     if (res.ok) {
       showToast('success', 'Đã cập nhật KPI tháng.');
       const history = await apiFetch(`/api/v1/chapters/${chapterId}/kpi`, { noCache: true });
@@ -120,8 +120,8 @@ export default function AdminChaptersProgressPage() {
 
       <Card className="mb-6 border border-blue-200 bg-blue-50/60 p-5">
         <h2 className="font-bold text-[#172554]">Nhập KPI và cách tính điểm</h2>
-        <p className="mt-2 text-sm text-[#434655]">Bấm “KPI & lịch sử” tại một Chapter để nhập KPI Đen, Đỏ, Vàng hoặc Xanh theo tháng và xem các tháng trước.</p>
-        <p className="mt-2 text-xs leading-6 text-[#737686]">Điều kiện vào bảng: ít nhất 20 thành viên, ít nhất 50% thành viên đạt ≥70% lộ trình bắt buộc, KPI không Đen/Đỏ. Điểm = hoàn thành trung bình × 30% + điểm Star tương đối × 30% + điểm quy mô × 20% + 20 điểm nếu KPI Xanh. Quy mô đạt tối đa tại 30 thành viên; KPI Vàng cộng 0.</p>
+        <p className="mt-2 text-sm text-[#434655]">Bấm “KPI & lịch sử” tại bất kỳ Chapter nào, kể cả Chapter chưa đủ điều kiện, để nhập KPI Đen, Đỏ, Vàng hoặc Xanh và xem các tháng trước.</p>
+        <p className="mt-2 text-xs leading-6 text-[#737686]">Điều kiện vào bảng: ít nhất 20 thành viên, ít nhất 50% thành viên đạt ≥70% lộ trình bắt buộc, KPI không Đen/Đỏ. Điểm = hoàn thành trung bình × 30% + điểm Star tương đối × 30% + điểm quy mô × 20% + 20 điểm nếu KPI Xanh. Điểm quy mô = min(100, số thành viên / 51 × 100); KPI Vàng cộng 0.</p>
       </Card>
 
       {/* Stat Cards */}
@@ -246,11 +246,11 @@ export default function AdminChaptersProgressPage() {
           <h2 className="font-bold text-[#172554]">Chưa đủ điều kiện tham gia BXH</h2>
           <p className="mt-1 text-xs text-[#737686]">Admin có thể dùng danh sách này để theo dõi Chapter cần hỗ trợ.</p>
           <div className="mt-3 flex flex-wrap gap-2">
-            {excludedChapters.map((chapter) => (
-              <span key={chapter.chapterId} className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-xs text-[#434655]">
-                <strong>{chapter.name}</strong> · {chapter.reason === 'KPI_RED' ? 'KPI đỏ' : chapter.reason === 'MINIMUM_MEMBERS' ? `Dưới 20 thành viên (${chapter.memberCount})` : `Chưa đạt 50% thành viên ≥70% (${chapter.atLeast70Percent}%)`}
-              </span>
-            ))}
+            {excludedChapters.map((chapter) => <button key={chapter.chapterId} onClick={() => handleOpenChapterDrillDown(chapter)} className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-left text-xs text-[#434655] hover:border-blue-300">
+              <strong>{chapter.name}</strong>
+              <span className="mt-1 block">{(chapter.reasons || []).map((reason: string) => reason === 'MINIMUM_MEMBERS' ? `Chưa đủ 20 thành viên (${chapter.memberCount})` : reason === 'COMPLETION_THRESHOLD' ? `Chưa đạt 50% thành viên ≥70% (${chapter.atLeast70Percent}% đã đạt)` : reason === 'KPI_RED' ? 'KPI Đỏ' : 'KPI Đen').join(' · ')}</span>
+              <span className="mt-1 block font-semibold text-blue-700">KPI & lịch sử →</span>
+            </button>)}
           </div>
         </Card>
       )}
@@ -283,6 +283,18 @@ export default function AdminChaptersProgressPage() {
               >
                 ✕
               </button>
+            </div>
+
+            <div className="rounded-2xl border border-blue-200 bg-blue-50/50 p-4 space-y-3">
+              <h4 className="font-bold text-[#172554]">Nhập KPI Chapter theo tháng</h4>
+              <div className="grid gap-2 sm:grid-cols-3">
+                <input type="month" value={kpiForm.month} onChange={(e) => setKpiForm({ ...kpiForm, month: e.target.value })} className="rounded-xl border border-[#cbdbf5] px-3 py-2 text-sm" />
+                <select value={kpiForm.status} onChange={(e) => setKpiForm({ ...kpiForm, status: e.target.value })} className="rounded-xl border border-[#cbdbf5] px-3 py-2 text-sm"><option value="BLACK">Đen</option><option value="RED">Đỏ</option><option value="YELLOW">Vàng</option><option value="GREEN">Xanh</option></select>
+                <Button loading={kpiSaving} onClick={saveKpi}>Lưu KPI</Button>
+              </div>
+              <input value={kpiForm.note} onChange={(e) => setKpiForm({ ...kpiForm, note: e.target.value })} placeholder="Ghi chú KPI" className="w-full rounded-xl border border-[#cbdbf5] px-3 py-2 text-sm" />
+              <h5 className="text-xs font-bold uppercase tracking-wide text-[#737686]">Lịch sử các tháng</h5>
+              <div className="max-h-40 overflow-auto divide-y divide-blue-100 text-xs">{kpiHistory.map((item, index) => <div key={`${item.month}-${index}`} className="grid grid-cols-3 gap-2 py-2"><span>{new Date(item.month).toLocaleDateString('vi-VN', { month: '2-digit', year: 'numeric' })}</span><strong>{item.status}</strong><span>{item.note || 'Không ghi chú'}</span></div>)}{!kpiHistory.length && <p className="py-2 text-[#737686]">Chưa có KPI tháng nào.</p>}</div>
             </div>
 
             {membersLoading ? (
@@ -353,19 +365,6 @@ export default function AdminChaptersProgressPage() {
               <Button variant="secondary" onClick={() => setSelectedChapter(null)}>
                 Đóng
               </Button>
-            </div>
-            <div className="rounded-2xl border border-[#eff4ff] p-4 space-y-3">
-              <h4 className="font-bold text-[#172554]">KPI Chapter theo tháng</h4>
-              <div className="grid gap-2 sm:grid-cols-3">
-                <input type="month" value={kpiForm.month} onChange={(e) => setKpiForm({ ...kpiForm, month: e.target.value })} className="rounded-xl border border-[#cbdbf5] px-3 py-2 text-sm" />
-                <select value={kpiForm.status} onChange={(e) => setKpiForm({ ...kpiForm, status: e.target.value })} className="rounded-xl border border-[#cbdbf5] px-3 py-2 text-sm"><option value="BLACK">Đen</option><option value="RED">Đỏ</option><option value="YELLOW">Vàng</option><option value="GREEN">Xanh</option></select>
-                <Button loading={kpiSaving} onClick={saveKpi}>Lưu KPI</Button>
-              </div>
-              <input value={kpiForm.note} onChange={(e) => setKpiForm({ ...kpiForm, note: e.target.value })} placeholder="Ghi chú KPI (tùy chọn)" className="w-full rounded-xl border border-[#cbdbf5] px-3 py-2 text-sm" />
-              <div className="max-h-40 overflow-auto divide-y divide-[#eff4ff] text-xs">
-                {kpiHistory.map((item, index) => <div key={`${item.month}-${index}`} className="flex items-center justify-between gap-3 py-2"><span>{new Date(item.month).toLocaleDateString('vi-VN', { month: '2-digit', year: 'numeric' })}</span><strong>{item.status}</strong><span className="text-[#737686]">Cập nhật {new Date(item.updatedAt).toLocaleString('vi-VN')}</span></div>)}
-                {!kpiHistory.length && <p className="py-2 text-[#737686]">Chưa có lịch sử KPI.</p>}
-              </div>
             </div>
           </div>
         )}

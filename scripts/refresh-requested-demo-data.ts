@@ -24,7 +24,7 @@ async function main() {
   if (!chapter) throw new Error('No active Chapter available for demo members')
   const chapterUnit = chapter.organization_unit_id ? await prisma.organizationUnit.findUnique({ where: { id: chapter.organization_unit_id } }) : null
   if (!chapterUnit) throw new Error('Demo Chapter has no organization unit')
-  const departmentNames = ['Ban Chủ tịch', 'Ban Nội dung', 'Ban Truyền thông', 'Ban Nhân sự', 'Ban Đối ngoại', 'Ban Sự kiện', 'Ban Tài chính']
+  const departmentNames = ['Ban Chủ tịch', 'Ban Nội dung', 'Ban Khách mời', 'Ban Thành viên', 'Ban Chất lượng', 'Ban TT&SK', 'Ban Thư ký']
   const departments = []
   for (const name of departmentNames) {
     const unit = await prisma.organizationUnit.findFirst({ where: { name, type: 'DEPARTMENT', parent_id: chapterUnit.id } }) || await prisma.organizationUnit.create({ data: { name, type: 'DEPARTMENT', parent_id: chapterUnit.id } })

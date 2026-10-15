@@ -18,6 +18,14 @@ function decodeSheetTitle(value: string) {
 async function fetchSheetTitles(spreadsheetId: string): Promise<string[]> {
   const html = await fetchPublicText(`https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`)
   const titles = new Set<string>()
+  const captionPattern = /docs-sheet-tab-caption[^>]*>([^<]+)</g
+  let captionMatch: RegExpExecArray | null
+  while ((captionMatch = captionPattern.exec(html)) !== null) {
+    const title = captionMatch[1]
+      .replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+      .trim()
+    if (title) titles.add(title)
+  }
   const patterns = [
     /"title":"((?:\\.|[^"\\])+)"[^{}]{0,500}?"sheetId":\d+/g,
     /"sheetId":\d+[^{}]{0,500}?"title":"((?:\\.|[^"\\])+)"/g,

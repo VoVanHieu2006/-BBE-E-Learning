@@ -125,9 +125,8 @@ export function calculateChapterLeaderboardMetrics(
     ? completions.filter((completion) => completion >= 70).length / memberCount
     : 0
   const completionScore = averageCompletion
-  // A Chapter reaches the full size component at 30 people, so 50 members
-  // do not obtain an advantage over a healthy 30-member Chapter.
-  const sizeScore = Math.min(100, (memberCount / 30) * 100)
+  // The size component grows linearly and reaches its cap at 51 members.
+  const sizeScore = Math.min(100, (memberCount / 51) * 100)
 
   return {
     memberCount,

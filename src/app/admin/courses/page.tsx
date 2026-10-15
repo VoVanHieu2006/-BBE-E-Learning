@@ -94,9 +94,7 @@ export default function AdminCoursesPage() {
           </h1>
           <p className="text-[#737686] mt-1 text-sm">Danh sách tất cả các khóa học trên hệ thống đào tạo BBE</p>
         </div>
-        <Link href="/admin/courses/new">
-          <Button>＋ Tạo khóa học mới</Button>
-        </Link>
+        <div className="flex gap-2"><Link href="/admin/courses/mandatory"><Button variant="outline">Ma trận khóa học bắt buộc</Button></Link><Link href="/admin/courses/new"><Button>＋ Tạo khóa học mới</Button></Link></div>
       </div>
 
       {!mounted || (loading && courses.length === 0) ? (
