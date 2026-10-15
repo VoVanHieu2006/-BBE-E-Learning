@@ -43,6 +43,7 @@ export async function GET(
   const assessment = await prisma.assessment.findUnique({
     where: { lesson_id: lessonId },
     include: {
+      question_pools: { orderBy: { sort_order: 'asc' } },
       questions: {
         include: {
           options: { orderBy: { sort_order: 'asc' } },
@@ -69,6 +70,11 @@ export async function GET(
       questionCount: assessment.question_count,
       durationMinutes: assessment.duration_minutes,
       totalQuestionCount: assessment.questions.length,
+      pools: assessment.question_pools.map((pool) => ({
+        poolId: pool.id,
+        name: pool.name,
+        sortOrder: pool.sort_order,
+      })),
       questions: assessment.questions.map((q) => ({
         questionId: q.id,
         id: q.id,

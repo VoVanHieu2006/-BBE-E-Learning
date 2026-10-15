@@ -8,38 +8,6 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 const jsonError = (code: string, message: string, status: number) =>
   NextResponse.json({ error: { code, message } }, { status })
 
-function formatAssessment(assessment: any) {
-  return {
-    assessmentId: assessment.id,
-    id: assessment.id,
-    assessmentType: 'COURSE_FINAL',
-    courseId: assessment.course_id,
-    title: assessment.title,
-    description: assessment.description,
-    questionCount: assessment.question_count,
-    durationMinutes: assessment.duration_minutes,
-    totalQuestionCount: assessment.questions.length,
-    pools: assessment.question_pools?.map((pool: any) => ({ poolId: pool.id, name: pool.name, sortOrder: pool.sort_order })) || [],
-    questions: assessment.questions.map((question: any) => ({
-      questionId: question.id,
-      id: question.id,
-      questionText: question.question_text,
-      type: question.question_type,
-      points: Number(question.points),
-      durationSeconds: question.duration_seconds,
-      sortOrder: question.sort_order,
-      poolId: question.pool_id,
-      explanation: question.explanation || '',
-      options: question.options.map((option: any) => ({
-        optionId: option.id,
-        id: option.id,
-        optionText: option.option_text,
-        isCorrect: option.is_correct,
-      })),
-    })),
-  }
-}
-
 /** Admin receives the authoring bank; learners receive only availability/results, never answer keys. */
 export async function GET(request: NextRequest, { params }: { params: { courseId: string } }) {
   if (!UUID_REGEX.test(params.courseId)) return jsonError('CourseNotFound', 'Khóa học không tồn tại.', 404)
@@ -55,9 +23,13 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
       title: true,
       status: true,
       final_assessment: {
-        include: {
-          question_pools: { orderBy: { sort_order: 'asc' } },
-          questions: { include: { options: { orderBy: { sort_order: 'asc' } } }, orderBy: { sort_order: 'asc' } },
+        select: {
+          id: true,
+          course_id: true,
+          title: true,
+          description: true,
+          question_count: true,
+          duration_minutes: true,
           _count: { select: { attempts: true, questions: true } },
         },
       },
@@ -65,11 +37,22 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
   })
   if (!course) return jsonError('CourseNotFound', 'Khóa học không tồn tại.', 404)
   if (role === 'ADMIN') {
+    const finalAssessment = course.final_assessment
     return NextResponse.json({
       courseId: course.id,
       courseTitle: course.title,
-      assessment: course.final_assessment ? formatAssessment(course.final_assessment) : null,
-      attemptCount: course.final_assessment?._count.attempts || 0,
+      assessment: finalAssessment ? {
+        assessmentId: finalAssessment.id,
+        id: finalAssessment.id,
+        assessmentType: 'COURSE_FINAL',
+        courseId: finalAssessment.course_id,
+        title: finalAssessment.title,
+        description: finalAssessment.description,
+        questionCount: finalAssessment.question_count,
+        durationMinutes: finalAssessment.duration_minutes,
+        totalQuestionCount: finalAssessment._count.questions,
+      } : null,
+      attemptCount: finalAssessment?._count.attempts || 0,
     }, { headers: { 'Cache-Control': 'private, no-store' } })
   }
 

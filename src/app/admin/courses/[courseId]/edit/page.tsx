@@ -87,6 +87,8 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
     assessment: any;
   } | null>(null);
   const [assessmentSaving, setAssessmentSaving] = useState(false);
+  const [assessmentLoading, setAssessmentLoading] = useState(false);
+  const assessmentLoadIdRef = useRef(0);
   const [assessmentFormError, setAssessmentFormError] = useState('');
   const [quizImportUrl, setQuizImportUrl] = useState('');
   const [quizImporting, setQuizImporting] = useState(false);
@@ -113,6 +115,12 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
       },
     ] as QuestionForm[],
   });
+
+  const closeAssessmentModal = () => {
+    assessmentLoadIdRef.current += 1;
+    setAssessmentLoading(false);
+    setShowAssessmentModal(false);
+  };
 
   useEffect(() => {
     loadCourse();
@@ -153,29 +161,40 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
 
   // ─── Open Assessment Modal for a specific Lesson ─────────────────────────────
   const openAssessmentEditorForLesson = async (sId: string, lesson: any) => {
+    const loadId = ++assessmentLoadIdRef.current;
     setActiveAssessmentMode('LESSON');
     setAssessmentFormError('');
     setQuizImportUrl('');
     setQuizImportErrors([]);
     const lId = lesson.lessonId || lesson.id;
+    setActiveLessonForAssessment({
+      sessionId: sId,
+      lessonId: lId,
+      lessonTitle: lesson.title,
+      assessment: lesson.assessment,
+    });
+    setShowAssessmentModal(true);
+    setAssessmentLoading(Boolean(lesson.assessment));
     let assessData = lesson.assessment;
 
-    // Always fetch fresh full questions and explanations if lesson has an assessment
+    // The modal opens immediately. One endpoint now returns assessment + pools,
+    // avoiding the old pair of sequential requests before anything was shown.
     if (assessData) {
-      const res = await apiFetch(`/api/v1/lessons/${lId}/assessment`, { noCache: true });
+      const res = await apiFetch(`/api/v1/lessons/${lId}/assessment`);
+      if (loadId !== assessmentLoadIdRef.current) return;
       if (res.ok && res.data) {
         assessData = res.data;
+      } else {
+        setAssessmentLoading(false);
+        showToast('error', res.error?.message || 'Không tải được nội dung Quiz.');
+        return;
       }
     }
     let poolNames = ['Nhóm 1'];
     const poolIndexById = new Map<string, number>();
-    const assessmentId = assessData?.assessmentId || assessData?.id;
-    if (assessmentId) {
-      const poolsResult = await apiFetch(`/api/v1/assessments/${assessmentId}/pools`, { noCache: true });
-      if (poolsResult.ok && Array.isArray(poolsResult.data?.items) && poolsResult.data.items.length > 0) {
-        poolNames = poolsResult.data.items.map((pool: any) => pool.name);
-        poolsResult.data.items.forEach((pool: any, index: number) => poolIndexById.set(pool.poolId, index));
-      }
+    if (Array.isArray(assessData?.pools) && assessData.pools.length > 0) {
+      poolNames = assessData.pools.map((pool: any) => pool.name);
+      assessData.pools.forEach((pool: any, index: number) => poolIndexById.set(pool.poolId, index));
     }
     setQuizPoolNames(poolNames);
 
@@ -230,17 +249,24 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
         ],
       });
     }
-    setShowAssessmentModal(true);
+    setAssessmentLoading(false);
   };
 
   const openFinalAssessmentEditor = async () => {
+    const loadId = ++assessmentLoadIdRef.current;
     setActiveAssessmentMode('COURSE_FINAL');
     setAssessmentFormError('');
     setQuizImportUrl('');
     setQuizImportErrors([]);
-    const result = await apiFetch(`/api/v1/courses/${params.courseId}/final-assessment`, { noCache: true });
+    setActiveLessonForAssessment(null);
+    setShowAssessmentModal(true);
+    setAssessmentLoading(true);
+    const result = await apiFetch(`/api/v1/courses/${params.courseId}/final-assessment`);
+    if (loadId !== assessmentLoadIdRef.current) return;
     if (!result.ok) {
+      setAssessmentLoading(false);
       showToast('error', result.error?.message || 'Không tải được cấu hình bài thi cuối khóa.');
+      setShowAssessmentModal(false);
       return;
     }
     const assessData = result.data?.assessment || null;
@@ -253,7 +279,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
         durationMinutes: assessData?.durationMinutes || 30,
         questions: [],
     });
-    setShowAssessmentModal(true);
+    setAssessmentLoading(false);
   };
 
   // ─── Course Info Form ──────────────────────────────────────────────────────────
@@ -1292,6 +1318,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
     });
 
     if (res.ok) {
+      clearApiCache(endpoint);
       showToast('success', activeAssessmentMode === 'COURSE_FINAL' ? 'Đã lưu cấu hình bài thi cuối khóa.' : `Đã lưu thành công bài kiểm tra (${assessmentForm.questions.length} câu hỏi)!`);
       setShowAssessmentModal(false);
       setAssessment(res.data);
@@ -2048,7 +2075,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
         {/* Modal: Assessment Multi-Type Question Builder with Question Reordering */}
         <Modal
           isOpen={showAssessmentModal}
-          onClose={() => setShowAssessmentModal(false)}
+          onClose={closeAssessmentModal}
           maxWidth="max-w-2xl"
         >
           <div className="p-6 space-y-5 max-h-[90vh] overflow-y-auto">
@@ -2057,12 +2084,27 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
                 {activeAssessmentMode === 'COURSE_FINAL' ? 'Cấu hình bài thi cuối khóa' : activeLessonForAssessment ? `Cấu hình Quiz: ${activeLessonForAssessment.lessonTitle}` : 'Cấu hình bài kiểm tra'}
               </h3>
               <button
-                onClick={() => setShowAssessmentModal(false)}
+                onClick={closeAssessmentModal}
                 className="text-[#737686] hover:text-[#172554] font-bold text-xl p-1 rounded-lg hover:bg-slate-100 transition"
               >
                 ✕
               </button>
             </div>
+
+            {assessmentLoading ? (
+              <div className="space-y-4 py-2" role="status" aria-live="polite">
+                <div className="flex items-center gap-3 rounded-2xl border border-blue-100 bg-blue-50/70 p-4 text-sm font-semibold text-blue-800">
+                  <span className="h-5 w-5 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600" />
+                  Đang tải nội dung bài kiểm tra...
+                </div>
+                <div className="h-10 animate-pulse rounded-xl bg-slate-100" />
+                <div className="h-20 animate-pulse rounded-xl bg-slate-100" />
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="h-10 animate-pulse rounded-xl bg-slate-100" />
+                  <div className="h-10 animate-pulse rounded-xl bg-slate-100" />
+                </div>
+              </div>
+            ) : <>
 
               {assessmentFormError && (
                 <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 font-semibold flex items-center gap-2">
@@ -2328,7 +2370,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
                   )}
                 </div>
                 <div className="flex gap-3">
-                  <Button variant="outline" onClick={() => setShowAssessmentModal(false)}>
+                  <Button variant="outline" onClick={closeAssessmentModal}>
                     Hủy
                   </Button>
                   <Button loading={assessmentSaving} loadingText="Đang lưu..." onClick={handleSaveAssessment}>
@@ -2336,6 +2378,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
                   </Button>
                 </div>
               </div>
+              </>}
             </div>
         </Modal>
     </>
