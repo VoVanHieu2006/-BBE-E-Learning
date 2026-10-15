@@ -5,6 +5,7 @@ import Sidebar from '@/components/layout/Sidebar';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
+import MonthPicker from '@/components/ui/MonthPicker';
 import { apiFetch, getCachedApiData } from '@/lib/api/client';
 
 export default function LeaderboardPage() {
@@ -20,6 +21,7 @@ export default function LeaderboardPage() {
   const [leaderboardMonth, setLeaderboardMonth] = useState<string | null>(null);
   const [leaderboardUpdatedAt, setLeaderboardUpdatedAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [chapterMonthLoading, setChapterMonthLoading] = useState(false);
 
   // Chapter Drill-down Modal
   const [selectedChapter, setSelectedChapter] = useState<any | null>(null);
@@ -91,16 +93,20 @@ export default function LeaderboardPage() {
   }
 
   async function loadChapterMonth(month: string) {
-    setLoading(true);
-    const res = await apiFetch(`/api/v1/leaderboard/chapters?month=${month}`, { noCache: true });
-    if (res.ok && res.data) {
-      setChapters(res.data.items || []);
-      setExcludedChapters(res.data.excluded || []);
-      setAvailableMonths(res.data.availableMonths || []);
-      setLeaderboardMonth(res.data.month || null);
-      setLeaderboardUpdatedAt(res.data.updatedAt || null);
+    if (chapterMonthLoading) return; // Chống chuyển tháng liên tục
+    setChapterMonthLoading(true);
+    try {
+      const res = await apiFetch(`/api/v1/leaderboard/chapters?month=${month}`, { noCache: true });
+      if (res.ok && res.data) {
+        setChapters(res.data.items || []);
+        setExcludedChapters(res.data.excluded || []);
+        setAvailableMonths(res.data.availableMonths || []);
+        setLeaderboardMonth(res.data.month || null);
+        setLeaderboardUpdatedAt(res.data.updatedAt || null);
+      }
+    } finally {
+      setChapterMonthLoading(false);
     }
-    setLoading(false);
   }
 
   async function handleOpenChapterDrillDown(chapter: any) {
@@ -280,71 +286,116 @@ export default function LeaderboardPage() {
       ) : (
         /* Chapter Standings Table */
         <div className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#eff4ff] bg-white p-4">
-          <strong className="text-sm text-[#172554]">Bảng xếp hạng theo tháng</strong>
-          <input type="month" value={leaderboardMonth?.slice(0, 7) || ''} onChange={(event) => void loadChapterMonth(event.target.value)} className="rounded-xl border border-[#cbdbf5] px-3 py-2 text-sm font-semibold" />
-          <span className="text-xs text-[#737686]">Có dữ liệu: {availableMonths.map((month) => month.split('-').reverse().join('/')).join(' · ') || 'chưa có'}</span>
-        </div>
-        <Card className="p-0 overflow-hidden border border-[#eff4ff]">
-          {chapters.length === 0 ? (
-            <div className="text-center py-16 text-[#737686]">Chưa có dữ liệu xếp hạng Chapter</div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-[#f8f9ff] text-[#434655] font-semibold border-b border-[#eff4ff]">
-                  <tr>
-                    <th className="px-6 py-4 w-16 text-center">Hạng</th>
-                    <th className="px-6 py-4">Chapter</th>
-                    <th className="px-6 py-4 text-center">Thành viên</th>
-                    <th className="px-6 py-4 text-center">% đạt ≥70%</th>
-                    <th className="px-6 py-4 text-center">⭐ / thành viên</th>
-                    <th className="px-6 py-4 text-center">KPI</th>
-                    <th className="px-6 py-4 text-right">Điểm BXH</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#eff4ff]">
-                  {chapters.map((ch, idx) => (
-                    <tr
-                      key={ch.chapterId || ch.id || idx}
-                      onClick={() => handleOpenChapterDrillDown(ch)}
-                      className="hover:bg-[#f8f9ff] transition cursor-pointer group"
-                    >
-                      <td className="px-6 py-4 text-center font-bold text-base">
-                        {getMedal(idx)}
-                      </td>
-                      <td className="px-6 py-4 font-bold text-[#172554]">
-                        <div className="group-hover:text-[#2563EB] transition-colors">{ch.name}</div>
-                        {ch.description && (
-                          <p className="text-xs text-[#737686] font-normal mt-0.5">{ch.description}</p>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 text-center text-[#434655] font-medium">
-                        <span className="inline-block px-2.5 py-0.5 rounded-full bg-blue-50 text-[#2563EB] text-xs font-bold">
-                          {ch.memberCount} thành viên
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-center text-[#172554] font-semibold">
-                        <div className="text-green-700">{ch.completion?.atLeast70Percent || 0}%</div>
-                      </td>
-                      <td className="px-6 py-4 text-center font-extrabold text-[#2563EB] text-base">
-                        {ch.stars?.averagePerMember || 0} ⭐
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${ch.kpi?.status === 'GREEN' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-800'}`}>
-                          {ch.kpi?.status === 'GREEN' ? 'Xanh' : 'Vàng'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-right font-extrabold text-[#2563EB] text-base">
-                        {ch.score}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#eff4ff] bg-white p-4 shadow-sm">
+            <div className="flex flex-wrap items-center gap-3">
+              <strong className="text-sm text-[#172554]">Bảng xếp hạng theo tháng:</strong>
+              <MonthPicker
+                value={leaderboardMonth?.slice(0, 7) || ''}
+                onChange={(m) => void loadChapterMonth(m)}
+                availableMonths={availableMonths}
+                disabled={chapterMonthLoading}
+              />
             </div>
-          )}
-        </Card>
-        {excludedChapters.length > 0 && <Card className="border border-amber-200 bg-amber-50/50"><h3 className="font-bold text-[#172554]">Chapter chưa có mặt trên BXH</h3><p className="mt-1 text-xs text-[#737686]">Các điều kiện chưa đạt trong kỳ đang xem:</p><div className="mt-3 grid gap-3 md:grid-cols-2">{excludedChapters.map((chapter) => <div key={chapter.chapterId} className="rounded-xl border border-amber-200 bg-white p-3"><strong className="text-sm text-[#172554]">{chapter.name}</strong><div className="mt-2 flex flex-col gap-1">{(chapter.reasons || []).map((reason: string) => <span key={reason} className="rounded-lg bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800">{reason === 'KPI_MISSING' ? `📅 Chưa nhập KPI tháng ${leaderboardMonth ? new Date(leaderboardMonth).toLocaleDateString('vi-VN', { month: '2-digit', year: 'numeric' }) : ''}` : reason === 'MINIMUM_MEMBERS' ? `👥 Chưa đủ 20 thành viên (${chapter.memberCount})` : reason === 'COMPLETION_THRESHOLD' ? `📘 Chưa đạt 50% thành viên ≥70% (${chapter.atLeast70Percent}% đã đạt)` : reason === 'KPI_RED' ? '🔴 KPI Đỏ' : '⚫ KPI Đen'}</span>)}</div></div>)}</div></Card>}
+            {leaderboardUpdatedAt && (
+              <span className="text-xs text-[#737686]">
+                Cập nhật: {new Date(leaderboardUpdatedAt).toLocaleDateString('vi-VN')}
+              </span>
+            )}
+          </div>
+
+          <div className="relative">
+            {chapterMonthLoading && (
+              <div className="absolute inset-0 z-20 flex flex-col items-center justify-center rounded-2xl bg-white/70 backdrop-blur-[2px] pointer-events-none select-none transition-all">
+                <div className="flex items-center gap-3 rounded-2xl bg-white px-6 py-4 shadow-xl border border-[#eff4ff]">
+                  <span className="h-6 w-6 animate-spin rounded-full border-2 border-[#2563EB] border-t-transparent" />
+                  <span className="text-sm font-semibold text-[#172554]">
+                    Đang tải bảng xếp hạng Chapter...
+                  </span>
+                </div>
+              </div>
+            )}
+
+            <Card className={`p-0 overflow-hidden border border-[#eff4ff] transition-opacity duration-200 ${chapterMonthLoading ? 'pointer-events-none select-none opacity-40' : ''}`}>
+              {chapters.length === 0 ? (
+                <div className="text-center py-16 text-[#737686]">Chưa có dữ liệu xếp hạng Chapter</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-[#f8f9ff] text-[#434655] font-semibold border-b border-[#eff4ff]">
+                      <tr>
+                        <th className="px-6 py-4 w-16 text-center">Hạng</th>
+                        <th className="px-6 py-4">Chapter</th>
+                        <th className="px-6 py-4 text-center">Thành viên</th>
+                        <th className="px-6 py-4 text-center">% đạt ≥70%</th>
+                        <th className="px-6 py-4 text-center">⭐ / thành viên</th>
+                        <th className="px-6 py-4 text-center">KPI</th>
+                        <th className="px-6 py-4 text-right">Điểm BXH</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#eff4ff]">
+                      {chapters.map((ch, idx) => (
+                        <tr
+                          key={ch.chapterId || ch.id || idx}
+                          onClick={() => !chapterMonthLoading && handleOpenChapterDrillDown(ch)}
+                          className="hover:bg-[#f8f9ff] transition cursor-pointer group"
+                        >
+                          <td className="px-6 py-4 text-center font-bold text-base">
+                            {getMedal(idx)}
+                          </td>
+                          <td className="px-6 py-4 font-bold text-[#172554]">
+                            <div className="group-hover:text-[#2563EB] transition-colors">{ch.name}</div>
+                            {ch.description && (
+                              <p className="text-xs text-[#737686] font-normal mt-0.5">{ch.description}</p>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 text-center text-[#434655] font-medium">
+                            <span className="inline-block px-2.5 py-0.5 rounded-full bg-blue-50 text-[#2563EB] text-xs font-bold">
+                              {ch.memberCount} thành viên
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-center text-[#172554] font-semibold">
+                            <div className="text-green-700">{ch.completion?.atLeast70Percent || 0}%</div>
+                          </td>
+                          <td className="px-6 py-4 text-center font-extrabold text-[#2563EB] text-base">
+                            {ch.stars?.averagePerMember || 0} ⭐
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${ch.kpi?.status === 'GREEN' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-800'}`}>
+                              {ch.kpi?.status === 'GREEN' ? 'Xanh' : 'Vàng'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-right font-extrabold text-[#2563EB] text-base">
+                            {ch.score}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Card>
+
+            {excludedChapters.length > 0 && (
+              <Card className={`mt-4 border border-amber-200 bg-amber-50/50 transition-opacity duration-200 ${chapterMonthLoading ? 'pointer-events-none select-none opacity-40' : ''}`}>
+                <h3 className="font-bold text-[#172554]">Chapter chưa có mặt trên BXH</h3>
+                <p className="mt-1 text-xs text-[#737686]">Các điều kiện chưa đạt trong kỳ đang xem:</p>
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  {excludedChapters.map((chapter) => (
+                    <div key={chapter.chapterId} className="rounded-xl border border-amber-200 bg-white p-3">
+                      <strong className="text-sm text-[#172554]">{chapter.name}</strong>
+                      <div className="mt-2 flex flex-col gap-1">
+                        {(chapter.reasons || []).map((reason: string) => (
+                          <span key={reason} className="rounded-lg bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800">
+                            {reason === 'KPI_MISSING' ? `📅 Chưa nhập KPI tháng ${leaderboardMonth ? new Date(leaderboardMonth).toLocaleDateString('vi-VN', { month: '2-digit', year: 'numeric' }) : ''}` : reason === 'MINIMUM_MEMBERS' ? `👥 Chưa đủ 20 thành viên (${chapter.memberCount})` : reason === 'COMPLETION_THRESHOLD' ? `📘 Chưa đạt 50% thành viên ≥70% (${chapter.atLeast70Percent}% đã đạt)` : reason === 'KPI_RED' ? '🔴 KPI Đỏ' : '⚫ KPI Đen'}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            )}
+          </div>
         </div>
       )}
 

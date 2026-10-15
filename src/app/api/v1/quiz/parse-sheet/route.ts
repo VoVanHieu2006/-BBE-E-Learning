@@ -4,10 +4,12 @@ import { buildGoogleExportUrl, extractGoogleDocRef, parseQuizCsv, parseQuizText 
 
 async function fetchPublicText(url: string) {
   const response = await fetch(url, { cache: 'no-store', redirect: 'follow' })
+  if (!response.ok) throw new Error('DocumentNotPublic')
   const text = await response.text().catch(() => '')
-  const blocked = response.url.includes('accounts.google.com') ||
-    (/^<!DOCTYPE html/i.test(text) && /sign in|đăng nhập/i.test(text))
-  if (!response.ok || blocked) throw new Error('DocumentNotPublic')
+  const isSignInUrl = response.url.includes('accounts.google.com') || response.url.includes('ServiceLogin')
+  const isCsvBlocked = (url.includes('/export') || url.includes('gviz/tq')) && /^<!DOCTYPE html/i.test(text.trim())
+  const isDocBlocked = /<title>[^<]*(sign[\s-]?in|đăng nhập)[^<]*<\/title>/i.test(text)
+  if (isSignInUrl || isCsvBlocked || isDocBlocked) throw new Error('DocumentNotPublic')
   return text
 }
 
@@ -22,21 +24,21 @@ async function fetchSheetTitles(spreadsheetId: string): Promise<string[]> {
   let captionMatch: RegExpExecArray | null
   while ((captionMatch = captionPattern.exec(html)) !== null) {
     const title = captionMatch[1]
-      .replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+      .replace(/&amp;/g, '&')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
       .trim()
     if (title) titles.add(title)
   }
-  const patterns = [
-    /"title":"((?:\\.|[^"\\])+)"[^{}]{0,500}?"sheetId":\d+/g,
-    /"sheetId":\d+[^{}]{0,500}?"title":"((?:\\.|[^"\\])+)"/g,
-    /\\"name\\":\\"((?:\\.|[^"\\])+)\\"[^\n]{0,500}?\\"gid\\":\d+/g,
-  ]
-  for (const pattern of patterns) {
-    let match: RegExpExecArray | null
-    while ((match = pattern.exec(html)) !== null) {
-      const title = decodeSheetTitle(match[1]).trim()
-      if (title && title.length <= 100) titles.add(title)
-    }
+  if (titles.size > 0) return Array.from(titles)
+
+  const bootPattern = /\\?"([0-9]{1,15})\\?",\[\{\\?"1\\":\[\[0,0,\\?"([^"\\]+)\\?"/g
+  let bootMatch: RegExpExecArray | null
+  while ((bootMatch = bootPattern.exec(html)) !== null) {
+    const title = decodeSheetTitle(bootMatch[2]).trim()
+    if (title && title.length <= 100) titles.add(title)
   }
   return Array.from(titles)
 }

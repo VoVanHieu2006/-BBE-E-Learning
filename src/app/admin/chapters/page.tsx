@@ -5,6 +5,7 @@ import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Toast, { ToastMessage } from '@/components/ui/Toast';
 import Modal from '@/components/ui/Modal';
+import MonthPicker from '@/components/ui/MonthPicker';
 import { apiFetch, getCachedApiData } from '@/lib/api/client';
 import { useAdmin } from '../AdminContext';
 
@@ -38,14 +39,19 @@ export default function AdminChaptersProgressPage() {
   }, []);
 
   async function loadChapters(month?: string) {
-    const res = await apiFetch(`/api/v1/leaderboard/chapters${month ? `?month=${month}` : ''}`, { noCache: true });
-    if (res.ok && res.data) {
-      setChapters(res.data.items || []);
-      setExcludedChapters(res.data.excluded || []);
-      setLeaderboardMonth(String(res.data.month || '').slice(0, 7));
-      setAvailableMonths(res.data.availableMonths || []);
+    if (loading && month !== undefined) return; // Không cho chuyển tháng liên tục
+    setLoading(true);
+    try {
+      const res = await apiFetch(`/api/v1/leaderboard/chapters${month ? `?month=${month}` : ''}`, { noCache: true });
+      if (res.ok && res.data) {
+        setChapters(res.data.items || []);
+        setExcludedChapters(res.data.excluded || []);
+        setLeaderboardMonth(String(res.data.month || '').slice(0, 7));
+        setAvailableMonths(res.data.availableMonths || []);
+      }
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   async function handleOpenChapterDrillDown(chapter: any) {
@@ -134,152 +140,179 @@ export default function AdminChaptersProgressPage() {
       </Card>
 
       <div className="mb-6 flex flex-wrap items-center gap-3 rounded-2xl border border-[#eff4ff] bg-white p-4 shadow-sm">
-        <strong className="text-sm text-[#172554]">Kỳ bảng xếp hạng</strong>
-        <input type="month" value={leaderboardMonth} onChange={(event) => { setLoading(true); void loadChapters(event.target.value) }} className="rounded-xl border border-[#cbdbf5] px-3 py-2 text-sm font-semibold" />
-        <span className="text-xs text-[#737686]">Có dữ liệu: {availableMonths.map((month) => month.split('-').reverse().join('/')).join(' · ') || 'chưa có'}</span>
+        <strong className="text-sm text-[#172554]">Kỳ bảng xếp hạng:</strong>
+        <MonthPicker
+          value={leaderboardMonth}
+          onChange={(m) => void loadChapters(m)}
+          availableMonths={availableMonths}
+          disabled={loading}
+        />
       </div>
 
       {/* Stat Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-        <Card shadow="md" className="p-4 border border-[#eff4ff]">
-          <div className="text-xs font-semibold text-[#737686]">Chapter đủ điều kiện BXH</div>
-          <div className="text-2xl font-bold text-[#172554] mt-1">{chapters.length}</div>
-          <div className="text-[11px] text-[#737686] mt-0.5">Chapter đỏ/thiếu điều kiện bị loại</div>
-        </Card>
-        <Card shadow="md" className="p-4 border border-[#eff4ff]">
-          <div className="text-xs font-semibold text-blue-700">Tổng thành viên</div>
-          <div className="text-2xl font-bold text-[#2563EB] mt-1">{totalMembersAll}</div>
-          <div className="text-[11px] text-[#737686] mt-0.5">Học viên tham gia</div>
-        </Card>
-        <Card shadow="md" className="p-4 border border-[#eff4ff]">
-          <div className="text-xs font-semibold text-green-700">% thành viên đạt ≥70%</div>
-          <div className="text-2xl font-bold text-green-700 mt-1">{averageChapterCompletion}%</div>
-          <div className="text-[11px] text-[#737686] mt-0.5">Trung bình các Chapter đủ điều kiện</div>
-        </Card>
-        <Card shadow="md" className="p-4 border border-[#eff4ff]">
-          <div className="text-xs font-semibold text-amber-700">⭐ Bình quân / thành viên</div>
-          <div className="text-2xl font-bold text-amber-600 mt-1">{averageStarsPerMember} ⭐</div>
-          <div className="text-[11px] text-[#737686] mt-0.5">Không dùng tổng Star để so quy mô</div>
-        </Card>
-        <Card shadow="md" className="p-4 border border-[#eff4ff]">
-          <div className="text-xs font-semibold text-amber-700">Chapter dẫn đầu</div>
-          <div
-            className="text-sm lg:text-base font-bold text-amber-600 mt-1 break-words leading-snug"
-            title={chapters[0]?.name || 'Chưa có'}
-          >
-            {chapters[0]?.name || '—'}
-          </div>
-          <div className="text-[11px] text-[#737686] mt-0.5">Điểm BXH: {chapters[0]?.score || 0}</div>
-        </Card>
-      </div>
-
-      <div className="grid items-start gap-6 xl:grid-cols-[300px_minmax(0,1fr)]">
-        <Card className="p-4 xl:sticky xl:top-24">
-          <h2 className="font-bold text-[#172554]">Tất cả Chapter</h2>
-          <p className="mb-3 mt-1 text-xs text-[#737686]">Chọn Chapter để nhập KPI và xem lịch sử.</p>
-          <div className="max-h-[620px] space-y-2 overflow-auto">
-            {[...chapters, ...excludedChapters].sort((a, b) => a.name.localeCompare(b.name, 'vi')).map((chapter) => <button key={chapter.chapterId} onClick={() => handleOpenChapterDrillDown(chapter)} className="flex w-full items-center justify-between gap-2 rounded-xl border border-[#eff4ff] p-3 text-left text-xs hover:border-blue-300 hover:bg-blue-50">
-              <span className="font-semibold text-[#172554]">{chapter.name}</span>
-              <span className={`shrink-0 rounded-full px-2 py-1 font-bold ${chapter.reasons?.length ? 'bg-amber-100 text-amber-800' : 'bg-green-100 text-green-700'}`}>{chapter.reasons?.length ? `${chapter.reasons.length} lý do` : `#${chapter.rank}`}</span>
-            </button>)}
-          </div>
-        </Card>
-        <div className="min-w-0">
-      {/* Chapter Rankings Table */}
-      <Card className="p-0 overflow-hidden border border-[#eff4ff] shadow-sm">
-        {!mounted || (loading && chapters.length === 0) ? (
-          <div className="p-8 space-y-4 animate-pulse">
-            {[1, 2, 3].map((n) => (
-              <div key={n} className="h-16 bg-slate-100 rounded-xl"></div>
-            ))}
-          </div>
-        ) : chapters.length === 0 ? (
-          <div className="text-center py-16 text-[#737686]">
-            <p className="text-lg font-semibold text-[#172554] mb-1">Chưa có dữ liệu Chapter</p>
-            <p className="text-sm text-[#737686]">Vui lòng tạo chapter hoặc mời Trưởng Chapter.</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-[#f8f9ff] text-[#434655] font-semibold border-b border-[#eff4ff]">
-                <tr>
-                  <th className="px-6 py-4 w-16 text-center">Hạng</th>
-                  <th className="px-6 py-4">Tên Chapter</th>
-                  <th className="px-6 py-4 text-center">Thành viên</th>
-                  <th className="px-4 py-4 text-center">% đạt ≥70%</th>
-                  <th className="px-6 py-4 text-center">⭐ / thành viên</th>
-                  <th className="px-3 py-4 text-center whitespace-nowrap">KPI tháng</th>
-                  <th className="px-6 py-4 text-center">Điểm BXH</th>
-                  <th className="px-6 py-4 text-right">Chi tiết</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#eff4ff]">
-                {chapters.map((ch, idx) => (
-                  <tr
-                    key={ch.chapterId || ch.id || idx}
-                    onClick={() => handleOpenChapterDrillDown(ch)}
-                    className="hover:bg-[#f8f9ff] transition cursor-pointer group"
-                  >
-                    <td className="px-6 py-4 text-center font-bold text-base">
-                      {getMedal(idx)}
-                    </td>
-                    <td className="px-6 py-4 font-bold text-[#172554]">
-                      <div className="group-hover:text-[#2563EB] transition-colors">{ch.name}</div>
-                      {ch.description && (
-                        <p className="text-xs text-[#737686] font-normal mt-0.5 line-clamp-1">{ch.description}</p>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 text-center font-medium text-[#434655]">
-                      <span className="whitespace-nowrap inline-flex items-center px-2.5 py-0.5 rounded-full bg-blue-50 text-[#2563EB] text-xs font-bold">
-                        {ch.memberCount} học viên
-                      </span>
-                    </td>
-                    <td className="px-4 py-4 text-center text-[#172554] font-semibold">
-                      <div className="text-base text-green-700">{ch.completion?.atLeast70Percent || 0}%</div>
-                    </td>
-                    <td className="px-6 py-4 text-center font-extrabold text-[#2563EB] text-base">
-                      {ch.stars?.averagePerMember || 0} ⭐
-                    </td>
-                    <td className="px-3 py-4 text-center whitespace-nowrap">
-                      <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${ch.kpi?.status === 'GREEN' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-800'}`}>
-                        {ch.kpi?.status === 'GREEN' ? 'Xanh +20' : 'Vàng +0'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-center font-extrabold text-[#172554] text-base">
-                      {ch.score}
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleOpenChapterDrillDown(ch);
-                        }}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#eff4ff] hover:bg-[#2563EB] text-[#2563EB] hover:text-white text-xs font-bold transition-all shadow-xs"
-                      >
-                        KPI & lịch sử →
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      <div className="relative mb-6">
+        {loading && (
+          <div className="absolute inset-0 z-20 flex items-center justify-center rounded-2xl bg-white/70 backdrop-blur-[2px] pointer-events-none select-none transition-all">
+            <div className="flex items-center gap-2.5 rounded-xl bg-white px-4 py-2 shadow-md border border-[#eff4ff]">
+              <span className="h-5 w-5 animate-spin rounded-full border-2 border-[#2563EB] border-t-transparent" />
+              <span className="text-xs font-semibold text-[#172554]">Đang cập nhật chỉ số...</span>
+            </div>
           </div>
         )}
-      </Card>
+        <div className={`grid grid-cols-2 lg:grid-cols-5 gap-4 transition-opacity duration-200 ${loading ? 'pointer-events-none select-none opacity-40' : ''}`}>
+          <Card shadow="md" className="p-4 border border-[#eff4ff]">
+            <div className="text-xs font-semibold text-[#737686]">Chapter đủ điều kiện BXH</div>
+            <div className="text-2xl font-bold text-[#172554] mt-1">{chapters.length}</div>
+            <div className="text-[11px] text-[#737686] mt-0.5">Chapter đỏ/thiếu điều kiện bị loại</div>
+          </Card>
+          <Card shadow="md" className="p-4 border border-[#eff4ff]">
+            <div className="text-xs font-semibold text-blue-700">Tổng thành viên</div>
+            <div className="text-2xl font-bold text-[#2563EB] mt-1">{totalMembersAll}</div>
+            <div className="text-[11px] text-[#737686] mt-0.5">Học viên tham gia</div>
+          </Card>
+          <Card shadow="md" className="p-4 border border-[#eff4ff]">
+            <div className="text-xs font-semibold text-green-700">% thành viên đạt ≥70%</div>
+            <div className="text-2xl font-bold text-green-700 mt-1">{averageChapterCompletion}%</div>
+            <div className="text-[11px] text-[#737686] mt-0.5">Trung bình các Chapter đủ điều kiện</div>
+          </Card>
+          <Card shadow="md" className="p-4 border border-[#eff4ff]">
+            <div className="text-xs font-semibold text-amber-700">⭐ Bình quân / thành viên</div>
+            <div className="text-2xl font-bold text-amber-600 mt-1">{averageStarsPerMember} ⭐</div>
+            <div className="text-[11px] text-[#737686] mt-0.5">Không dùng tổng Star để so quy mô</div>
+          </Card>
+          <Card shadow="md" className="p-4 border border-[#eff4ff]">
+            <div className="text-xs font-semibold text-amber-700">Chapter dẫn đầu</div>
+            <div
+              className="text-sm lg:text-base font-bold text-amber-600 mt-1 break-words leading-snug"
+              title={chapters[0]?.name || 'Chưa có'}
+            >
+              {chapters[0]?.name || '—'}
+            </div>
+            <div className="text-[11px] text-[#737686] mt-0.5">Điểm BXH: {chapters[0]?.score || 0}</div>
+          </Card>
+        </div>
+      </div>
 
-      {excludedChapters.length > 0 && (
-        <Card className="mt-6 border border-amber-200 bg-amber-50/50 shadow-sm">
-          <h2 className="font-bold text-[#172554]">Chưa đủ điều kiện tham gia BXH</h2>
-          <p className="mt-1 text-xs text-[#737686]">Admin có thể dùng danh sách này để theo dõi Chapter cần hỗ trợ.</p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {excludedChapters.map((chapter) => <button key={chapter.chapterId} onClick={() => handleOpenChapterDrillDown(chapter)} className="min-w-[260px] rounded-xl border border-amber-200 bg-white px-4 py-3 text-left text-xs text-[#434655] hover:border-blue-300 hover:shadow-sm">
-              <strong>{chapter.name}</strong>
-              <span className="mt-2 flex flex-col gap-1">{(chapter.reasons || []).map((reason: string) => <span key={reason} className={`rounded-lg px-2 py-1 font-semibold ${reason === 'KPI_MISSING' ? 'bg-slate-100 text-slate-700' : reason.startsWith('KPI_') ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-800'}`}>{reason === 'KPI_MISSING' ? `📅 Chưa nhập KPI tháng ${leaderboardMonth.split('-')[1]}/${leaderboardMonth.split('-')[0]}` : reason === 'MINIMUM_MEMBERS' ? `👥 Chưa đủ 20 thành viên (${chapter.memberCount})` : reason === 'COMPLETION_THRESHOLD' ? `📘 Chưa đạt 50% thành viên ≥70% (${chapter.atLeast70Percent}% đã đạt)` : reason === 'KPI_RED' ? '🔴 KPI Đỏ' : '⚫ KPI Đen'}</span>)}</span>
-              <span className="mt-1 block font-semibold text-blue-700">KPI & lịch sử →</span>
-            </button>)}
+      <div className="relative">
+        {loading && (
+          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center rounded-2xl bg-white/70 backdrop-blur-[2px] pointer-events-none select-none transition-all">
+            <div className="flex items-center gap-3 rounded-2xl bg-white px-6 py-4 shadow-xl border border-[#eff4ff]">
+              <span className="h-6 w-6 animate-spin rounded-full border-2 border-[#2563EB] border-t-transparent" />
+              <span className="text-sm font-semibold text-[#172554]">
+                Đang tải bảng xếp hạng Chapter...
+              </span>
+            </div>
           </div>
+        )}
+
+        <div className={`grid items-start gap-6 xl:grid-cols-[300px_minmax(0,1fr)] transition-opacity duration-200 ${loading ? 'pointer-events-none select-none opacity-40' : ''}`}>
+          <Card className="p-4 xl:sticky xl:top-24">
+            <h2 className="font-bold text-[#172554]">Tất cả Chapter</h2>
+            <p className="mb-3 mt-1 text-xs text-[#737686]">Chọn Chapter để nhập KPI và xem lịch sử.</p>
+            <div className="max-h-[620px] space-y-2 overflow-auto">
+              {[...chapters, ...excludedChapters].sort((a, b) => a.name.localeCompare(b.name, 'vi')).map((chapter) => <button key={chapter.chapterId} onClick={() => !loading && handleOpenChapterDrillDown(chapter)} className="flex w-full items-center justify-between gap-2 rounded-xl border border-[#eff4ff] p-3 text-left text-xs hover:border-blue-300 hover:bg-blue-50">
+                <span className="font-semibold text-[#172554]">{chapter.name}</span>
+                <span className={`shrink-0 rounded-full px-2 py-1 font-bold ${chapter.reasons?.length ? 'bg-amber-100 text-amber-800' : 'bg-green-100 text-green-700'}`}>{chapter.reasons?.length ? `${chapter.reasons.length} lý do` : `#${chapter.rank}`}</span>
+              </button>)}
+            </div>
+          </Card>
+          <div className="min-w-0">
+        {/* Chapter Rankings Table */}
+        <Card className="p-0 overflow-hidden border border-[#eff4ff] shadow-sm">
+          {!mounted || (loading && chapters.length === 0) ? (
+            <div className="p-8 space-y-4 animate-pulse">
+              {[1, 2, 3].map((n) => (
+                <div key={n} className="h-16 bg-slate-100 rounded-xl"></div>
+              ))}
+            </div>
+          ) : chapters.length === 0 ? (
+            <div className="text-center py-16 text-[#737686]">
+              <p className="text-lg font-semibold text-[#172554] mb-1">Chưa có dữ liệu Chapter</p>
+              <p className="text-sm text-[#737686]">Vui lòng tạo chapter hoặc mời Trưởng Chapter.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-[#f8f9ff] text-[#434655] font-semibold border-b border-[#eff4ff]">
+                  <tr>
+                    <th className="px-6 py-4 w-16 text-center">Hạng</th>
+                    <th className="px-6 py-4">Tên Chapter</th>
+                    <th className="px-6 py-4 text-center">Thành viên</th>
+                    <th className="px-4 py-4 text-center">% đạt ≥70%</th>
+                    <th className="px-6 py-4 text-center">⭐ / thành viên</th>
+                    <th className="px-3 py-4 text-center whitespace-nowrap">KPI tháng</th>
+                    <th className="px-6 py-4 text-center">Điểm BXH</th>
+                    <th className="px-6 py-4 text-right">Chi tiết</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#eff4ff]">
+                  {chapters.map((ch, idx) => (
+                    <tr
+                      key={ch.chapterId || ch.id || idx}
+                      onClick={() => !loading && handleOpenChapterDrillDown(ch)}
+                      className="hover:bg-[#f8f9ff] transition cursor-pointer group"
+                    >
+                      <td className="px-6 py-4 text-center font-bold text-base">
+                        {getMedal(idx)}
+                      </td>
+                      <td className="px-6 py-4 font-bold text-[#172554]">
+                        <div className="group-hover:text-[#2563EB] transition-colors">{ch.name}</div>
+                        {ch.description && (
+                          <p className="text-xs text-[#737686] font-normal mt-0.5 line-clamp-1">{ch.description}</p>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 text-center font-medium text-[#434655]">
+                        <span className="whitespace-nowrap inline-flex items-center px-2.5 py-0.5 rounded-full bg-blue-50 text-[#2563EB] text-xs font-bold">
+                          {ch.memberCount} học viên
+                        </span>
+                      </td>
+                      <td className="px-4 py-4 text-center text-[#172554] font-semibold">
+                        <div className="text-base text-green-700">{ch.completion?.atLeast70Percent || 0}%</div>
+                      </td>
+                      <td className="px-6 py-4 text-center font-extrabold text-[#2563EB] text-base">
+                        {ch.stars?.averagePerMember || 0} ⭐
+                      </td>
+                      <td className="px-3 py-4 text-center whitespace-nowrap">
+                        <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${ch.kpi?.status === 'GREEN' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-800'}`}>
+                          {ch.kpi?.status === 'GREEN' ? 'Xanh +20' : 'Vàng +0'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-center font-extrabold text-[#172554] text-base">
+                        {ch.score}
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (!loading) handleOpenChapterDrillDown(ch);
+                          }}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#eff4ff] hover:bg-[#2563EB] text-[#2563EB] hover:text-white text-xs font-bold transition-all shadow-xs"
+                        >
+                          KPI & lịch sử →
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </Card>
-      )}
+
+        {excludedChapters.length > 0 && (
+          <Card className="mt-6 border border-amber-200 bg-amber-50/50 shadow-sm">
+            <h2 className="font-bold text-[#172554]">Chưa đủ điều kiện tham gia BXH</h2>
+            <p className="mt-1 text-xs text-[#737686]">Admin có thể dùng danh sách này để theo dõi Chapter cần hỗ trợ.</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {excludedChapters.map((chapter) => <button key={chapter.chapterId} onClick={() => !loading && handleOpenChapterDrillDown(chapter)} className="min-w-[260px] rounded-xl border border-amber-200 bg-white px-4 py-3 text-left text-xs text-[#434655] hover:border-blue-300 hover:shadow-sm">
+                <strong>{chapter.name}</strong>
+                <span className="mt-2 flex flex-col gap-1">{(chapter.reasons || []).map((reason: string) => <span key={reason} className={`rounded-lg px-2 py-1 font-semibold ${reason === 'KPI_MISSING' ? 'bg-slate-100 text-slate-700' : reason.startsWith('KPI_') ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-800'}`}>{reason === 'KPI_MISSING' ? `📅 Chưa nhập KPI tháng ${leaderboardMonth.split('-')[1]}/${leaderboardMonth.split('-')[0]}` : reason === 'MINIMUM_MEMBERS' ? `👥 Chưa đủ 20 thành viên (${chapter.memberCount})` : reason === 'COMPLETION_THRESHOLD' ? `📘 Chưa đạt 50% thành viên ≥70% (${chapter.atLeast70Percent}% đã đạt)` : reason === 'KPI_RED' ? '🔴 KPI Đỏ' : '⚫ KPI Đen'}</span>)}</span>
+                <span className="mt-1 block font-semibold text-blue-700">KPI & lịch sử →</span>
+              </button>)}
+            </div>
+          </Card>
+        )}
+          </div>
         </div>
       </div>
 
