@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs'
 import { SignJWT } from 'jose'
 import crypto from 'crypto'
 import { hasActiveAffiliation } from '@/lib/affiliation-access'
+import { getLearningManagerKind } from '@/lib/manager-learning-access'
 
 const JWT_ACCESS_SECRET = process.env.JWT_ACCESS_SECRET || ''
 const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || ''
@@ -73,7 +74,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Generate JWT tokens concurrently
-    const chapterId = user.chapter_members?.[0]?.chapter?.id || undefined
+    const managerKind = await getLearningManagerKind(user.id, user.role)
+    const chapterId = managerKind === 'LEAD_DNA' ? undefined : user.chapter_members?.[0]?.chapter?.id || undefined
 
     const accessSecret = new TextEncoder().encode(JWT_ACCESS_SECRET)
     const refreshSecret = new TextEncoder().encode(JWT_REFRESH_SECRET)
@@ -125,7 +127,10 @@ export async function POST(request: NextRequest) {
         role: user.role,
         status: user.status,
         chapterId: chapterId || null,
-        chapterName: user.chapter_members?.[0]?.chapter?.name || null,
+        chapterName: managerKind === 'LEAD_DNA' ? null : user.chapter_members?.[0]?.chapter?.name || null,
+        managerKind,
+        isLearningManager: Boolean(managerKind),
+        isOrganizationManager: managerKind === 'LEAD_DNA',
       },
     }, { status: 200 })
 

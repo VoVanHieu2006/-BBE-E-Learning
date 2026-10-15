@@ -5,6 +5,7 @@ import { awardStars, canEarnStarsForCourse, starsForVideoDuration } from '@/lib/
 import { checkLessonProgression } from '@/lib/progression'
 import { syncCourseAssignmentCompletion } from '@/lib/learning-assignments'
 import { capVideoProgress, hasWatchedFullVideo } from '@/lib/video-progress-rules'
+import { isLearningManager } from '@/lib/manager-learning-access'
 
 /**
  * PATCH / POST /api/v1/lessons/[lessonId]/progress
@@ -15,6 +16,9 @@ export async function PATCH(request: NextRequest, { params }: { params: { lesson
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: 401 })
 
   const userId = (auth as any).context!.userId
+  if (await isLearningManager(userId, auth.context!.role)) {
+    return NextResponse.json({ error: { code: 'ManagementOnlyAccount', message: 'Tài khoản quản lý không ghi nhận tiến độ học tập.' } }, { status: 403 })
+  }
   const isAdmin = (auth as any).context!.role === 'ADMIN'
 
   const gate = await checkLessonProgression(userId, params.lessonId, 'WATCH', isAdmin)

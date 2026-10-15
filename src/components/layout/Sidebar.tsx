@@ -49,6 +49,12 @@ function getStudentNav(chapterId?: string | null, isOrganizationManager = false)
   return items;
 }
 
+const dnaLeadNav: NavItem[] = [
+  { label: 'Quản lý thành viên DNA', href: '/organization-manager', icon: '🏢', prefetchUrls: ['/api/v1/organization/managed-units'] },
+  { label: 'Bảng xếp hạng nội bộ DNA', href: '/organization-manager/leaderboard', icon: '🏆', prefetchUrls: ['/api/v1/organization/dna-leaderboard'] },
+  { label: 'Hồ sơ quản lý', href: '/student/profile', icon: '👤', prefetchUrls: ['/api/v1/users/me'] },
+];
+
 const adminNav: NavItem[] = [
   { label: 'Tổng quan', href: '/admin/dashboard', icon: '📊', prefetchUrls: ['/api/v1/admin/overview'] },
   { label: 'Khóa học & lộ trình', href: '/admin/courses', icon: '📚', prefetchUrls: ['/api/v1/courses', '/api/v1/admin/learning-rules'] },
@@ -65,8 +71,9 @@ const chapterManagerNav: NavItem[] = [
   { label: 'Mời thành viên', href: '/chapter-manager/invitations', icon: '✉️' },
 ];
 
-function getNav(role: string, chapterId?: string | null, isOrganizationManager = false) {
+function getNav(role: string, chapterId?: string | null, isOrganizationManager = false, managerKind?: string | null) {
   if (role === 'ADMIN') return adminNav;
+  if (managerKind === 'LEAD_DNA') return dnaLeadNav;
   if (role === 'CHAPTER_LEADER') {
     if (!chapterId) return chapterManagerNav;
     // Hover prefetch dữ liệu tab đích (URL khớp cache key của apiFetch)
@@ -120,7 +127,7 @@ export default function Sidebar({
   user,
 }: {
   role?: string;
-  user?: { email?: string; chapterName?: string; canManageMembers?: boolean; isOrganizationManager?: boolean };
+  user?: { email?: string; chapterName?: string; canManageMembers?: boolean; isOrganizationManager?: boolean; managerKind?: string | null };
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -136,6 +143,7 @@ export default function Sidebar({
     }
   });
   const [isOrganizationManager, setIsOrganizationManager] = useState(Boolean(user?.isOrganizationManager));
+  const [managerKind, setManagerKind] = useState<string | null>(user?.managerKind || null);
 
   useEffect(() => {
     setMounted(true);
@@ -144,19 +152,21 @@ export default function Sidebar({
         const u = JSON.parse(localStorage.getItem('user') || 'null');
         if (u?.chapterId) setChapterId(u.chapterId);
         setIsOrganizationManager(Boolean(u?.isOrganizationManager));
+        setManagerKind(u?.managerKind || null);
       } catch {}
     }
     apiFetch('/api/v1/auth/me', { noCache: true }).then((result) => {
       const effective = result.data?.user;
       if (!result.ok || !effective) return;
       setIsOrganizationManager(Boolean(effective.isOrganizationManager));
+      setManagerKind(effective.managerKind || null);
       const current = JSON.parse(localStorage.getItem('user') || '{}');
       localStorage.setItem('user', JSON.stringify({ ...current, ...effective }));
     }).catch(() => {});
   }, []);
 
   const effectiveRole = role || 'MEMBER';
-  const nav = getNav(effectiveRole, chapterId, isOrganizationManager || Boolean(user?.isOrganizationManager)).filter((item) =>
+  const nav = getNav(effectiveRole, chapterId, isOrganizationManager || Boolean(user?.isOrganizationManager), managerKind || user?.managerKind).filter((item) =>
     !(item.href === '/chapter-manager/invitations' && user?.canManageMembers === false),
   );
 
@@ -190,6 +200,8 @@ export default function Sidebar({
       ? 'Quản trị viên'
       : effectiveRole === 'CHAPTER_LEADER'
       ? 'Ban Định Hướng'
+      : managerKind === 'LEAD_DNA'
+      ? 'Lead DNA'
       : 'Học viên';
 
   return (

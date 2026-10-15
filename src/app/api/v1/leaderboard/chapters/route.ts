@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
     const unitIds = chapter.organization_unit_id ? await getOrganizationUnitTreeIds(chapter.organization_unit_id) : []
     const scopes: any[] = [{ chapter_members: { some: { chapter_id: chapter.id } } }]
     if (unitIds.length) scopes.push({ organization_memberships: { some: { unit_id: { in: unitIds }, status: 'ACTIVE', starts_at: { lte: asOf }, OR: [{ ends_at: null }, { ends_at: { gt: monthStart } }] } } })
-    const members = await prisma.user.findMany({ where: { status: 'ACTIVE', role: 'MEMBER', OR: scopes }, select: { id: true } })
+    const members = await prisma.user.findMany({ where: { status: 'ACTIVE', role: 'MEMBER', OR: scopes, position_assignments: { none: { position: { code: 'DNA_LEAD' }, starts_at: { lte: asOf }, OR: [{ ends_at: null }, { ends_at: { gt: monthStart } }] } } }, select: { id: true } })
     return { chapter, memberIds: members.map((member) => member.id) }
   }))
   const allMemberIds = Array.from(new Set(chapterMembers.flatMap((item) => item.memberIds)))

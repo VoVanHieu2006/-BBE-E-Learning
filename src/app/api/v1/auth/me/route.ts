@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { listManagedOrganizationUnits } from '@/lib/authorization'
+import { getLearningManagerKind } from '@/lib/manager-learning-access'
 
 /** Returns the effective UI scope, including tenure-based manager assignments. */
 export async function GET(request: NextRequest) {
@@ -17,10 +18,11 @@ export async function GET(request: NextRequest) {
   ])
   if (!user) return NextResponse.json({ error: { code: 'NotFound' } }, { status: 404 })
 
+  const managerKind = await getLearningManagerKind(user.id, user.role)
   const managerChapters = managedOrganizationUnits
     .filter((unit) => unit.type === 'CHAPTER' && unit.chapterId)
     .map((unit) => ({ id: unit.chapterId!, name: unit.name, canManageMembers: unit.canManageMembers }))
-  const legacyChapter = user.chapter_members[0]?.chapter
+  const legacyChapter = managerKind === 'LEAD_DNA' ? null : user.chapter_members[0]?.chapter
   const primaryChapter = legacyChapter || managerChapters[0] || null
 
   return NextResponse.json({
@@ -35,6 +37,8 @@ export async function GET(request: NextRequest) {
       managedChapters: managerChapters,
       isOrganizationManager: managedOrganizationUnits.length > 0,
       managedOrganizationUnits,
+      managerKind,
+      isLearningManager: Boolean(managerKind),
     },
   })
 }

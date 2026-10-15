@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
 
     // 1. Fetch ALL active members (no pagination here — sort must happen globally first)
     const allMembers = await prisma.user.findMany({
-      where: { status: 'ACTIVE', role: 'MEMBER' },
+      where: { status: 'ACTIVE', role: 'MEMBER', position_assignments: { none: { position: { code: 'DNA_LEAD' }, starts_at: { lte: new Date() }, OR: [{ ends_at: null }, { ends_at: { gt: new Date() } }] } } },
       select: {
         id: true,
         email: true,

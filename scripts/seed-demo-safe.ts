@@ -50,7 +50,7 @@ async function main() {
     where: { name: 'Chapter Demo' }, update: { organization_unit_id: chapterUnit.id, status: 'ACTIVE' },
     create: { name: 'Chapter Demo', description: 'Chapter mẫu để kiểm tra phân quyền.', organization_unit_id: chapterUnit.id },
   })
-  for (const email of users.slice(1).map((item) => item[0])) {
+  for (const email of users.slice(1).map((item) => item[0]).filter((email) => email !== 'dna.lead.demo@bbe.vn')) {
     await prisma.chapterMember.upsert({ where: { chapter_id_user_id: { chapter_id: chapter.id, user_id: created[email].id } }, update: {}, create: { chapter_id: chapter.id, user_id: created[email].id } })
   }
   const positions = await Promise.all([
@@ -75,6 +75,14 @@ async function main() {
   if (!await prisma.organizationMembership.findFirst({ where: { user_id: dnaMemberId, unit_id: dnaGroups[0].id, status: 'ACTIVE', ends_at: null } })) {
     await prisma.organizationMembership.create({ data: { user_id: dnaMemberId, unit_id: dnaGroups[0].id } })
   }
+  const dnaLeadId = created['dna.lead.demo@bbe.vn'].id
+  await prisma.chapterMember.deleteMany({ where: { user_id: dnaLeadId } })
+  await prisma.organizationMembership.deleteMany({ where: { user_id: dnaLeadId, unit: { type: { in: ['CHAPTER', 'DEPARTMENT'] } } } })
+  await prisma.positionAssignment.deleteMany({ where: { user_id: dnaLeadId, position: { scope: { in: ['CHAPTER', 'DEPARTMENT'] } } } })
+  await prisma.attempt.deleteMany({ where: { user_id: dnaLeadId } })
+  await prisma.lessonProgress.deleteMany({ where: { user_id: dnaLeadId } })
+  await prisma.starLedger.deleteMany({ where: { user_id: dnaLeadId } })
+  await prisma.userLearningAssignment.deleteMany({ where: { user_id: dnaLeadId } })
   const viewProgress = await prisma.permission.upsert({ where: { code: 'VIEW_MEMBER_PROGRESS' }, update: {}, create: { code: 'VIEW_MEMBER_PROGRESS', description: 'Xem tiến độ thành viên trong phạm vi.' } })
   const manageMembers = await prisma.permission.upsert({ where: { code: 'MANAGE_CHAPTER_MEMBERS' }, update: {}, create: { code: 'MANAGE_CHAPTER_MEMBERS', description: 'Quản lý thành viên Chapter.' } })
   const manageDnaMembers = await prisma.permission.upsert({ where: { code: 'MANAGE_DNA_MEMBERS' }, update: {}, create: { code: 'MANAGE_DNA_MEMBERS', description: 'Quản lý thành viên trong DNA.' } })

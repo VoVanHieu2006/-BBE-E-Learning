@@ -1,9 +1,11 @@
 import { StarReason } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { hasActiveDnaAffiliation } from '@/lib/affiliation-access'
+import { isLearningManager } from '@/lib/manager-learning-access'
 export { starsForVideoDuration, starsForQuizScore } from '@/lib/reward-rules'
 
 export async function canEarnStarsForCourse(userId: string, courseId: string): Promise<boolean> {
+  if (await isLearningManager(userId)) return false
   if (await hasActiveDnaAffiliation(userId)) return true
   const assignments = await prisma.userLearningAssignment.findMany({
     where: { user_id: userId, course_id: courseId, ended_at: null },
@@ -25,6 +27,7 @@ export async function awardStars(input: {
   metadata?: Record<string, unknown>
 }) {
   if (input.amount <= 0) return { awarded: false, amount: 0 }
+  if (await isLearningManager(input.userId)) return { awarded: false, amount: 0 }
 
   try {
     const entry = await prisma.starLedger.create({
@@ -47,6 +50,7 @@ export async function awardStars(input: {
 }
 
 export async function getUserStarBalance(userId: string): Promise<number> {
+  if (await isLearningManager(userId)) return 0
   const result = await prisma.starLedger.aggregate({ where: { user_id: userId }, _sum: { amount: true } })
   return result._sum.amount || 0
 }

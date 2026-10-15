@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { getLearningManagerKind } from '@/lib/manager-learning-access'
 
 /**
  * GET /api/v1/users/me
@@ -40,6 +41,7 @@ export async function GET(request: NextRequest) {
   ])
   const dnaMembership = memberships.find(({ unit }) => unit.type === 'DNA' || unit.type === 'DNA_GROUP')
   const departmentMembership = memberships.find(({ unit }) => unit.type === 'DEPARTMENT')
+  const managerKind = await getLearningManagerKind(user.id, user.role)
 
   return NextResponse.json({
     id: user.id,
@@ -47,8 +49,8 @@ export async function GET(request: NextRequest) {
     displayName: user.display_name,
     role: user.role,
     status: user.status,
-    chapterId: user.chapter_members?.[0]?.chapter?.id || null,
-    chapterName: user.chapter_members?.[0]?.chapter?.name || null,
+    chapterId: managerKind === 'LEAD_DNA' ? null : user.chapter_members?.[0]?.chapter?.id || null,
+    chapterName: managerKind === 'LEAD_DNA' ? null : user.chapter_members?.[0]?.chapter?.name || null,
     department: departmentMembership ? { id: departmentMembership.unit.id, name: departmentMembership.unit.name } : null,
     dna: dnaMembership ? {
       active: true,
@@ -59,7 +61,8 @@ export async function GET(request: NextRequest) {
       role: positions.some((assignment) => assignment.position.code === 'DNA_LEAD') ? 'LEAD_DNA' : 'DNA_MEMBER',
     } : { active: false, unitId: null, unitName: null, groupId: null, groupName: null, role: null },
     positions: positions.map((assignment) => ({ ...assignment.position, unitId: assignment.unit.id, unitName: assignment.unit.name })),
-    capabilities: { formerOrCurrentLt: Boolean(formerLt), dnaFullLearningAccess: Boolean(dnaMembership) },
+    managerKind,
+    capabilities: { formerOrCurrentLt: managerKind ? false : Boolean(formerLt), dnaFullLearningAccess: managerKind ? false : Boolean(dnaMembership), learningEnabled: !managerKind },
   }, { status: 200 })
 }
 

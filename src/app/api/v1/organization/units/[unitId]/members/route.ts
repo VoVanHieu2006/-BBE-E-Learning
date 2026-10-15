@@ -70,6 +70,7 @@ export async function GET(request: NextRequest, { params }: { params: { unitId: 
         OR: [{ ends_at: null }, { ends_at: { gt: now } }],
         user: {
           role: 'MEMBER',
+          position_assignments: { none: { position: { code: 'DNA_LEAD' }, starts_at: { lte: now }, OR: [{ ends_at: null }, { ends_at: { gt: now } }] } },
           ...(includeInactive ? {} : { status: 'ACTIVE' }),
           ...(search ? { email: { contains: search, mode: 'insensitive' } } : {}),
         },

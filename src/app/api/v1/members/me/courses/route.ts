@@ -2,10 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { calculateUserProgress } from '@/lib/progress/calculator'
+import { isLearningManager } from '@/lib/manager-learning-access'
 
 export async function GET(request: NextRequest) {
   const auth = await authenticate(request)
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: 401 })
+  if (await isLearningManager(auth.context!.userId, auth.context!.role)) {
+    return NextResponse.json({ items: [], totalItems: 0, totalPages: 0, summary: null, managementOnly: true })
+  }
   if ((auth as any).context!.role === 'MEMBER') {
     // OK
   } else if ((auth as any).context!.role === 'CHAPTER_LEADER' || (auth as any).context!.role === 'ADMIN') {

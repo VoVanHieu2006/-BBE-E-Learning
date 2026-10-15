@@ -128,7 +128,7 @@ async function main(): Promise<void> {
   });
 
   const userSpecs: UserSpec[] = [
-    { name: "Lead DNA Demo", email: "dna.lead.demo@bbe.vn", role: "MEMBER", chapter: hn.id },
+    { name: "Lead DNA Demo", email: "dna.lead.demo@bbe.vn", role: "MEMBER" },
     { name: "Lead Chapter Demo", email: "chapter.lead.demo@bbe.vn", role: "CHAPTER_LEADER", chapter: hn.id },
     { name: "LT Ban Demo", email: "department.lead.demo@bbe.vn", role: "MEMBER", chapter: hn.id },
     { name: "Thành viên Demo", email: "member.demo@bbe.vn", role: "MEMBER", chapter: hn.id },

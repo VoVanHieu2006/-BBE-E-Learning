@@ -5,6 +5,7 @@ import { checkCourseFinalProgression, checkLessonProgression } from '@/lib/progr
 import { hasWatchedFullVideo } from '@/lib/video-progress-rules'
 import { selectQuizQuestions } from '@/lib/quiz-pool-selection'
 import { randomInt } from 'crypto'
+import { isLearningManager } from '@/lib/manager-learning-access'
 
 function shuffleSecurely<T>(items: readonly T[]): T[] {
   const shuffled = [...items]
@@ -24,6 +25,9 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: 401 })
 
   const userId = (auth as any).context!.userId
+  if (await isLearningManager(userId, auth.context!.role)) {
+    return NextResponse.json({ error: { code: 'ManagementOnlyAccount', message: 'Tài khoản quản lý không tham gia học hoặc làm bài kiểm tra.' } }, { status: 403 })
+  }
   const assessmentId = params.assessmentId
 
   const user = await prisma.user.findUnique({ where: { id: userId } })
