@@ -168,7 +168,7 @@ export async function POST(request: NextRequest, { params }: { params: { courseI
       await tx.question.createMany({ data: copies.map(({ source, id }) => ({
         id, assessment_id: assessment.id, final_exam_version_id: version.id, source_assessment_id: source.assessment_id,
         question_text: source.question_text, question_type: source.question_type, points: source.points,
-        duration_seconds: source.duration_seconds, sort_order: source.sort_order, explanation: source.explanation,
+        sort_order: source.sort_order, explanation: source.explanation,
       })) })
       await tx.questionOption.createMany({ data: copies.flatMap(({ source, id }) => source.options.map((option) => ({
         id: randomUUID(), question_id: id, option_text: option.option_text, is_correct: option.is_correct, sort_order: option.sort_order,

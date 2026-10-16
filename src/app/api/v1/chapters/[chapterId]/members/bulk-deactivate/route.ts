@@ -41,10 +41,15 @@ export async function POST(
 
   // Thực hiện vô hiệu hóa
   await prisma.$transaction(async (tx) => {
-    // 1. Chuyển User status sang INACTIVE
+    const actorRole = auth.context!.role === 'ADMIN' ? 'ADMIN' : 'LEAD'
     await tx.user.updateMany({
       where: { id: { in: userIds } },
-      data: { status: 'INACTIVE' },
+      data: {
+        status: 'INACTIVE',
+        deactivated_by_user_id: auth.context!.userId,
+        deactivated_by_role: actorRole,
+        deactivated_at: now,
+      },
     })
 
     // 2. Kết thúc OrganizationMembership trong chapter này

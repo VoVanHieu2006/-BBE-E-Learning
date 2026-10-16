@@ -82,7 +82,6 @@ export async function GET(
         questionText: q.question_text,
         type: q.question_type,
         points: Number(q.points),
-        durationSeconds: q.duration_seconds,
         sortOrder: q.sort_order,
         poolId: q.pool_id,
         explanation: q.explanation || '',
@@ -218,10 +217,6 @@ export async function POST(
       const qText = (q.questionText || q.question_text || `Câu hỏi ${i + 1}`).trim();
       const qType = q.questionType || q.type || 'SINGLE_CHOICE';
       const qPoints = Math.max(1, parseInt(String(q.points), 10) || 10);
-      const qDuration = Math.max(
-        10,
-        parseInt(String(q.durationSeconds || q.duration_seconds), 10) || 120
-      );
       const qExplanation =
         typeof q.explanation === 'string' && q.explanation.trim()
           ? q.explanation.trim()
@@ -250,7 +245,6 @@ export async function POST(
           question_text: qText,
           question_type: qType as any,
           points: qPoints,
-          duration_seconds: qDuration,
           explanation: qExplanation,
           sort_order: i,
           pool_id: usesPools ? preparedPools[Number(q.poolIndex)].id : null,
@@ -321,7 +315,6 @@ export async function POST(
           questionText: q.question_text,
           type: q.question_type,
           points: Number(q.points),
-          durationSeconds: q.duration_seconds,
           sortOrder: q.sort_order,
           explanation: q.explanation || '',
           poolId: q.pool_id,

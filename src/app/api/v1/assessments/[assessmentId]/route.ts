@@ -50,6 +50,7 @@ export async function GET(request: NextRequest, { params }: { params: { assessme
     lessonId: assessment.lesson_id,
     title: assessment.title,
     description: assessment.description,
+    durationMinutes: assessment.duration_minutes || 30,
     questionCount: assessment.questions.length,
     pools: assessment.question_pools.map((pool) => ({ poolId: pool.id, name: pool.name, sortOrder: pool.sort_order })),
     questions: assessment.questions.map((q) => ({
@@ -58,7 +59,6 @@ export async function GET(request: NextRequest, { params }: { params: { assessme
       questionText: q.question_text,
       type: q.question_type,
       points: Number(q.points),
-      durationSeconds: q.duration_seconds,
       sortOrder: q.sort_order,
       poolId: q.pool_id,
       explanation: q.explanation || '',
@@ -151,7 +151,6 @@ export async function PATCH(request: NextRequest, { params }: { params: { assess
             question_text: String(q.questionText || q.text || `Câu hỏi ${idx + 1}`).trim(),
             question_type: (q.type || q.questionType || 'SINGLE_CHOICE') as any,
             points: Math.max(1, Number(q.points || 10)),
-            duration_seconds: Math.max(10, Number(q.durationSeconds || q.duration_seconds || 120)),
             sort_order: Number(q.sortOrder ?? q.sort_order ?? idx),
             explanation: typeof q.explanation === 'string' && q.explanation.trim() ? q.explanation.trim() : null,
             pool_id: q.poolId || q.pool_id || null,

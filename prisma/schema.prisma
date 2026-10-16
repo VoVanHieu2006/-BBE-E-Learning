@@ -457,7 +457,6 @@ model Question {
   question_text   String         @db.Text
   question_type   QuestionType   @default(SINGLE_CHOICE)
   points          Int            @default(1)
-  duration_seconds Int
   sort_order      Int
   explanation     String?        @db.Text
   created_at      DateTime       @default(now()) @db.Timestamp

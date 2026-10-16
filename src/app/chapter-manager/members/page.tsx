@@ -30,6 +30,7 @@ export default function ChapterManagerMembersPage() {
     currentStatus: string;
     nextStatus: 'ACTIVE' | 'INACTIVE';
   } | null>(null);
+  const [deactivateInputText, setDeactivateInputText] = useState('');
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const canManageMembers = user?.role === 'CHAPTER_LEADER' || user?.canManageMembers === true;
 
@@ -162,6 +163,12 @@ export default function ChapterManagerMembersPage() {
     if (!canManageMembers) {
       showToast('error', 'Bạn không có quyền quản lý thành viên Chapter.');
       setConfirmToggle(null);
+      setDeactivateInputText('');
+      return;
+    }
+
+    if (nextStatus === 'INACTIVE' && deactivateInputText.trim().toLowerCase() !== 'vô hiệu hóa') {
+      showToast('error', 'Vui lòng điền đúng chữ "vô hiệu hóa" để xác nhận');
       return;
     }
 
@@ -204,6 +211,7 @@ export default function ChapterManagerMembersPage() {
     }
     setActionUserId(null);
     setConfirmToggle(null);
+    setDeactivateInputText('');
   };
 
   // Chỉ hiển thị thành viên (MEMBER) — không hiện tài khoản Lead Chapter/Admin trong danh sách
@@ -491,14 +499,15 @@ export default function ChapterManagerMembersPage() {
                             {canManageMembers && (isActive || isLocked) && (
                               <button
                                 disabled={isBusy}
-                                onClick={() =>
+                                onClick={() => {
+                                  setDeactivateInputText('');
                                   setConfirmToggle({
                                     userId: mId,
                                     email: m.email,
                                     currentStatus: m.status,
                                     nextStatus: 'INACTIVE',
-                                  })
-                                }
+                                  });
+                                }}
                                 className="whitespace-nowrap px-2.5 py-1 text-xs font-semibold rounded-lg text-red-600 hover:bg-red-50 transition"
                               >
                                 Vô hiệu hóa
@@ -510,14 +519,15 @@ export default function ChapterManagerMembersPage() {
                               canLeadReactivate ? (
                                 <button
                                   disabled={isBusy}
-                                  onClick={() =>
+                                  onClick={() => {
+                                    setDeactivateInputText('');
                                     setConfirmToggle({
                                       userId: mId,
                                       email: m.email,
                                       currentStatus: m.status,
                                       nextStatus: 'ACTIVE',
-                                    })
-                                  }
+                                    });
+                                  }}
                                   className="whitespace-nowrap px-2.5 py-1 text-xs font-semibold rounded-lg text-green-700 hover:bg-green-50 transition"
                                 >
                                   Kích hoạt
@@ -651,8 +661,32 @@ export default function ChapterManagerMembersPage() {
                 ? `Thành viên ${confirmToggle?.email} sẽ không thể đăng nhập và ngừng toàn bộ quyền truy cập học tập. Bạn hoặc Quản trị viên (Admin) có thể kích hoạt lại sau này.`
                 : `Thành viên ${confirmToggle?.email} sẽ được kích hoạt lại và có thể tiếp tục học tập bình thường.`}
             </p>
+
+            {confirmToggle?.nextStatus === 'INACTIVE' && (
+              <div className="p-3 bg-red-50/80 border border-red-200 rounded-xl space-y-1.5">
+                <label className="block text-xs font-semibold text-red-950">
+                  Để xác nhận, vui lòng nhập chính xác chữ <strong className="text-red-600 underline font-extrabold">&ldquo;vô hiệu hóa&rdquo;</strong> vào ô bên dưới:
+                </label>
+                <input
+                  type="text"
+                  value={deactivateInputText}
+                  onChange={(e) => setDeactivateInputText(e.target.value)}
+                  placeholder="vô hiệu hóa"
+                  className="w-full px-3 py-2 text-xs border border-red-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 bg-white"
+                  autoFocus
+                />
+              </div>
+            )}
+
             <div className="flex justify-end gap-3 pt-2">
-              <Button variant="outline" type="button" onClick={() => setConfirmToggle(null)}>
+              <Button
+                variant="outline"
+                type="button"
+                onClick={() => {
+                  setConfirmToggle(null);
+                  setDeactivateInputText('');
+                }}
+              >
                 Hủy
               </Button>
               <Button
@@ -660,6 +694,11 @@ export default function ChapterManagerMembersPage() {
                 type="button"
                 loading={!!actionUserId}
                 loadingText="Đang xử lý..."
+                disabled={
+                  Boolean(actionUserId) ||
+                  (confirmToggle?.nextStatus === 'INACTIVE' &&
+                    deactivateInputText.trim().toLowerCase() !== 'vô hiệu hóa')
+                }
                 onClick={() => confirmToggle && handleToggleStatus(confirmToggle.userId, confirmToggle.nextStatus)}
               >
                 {confirmToggle?.nextStatus === 'INACTIVE' ? 'Xác nhận vô hiệu hóa' : 'Xác nhận kích hoạt'}

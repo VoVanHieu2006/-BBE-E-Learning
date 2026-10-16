@@ -46,6 +46,7 @@ export default function AdminUsersPage() {
     user: any;
     nextStatus: 'ACTIVE' | 'INACTIVE';
   } | null>(null);
+  const [deactivateInputText, setDeactivateInputText] = useState('');
   const [unlockExtensionModal, setUnlockExtensionModal] = useState<{
     user: any;
     extensionDays: number;
@@ -153,6 +154,7 @@ export default function AdminUsersPage() {
 
   const handleOpenConfirmModal = (targetUser: any, desiredNextStatus?: 'ACTIVE' | 'INACTIVE') => {
     const nextStatus = desiredNextStatus || (targetUser.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE');
+    setDeactivateInputText('');
     setConfirmStatusModal({ user: targetUser, nextStatus });
   };
 
@@ -220,14 +222,21 @@ export default function AdminUsersPage() {
     const { user: targetUser, nextStatus } = confirmStatusModal;
     const userId = targetUser.userId || targetUser.id;
 
+    if (nextStatus === 'INACTIVE' && deactivateInputText.trim().toLowerCase() !== 'vô hiệu hóa') {
+      showToast('error', 'Vui lòng điền đúng chữ "vô hiệu hóa" để xác nhận', 'Chưa xác nhận');
+      return;
+    }
+
     if (targetUser.role === 'ADMIN' && nextStatus === 'INACTIVE') {
       showToast('error', 'Không thể vô hiệu hóa tài khoản Quản trị viên', 'Lỗi phân quyền');
       setConfirmStatusModal(null);
+      setDeactivateInputText('');
       return;
     }
 
     setActionUserId(userId);
     setConfirmStatusModal(null);
+    setDeactivateInputText('');
     clearApiCache('/api/v1/users');
     clearApiCache('/api/v1/admin/overview');
 
@@ -835,6 +844,20 @@ export default function AdminUsersPage() {
                       </p>
                     </div>
                   )}
+
+                  <div className="p-3 bg-red-50/80 border border-red-200 rounded-xl space-y-1.5 mt-2">
+                    <label className="block text-xs font-semibold text-red-950">
+                      Để xác nhận, vui lòng nhập chính xác chữ <strong className="text-red-600 underline font-extrabold">&ldquo;vô hiệu hóa&rdquo;</strong> vào ô bên dưới:
+                    </label>
+                    <input
+                      type="text"
+                      value={deactivateInputText}
+                      onChange={(e) => setDeactivateInputText(e.target.value)}
+                      placeholder="vô hiệu hóa"
+                      className="w-full px-3 py-2 text-xs border border-red-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 bg-white"
+                      autoFocus
+                    />
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -860,7 +883,10 @@ export default function AdminUsersPage() {
                   variant="outline"
                   size="sm"
                   disabled={Boolean(actionUserId)}
-                  onClick={() => setConfirmStatusModal(null)}
+                  onClick={() => {
+                    setConfirmStatusModal(null);
+                    setDeactivateInputText('');
+                  }}
                 >
                   Hủy bỏ
                 </Button>
@@ -869,6 +895,11 @@ export default function AdminUsersPage() {
                   size="sm"
                   loading={Boolean(actionUserId)}
                   loadingText="Đang xử lý..."
+                  disabled={
+                    Boolean(actionUserId) ||
+                    (confirmStatusModal.nextStatus === 'INACTIVE' &&
+                      deactivateInputText.trim().toLowerCase() !== 'vô hiệu hóa')
+                  }
                   onClick={handleExecuteStatusToggle}
                 >
                   {confirmStatusModal.nextStatus === 'INACTIVE' ? 'Xác nhận vô hiệu hóa' : 'Xác nhận kích hoạt'}

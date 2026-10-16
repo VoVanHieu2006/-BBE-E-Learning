@@ -19,6 +19,7 @@ export default function MemberDetailPage({ params }: { params: { userId: string 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [deactivateInputText, setDeactivateInputText] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
   const [toast, setToast] = useState<ToastMessage | null>(null);
 
@@ -26,14 +27,18 @@ export default function MemberDetailPage({ params }: { params: { userId: string 
 
   const handleToggleUserStatus = async () => {
     if (!data?.user?.userId) return;
-    setActionLoading(true);
     const nextStatus = data.user.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+    if (nextStatus === 'INACTIVE' && deactivateInputText.trim().toLowerCase() !== 'vô hiệu hóa') {
+      return;
+    }
+    setActionLoading(true);
     const res = await apiFetch(`/api/v1/users/${data.user.userId}`, {
       method: 'PATCH',
       body: JSON.stringify({ status: nextStatus, chapterId: user?.chapterId }),
     });
     setActionLoading(false);
     setShowConfirmModal(false);
+    setDeactivateInputText('');
     if (res.ok) {
       setData((prev: any) => ({
         ...prev,
@@ -243,7 +248,10 @@ export default function MemberDetailPage({ params }: { params: { userId: string 
                         ? 'bg-red-50 text-red-700 border-red-300 hover:bg-red-100 font-bold text-xs'
                         : 'bg-green-50 text-green-700 border-green-300 hover:bg-green-100 font-bold text-xs'
                     }
-                    onClick={() => setShowConfirmModal(true)}
+                    onClick={() => {
+                      setDeactivateInputText('');
+                      setShowConfirmModal(true);
+                    }}
                     loading={actionLoading}
                   >
                     {data?.user?.status === 'ACTIVE' ? '⛔ Vô hiệu hóa tài khoản' : '✓ Kích hoạt lại'}
@@ -279,8 +287,32 @@ export default function MemberDetailPage({ params }: { params: { userId: string 
                       ? `Bạn có chắc muốn vô hiệu hóa tài khoản ${data?.user?.email}? Tài khoản này sẽ không thể đăng nhập học tập và không tính vào các báo cáo nhiệm kỳ mới.`
                       : `Bạn có chắc muốn kích hoạt lại tài khoản ${data?.user?.email}?`}
                   </p>
+
+                  {data?.user?.status === 'ACTIVE' && (
+                    <div className="p-3 bg-red-50/80 border border-red-200 rounded-xl space-y-1.5">
+                      <label className="block text-xs font-semibold text-red-950">
+                        Để xác nhận, vui lòng nhập chính xác chữ <strong className="text-red-600 underline font-extrabold">&ldquo;vô hiệu hóa&rdquo;</strong> vào ô bên dưới:
+                      </label>
+                      <input
+                        type="text"
+                        value={deactivateInputText}
+                        onChange={(e) => setDeactivateInputText(e.target.value)}
+                        placeholder="vô hiệu hóa"
+                        className="w-full px-3 py-2 text-xs border border-red-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 bg-white"
+                        autoFocus
+                      />
+                    </div>
+                  )}
+
                   <div className="flex justify-end gap-2 pt-2 border-t border-[#eff4ff]">
-                    <Button variant="outline" size="sm" onClick={() => setShowConfirmModal(false)}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setShowConfirmModal(false);
+                        setDeactivateInputText('');
+                      }}
+                    >
                       Hủy
                     </Button>
                     <Button
@@ -288,6 +320,11 @@ export default function MemberDetailPage({ params }: { params: { userId: string 
                       size="sm"
                       className={data?.user?.status === 'ACTIVE' ? 'bg-red-600 hover:bg-red-700 text-white font-bold' : 'bg-green-600 hover:bg-green-700 text-white font-bold'}
                       loading={actionLoading}
+                      disabled={
+                        actionLoading ||
+                        (data?.user?.status === 'ACTIVE' &&
+                          deactivateInputText.trim().toLowerCase() !== 'vô hiệu hóa')
+                      }
                       onClick={handleToggleUserStatus}
                     >
                       {data?.user?.status === 'ACTIVE' ? 'Xác nhận vô hiệu hóa' : 'Kích hoạt lại'}

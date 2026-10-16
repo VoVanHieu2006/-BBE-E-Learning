@@ -127,6 +127,25 @@ export async function POST(request: NextRequest, { params }: { params: { chapter
     }
   }
 
+  // Chỉ cho phép 1 đợt chuyển giao lên lịch tại một thời điểm
+  const existingScheduled = await prisma.chapterReorganization.findFirst({
+    where: {
+      chapter_id: params.chapterId,
+      status: 'SCHEDULED',
+    },
+  })
+  if (existingScheduled) {
+    return NextResponse.json(
+      {
+        error: {
+          code: 'ScheduledReorganizationExists',
+          message: 'Đã có đợt chuyển giao nhiệm kỳ đang được lên lịch. Vui lòng áp dụng hoặc hủy đợt hiện tại trước khi lên lịch đợt mới.',
+        },
+      },
+      { status: 409 }
+    )
+  }
+
   const isImmediate = effectiveAt.getTime() <= Date.now() + 60000
 
   const batch = await prisma.chapterReorganization.create({

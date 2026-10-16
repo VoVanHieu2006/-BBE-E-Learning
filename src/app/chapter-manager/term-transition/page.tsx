@@ -100,6 +100,8 @@ export default function ChapterManagerTermTransitionPage() {
   const [scheduledBatch, setScheduledBatch] = useState<any | null>(null);
   const [applyingBatch, setApplyingBatch] = useState(false);
   const [cancelingBatch, setCancelingBatch] = useState(false);
+  const [showApplyBatchModal, setShowApplyBatchModal] = useState(false);
+  const [showCancelBatchModal, setShowCancelBatchModal] = useState(false);
 
   // Modal đổi ban cho thành viên
   const [changeDeptModal, setChangeDeptModal] = useState<{
@@ -130,6 +132,12 @@ export default function ChapterManagerTermTransitionPage() {
   const [showConfirmDeactivate, setShowConfirmDeactivate] = useState(false);
   const [deactivating, setDeactivating] = useState(false);
   const [deactivatingUserId, setDeactivatingUserId] = useState<string | null>(null);
+  const [deactivateText, setDeactivateText] = useState('');
+  const [singleDeactivateModal, setSingleDeactivateModal] = useState<{
+    userId: string;
+    displayName: string;
+  } | null>(null);
+  const [showBulkUnassignedModal, setShowBulkUnassignedModal] = useState(false);
 
   // Lịch sử nhiệm kỳ
   const [historyList, setHistoryList] = useState<any[]>([]);
@@ -450,9 +458,13 @@ export default function ChapterManagerTermTransitionPage() {
     }
   };
 
-  // Vô hiệu hóa từng thành viên riêng lẻ
+  // Vô hiệu hóa từng thành viên riêng lẻ (cần xác nhận gõ chữ "vô hiệu hóa")
   const handleIndividualDeactivate = async (userId: string, name?: string) => {
     if (!user?.chapterId) return;
+    if (deactivateText.trim().toLowerCase() !== 'vô hiệu hóa') {
+      notify('error', 'Vui lòng nhập đúng chữ "vô hiệu hóa" để xác nhận.');
+      return;
+    }
     setDeactivatingUserId(userId);
 
     const res = await apiFetch(`/api/v1/users/${userId}`, {
@@ -461,6 +473,8 @@ export default function ChapterManagerTermTransitionPage() {
     });
 
     setDeactivatingUserId(null);
+    setSingleDeactivateModal(null);
+    setDeactivateText('');
 
     if (!res.ok) {
       notify('error', res.error?.message || 'Không thể vô hiệu hóa thành viên.');
@@ -481,9 +495,47 @@ export default function ChapterManagerTermTransitionPage() {
     loadCurrentRoster(user.chapterId);
   };
 
-  // Vô hiệu hóa tất cả thành viên không có trong sheet
+  // Vô hiệu hóa tất cả thành viên chưa có Ban (cần xác nhận gõ chữ "vô hiệu hóa")
+  const handleBulkDeactivateUnassigned = async () => {
+    if (!user?.chapterId || !unassignedMembers.length) return;
+    if (deactivateText.trim().toLowerCase() !== 'vô hiệu hóa') {
+      notify('error', 'Vui lòng nhập đúng chữ "vô hiệu hóa" để xác nhận.');
+      return;
+    }
+    setDeactivating(true);
+
+    const userIds = unassignedMembers.map((m: any) => m.userId);
+    const res = await apiFetch(`/api/v1/chapters/${user.chapterId}/members/bulk-deactivate`, {
+      method: 'POST',
+      body: JSON.stringify({ userIds }),
+    });
+
+    setDeactivating(false);
+    setShowBulkUnassignedModal(false);
+    setDeactivateText('');
+
+    if (!res.ok) {
+      notify('error', res.error?.message || 'Không thể vô hiệu hóa thành viên.');
+      return;
+    }
+
+    notify(
+      'success',
+      `Đã vô hiệu hóa thành công ${userIds.length} thành viên chưa có Ban!`
+    );
+
+    clearApiCache('/api/v1/chapters');
+    clearApiCache('/api/v1/users');
+    loadCurrentRoster(user.chapterId);
+  };
+
+  // Vô hiệu hóa tất cả thành viên không có trong sheet (cần xác nhận gõ chữ "vô hiệu hóa")
   const handleBulkDeactivate = async () => {
     if (!user?.chapterId || !parsedResult?.unmatchedCurrentMembers?.length) return;
+    if (deactivateText.trim().toLowerCase() !== 'vô hiệu hóa') {
+      notify('error', 'Vui lòng nhập đúng chữ "vô hiệu hóa" để xác nhận.');
+      return;
+    }
     setDeactivating(true);
 
     const userIds = parsedResult.unmatchedCurrentMembers.map((m: any) => m.userId);
@@ -494,6 +546,7 @@ export default function ChapterManagerTermTransitionPage() {
 
     setDeactivating(false);
     setShowConfirmDeactivate(false);
+    setDeactivateText('');
 
     if (!res.ok) {
       notify('error', res.error?.message || 'Không thể vô hiệu hóa thành viên.');
@@ -525,6 +578,7 @@ export default function ChapterManagerTermTransitionPage() {
     });
     setApplyingBatch(false);
     setActionLoading(null);
+    setShowApplyBatchModal(false);
     if (res.ok) {
       notify('success', 'Chuyển giao nhiệm kỳ thành công! Sơ đồ 7 Ban đã được cập nhật ngay lập tức.');
       clearApiCache('/api/v1/chapters');
@@ -536,7 +590,7 @@ export default function ChapterManagerTermTransitionPage() {
 
   // Hủy đợt chuyển giao đã lên lịch
   const handleCancelScheduledBatch = async (batchId: string) => {
-    if (!user?.chapterId || !confirm('Bạn có chắc chắn muốn hủy đợt chuyển giao nhiệm kỳ đã lên lịch này?')) return;
+    if (!user?.chapterId) return;
     setCancelingBatch(true);
     setActionLoading({ type: 'cancelScheduled', id: batchId });
     const res = await apiFetch(`/api/v1/chapters/${user.chapterId}/reorganizations/${batchId}`, {
@@ -544,6 +598,7 @@ export default function ChapterManagerTermTransitionPage() {
     });
     setCancelingBatch(false);
     setActionLoading(null);
+    setShowCancelBatchModal(false);
     if (res.ok) {
       notify('success', 'Đã hủy đợt chuyển giao nhiệm kỳ đã lên lịch.');
       clearApiCache('/api/v1/chapters');
@@ -629,14 +684,20 @@ export default function ChapterManagerTermTransitionPage() {
           >
             📜 Lịch sử nhiệm kỳ
           </Button>
-          <Button
-            variant="primary"
-            onClick={scrollToImport}
-            size="sm"
-            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
-          >
-            📥 Nạp Google Sheet nhiệm kỳ mới
-          </Button>
+          {!scheduledBatch ? (
+            <Button
+              variant="primary"
+              onClick={scrollToImport}
+              size="sm"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+            >
+              📥 Nạp Google Sheet nhiệm kỳ mới
+            </Button>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-100 text-[#2563EB] rounded-xl text-xs font-bold border border-blue-200">
+              📅 Đã có 1 đợt chuyển giao lên lịch
+            </span>
+          )}
         </div>
       </div>
 
@@ -818,7 +879,7 @@ export default function ChapterManagerTermTransitionPage() {
 
           {/* KHU VỰC THÀNH VIÊN CHƯA CÓ BAN (ĐẶT NGAY DƯỚI SƠ ĐỒ NHIỆM KỲ HIỆN TẠI ĐỂ DỄ THAO TÁC) */}
           <Card className="border border-amber-200 bg-amber-50/20 p-5 shadow-xs">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-amber-200/60 pb-3 mb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-amber-200/60 pb-3 mb-4">
               <div>
                 <h3 className="text-sm font-bold text-amber-900 flex items-center gap-1.5">
                   <span>⚠️ Thành viên chưa có Ban ({unassignedMembers.length})</span>
@@ -827,6 +888,20 @@ export default function ChapterManagerTermTransitionPage() {
                   Các thành viên thuộc Chapter nhưng chưa phân ban (bao gồm thành viên không có trong sheet sau khi chuyển giao). Bạn có thể gán Ban hoặc vô hiệu hóa tài khoản.
                 </p>
               </div>
+
+              {unassignedMembers.length > 0 && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="bg-red-50 text-red-700 hover:bg-red-100 border-red-300 font-bold text-xs shrink-0 self-start sm:self-auto"
+                  onClick={() => {
+                    setDeactivateText('');
+                    setShowBulkUnassignedModal(true);
+                  }}
+                >
+                  ⛔ Vô hiệu hóa tất cả ({unassignedMembers.length})
+                </Button>
+              )}
             </div>
 
             {unassignedMembers.length === 0 ? (
@@ -895,7 +970,10 @@ export default function ChapterManagerTermTransitionPage() {
                               variant="outline"
                               className="text-red-700 bg-red-50 hover:bg-red-100 border-red-200 font-semibold text-xs py-1 px-2.5"
                               loading={deactivatingUserId === m.userId}
-                              onClick={() => handleIndividualDeactivate(m.userId, m.displayName)}
+                              onClick={() => {
+                                setDeactivateText('');
+                                setSingleDeactivateModal({ userId: m.userId, displayName: m.displayName });
+                              }}
                             >
                               ⛔ Vô hiệu hóa
                             </Button>
@@ -934,7 +1012,7 @@ export default function ChapterManagerTermTransitionPage() {
                 <div className="flex items-center gap-2">
                   <Button
                     size="sm"
-                    onClick={() => handleApplyScheduledBatch(scheduledBatch.id)}
+                    onClick={() => setShowApplyBatchModal(true)}
                     loading={applyingBatch}
                     className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
                   >
@@ -943,7 +1021,7 @@ export default function ChapterManagerTermTransitionPage() {
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => handleCancelScheduledBatch(scheduledBatch.id)}
+                    onClick={() => setShowCancelBatchModal(true)}
                     loading={cancelingBatch}
                     className="text-red-600 border-red-200 hover:bg-red-50"
                   >
@@ -1051,12 +1129,14 @@ export default function ChapterManagerTermTransitionPage() {
 
           {/* ═══════════════════════════════════════════════════════════════════
               KHU VỰC NHẬP GOOGLE SHEET CHUYỂN GIAO NHIỆM KỲ MỚI (NẰM PHÍA DƯỚI)
+              CHỈ HIỂN THỊ KHI CHƯA CÓ ĐỢT CHUYỂN GIAO NÀO ĐANG LÊN LỊCH
              ═══════════════════════════════════════════════════════════════════ */}
-          <div
-            id="import-sheet-section"
-            ref={importSectionRef}
-            className="pt-8 border-t-2 border-slate-200 space-y-6"
-          >
+          {!scheduledBatch && (
+            <div
+              id="import-sheet-section"
+              ref={importSectionRef}
+              className="pt-8 border-t-2 border-slate-200 space-y-6"
+            >
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <span className="text-xs font-bold uppercase tracking-wider text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-md border border-blue-100">
@@ -1325,7 +1405,10 @@ export default function ChapterManagerTermTransitionPage() {
                         size="sm"
                         variant="outline"
                         className="bg-red-50 text-red-700 border-red-300 hover:bg-red-100 font-bold"
-                        onClick={() => setShowConfirmDeactivate(true)}
+                        onClick={() => {
+                          setDeactivateText('');
+                          setShowConfirmDeactivate(true);
+                        }}
                       >
                         ⛔ Vô hiệu hóa tất cả ({parsedResult.unmatchedCurrentMembers.length})
                       </Button>
@@ -1360,7 +1443,10 @@ export default function ChapterManagerTermTransitionPage() {
                                   variant="outline"
                                   className="text-red-700 bg-red-50 hover:bg-red-100 border-red-200 font-bold text-xs py-1 px-2.5"
                                   loading={deactivatingUserId === item.userId}
-                                  onClick={() => handleIndividualDeactivate(item.userId, item.displayName)}
+                                  onClick={() => {
+                                    setDeactivateText('');
+                                    setSingleDeactivateModal({ userId: item.userId, displayName: item.displayName });
+                                  }}
                                 >
                                   ⛔ Vô hiệu hóa
                                 </Button>
@@ -1401,6 +1487,7 @@ export default function ChapterManagerTermTransitionPage() {
               </div>
             )}
           </div>
+          )}
         </div>
       )}
 
@@ -1692,11 +1779,14 @@ export default function ChapterManagerTermTransitionPage() {
         </Modal>
       )}
 
-      {/* MODAL CẢNH BÁO XÁC NHẬN VÔ HIỆU HÓA TẤT CẢ */}
+      {/* MODAL CẢNH BÁO XÁC NHẬN VÔ HIỆU HÓA TẤT CẢ (TRONG SHEET DỰ KIẾN) */}
       {showConfirmDeactivate && (
         <Modal
           isOpen={showConfirmDeactivate}
-          onClose={() => setShowConfirmDeactivate(false)}
+          onClose={() => {
+            setShowConfirmDeactivate(false);
+            setDeactivateText('');
+          }}
           maxWidth="max-w-md"
         >
           <div className="space-y-4 p-2">
@@ -1706,7 +1796,10 @@ export default function ChapterManagerTermTransitionPage() {
               </h2>
               <button
                 type="button"
-                onClick={() => setShowConfirmDeactivate(false)}
+                onClick={() => {
+                  setShowConfirmDeactivate(false);
+                  setDeactivateText('');
+                }}
                 className="text-[#737686] hover:text-[#172554] text-base font-bold px-2 py-1"
               >
                 ✕
@@ -1720,18 +1813,321 @@ export default function ChapterManagerTermTransitionPage() {
             <p className="text-xs text-[#596174]">
               Họ sẽ không thể đăng nhập học và không tham gia vào các phép tính hoàn thành khóa học của nhiệm kỳ mới. Bạn có chắc chắn muốn thực hiện?
             </p>
+
+            <div className="p-3 bg-red-50/80 border border-red-200 rounded-xl space-y-1.5">
+              <label className="block text-xs font-semibold text-red-950">
+                Để xác nhận, vui lòng nhập chính xác chữ <strong className="text-red-600 underline font-extrabold">&ldquo;vô hiệu hóa&rdquo;</strong> vào ô bên dưới:
+              </label>
+              <input
+                type="text"
+                value={deactivateText}
+                onChange={(e) => setDeactivateText(e.target.value)}
+                placeholder="vô hiệu hóa"
+                className="w-full px-3 py-2 text-xs border border-red-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 bg-white"
+                autoFocus
+              />
+            </div>
+
             <div className="flex justify-end gap-2 pt-2 border-t border-[#eff4ff]">
-              <Button variant="outline" onClick={() => setShowConfirmDeactivate(false)}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setShowConfirmDeactivate(false);
+                  setDeactivateText('');
+                }}
+              >
                 Hủy
               </Button>
               <Button
                 variant="primary"
+                size="sm"
                 loading={deactivating}
                 loadingText="Đang vô hiệu hóa..."
+                disabled={
+                  deactivating ||
+                  deactivateText.trim().toLowerCase() !== 'vô hiệu hóa'
+                }
                 className="bg-red-600 hover:bg-red-700 text-white font-bold"
                 onClick={handleBulkDeactivate}
               >
                 Vô hiệu hóa tất cả
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* MODAL CẢNH BÁO XÁC NHẬN VÔ HIỆU HÓA 1 THÀNH VIÊN RIÊNG LẺ */}
+      {singleDeactivateModal && (
+        <Modal
+          isOpen={Boolean(singleDeactivateModal)}
+          onClose={() => {
+            setSingleDeactivateModal(null);
+            setDeactivateText('');
+          }}
+          maxWidth="max-w-md"
+        >
+          <div className="space-y-4 p-2">
+            <div className="flex items-center justify-between pb-2 border-b border-[#eff4ff]">
+              <h2 className="text-base font-bold text-red-700">
+                Xác nhận vô hiệu hóa thành viên
+              </h2>
+              <button
+                type="button"
+                onClick={() => {
+                  setSingleDeactivateModal(null);
+                  setDeactivateText('');
+                }}
+                className="text-[#737686] hover:text-[#172554] text-base font-bold px-2 py-1"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="p-3 bg-red-50 text-red-900 rounded-xl border border-red-200 text-xs leading-relaxed space-y-1">
+              <p>
+                ⚠️ <strong>Cảnh báo:</strong> Bạn đang thao tác vô hiệu hóa tài khoản của{' '}
+                <strong>{singleDeactivateModal.displayName}</strong>.
+              </p>
+              <p className="text-red-700">
+                Tài khoản này sẽ bị chặn đăng nhập và ngừng toàn bộ quyền truy cập học tập trên hệ thống BBE.
+              </p>
+            </div>
+
+            <div className="p-3 bg-red-50/80 border border-red-200 rounded-xl space-y-1.5">
+              <label className="block text-xs font-semibold text-red-950">
+                Để xác nhận, vui lòng nhập chính xác chữ <strong className="text-red-600 underline font-extrabold">&ldquo;vô hiệu hóa&rdquo;</strong> vào ô bên dưới:
+              </label>
+              <input
+                type="text"
+                value={deactivateText}
+                onChange={(e) => setDeactivateText(e.target.value)}
+                placeholder="vô hiệu hóa"
+                className="w-full px-3 py-2 text-xs border border-red-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 bg-white"
+                autoFocus
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-[#eff4ff]">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setSingleDeactivateModal(null);
+                  setDeactivateText('');
+                }}
+              >
+                Hủy
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                loading={deactivatingUserId === singleDeactivateModal.userId}
+                loadingText="Đang xử lý..."
+                disabled={
+                  Boolean(deactivatingUserId) ||
+                  deactivateText.trim().toLowerCase() !== 'vô hiệu hóa'
+                }
+                className="bg-red-600 hover:bg-red-700 text-white font-bold"
+                onClick={() =>
+                  handleIndividualDeactivate(
+                    singleDeactivateModal.userId,
+                    singleDeactivateModal.displayName
+                  )
+                }
+              >
+                Xác nhận vô hiệu hóa
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* MODAL CẢNH BÁO XÁC NHẬN VÔ HIỆU HÓA TẤT CẢ THÀNH VIÊN CHƯA CÓ BAN */}
+      {showBulkUnassignedModal && (
+        <Modal
+          isOpen={showBulkUnassignedModal}
+          onClose={() => {
+            setShowBulkUnassignedModal(false);
+            setDeactivateText('');
+          }}
+          maxWidth="max-w-md"
+        >
+          <div className="space-y-4 p-2">
+            <div className="flex items-center justify-between pb-2 border-b border-[#eff4ff]">
+              <h2 className="text-base font-bold text-red-700">
+                Xác nhận vô hiệu hóa tất cả thành viên chưa có Ban
+              </h2>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowBulkUnassignedModal(false);
+                  setDeactivateText('');
+                }}
+                className="text-[#737686] hover:text-[#172554] text-base font-bold px-2 py-1"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="p-3 bg-red-50 text-red-900 rounded-xl border border-red-200 text-xs leading-relaxed space-y-1">
+              <p>
+                ⚠️ <strong>Cảnh báo:</strong> Thao tác này sẽ vô hiệu hóa toàn bộ{' '}
+                <strong>{unassignedMembers.length} thành viên</strong> chưa có Ban trong danh sách.
+              </p>
+              <p className="text-red-700">
+                Tất cả tài khoản này sẽ bị chuyển sang trạng thái <strong>Ngưng hoạt động (INACTIVE)</strong>, chặn đăng nhập học tập và kết thúc vai trò trong Chapter.
+              </p>
+            </div>
+
+            <div className="p-3 bg-red-50/80 border border-red-200 rounded-xl space-y-1.5">
+              <label className="block text-xs font-semibold text-red-950">
+                Để xác nhận, vui lòng nhập chính xác chữ <strong className="text-red-600 underline font-extrabold">&ldquo;vô hiệu hóa&rdquo;</strong> vào ô bên dưới:
+              </label>
+              <input
+                type="text"
+                value={deactivateText}
+                onChange={(e) => setDeactivateText(e.target.value)}
+                placeholder="vô hiệu hóa"
+                className="w-full px-3 py-2 text-xs border border-red-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 bg-white"
+                autoFocus
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-[#eff4ff]">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setShowBulkUnassignedModal(false);
+                  setDeactivateText('');
+                }}
+              >
+                Hủy
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                loading={deactivating}
+                loadingText="Đang vô hiệu hóa..."
+                disabled={
+                  deactivating ||
+                  deactivateText.trim().toLowerCase() !== 'vô hiệu hóa'
+                }
+                className="bg-red-600 hover:bg-red-700 text-white font-bold"
+                onClick={handleBulkDeactivateUnassigned}
+              >
+                Vô hiệu hóa tất cả ({unassignedMembers.length})
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* MODAL CẢNH BÁO XÁC NHẬN ÁP DỤNG NGAY CHUYỂN GIAO ĐÃ LÊN LỊCH */}
+      {showApplyBatchModal && scheduledBatch && (
+        <Modal
+          isOpen={showApplyBatchModal}
+          onClose={() => setShowApplyBatchModal(false)}
+          maxWidth="max-w-md"
+        >
+          <div className="space-y-4 p-2">
+            <div className="flex items-center justify-between pb-2 border-b border-[#eff4ff]">
+              <h2 className="text-base font-bold text-[#172554] flex items-center gap-2">
+                <span>⚡</span> Xác nhận áp dụng chuyển giao ngay?
+              </h2>
+              <button
+                type="button"
+                onClick={() => setShowApplyBatchModal(false)}
+                className="text-[#737686] hover:text-[#172554] text-base font-bold px-2 py-1"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="p-3.5 bg-amber-50 text-amber-900 rounded-xl border border-amber-200 text-xs leading-relaxed space-y-1.5">
+              <p className="font-bold text-amber-950">
+                ⚠️ Cảnh báo áp dụng trước thời hạn:
+              </p>
+              <p>
+                Đợt chuyển giao nhiệm kỳ này đang được lên lịch hiệu lực vào lúc{' '}
+                <strong>{new Date(scheduledBatch.effectiveAt).toLocaleString('vi-VN')}</strong>.
+              </p>
+              <p>
+                Nếu bạn chọn <strong>&ldquo;Áp dụng ngay&rdquo;</strong>, toàn bộ sơ đồ 7 Ban, các phân công Trưởng ban (LT) và nhân sự của <strong>{scheduledBatch.totalItems} thành viên</strong> sẽ được áp dụng trực tiếp vào hệ thống ngay lúc này mà không cần chờ đến lịch hẹn.
+              </p>
+            </div>
+            <div className="flex justify-end gap-2 pt-2 border-t border-[#eff4ff]">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={applyingBatch}
+                onClick={() => setShowApplyBatchModal(false)}
+              >
+                Hủy bỏ
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                loading={applyingBatch}
+                loadingText="Đang áp dụng..."
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+                onClick={() => handleApplyScheduledBatch(scheduledBatch.id)}
+              >
+                ⚡ Xác nhận áp dụng ngay
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* MODAL CẢNH BÁO XÁC NHẬN HỦY ĐỢT CHUYỂN GIAO ĐÃ LÊN LỊCH */}
+      {showCancelBatchModal && scheduledBatch && (
+        <Modal
+          isOpen={showCancelBatchModal}
+          onClose={() => setShowCancelBatchModal(false)}
+          maxWidth="max-w-md"
+        >
+          <div className="space-y-4 p-2">
+            <div className="flex items-center justify-between pb-2 border-b border-[#eff4ff]">
+              <h2 className="text-base font-bold text-red-700 flex items-center gap-2">
+                <span>⚠️</span> Xác nhận hủy đợt chuyển giao?
+              </h2>
+              <button
+                type="button"
+                onClick={() => setShowCancelBatchModal(false)}
+                className="text-[#737686] hover:text-[#172554] text-base font-bold px-2 py-1"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="p-3.5 bg-red-50 text-red-900 rounded-xl border border-red-200 text-xs leading-relaxed space-y-1.5">
+              <p className="font-bold text-red-950">
+                ⚠️ Cảnh báo hủy chuyển giao đã lên lịch:
+              </p>
+              <p>
+                Đợt chuyển giao nhiệm kỳ (hiệu lực {new Date(scheduledBatch.effectiveAt).toLocaleString('vi-VN')}) gồm <strong>{scheduledBatch.totalItems} thành viên</strong> sẽ bị hủy bỏ hoàn toàn khỏi hệ thống.
+              </p>
+              <p className="text-red-700 font-medium">
+                Sau khi hủy, khu vực nạp Google Sheet sẽ hiển thị lại để bạn có thể tải lên và lên lịch đợt mới khi cần.
+              </p>
+            </div>
+            <div className="flex justify-end gap-2 pt-2 border-t border-[#eff4ff]">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={cancelingBatch}
+                onClick={() => setShowCancelBatchModal(false)}
+              >
+                Giữ lại lịch
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                loading={cancelingBatch}
+                loadingText="Đang hủy..."
+                className="bg-red-600 hover:bg-red-700 text-white font-bold"
+                onClick={() => handleCancelScheduledBatch(scheduledBatch.id)}
+              >
+                ✕ Xác nhận hủy lịch
               </Button>
             </div>
           </div>

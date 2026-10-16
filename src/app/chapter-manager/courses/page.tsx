@@ -490,7 +490,7 @@ export default function ChapterManagerCoursesPage() {
             {/* Header */}
             <div className="flex justify-between items-center border-b border-[#eff4ff] pb-3 shrink-0">
               <div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <span className="text-[11px] font-bold px-2 py-0.5 bg-amber-100 text-amber-800 rounded-md">
                     Ngân hàng câu hỏi & Đáp án
                   </span>
@@ -499,6 +499,12 @@ export default function ChapterManagerCoursesPage() {
                       {quizData.questions?.length || 0} câu hỏi
                     </span>
                   )}
+                  <span className="text-xs font-medium px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200">
+                    ⏱️ Thời gian: {quizData?.durationMinutes || 30} phút
+                  </span>
+                  <span className="text-xs font-medium px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-200">
+                    ⭐ 1 câu đúng = 1 sao
+                  </span>
                 </div>
                 <h3 className="text-lg font-bold text-[#172554] mt-1" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
                   📝 {quizModal?.title}
@@ -571,14 +577,9 @@ export default function ChapterManagerCoursesPage() {
                           <span className="w-7 h-7 rounded-lg bg-[#eff4ff] text-[#2563EB] font-bold text-xs flex items-center justify-center shrink-0">
                             {qIdx + 1}
                           </span>
-                          <span className="text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-[#434655]">
-                            {q.points || 1} điểm
+                          <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1">
+                            ⭐ 1 sao
                           </span>
-                          {q.durationSeconds ? (
-                            <span className="text-xs text-[#737686]">
-                              ⏱️ {q.durationSeconds}s
-                            </span>
-                          ) : null}
                         </div>
                       </div>
 
