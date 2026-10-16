@@ -38,6 +38,9 @@ export default function AdminUsersPage() {
 
   const [actionUserId, setActionUserId] = useState<string | null>(null);
   const [selectedUserDetail, setSelectedUserDetail] = useState<any | null>(null);
+  const isSelectedLeadDna = selectedUserDetail
+    ? selectedUserDetail.effectivePositions?.some((position: any) => position.code === 'DNA_LEAD') || selectedUserDetail.dna?.role === 'Lead DNA'
+    : false;
   const [learningDetail, setLearningDetail] = useState<any | null>(null);
   const [learningDetailLoading, setLearningDetailLoading] = useState(false);
   const [learningDetailError, setLearningDetailError] = useState('');
@@ -197,7 +200,8 @@ export default function AdminUsersPage() {
     setLearningDetailLoading(false);
     const userId = user.userId || user.id;
     const chapterId = user.chapter?.chapterId || user.chapter?.id || 'all';
-    if (user.role !== 'MEMBER') return;
+    const isUserLeadDna = user.effectivePositions?.some((position: any) => position.code === 'DNA_LEAD') || user.dna?.role === 'Lead DNA';
+    if (user.role !== 'MEMBER' || isUserLeadDna) return;
 
     setLearningDetailLoading(true);
     const result = await apiFetch(`/api/v1/chapters/${chapterId}/members/${userId}/course-progress`, { noCache: true });
@@ -402,7 +406,7 @@ export default function AdminUsersPage() {
                 className="w-full px-3 py-2.5 border border-[#cbdbf5] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB] bg-white text-[#172554]"
               >
                 <option value="">👔 Tất cả chức vụ</option>
-                <option value="MEMBER">👤 Thành viên</option>
+                <option value="MEMBER">👤 Thành viên chapter</option>
                 <option value="DNA">🧬 Thành viên DNA</option>
                 <option value="DNA_LEAD">⭐ Lead DNA</option>
                 <option value="CHAPTER_LEADER">🏅 Lead Chapter</option>
@@ -526,6 +530,7 @@ export default function AdminUsersPage() {
                     const isActive = u.status === 'ACTIVE';
                     const isBusy = actionUserId === uId;
                     const isLeader = u.role === 'CHAPTER_LEADER';
+                    const isLeadDna = u.effectivePositions?.some((position: any) => position.code === 'DNA_LEAD') || u.dna?.role === 'Lead DNA';
 
                     return (
                       <tr key={uId} className="hover:bg-[#f8f9ff] transition">
@@ -545,8 +550,8 @@ export default function AdminUsersPage() {
                               </span>
                             )}
 
-                            {/* Member Department or "Chưa có ban" */}
-                            {u.role === 'MEMBER' && (
+                            {/* Member Department or "Chưa có ban" (Không hiển thị "Chưa có ban" đối với Lead DNA vì Lead không dùng Ban) */}
+                            {u.role === 'MEMBER' && !isLeadDna && (
                               u.department ? (
                                 <span className="inline-flex whitespace-nowrap rounded-full bg-blue-50 border border-blue-200 px-2.5 py-0.5 text-[11px] font-semibold text-blue-700">
                                   {formatDepartmentName(u.department.name) === 'Chủ tịch'
@@ -563,14 +568,14 @@ export default function AdminUsersPage() {
                             )}
 
                             {/* Lead DNA */}
-                            {u.effectivePositions?.some((position: any) => position.code === 'DNA_LEAD') && (
+                            {isLeadDna && (
                               <span className="inline-flex whitespace-nowrap rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700">
                                 ⭐ Lead DNA{u.dna?.group ? ` · ${u.dna.group}` : ''}
                               </span>
                             )}
 
                             {/* DNA Member */}
-                            {u.dna?.active && !u.effectivePositions?.some((position: any) => position.code === 'DNA_LEAD') && (
+                            {u.dna?.active && !isLeadDna && (
                               <span className="inline-flex whitespace-nowrap rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700">
                                 🧬 Thành viên DNA{u.dna.group ? ` · ${u.dna.group}` : ''}
                               </span>
@@ -594,6 +599,12 @@ export default function AdminUsersPage() {
                             <div className="flex justify-center">
                               <span className="whitespace-nowrap inline-flex items-center justify-center text-xs font-bold text-purple-700 bg-purple-50 px-2.5 py-1 rounded-full border border-purple-200 shadow-xs">
                                 100% (Lead Chapter / Miễn học)
+                              </span>
+                            </div>
+                          ) : isLeadDna ? (
+                            <div className="flex justify-center">
+                              <span className="whitespace-nowrap inline-flex items-center justify-center text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200 shadow-xs">
+                                Lead DNA (Miễn học)
                               </span>
                             </div>
                           ) : (
@@ -1026,10 +1037,10 @@ export default function AdminUsersPage() {
               <div className="space-y-4">
                 <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[#eff4ff] p-3 text-xs">
                   <span className="font-semibold text-[#172554]">Phạm vi hiện tại:</span>
-                  <span>{selectedUserDetail.chapter?.name ? formatChapterName(selectedUserDetail.chapter.name) : 'Chưa gán Chapter'}</span>
+                  <span>{selectedUserDetail.chapter?.name ? formatChapterName(selectedUserDetail.chapter.name) : isSelectedLeadDna ? 'DNA' : 'Chưa gán Chapter'}</span>
                   <span>·</span>
-                  <span className={selectedUserDetail.department ? 'text-blue-700 font-semibold' : 'text-amber-800 font-semibold'}>
-                    {selectedUserDetail.department ? `Ban ${formatDepartmentName(selectedUserDetail.department.name)}` : '⚠️ Chưa có ban'}
+                  <span className={isSelectedLeadDna ? 'text-emerald-700 font-semibold' : selectedUserDetail.department ? 'text-blue-700 font-semibold' : 'text-amber-800 font-semibold'}>
+                    {isSelectedLeadDna ? 'Lead DNA (Không dùng Ban)' : selectedUserDetail.department ? `Ban ${formatDepartmentName(selectedUserDetail.department.name)}` : '⚠️ Chưa có ban'}
                   </span>
                   <span>·</span>
                   <span className={selectedUserDetail.dna?.active ? 'text-emerald-700 font-semibold' : 'text-slate-500'}>
@@ -1044,6 +1055,10 @@ export default function AdminUsersPage() {
                       {selectedUserDetail.role === 'CHAPTER_LEADER' ? (
                         <span className="inline-flex whitespace-nowrap rounded-full bg-purple-50 border border-purple-200 px-2.5 py-0.5 text-xs font-bold text-purple-700">
                           🏅 Lead Chapter
+                        </span>
+                      ) : isSelectedLeadDna ? (
+                        <span className="inline-flex whitespace-nowrap rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
+                          ⭐ Lead DNA{selectedUserDetail.dna?.group ? ` · ${selectedUserDetail.dna.group}` : ''}
                         </span>
                       ) : selectedUserDetail.department ? (
                         <span className="inline-flex whitespace-nowrap rounded-full bg-blue-50 border border-blue-200 px-2.5 py-0.5 text-xs font-semibold text-blue-700">
@@ -1125,19 +1140,29 @@ export default function AdminUsersPage() {
                   <div className="flex justify-between text-sm">
                     <span className="text-[#737686]">Tiến độ học tập TB:</span>
                     <span className="font-bold text-[#172554]">
-                      {selectedUserDetail.role === 'CHAPTER_LEADER' ? '100% (Lead Chapter)' : `${selectedUserDetail.avgProgress || 0}%`}
+                      {selectedUserDetail.role === 'CHAPTER_LEADER'
+                        ? '100% (Lead Chapter)'
+                        : selectedUserDetail.effectivePositions?.some((position: any) => position.code === 'DNA_LEAD') || selectedUserDetail.dna?.role === 'Lead DNA'
+                        ? 'Lead DNA / Miễn học'
+                        : `${selectedUserDetail.avgProgress || 0}%`}
                     </span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-[#737686]">Điểm Quiz trung bình:</span>
                     <span className="font-bold text-amber-600">
-                      {selectedUserDetail.role === 'CHAPTER_LEADER' ? '—' : `${selectedUserDetail.avgQuizScore || 0}%`}
+                      {selectedUserDetail.role === 'CHAPTER_LEADER' ||
+                      selectedUserDetail.effectivePositions?.some((position: any) => position.code === 'DNA_LEAD') ||
+                      selectedUserDetail.dna?.role === 'Lead DNA'
+                        ? '—'
+                        : `${selectedUserDetail.avgQuizScore || 0}%`}
                     </span>
                   </div>
                 </div>
               </div>
 
-              {selectedUserDetail.role === 'MEMBER' && (
+              {selectedUserDetail.role === 'MEMBER' &&
+                !selectedUserDetail.effectivePositions?.some((position: any) => position.code === 'DNA_LEAD') &&
+                selectedUserDetail.dna?.role !== 'Lead DNA' && (
                 <section className="space-y-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>

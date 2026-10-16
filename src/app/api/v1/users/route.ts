@@ -101,8 +101,20 @@ export async function GET(request: NextRequest) {
     ]
   }
 
-  if (role && ['CHAPTER_LEADER', 'MEMBER'].includes(role)) {
-    where.role = role
+  if (role === 'CHAPTER_LEADER') {
+    where.role = 'CHAPTER_LEADER'
+  } else if (role === 'MEMBER' || role === 'CHAPTER_MEMBER') {
+    where.role = 'MEMBER'
+    where.chapter_members = {
+      some: chapterId ? { chapter_id: chapterId } : {},
+    }
+    where.position_assignments = {
+      none: {
+        position: { code: 'DNA_LEAD' },
+        starts_at: { lte: now },
+        OR: [{ ends_at: null }, { ends_at: { gt: now } }],
+      },
+    }
   } else if (role === 'DNA_LEAD' || role === 'LT') {
     where.position_assignments = {
       some: {
