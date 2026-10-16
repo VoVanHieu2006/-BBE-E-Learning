@@ -39,6 +39,10 @@ export default function ChapterManagerTermTransitionPage() {
   const [selectedDeptId, setSelectedDeptId] = useState<string>('');
   const [makeLead, setMakeLead] = useState(false);
   const [savingDept, setSavingDept] = useState(false);
+  const [actionLoading, setActionLoading] = useState<{
+    type: 'appoint' | 'saveDept' | 'applyScheduled' | 'cancelScheduled';
+    id?: string;
+  } | null>(null);
 
   // Chuyển giao nhiệm kỳ từ Google Sheet
   const [rosterUrl, setRosterUrl] = useState(SAMPLE_SHEET_URL);
@@ -174,29 +178,123 @@ export default function ChapterManagerTermTransitionPage() {
   // Đổi ban cho thành viên
   const handleSaveDepartment = async () => {
     if (!user?.chapterId || !changeDeptModal?.userId) return;
+    const targetUserId = changeDeptModal.userId;
+    const targetDisplayName = changeDeptModal.displayName;
+    const targetDeptId = selectedDeptId.trim() || null;
+    const isTargetDeptPresident = availableDepartments.find((d: any) => d.id === targetDeptId)?.name === 'Chủ Tịch';
+    const isAppointLead = isTargetDeptPresident ? true : makeLead;
+
     setSavingDept(true);
-    const deptId = selectedDeptId.trim() || null;
+    setActionLoading({ type: 'saveDept', id: targetUserId });
 
     const res = await apiFetch(
-      `/api/v1/chapters/${user.chapterId}/members/${changeDeptModal.userId}/department`,
+      `/api/v1/chapters/${user.chapterId}/members/${targetUserId}/department`,
       {
         method: 'POST',
-        body: JSON.stringify({ departmentUnitId: deptId, makeLead }),
+        body: JSON.stringify({ departmentUnitId: targetDeptId, makeLead: isAppointLead }),
       }
     );
 
     setSavingDept(false);
+    setActionLoading(null);
+
     if (res.ok) {
       notify(
         'success',
-        deptId
-          ? makeLead
-            ? `Đã chuyển ${changeDeptModal.displayName} và bổ nhiệm làm Trưởng ban thành công!`
-            : `Đã chuyển ban cho ${changeDeptModal.displayName} thành công!`
-          : `Đã đưa ${changeDeptModal.displayName} về danh sách Chưa phân Ban.`
+        targetDeptId
+          ? isAppointLead
+            ? isTargetDeptPresident
+              ? `Đã phân ${targetDisplayName} làm Chủ tịch Chapter thành công!`
+              : `Đã chuyển ${targetDisplayName} và bổ nhiệm làm Trưởng ban thành công!`
+            : `Đã chuyển ban cho ${targetDisplayName} thành công!`
+          : `Đã đưa ${targetDisplayName} về danh sách Chưa phân Ban.`
       );
       setChangeDeptModal(null);
+      setSelectedDeptId('');
       setMakeLead(false);
+
+      // CẬP NHẬT GIAO DIỆN LẠC QUAN (OPTIMISTIC UI): Phản hồi ngay < 50ms không bị trễ
+      if (!targetDeptId) {
+        let memberEmail = '';
+        setRosterData((prev) =>
+          prev.map((ban) => {
+            const found = ban.members.find((m: any) => m.userId === targetUserId);
+            if (found) memberEmail = found.email;
+            const updated = ban.members.filter((m: any) => m.userId !== targetUserId);
+            return { ...ban, members: updated, total: updated.length };
+          })
+        );
+        setUnassignedMembers((prev) => {
+          if (prev.some((m) => m.userId === targetUserId)) return prev;
+          return [{ userId: targetUserId, displayName: targetDisplayName, email: memberEmail, role: 'MEMBER' }, ...prev];
+        });
+      } else {
+        let memberEmail = '';
+        setUnassignedMembers((prev) => {
+          const found = prev.find((m) => m.userId === targetUserId);
+          if (found) memberEmail = found.email;
+          return prev.filter((m) => m.userId !== targetUserId);
+        });
+
+        setRosterData((prev) => {
+          let oldPresidentToUnassigned: any = null;
+
+          // Xóa khỏi ban cũ
+          const cleaned = prev.map((ban) => {
+            const found = ban.members.find((m: any) => m.userId === targetUserId);
+            if (found && !memberEmail) memberEmail = found.email;
+            const updated = ban.members.filter((m: any) => m.userId !== targetUserId);
+            return { ...ban, members: updated, total: updated.length };
+          });
+
+          // Nếu chuyển vào ban Chủ Tịch: Chủ tịch cũ tự động chuyển sang chưa phân ban
+          const withPresidentHandled = cleaned.map((ban) => {
+            if (ban.id === targetDeptId && isTargetDeptPresident && ban.members.length > 0) {
+              oldPresidentToUnassigned = ban.members[0];
+              return { ...ban, members: [], total: 0 };
+            }
+            return ban;
+          });
+
+          if (oldPresidentToUnassigned) {
+            setUnassignedMembers((un) => [
+              {
+                userId: oldPresidentToUnassigned.userId,
+                displayName: oldPresidentToUnassigned.displayName,
+                email: oldPresidentToUnassigned.email,
+                role: 'MEMBER',
+              },
+              ...un,
+            ]);
+          }
+
+          const newMemberObj = {
+            userId: targetUserId,
+            displayName: targetDisplayName,
+            email: memberEmail,
+            role: 'MEMBER',
+            isLead: isAppointLead,
+          };
+
+          return withPresidentHandled.map((ban) => {
+            if (ban.id === targetDeptId) {
+              const updatedMembers = ban.members.map((m: any) => ({
+                ...m,
+                isLead: isAppointLead ? false : m.isLead,
+              }));
+              updatedMembers.push(newMemberObj);
+              updatedMembers.sort((a: any, b: any) => {
+                if (a.isLead && !b.isLead) return -1;
+                if (!a.isLead && b.isLead) return 1;
+                return a.displayName.localeCompare(b.displayName, 'vi');
+              });
+              return { ...ban, members: updatedMembers, total: updatedMembers.length };
+            }
+            return ban;
+          });
+        });
+      }
+
       clearApiCache('/api/v1/chapters');
       loadCurrentRoster(user.chapterId);
     } else {
@@ -208,7 +306,10 @@ export default function ChapterManagerTermTransitionPage() {
   const handleAppointLead = async (userId: string, displayName: string, deptId: string, deptName: string) => {
     if (!user?.chapterId) return;
     if (!confirm(`Bạn có chắc chắn muốn bổ nhiệm ${displayName} làm Trưởng ban của ${deptName}?`)) return;
+
     setSavingDept(true);
+    setActionLoading({ type: 'appoint', id: userId });
+
     const res = await apiFetch(
       `/api/v1/chapters/${user.chapterId}/members/${userId}/department`,
       {
@@ -216,9 +317,32 @@ export default function ChapterManagerTermTransitionPage() {
         body: JSON.stringify({ departmentUnitId: deptId, makeLead: true }),
       }
     );
+
     setSavingDept(false);
+    setActionLoading(null);
+
     if (res.ok) {
       notify('success', `Đã bổ nhiệm ${displayName} làm Trưởng ban ${deptName} thành công!`);
+
+      // Cập nhật lạc quan
+      setRosterData((prev) =>
+        prev.map((ban) => {
+          if (ban.id === deptId) {
+            const updated = ban.members.map((m: any) => ({
+              ...m,
+              isLead: m.userId === userId,
+            }));
+            updated.sort((a: any, b: any) => {
+              if (a.isLead && !b.isLead) return -1;
+              if (!a.isLead && b.isLead) return 1;
+              return a.displayName.localeCompare(b.displayName, 'vi');
+            });
+            return { ...ban, members: updated };
+          }
+          return ban;
+        })
+      );
+
       clearApiCache('/api/v1/chapters');
       loadCurrentRoster(user.chapterId);
     } else {
@@ -295,10 +419,12 @@ export default function ChapterManagerTermTransitionPage() {
   const handleApplyScheduledBatch = async (batchId: string) => {
     if (!user?.chapterId) return;
     setApplyingBatch(true);
+    setActionLoading({ type: 'applyScheduled', id: batchId });
     const res = await apiFetch(`/api/v1/chapters/${user.chapterId}/reorganizations/${batchId}`, {
       method: 'POST',
     });
     setApplyingBatch(false);
+    setActionLoading(null);
     if (res.ok) {
       notify('success', 'Chuyển giao nhiệm kỳ thành công! Sơ đồ 7 Ban đã được cập nhật ngay lập tức.');
       clearApiCache('/api/v1/chapters');
@@ -312,10 +438,12 @@ export default function ChapterManagerTermTransitionPage() {
   const handleCancelScheduledBatch = async (batchId: string) => {
     if (!user?.chapterId || !confirm('Bạn có chắc chắn muốn hủy đợt chuyển giao nhiệm kỳ đã lên lịch này?')) return;
     setCancelingBatch(true);
+    setActionLoading({ type: 'cancelScheduled', id: batchId });
     const res = await apiFetch(`/api/v1/chapters/${user.chapterId}/reorganizations/${batchId}`, {
       method: 'DELETE',
     });
     setCancelingBatch(false);
+    setActionLoading(null);
     if (res.ok) {
       notify('success', 'Đã hủy đợt chuyển giao nhiệm kỳ đã lên lịch.');
       clearApiCache('/api/v1/chapters');
@@ -440,8 +568,25 @@ export default function ChapterManagerTermTransitionPage() {
               <p className="font-semibold">Đang tải sơ đồ phân ban của Chapter...</p>
             </Card>
           ) : (
-            <div className="overflow-x-auto pb-4">
-              <div className="grid grid-cols-7 gap-4 min-w-[1650px]">
+            <div className="relative">
+              {/* Lớp phủ làm mờ mượt mà khi đang xử lý bổ nhiệm / đổi ban */}
+              {actionLoading && (
+                <div className="absolute inset-0 bg-white/70 backdrop-blur-[1px] z-20 flex flex-col items-center justify-center rounded-2xl transition-all">
+                  <div className="inline-block animate-spin rounded-full h-8 w-8 border-3 border-blue-600 border-t-transparent mb-2" />
+                  <span className="text-xs font-bold text-slate-800 bg-white/95 px-3.5 py-1.5 rounded-full shadow-md border border-slate-200">
+                    {actionLoading.type === 'appoint'
+                      ? '👑 Đang bổ nhiệm Trưởng ban...'
+                      : actionLoading.type === 'saveDept'
+                      ? '⚙️ Đang lưu thông tin phân Ban...'
+                      : actionLoading.type === 'applyScheduled'
+                      ? '⚡ Đang áp dụng chuyển giao nhiệm kỳ...'
+                      : 'Đang xử lý...'}
+                  </span>
+                </div>
+              )}
+
+              <div className={`overflow-x-auto pb-4 ${actionLoading ? 'pointer-events-none opacity-50' : ''}`}>
+                <div className="grid grid-cols-7 gap-4 min-w-[1650px]">
                 {rosterData.map((ban, idx) => {
                   const isPresidentBan = ban.name === 'Chủ Tịch';
                   return (
@@ -509,17 +654,28 @@ export default function ChapterManagerTermTransitionPage() {
                                 {!isLead && !isPresidentBan && ban.id ? (
                                   <button
                                     type="button"
+                                    disabled={Boolean(actionLoading)}
                                     onClick={() => handleAppointLead(member.userId, member.displayName, ban.id!, ban.name)}
-                                    className="text-amber-700 hover:text-amber-900 font-bold flex items-center gap-0.5"
+                                    className="text-amber-700 hover:text-amber-900 font-bold flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed"
                                     title="Bổ nhiệm làm Trưởng ban"
                                   >
-                                    👑 Bổ nhiệm LT
+                                    {actionLoading?.type === 'appoint' && actionLoading.id === member.userId ? (
+                                      <>
+                                        <div className="animate-spin rounded-full h-3 w-3 border-2 border-amber-700 border-t-transparent" />
+                                        <span>Đang bổ nhiệm...</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <span>👑</span> Bổ nhiệm LT
+                                      </>
+                                    )}
                                   </button>
                                 ) : (
                                   <span className="text-[10px] text-amber-800 font-bold">{isPresidentBan ? '⭐ Lãnh đạo' : '👑 Trưởng ban'}</span>
                                 )}
                                 <button
                                   type="button"
+                                  disabled={Boolean(actionLoading)}
                                   onClick={() => {
                                     setChangeDeptModal({
                                       userId: member.userId,
@@ -529,7 +685,7 @@ export default function ChapterManagerTermTransitionPage() {
                                     setSelectedDeptId(ban.id || '');
                                     setMakeLead(member.isLead);
                                   }}
-                                  className="text-slate-500 hover:text-[#2563EB] font-semibold flex items-center gap-0.5 ml-auto"
+                                  className="text-slate-500 hover:text-[#2563EB] font-semibold flex items-center gap-0.5 ml-auto disabled:opacity-40 disabled:cursor-not-allowed"
                                   title="Chuyển sang ban khác"
                                 >
                                   ⚙️ Đổi ban
@@ -550,7 +706,8 @@ export default function ChapterManagerTermTransitionPage() {
                 })}
               </div>
             </div>
-          )}
+          </div>
+        )}
 
           {/* ĐỢT CHUYỂN GIAO NHIỆM KỲ ĐÃ LÊN LỊCH (NẾU CÓ) */}
           {scheduledBatch && (
@@ -632,6 +789,57 @@ export default function ChapterManagerTermTransitionPage() {
                   })}
                 </div>
               </div>
+
+              {/* Bảng thành viên Chapter không có tên trong nhiệm kỳ tiếp theo */}
+              {scheduledBatch.unmatchedCurrentMembers && scheduledBatch.unmatchedCurrentMembers.length > 0 && (
+                <div className="pt-4 border-t border-blue-200/80 space-y-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                    <h4 className="text-xs font-extrabold text-amber-900 uppercase tracking-wide flex items-center gap-1.5">
+                      <span>⚠️</span> Thành viên Chapter không có tên trong nhiệm kỳ tiếp theo ({scheduledBatch.unmatchedCurrentMembers.length})
+                    </h4>
+                    <span className="text-[11px] text-[#737686]">
+                      (Sau khi chuyển giao, các thành viên này sẽ chuyển về trạng thái Chưa phân Ban)
+                    </span>
+                  </div>
+
+                  <div className="border border-amber-200 rounded-xl overflow-hidden bg-white max-h-56 overflow-y-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-100 border-b-2 border-slate-300 text-slate-900 font-extrabold text-[11px] uppercase tracking-wider sticky top-0">
+                        <tr>
+                          <th className="py-2.5 px-4">Họ và tên</th>
+                          <th className="py-2.5 px-4">Email</th>
+                          <th className="py-2.5 px-4">Ban hiện tại</th>
+                          <th className="py-2.5 px-4 text-right">Chi tiết</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-amber-100/60">
+                        {scheduledBatch.unmatchedCurrentMembers.map((m: any) => (
+                          <tr key={m.userId} className="hover:bg-amber-50/20">
+                            <td className="py-2 px-4 font-semibold text-[#172554]">
+                              <Link
+                                href={`/chapter-manager/members/${m.userId}`}
+                                className="hover:text-[#2563EB]"
+                              >
+                                {m.displayName}
+                              </Link>
+                            </td>
+                            <td className="py-2 px-4 text-[#737686]">{m.email}</td>
+                            <td className="py-2 px-4 font-medium text-slate-700">{m.currentDepartmentName}</td>
+                            <td className="py-2 px-4 text-right">
+                              <Link
+                                href={`/chapter-manager/members/${m.userId}`}
+                                className="text-blue-600 hover:underline font-semibold"
+                              >
+                                Chi tiết →
+                              </Link>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </Card>
           )}
 
@@ -677,17 +885,21 @@ export default function ChapterManagerTermTransitionPage() {
                         <td className="py-2.5 px-4 text-[#737686]">{m.email}</td>
                         <td className="py-2.5 px-4 text-center">
                           <select
-                            defaultValue=""
+                            value={changeDeptModal?.userId === m.userId ? selectedDeptId : ''}
+                            disabled={Boolean(actionLoading)}
                             onChange={(e) => {
-                              if (e.target.value) {
-                                setSelectedDeptId(e.target.value);
+                              const val = e.target.value;
+                              if (val) {
+                                setSelectedDeptId(val);
                                 setChangeDeptModal({
                                   userId: m.userId,
                                   displayName: m.displayName,
                                 });
+                                const deptObj = availableDepartments.find((d: any) => d.id === val);
+                                setMakeLead(deptObj?.name === 'Chủ Tịch');
                               }
                             }}
-                            className="text-xs border border-[#cbdbf5] rounded-lg px-2.5 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-[#2563EB]"
+                            className="text-xs border border-[#cbdbf5] rounded-lg px-2.5 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-[#2563EB] disabled:opacity-50"
                           >
                             <option value="">➕ Chọn ban để gán...</option>
                             {availableDepartments.map((d: any) => (
@@ -762,7 +974,7 @@ export default function ChapterManagerTermTransitionPage() {
                 Người đứng đầu mỗi cột là <strong>LT của ban đó</strong> (Chủ Tịch có 1 người duy nhất). Định dạng mỗi ô: <strong>Họ tên (email@gmail.com)</strong>.
               </p>
               <p className="text-xs text-blue-800 bg-blue-100/70 px-3 py-1.5 rounded-lg border border-blue-200 inline-block">
-                💡 <strong>Lưu ý:</strong> Nếu bạn vừa sửa dữ liệu trên Google Sheet, vui lòng bấm nút <strong>"🔄 Tải lại Sheet"</strong> để hệ thống làm mới bản dự kiến mới nhất!
+                💡 <strong>Lưu ý:</strong> Nếu bạn vừa sửa dữ liệu trên Google Sheet, vui lòng bấm nút <strong>"🔍 Đọc và phân tích sheet"</strong> để hệ thống làm mới bản dự kiến mới nhất!
               </p>
             </div>
 
@@ -809,14 +1021,6 @@ export default function ChapterManagerTermTransitionPage() {
                   <div className="flex items-end gap-2">
                     <Button type="submit" loading={parsing} loadingText="Đang phân tích...">
                       🔍 Đọc và phân tích sheet
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      loading={parsing}
-                      onClick={() => handleParseSheet()}
-                    >
-                      🔄 Tải lại Sheet
                     </Button>
                   </div>
                 </div>
@@ -1252,7 +1456,13 @@ export default function ChapterManagerTermTransitionPage() {
       {changeDeptModal && (
         <Modal
           isOpen={Boolean(changeDeptModal)}
-          onClose={() => setChangeDeptModal(null)}
+          onClose={() => {
+            if (!savingDept) {
+              setChangeDeptModal(null);
+              setSelectedDeptId('');
+              setMakeLead(false);
+            }
+          }}
           maxWidth="max-w-md"
         >
           <div className="space-y-4 p-2">
@@ -1260,13 +1470,19 @@ export default function ChapterManagerTermTransitionPage() {
               <h3 className="text-base font-bold text-[#172554]">
                 Phân Ban cho: {changeDeptModal.displayName}
               </h3>
-              <button
-                type="button"
-                onClick={() => setChangeDeptModal(null)}
-                className="text-[#737686] hover:text-[#172554] text-base font-bold px-2 py-1"
-              >
-                ✕
-              </button>
+              {!savingDept && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setChangeDeptModal(null);
+                    setSelectedDeptId('');
+                    setMakeLead(false);
+                  }}
+                  className="text-[#737686] hover:text-[#172554] text-base font-bold px-2 py-1"
+                >
+                  ✕
+                </button>
+              )}
             </div>
 
             <div className="space-y-3">
@@ -1280,9 +1496,17 @@ export default function ChapterManagerTermTransitionPage() {
                   Chọn Ban mới:
                 </label>
                 <select
+                  disabled={savingDept}
                   value={selectedDeptId}
-                  onChange={(e) => setSelectedDeptId(e.target.value)}
-                  className="w-full rounded-xl border border-[#cbdbf5] px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB] bg-white font-medium"
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    setSelectedDeptId(id);
+                    const deptObj = availableDepartments.find((d: any) => d.id === id);
+                    if (deptObj?.name === 'Chủ Tịch') {
+                      setMakeLead(true);
+                    }
+                  }}
+                  className="w-full rounded-xl border border-[#cbdbf5] px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB] bg-white font-medium disabled:opacity-50"
                 >
                   <option value="">⚠️ Đưa về trạng thái Chưa phân Ban</option>
                   {availableDepartments.map((d: any) => (
@@ -1295,30 +1519,50 @@ export default function ChapterManagerTermTransitionPage() {
 
               {selectedDeptId && (
                 <div className="pt-2">
-                  <label className="flex items-center gap-2 text-xs font-semibold text-slate-800 cursor-pointer bg-amber-50/80 p-2.5 rounded-xl border border-amber-200">
-                    <input
-                      type="checkbox"
-                      checked={makeLead}
-                      onChange={(e) => setMakeLead(e.target.checked)}
-                      className="rounded text-amber-600 focus:ring-amber-500 w-4 h-4 cursor-pointer"
-                    />
-                    <span>👑 Bổ nhiệm làm Trưởng ban của Ban này</span>
-                  </label>
-                  <p className="text-[11px] text-slate-500 mt-1 pl-6">
-                    (Nếu được chọn, thành viên sẽ trở thành Trưởng ban mới, thay thế Trưởng ban cũ của ban đó)
-                  </p>
+                  {availableDepartments.find((d: any) => d.id === selectedDeptId)?.name === 'Chủ Tịch' ? (
+                    <div className="bg-amber-100/90 p-2.5 rounded-xl border border-amber-300 text-xs text-amber-900 font-semibold flex items-center gap-2">
+                      <span>⭐</span>
+                      <span>Ban Chủ Tịch chỉ có 1 người duy nhất. Thành viên này sẽ trở thành Chủ tịch mới của Chapter.</span>
+                    </div>
+                  ) : (
+                    <label className="flex items-center gap-2 text-xs font-semibold text-slate-800 cursor-pointer bg-amber-50/80 p-2.5 rounded-xl border border-amber-200">
+                      <input
+                        type="checkbox"
+                        checked={makeLead}
+                        disabled={savingDept}
+                        onChange={(e) => setMakeLead(e.target.checked)}
+                        className="rounded text-amber-600 focus:ring-amber-500 w-4 h-4 cursor-pointer"
+                      />
+                      <span>👑 Bổ nhiệm làm Trưởng ban của Ban này</span>
+                    </label>
+                  )}
+                  {availableDepartments.find((d: any) => d.id === selectedDeptId)?.name !== 'Chủ Tịch' && (
+                    <p className="text-[11px] text-slate-500 mt-1 pl-6">
+                      (Nếu được chọn, thành viên sẽ trở thành Trưởng ban mới, thay thế Trưởng ban cũ của ban đó)
+                    </p>
+                  )}
                 </div>
               )}
             </div>
 
             <div className="flex justify-end gap-2 pt-3 border-t border-[#eff4ff]">
-              <Button variant="outline" size="sm" onClick={() => setChangeDeptModal(null)}>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={savingDept}
+                onClick={() => {
+                  setChangeDeptModal(null);
+                  setSelectedDeptId('');
+                  setMakeLead(false);
+                }}
+              >
                 Hủy
               </Button>
               <Button
                 variant="primary"
                 size="sm"
                 loading={savingDept}
+                disabled={savingDept}
                 onClick={handleSaveDepartment}
               >
                 Lưu thay đổi

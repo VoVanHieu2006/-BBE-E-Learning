@@ -121,6 +121,17 @@ export async function POST(request: NextRequest, { params }: { params: { chapter
         continue
       }
 
+      // Ban Chủ Tịch chỉ có tối đa 1 người (0 hoặc 1)
+      if (department.name.toLowerCase() === 'chủ tịch' && departmentIndex > 0) {
+        errors.push({
+          row: row + 1,
+          column: header,
+          value,
+          message: 'Ban Chủ Tịch chỉ được phép có tối đa 1 người (Chủ tịch Chapter). Vui lòng điều chỉnh lại sheet.',
+        })
+        continue
+      }
+
       const isLead = departmentIndex === 0
       candidates.push({
         displayName,

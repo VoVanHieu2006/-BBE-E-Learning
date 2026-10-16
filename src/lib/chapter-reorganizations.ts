@@ -51,9 +51,25 @@ export async function applyDueChapterReorganizations(now = new Date()): Promise<
       await tx.positionAssignment.createMany({ data: batch.items.filter((item) => item.position_id).map((item) => ({ user_id: item.user_id, unit_id: item.department_unit_id, position_id: item.position_id!, is_primary: item.is_primary, starts_at: now, appointed_by: batch.created_by_user_id })) })
       return true
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 30_000 })
-    if (result) {
-      await Promise.all(batch.items.map((item) => reconcileLearningAssignmentsForUser(item.user_id)))
-      applied++
+    try {
+      if (result) {
+        // Reconcile assignments in controlled chunks to avoid exhausting the DB connection pool (P2024)
+        const CHUNK_SIZE = 4
+        for (let i = 0; i < batch.items.length; i += CHUNK_SIZE) {
+          const chunk = batch.items.slice(i, i + CHUNK_SIZE)
+          await Promise.all(
+            chunk.map((item) =>
+              reconcileLearningAssignmentsForUser(item.user_id).catch((err) => {
+                console.error(`[applyDueChapterReorganizations] Reconcile error for user ${item.user_id}:`, err)
+              })
+            )
+          )
+        }
+        applied++
+      }
+    } catch (batchError) {
+      console.error(`[applyDueChapterReorganizations] Error processing batch ${batch.id}:`, batchError)
+      throw batchError
     }
   }
   return applied

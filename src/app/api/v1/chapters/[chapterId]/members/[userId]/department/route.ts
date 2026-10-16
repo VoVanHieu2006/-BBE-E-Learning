@@ -40,7 +40,9 @@ export async function POST(
     return NextResponse.json({ error: { code: 'InvalidDepartment', message: 'Ban không thuộc Chapter này' } }, { status: 400 })
   }
 
-  const makeLead = Boolean(body.makeLead)
+  const targetDept = departments.find((d) => d.id === departmentUnitId)
+  const isPresident = targetDept?.name.toLowerCase() === 'chủ tịch'
+  const makeLead = isPresident ? true : Boolean(body.makeLead)
 
   const now = new Date()
 
@@ -72,6 +74,30 @@ export async function POST(
 
     // 2. Nếu có departmentUnitId mới, tạo membership mới
     if (departmentUnitId) {
+      // Nếu là Ban Chủ Tịch: Đóng toàn bộ membership và position của Chủ tịch cũ (chỉ 0 hoặc 1 người)
+      if (isPresident) {
+        await tx.organizationMembership.updateMany({
+          where: {
+            unit_id: departmentUnitId,
+            status: 'ACTIVE',
+            ends_at: null,
+          },
+          data: {
+            status: 'ENDED',
+            ends_at: now,
+          },
+        })
+        await tx.positionAssignment.updateMany({
+          where: {
+            unit_id: departmentUnitId,
+            ends_at: null,
+          },
+          data: {
+            ends_at: now,
+          },
+        })
+      }
+
       await tx.organizationMembership.create({
         data: {
           user_id: params.userId,
@@ -81,7 +107,7 @@ export async function POST(
         },
       })
 
-      // 3. Nếu được bầu làm Trưởng ban (LT)
+      // 3. Nếu được bầu làm Trưởng ban (LT) hoặc Chủ tịch
       if (makeLead) {
         // Kết thúc chức vụ Trưởng ban cũ trong ban này
         await tx.positionAssignment.updateMany({

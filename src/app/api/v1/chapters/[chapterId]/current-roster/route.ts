@@ -178,6 +178,26 @@ export async function GET(
       }
     })
 
+    // Danh sách thành viên hiện tại của Chapter không có tên trong đợt chuyển giao tiếp theo
+    const itemUserIdSet = new Set(itemUserIds)
+    const userToCurrentDeptName = new Map<string, string>()
+    for (const d of departments) {
+      for (const m of d.memberships) {
+        if (m.user?.id) {
+          userToCurrentDeptName.set(m.user.id, d.name)
+        }
+      }
+    }
+
+    const unmatchedCurrentMembers = allChapterMembers
+      .filter((m) => !itemUserIdSet.has(m.userId) && m.role === 'MEMBER' && m.email !== 'chapter.lead.demo@bbe.vn')
+      .map((m) => ({
+        userId: m.userId,
+        email: m.email,
+        displayName: m.displayName || m.email.split('@')[0],
+        currentDepartmentName: userToCurrentDeptName.get(m.userId) || 'Chưa phân Ban',
+      }))
+
     scheduledBatch = {
       id: scheduledBatchRecord.id,
       effectiveAt: scheduledBatchRecord.effective_at,
@@ -185,6 +205,7 @@ export async function GET(
       totalItems: scheduledBatchRecord.items.length,
       status: scheduledBatchRecord.status,
       newTerm,
+      unmatchedCurrentMembers,
     }
   }
 

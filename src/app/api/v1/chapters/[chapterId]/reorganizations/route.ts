@@ -100,7 +100,7 @@ export async function POST(request: NextRequest, { params }: { params: { chapter
   const allowedUnits = new Set(await getOrganizationUnitTreeIds(chapter.organization_unit_id))
   const departments = await prisma.organizationUnit.findMany({
     where: { id: { in: rows.map((row: any) => row.departmentUnitId) } },
-    select: { id: true, type: true },
+    select: { id: true, name: true, type: true },
   })
 
   if (
@@ -108,6 +108,18 @@ export async function POST(request: NextRequest, { params }: { params: { chapter
     departments.some((unit) => unit.type !== 'DEPARTMENT' || !allowedUnits.has(unit.id))
   ) {
     return NextResponse.json({ error: { code: 'DepartmentScopeInvalid', message: 'Ban không hợp lệ trong Chapter này.' } }, { status: 400 })
+  }
+
+  // Ràng buộc Ban Chủ Tịch chỉ có tối đa 1 người (0 hoặc 1)
+  const presidentDept = departments.find((d) => d.name.toLowerCase() === 'chủ tịch')
+  if (presidentDept) {
+    const presidentCount = rows.filter((r: any) => r.departmentUnitId === presidentDept.id).length
+    if (presidentCount > 1) {
+      return NextResponse.json(
+        { error: { code: 'ValidationError', message: 'Ban Chủ Tịch chỉ được phép có tối đa 1 người (0 hoặc 1).' } },
+        { status: 400 }
+      )
+    }
   }
 
   const isImmediate = effectiveAt.getTime() <= Date.now() + 60000
