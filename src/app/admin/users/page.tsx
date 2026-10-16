@@ -296,7 +296,7 @@ export default function AdminUsersPage() {
               Quản lý tài khoản
             </h1>
             <p className="text-[#737686] mt-1 text-sm">
-              Quản lý toàn bộ tài khoản BĐHU và học viên theo từng Chapter, phân quyền và kiểm soát hoạt động
+              Quản lý toàn bộ tài khoản Lead Chapter và học viên theo từng Chapter, phân quyền và kiểm soát hoạt động
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -312,7 +312,7 @@ export default function AdminUsersPage() {
         {/* Global Stat Cards (Non-Admin Users Total) */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <Card shadow="md" className="p-4 border border-[#eff4ff]">
-            <div className="text-xs font-semibold text-[#737686]">Tổng thành viên & BĐHU</div>
+            <div className="text-xs font-semibold text-[#737686]">Tổng thành viên & Lead Chapter</div>
             <div className="text-2xl font-bold text-[#172554] mt-1">{stats?.total ?? (loading ? '...' : users.length)}</div>
             <div className="text-[11px] text-[#737686] mt-0.5">Toàn hệ thống (trừ Admin)</div>
           </Card>
@@ -331,7 +331,7 @@ export default function AdminUsersPage() {
             <div className="text-[11px] text-[#737686] mt-0.5">Đã khóa truy cập</div>
           </Card>
           <Card shadow="md" className="p-4 border border-[#eff4ff]">
-            <div className="text-xs font-semibold text-purple-700">Ban Định Hướng (BĐHU)</div>
+            <div className="text-xs font-semibold text-purple-700">Lead Chapter</div>
             <div className="text-2xl font-bold text-purple-700 mt-1">
               {stats?.leaders ?? (loading ? '...' : users.filter((u) => u.role === 'CHAPTER_LEADER').length)}
             </div>
@@ -347,7 +347,7 @@ export default function AdminUsersPage() {
                 type="text"
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
-                placeholder="🔍 Tìm theo địa chỉ email..."
+                placeholder="🔍 Tìm theo tên hoặc email..."
                 className="w-full px-3.5 py-2.5 border border-[#cbdbf5] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
               />
             </div>
@@ -357,9 +357,12 @@ export default function AdminUsersPage() {
                 onChange={(e) => setRoleInput(e.target.value)}
                 className="w-full px-3 py-2.5 border border-[#cbdbf5] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB] bg-white text-[#172554]"
               >
-                <option value="">-- Tất cả vai trò --</option>
-                <option value="MEMBER">Học viên (Member)</option>
-                <option value="CHAPTER_LEADER">Lead Chapter</option>
+                <option value="">👔 Tất cả chức vụ</option>
+                <option value="MEMBER">👤 Thành viên</option>
+                <option value="DNA">🧬 Thành viên DNA</option>
+                <option value="DNA_LEAD">⭐ Lead DNA</option>
+                <option value="CHAPTER_LEADER">🏅 Lead Chapter</option>
+                <option value="LT">👑 LT Ban</option>
               </select>
             </div>
             <div className="w-full lg:w-48">
@@ -406,7 +409,7 @@ export default function AdminUsersPage() {
           <div className="font-medium flex items-center gap-2">
             <span>
               Đang hiển thị <span className="text-[#2563EB] font-bold">{users.length}</span> trên tổng số{' '}
-              <span className="text-[#172554] font-bold">{stats?.total ?? totalFilteredCount}</span> tài khoản học viên & BĐHU
+              <span className="text-[#172554] font-bold">{stats?.total ?? totalFilteredCount}</span> tài khoản học viên & Lead Chapter
               {hasActiveFilters && ` (kết quả lọc: ${totalFilteredCount} tài khoản)`}
             </span>
             {loading && (
@@ -466,7 +469,7 @@ export default function AdminUsersPage() {
                 <thead className="bg-[#f8f9ff] text-[#434655] font-semibold border-b border-[#eff4ff]">
                   <tr>
                     <th className="px-6 py-4 min-w-[220px]">Tài khoản / Email</th>
-                    <th className="px-6 py-4 min-w-[260px]">Vai trò</th>
+                    <th className="px-6 py-4 min-w-[260px]">Chức vụ</th>
                     <th className="px-6 py-4 min-w-[160px]">Chapter</th>
                     <th className="px-6 py-4 text-center min-w-[190px]">Tiến độ khóa học</th>
                     <th className="px-6 py-4 text-center min-w-[140px]">Trạng thái</th>
@@ -498,20 +501,22 @@ export default function AdminUsersPage() {
                         <td className="px-6 py-4">
                           {!hasDetailedRole && <div>{getRoleBadge(u.role)}</div>}
                           <div className="mt-1 flex flex-wrap gap-1.5">
-                            {u.effectivePositions?.some((position: any) => position.code === 'DNA_LEAD') ? (
-                              <span className="inline-flex whitespace-nowrap rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">Lead DNA</span>
-                            ) : u.role === 'CHAPTER_LEADER' ? (
-                              <span className="inline-flex whitespace-nowrap rounded-full bg-purple-50 px-2 py-0.5 text-[10px] font-semibold text-purple-700">Lead Chapter · {formatChapterName(u.chapter?.name)}</span>
-                            ) : u.department ? (
+                            {u.effectivePositions?.some((position: any) => position.code === 'DNA_LEAD') && (
+                              <span className="inline-flex whitespace-nowrap rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">⭐ Lead DNA</span>
+                            )}
+                            {u.role === 'CHAPTER_LEADER' && (
+                              <span className="inline-flex whitespace-nowrap rounded-full bg-purple-50 px-2 py-0.5 text-[10px] font-semibold text-purple-700">🏅 Lead Chapter · {formatChapterName(u.chapter?.name)}</span>
+                            )}
+                            {u.department && (
                               <span className="inline-flex whitespace-nowrap rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
                                 {formatDepartmentName(u.department.name) === 'Chủ tịch'
-                                  ? 'Chủ tịch'
+                                  ? '⭐ Chủ tịch'
                                   : u.effectivePositions?.some((position: any) => ['DEPARTMENT_LEAD', 'LT'].includes(position.code))
-                                  ? `LT ${formatDepartmentName(u.department.name)}`
-                                  : `Thành viên · ${formatDepartmentName(u.department.name)}`}
+                                  ? `👑 LT ${formatDepartmentName(u.department.name)}`
+                                  : `👤 Thành viên · ${formatDepartmentName(u.department.name)}`}
                               </span>
-                            ) : null}
-                            {u.dna?.active && !u.effectivePositions?.some((position: any) => position.code === 'DNA_LEAD') && <span className="inline-flex whitespace-nowrap rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">Thành viên DNA{u.dna.group ? ` · ${u.dna.group}` : ''}</span>}
+                            )}
+                            {u.dna?.active && !u.effectivePositions?.some((position: any) => position.code === 'DNA_LEAD') && <span className="inline-flex whitespace-nowrap rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">🧬 Thành viên DNA{u.dna.group ? ` · ${u.dna.group}` : ''}</span>}
                           </div>
                         </td>
                         <td className="px-6 py-4">
@@ -530,7 +535,7 @@ export default function AdminUsersPage() {
                           {isLeader ? (
                             <div className="flex justify-center">
                               <span className="whitespace-nowrap inline-flex items-center justify-center text-xs font-bold text-purple-700 bg-purple-50 px-2.5 py-1 rounded-full border border-purple-200 shadow-xs">
-                                100% (BĐHU / Miễn học)
+                                100% (Lead Chapter / Miễn học)
                               </span>
                             </div>
                           ) : (
@@ -701,7 +706,7 @@ export default function AdminUsersPage() {
                 <div className="p-3.5 bg-blue-50 border border-blue-200 rounded-2xl text-xs text-blue-900 space-y-1">
                   <div className="font-bold text-blue-800">Thông tin kích hoạt:</div>
                   <p className="leading-relaxed">
-                    Tài khoản sẽ được mở khóa lại và học viên/BĐHU có thể đăng nhập bình thường.
+                    Tài khoản sẽ được mở khóa lại và học viên/Lead Chapter có thể đăng nhập bình thường.
                   </p>
                 </div>
               )}
@@ -756,7 +761,7 @@ export default function AdminUsersPage() {
                 <div className="flex flex-wrap gap-2 rounded-xl border border-[#eff4ff] p-3 text-xs"><span className="font-semibold text-[#172554]">Phạm vi hiện tại:</span><span>{selectedUserDetail.chapter?.name || 'Không thuộc Chapter'}</span><span>·</span><span>{selectedUserDetail.department ? `Ban ${selectedUserDetail.department.name}` : 'Không thuộc Ban'}</span><span>·</span><span>{selectedUserDetail.dna?.active ? `DNA ${selectedUserDetail.dna.group ? `(${selectedUserDetail.dna.group})` : ''}` : 'Không thuộc DNA'}</span></div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="p-3 bg-[#f8f9ff] rounded-xl">
-                    <span className="text-xs text-[#737686] block">Vai trò</span>
+                    <span className="text-xs text-[#737686] block">Chức vụ</span>
                     <div className="mt-1">{getRoleBadge(selectedUserDetail.role)}</div>
                   </div>
                   <div className="p-3 bg-[#f8f9ff] rounded-xl">
@@ -807,7 +812,7 @@ export default function AdminUsersPage() {
                   <div className="flex justify-between text-sm">
                     <span className="text-[#737686]">Tiến độ học tập TB:</span>
                     <span className="font-bold text-[#172554]">
-                      {selectedUserDetail.role === 'CHAPTER_LEADER' ? '100% (BĐHU)' : `${selectedUserDetail.avgProgress || 0}%`}
+                      {selectedUserDetail.role === 'CHAPTER_LEADER' ? '100% (Lead Chapter)' : `${selectedUserDetail.avgProgress || 0}%`}
                     </span>
                   </div>
                   <div className="flex justify-between text-sm">

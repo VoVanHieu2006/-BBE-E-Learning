@@ -124,7 +124,7 @@ export default function CourseDetailPage({ params }: { params: { courseId: strin
                 <div className="bg-[#f8f9ff] p-6 rounded-2xl border border-[#cbdbf5] min-w-[220px] text-center shrink-0">
                   <div className="text-3xl font-bold text-[#2563EB] mb-1">{progressPercentage}%</div>
                   <div className="text-xs text-[#737686] mb-3">
-                    {isLeaderOrAdmin ? 'Quyền quản trị / BĐHU' : 'Tiến độ hoàn thành'}
+                    {isLeaderOrAdmin ? 'Quyền quản trị / Lead Chapter' : 'Tiến độ hoàn thành'}
                   </div>
                   <div className="h-2.5 bg-[#eff4ff] rounded-full overflow-hidden mb-2">
                     <div className="h-full bg-[#2563EB] rounded-full transition-all" style={{ width: `${progressPercentage}%` }} />

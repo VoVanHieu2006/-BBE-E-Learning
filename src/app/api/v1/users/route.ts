@@ -78,7 +78,7 @@ export async function GET(request: NextRequest) {
   const now = new Date()
 
   // Check query cache
-  const cacheKey = `${search}:${role}:${status}:${chapterId}:${page}:${limit}`
+  const cacheKey = `${search}:${role}:${status}:${chapterId}:${compact}:${page}:${limit}`
   const cached = getUserQueryCache(cacheKey, USER_QUERY_CACHE_TTL)
   if (cached) {
     return NextResponse.json(cached, {
@@ -95,11 +95,31 @@ export async function GET(request: NextRequest) {
   }
 
   if (search) {
-    where.email = { contains: search, mode: 'insensitive' }
+    where.OR = [
+      { email: { contains: search, mode: 'insensitive' } },
+      { display_name: { contains: search, mode: 'insensitive' } },
+    ]
   }
 
   if (role && ['CHAPTER_LEADER', 'MEMBER'].includes(role)) {
     where.role = role
+  } else if (role === 'DNA_LEAD' || role === 'LT') {
+    where.position_assignments = {
+      some: {
+        position: { code: role === 'DNA_LEAD' ? 'DNA_LEAD' : { in: ['DEPARTMENT_LEAD', 'LT'] } },
+        starts_at: { lte: now },
+        OR: [{ ends_at: null }, { ends_at: { gt: now } }],
+      },
+    }
+  } else if (role === 'DNA') {
+    where.organization_memberships = {
+      some: {
+        status: 'ACTIVE',
+        starts_at: { lte: now },
+        OR: [{ ends_at: null }, { ends_at: { gt: now } }],
+        unit: { type: { in: ['DNA', 'DNA_GROUP'] } },
+      },
+    }
   }
 
   if (status && ['ACTIVE', 'INACTIVE', 'LOCKED'].includes(status)) {

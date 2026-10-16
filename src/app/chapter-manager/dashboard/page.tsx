@@ -77,7 +77,7 @@ export default function ChapterManagerDashboard() {
         <div className="flex justify-between items-center mb-8">
           <div>
             <h1 className="text-3xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
-              Dashboard BĐHU — <span suppressHydrationWarning>{mounted && user?.chapterName ? user.chapterName : 'Chapter của bạn'}</span>
+              Dashboard Lead Chapter — <span suppressHydrationWarning>{mounted && user?.chapterName ? user.chapterName : 'Chapter của bạn'}</span>
             </h1>
             <p className="text-[#737686] mt-1 text-sm">
               Theo dõi tiến độ học tập và quản lý học viên trong Chapter trực thuộc

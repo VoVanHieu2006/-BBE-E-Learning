@@ -419,7 +419,7 @@ export default function ChapterManagerCoursesPage() {
             <div className="flex justify-between items-center border-b border-[#eff4ff] pb-3">
               <div>
                 <span className="text-[11px] font-bold px-2 py-0.5 bg-blue-100 text-[#2563EB] rounded-md">
-                  Chế độ BĐHU (Có thể tua video)
+                  Chế độ Lead Chapter (Có thể tua video)
                 </span>
                 <h3 className="text-lg font-bold text-[#172554] mt-1" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
                   ▶ {videoModal?.title}

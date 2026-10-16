@@ -4,6 +4,7 @@ import { canAccessChapterPermission } from '@/lib/authorization'
 import { prisma } from '@/lib/prisma'
 import { EXACT_7_BANS, ORDERED_7_BANS } from '@/lib/departments'
 import { listChapterMembers } from '@/lib/chapter-members'
+import { applyDueChapterReorganizations } from '@/lib/chapter-reorganizations'
 
 export async function GET(
   request: NextRequest,
@@ -18,6 +19,9 @@ export async function GET(
     return NextResponse.json({ error: { code: 'AccessDenied' } }, { status: 403 })
   }
 
+  // Tự động kiểm tra và áp dụng đợt chuyển giao nếu đã đến hạn
+  await applyDueChapterReorganizations(new Date()).catch(() => {})
+
   const chapter = await prisma.chapter.findUnique({
     where: { id: params.chapterId },
     select: { id: true, name: true, organization_unit_id: true },
@@ -27,7 +31,7 @@ export async function GET(
     return NextResponse.json({ error: { code: 'ChapterNotFound' } }, { status: 404 })
   }
 
-  const [departments, allChapterMembers] = await Promise.all([
+  const [departments, allChapterMembers, scheduledBatchRecord] = await Promise.all([
     prisma.organizationUnit.findMany({
       where: {
         parent_id: chapter.organization_unit_id,
@@ -62,6 +66,11 @@ export async function GET(
       },
     }),
     listChapterMembers(params.chapterId, { roles: ['MEMBER'], status: 'ACTIVE' }),
+    prisma.chapterReorganization.findFirst({
+      where: { chapter_id: params.chapterId, status: 'SCHEDULED' },
+      include: { items: true },
+      orderBy: { effective_at: 'asc' },
+    }),
   ])
 
   const deptMap = new Map(departments.map((d) => [d.name, d]))
@@ -87,9 +96,9 @@ export async function GET(
     )
     const leadUserIds = new Set(leadPositions.map((p) => p.user_id))
 
-    // Tách thành viên và lead
+    // Tách thành viên và lead (loại bỏ Lead Chapter và Admin)
     const memberItems = dept.memberships
-      .filter((m) => m.user)
+      .filter((m) => m.user && m.user.role === 'MEMBER' && m.user.email !== 'chapter.lead.demo@bbe.vn')
       .map((m) => {
         assignedUserIds.add(m.user.id)
         const isLead = leadUserIds.has(m.user.id) || (banName === 'Chủ Tịch' && m.user.role === 'MEMBER' && leadUserIds.has(m.user.id))
@@ -121,9 +130,9 @@ export async function GET(
     }
   })
 
-  // Các thành viên Chapter chưa có ban
+  // Các thành viên Chapter chưa có ban (chỉ lấy MEMBER)
   const unassignedMembers = allChapterMembers
-    .filter((m) => !assignedUserIds.has(m.userId) && m.email !== 'chapter.lead.demo@bbe.vn')
+    .filter((m) => !assignedUserIds.has(m.userId) && m.role === 'MEMBER' && m.email !== 'chapter.lead.demo@bbe.vn')
     .map((m) => ({
       userId: m.userId,
       email: m.email,
@@ -136,12 +145,60 @@ export async function GET(
     .filter((r) => r.id)
     .map((r) => ({ id: r.id!, name: r.name }))
 
+  // Xử lý đợt chuyển giao đang chờ hiệu lực (nếu có)
+  let scheduledBatch: any = null
+  if (scheduledBatchRecord && scheduledBatchRecord.items.length > 0) {
+    const itemUserIds = Array.from(new Set(scheduledBatchRecord.items.map((i) => i.user_id)))
+    const itemUsers = await prisma.user.findMany({
+      where: { id: { in: itemUserIds } },
+      select: { id: true, email: true, display_name: true },
+    })
+    const userMap = new Map(itemUsers.map((u) => [u.id, u]))
+    const deptIdToName = new Map(departments.map((d) => [d.id, d.name]))
+
+    const newTerm = ORDERED_7_BANS.map((banName) => {
+      const dept = departments.find((d) => d.name.toLowerCase() === banName.toLowerCase())
+      const deptItems = scheduledBatchRecord.items
+        .filter((i) => deptIdToName.get(i.department_unit_id)?.toLowerCase() === banName.toLowerCase())
+        .map((i) => ({
+          userId: i.user_id,
+          email: userMap.get(i.user_id)?.email || '',
+          displayName: i.display_name || userMap.get(i.user_id)?.display_name || userMap.get(i.user_id)?.email || '',
+          departmentUnitId: i.department_unit_id,
+          departmentName: banName,
+          isLead: i.is_primary,
+        }))
+      deptItems.sort((a, b) => {
+        if (a.isLead && !b.isLead) return -1
+        if (!a.isLead && b.isLead) return 1
+        return a.displayName.localeCompare(b.displayName, 'vi')
+      })
+      return {
+        departmentId: dept?.id || null,
+        departmentName: banName,
+        lead: deptItems.find((m) => m.isLead) || deptItems[0] || null,
+        members: deptItems,
+        total: deptItems.length,
+      }
+    })
+
+    scheduledBatch = {
+      id: scheduledBatchRecord.id,
+      effectiveAt: scheduledBatchRecord.effective_at,
+      sourceUrl: scheduledBatchRecord.source_url,
+      totalItems: scheduledBatchRecord.items.length,
+      status: scheduledBatchRecord.status,
+      newTerm,
+    }
+  }
+
   return NextResponse.json({
     chapterId: chapter.id,
     chapterName: chapter.name,
     roster,
     unassignedMembers,
     departments: availableDepartments,
+    scheduledBatch,
     totalMembers: roster.reduce((sum, r) => sum + r.total, 0),
   })
 }

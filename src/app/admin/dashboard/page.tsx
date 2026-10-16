@@ -122,7 +122,7 @@ export default function AdminDashboard() {
           <Card className="hover:-translate-y-1 transition-transform cursor-pointer group border border-[#eff4ff] p-6 shadow-sm">
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-xl font-bold text-[#172554] group-hover:text-[#2563EB] transition-colors flex items-center gap-2">
-                <span>✉️</span> Quản lý lời mời (BĐHU)
+                <span>✉️</span> Quản lý lời mời (Lead Chapter)
               </h3>
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-[#eff4ff] group-hover:bg-[#2563EB] text-[#2563EB] group-hover:text-white text-xs font-bold transition-all shadow-xs">
                 Xem chi tiết →
@@ -161,7 +161,7 @@ export default function AdminDashboard() {
               </span>
             </div>
             <p className="text-sm text-[#434655]">
-              Xem danh sách tài khoản học viên và BĐHU, kích hoạt hoặc vô hiệu hóa (Active / Inactive).
+              Xem danh sách tài khoản học viên và Lead Chapter, kích hoạt hoặc vô hiệu hóa (Active / Inactive).
             </p>
           </Card>
         </Link>

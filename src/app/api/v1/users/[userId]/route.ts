@@ -53,7 +53,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { userId
     }
     if (!isMember) return NextResponse.json({ error: { code: 'AccessDenied', message: 'Chỉ quản lý thành viên trong chapter mình' } }, { status: 403 })
     if (target.role === 'ADMIN' || target.role === 'CHAPTER_LEADER') {
-      return NextResponse.json({ error: { code: 'AccessDenied', message: 'Không thể thay đổi trạng thái Admin/BĐHU' } }, { status: 403 })
+      return NextResponse.json({ error: { code: 'AccessDenied', message: 'Không thể thay đổi trạng thái Admin/Lead Chapter' } }, { status: 403 })
     }
     if (target.status !== 'ACTIVE') {
       return NextResponse.json({ error: { code: 'AdminUnlockRequired', message: 'Tài khoản không ở trạng thái ACTIVE; chỉ Admin mới xử lý mở khóa hoặc thay đổi trạng thái này.' } }, { status: 409 })

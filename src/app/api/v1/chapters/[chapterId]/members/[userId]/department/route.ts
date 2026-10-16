@@ -40,10 +40,12 @@ export async function POST(
     return NextResponse.json({ error: { code: 'InvalidDepartment', message: 'Ban không thuộc Chapter này' } }, { status: 400 })
   }
 
+  const makeLead = Boolean(body.makeLead)
+
   const now = new Date()
 
   await prisma.$transaction(async (tx) => {
-    // 1. Kết thúc các membership và position hiện tại trong các Ban thuộc Chapter
+    // 1. Kết thúc các membership và position hiện tại trong các Ban thuộc Chapter của user này
     await tx.organizationMembership.updateMany({
       where: {
         user_id: params.userId,
@@ -78,10 +80,52 @@ export async function POST(
           starts_at: now,
         },
       })
+
+      // 3. Nếu được bầu làm Trưởng ban (LT)
+      if (makeLead) {
+        // Kết thúc chức vụ Trưởng ban cũ trong ban này
+        await tx.positionAssignment.updateMany({
+          where: {
+            unit_id: departmentUnitId,
+            ends_at: null,
+          },
+          data: {
+            ends_at: now,
+          },
+        })
+
+        let leadPos = await tx.position.findFirst({
+          where: { code: 'DEPARTMENT_LEAD' },
+          select: { id: true },
+        })
+
+        if (!leadPos) {
+          leadPos = await tx.position.create({
+            data: {
+              code: 'DEPARTMENT_LEAD',
+              name: 'Trưởng ban (LT)',
+              scope: 'DEPARTMENT',
+              is_manager: true,
+            },
+            select: { id: true },
+          })
+        }
+
+        await tx.positionAssignment.create({
+          data: {
+            user_id: params.userId,
+            unit_id: departmentUnitId,
+            position_id: leadPos.id,
+            is_primary: true,
+            starts_at: now,
+            appointed_by: auth.context!.userId,
+          },
+        })
+      }
     }
   })
 
   await reconcileLearningAssignmentsForUser(params.userId).catch(() => {})
 
-  return NextResponse.json({ success: true, departmentUnitId })
+  return NextResponse.json({ success: true, departmentUnitId, isLead: makeLead })
 }

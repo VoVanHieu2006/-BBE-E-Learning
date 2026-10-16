@@ -191,7 +191,7 @@ export default function LoginPage() {
             ← Quay lại trang chủ
           </Link>
           <p className="text-xs text-[#94a3b8]">
-            Chưa có tài khoản? Liên hệ BĐHU Chapter của bạn để nhận lời mời.
+            Chưa có tài khoản? Liên hệ Lead Chapter của bạn để nhận lời mời.
           </p>
         </div>
       </div>

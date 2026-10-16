@@ -73,7 +73,7 @@ export async function POST(request: NextRequest, { params }: { params: { chapter
       select: { id: true, name: true },
     }),
     prisma.position.findFirst({ where: { code: 'DEPARTMENT_LEAD' }, select: { id: true } }),
-    listChapterMembers(params.chapterId, { status: 'ACTIVE' }),
+    listChapterMembers(params.chapterId, { roles: ['MEMBER'], status: 'ACTIVE' }),
   ])
 
   const rows = parseCsv(text)
@@ -180,6 +180,7 @@ export async function POST(request: NextRequest, { params }: { params: { chapter
   }> = []
 
   for (const m of currentMembers) {
+    if (m.role === 'CHAPTER_LEADER' || m.role === 'ADMIN' || m.email === 'chapter.lead.demo@bbe.vn') continue
     if (!candidateEmails.has(m.email.toLowerCase())) {
       unmatchedCurrentMembers.push({
         userId: m.userId,

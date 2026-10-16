@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
   if (!organizationUnitId && role === 'CHAPTER_LEADER') chapterId = context.chapterId
   if (!chapterId && !organizationUnitId) {
     return NextResponse.json(
-      { error: { code: 'AccessDenied', message: 'Tài khoản BĐHU chưa được phân công Chapter' } },
+      { error: { code: 'AccessDenied', message: 'Tài khoản Lead Chapter chưa được phân công Chapter' } },
       { status: 403 }
     )
   }

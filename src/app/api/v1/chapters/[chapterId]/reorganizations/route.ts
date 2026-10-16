@@ -15,6 +15,9 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
     return NextResponse.json({ error: { code: 'AccessDenied' } }, { status: 403 })
   }
 
+  // Tự động áp dụng nếu có đợt chuyển giao đã đến hạn
+  await applyDueChapterReorganizations(new Date()).catch(() => {})
+
   const batches = await prisma.chapterReorganization.findMany({
     where: { chapter_id: params.chapterId },
     include: { items: true },
@@ -80,7 +83,7 @@ export async function POST(request: NextRequest, { params }: { params: { chapter
     )
   ) {
     return NextResponse.json(
-      { error: { code: 'ValidationError', message: 'Ngày hiệu lực hợp lệ và mỗi dòng cần userId, departmentUnitId.' } },
+      { error: { code: 'ValidationError', message: 'Vui lòng chọn ngày giờ hiệu lực hợp lệ và kiểm tra đầy đủ danh sách phân ban trước khi xác nhận chuyển giao.' } },
       { status: 400 }
     )
   }

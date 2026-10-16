@@ -99,7 +99,7 @@ function getNav(role: string, chapterId?: string | null, isOrganizationManager =
       },
       {
         label: 'Bảng xếp hạng',
-        href: '/leaderboard',
+        href: '/chapter-manager/leaderboard',
         icon: '🏆',
         prefetchUrls: [`/api/v1/leaderboard/chapters/${chapterId}`],
       },
@@ -205,7 +205,7 @@ export default function Sidebar({
     effectiveRole === 'ADMIN'
       ? 'Quản trị viên'
       : effectiveRole === 'CHAPTER_LEADER'
-      ? 'Ban Định Hướng'
+      ? 'Lead Chapter'
       : managerKind === 'LEAD_DNA'
       ? 'Lead DNA'
       : 'Học viên';

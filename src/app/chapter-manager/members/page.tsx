@@ -15,6 +15,7 @@ export default function ChapterManagerMembersPage() {
   const [departmentFilter, setDepartmentFilter] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
   const [pagination, setPagination] = useState({ totalItems: 0, totalPages: 1 });
   const [summary, setSummary] = useState({ totalMembers: 0, activeMembers: 0, avgChapterProgress: 0 });
   const [isPageChanging, setIsPageChanging] = useState(false);
@@ -65,7 +66,8 @@ export default function ChapterManagerMembersPage() {
     noCache = false,
     targetPage = page,
     dept = departmentFilter,
-    role = roleFilter
+    role = roleFilter,
+    pageSize = limit
   ) {
     const targetChapter = chapterId || user?.chapterId || 'me';
     const searchQuery = query !== undefined ? query : search;
@@ -74,7 +76,7 @@ export default function ChapterManagerMembersPage() {
       search: searchQuery,
       includeInactive: '1',
       page: String(targetPage),
-      limit: '10',
+      limit: String(pageSize),
     });
     if (dept) params.set('department', dept);
     if (role) params.set('roleType', role);
@@ -107,7 +109,7 @@ export default function ChapterManagerMembersPage() {
     e.preventDefault();
     setLoading(true);
     setPage(1);
-    loadMembers(user?.chapterId, search, true, 1, departmentFilter, roleFilter);
+    loadMembers(user?.chapterId, search, true, 1, departmentFilter, roleFilter, limit);
   };
 
   const handleResetFilters = () => {
@@ -116,14 +118,14 @@ export default function ChapterManagerMembersPage() {
     setRoleFilter('');
     setPage(1);
     setLoading(true);
-    loadMembers(user?.chapterId, '', true, 1, '', '');
+    loadMembers(user?.chapterId, '', true, 1, '', '', limit);
   };
 
   const handlePageChange = async (newPage: number) => {
     if (newPage < 1 || newPage > pagination.totalPages || newPage === page || isPageChanging) return;
     setIsPageChanging(true);
     setPage(newPage);
-    await loadMembers(user?.chapterId, search, true, newPage, departmentFilter, roleFilter);
+    await loadMembers(user?.chapterId, search, true, newPage, departmentFilter, roleFilter, limit);
     setIsPageChanging(false);
   };
 
@@ -194,7 +196,7 @@ export default function ChapterManagerMembersPage() {
     setConfirmToggle(null);
   };
 
-  // Chỉ hiển thị thành viên (MEMBER) — không hiện tài khoản BĐHU/Admin trong danh sách
+  // Chỉ hiển thị thành viên (MEMBER) — không hiện tài khoản Lead Chapter/Admin trong danh sách
   const memberRows = members.filter((m) => m.role === 'MEMBER');
   const activeCount = memberRows.filter((m) => m.status === 'ACTIVE').length;
   const avgChapterProgress =
@@ -252,7 +254,7 @@ export default function ChapterManagerMembersPage() {
         </div>
 
         {/* Search & Filter Bar */}
-        <Card className="p-4 mb-6 border border-[#eff4ff] shadow-sm">
+        <Card className="p-4 mb-4 border border-[#eff4ff] shadow-sm">
           <form onSubmit={handleSearch} className="flex flex-col md:flex-row gap-3">
             <input
               type="text"
@@ -262,14 +264,10 @@ export default function ChapterManagerMembersPage() {
               className="flex-1 px-4 py-2.5 border border-[#cbdbf5] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
             />
 
-            {/* Bộ lọc theo Ban */}
+            {/* Bộ lọc theo Ban (Chỉ chọn, bấm nút Tìm kiếm mới lọc) */}
             <select
               value={departmentFilter}
-              onChange={(e) => {
-                setDepartmentFilter(e.target.value);
-                setPage(1);
-                loadMembers(user?.chapterId, search, true, 1, e.target.value, roleFilter);
-              }}
+              onChange={(e) => setDepartmentFilter(e.target.value)}
               className="px-3.5 py-2.5 border border-[#cbdbf5] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB] bg-white text-[#172554] font-medium"
             >
               <option value="">🏢 Tất cả các Ban</option>
@@ -283,22 +281,18 @@ export default function ChapterManagerMembersPage() {
               <option value="unassigned">⚠️ Chưa phân Ban</option>
             </select>
 
-            {/* Bộ lọc theo Chức vụ */}
+            {/* Bộ lọc theo Chức vụ (Chỉ chọn, bấm nút Tìm kiếm mới lọc) */}
             <select
               value={roleFilter}
-              onChange={(e) => {
-                setRoleFilter(e.target.value);
-                setPage(1);
-                loadMembers(user?.chapterId, search, true, 1, departmentFilter, e.target.value);
-              }}
+              onChange={(e) => setRoleFilter(e.target.value)}
               className="px-3.5 py-2.5 border border-[#cbdbf5] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB] bg-white text-[#172554] font-medium"
             >
               <option value="">👔 Tất cả chức vụ</option>
-              <option value="LT">👑 Trưởng ban (LT)</option>
+              <option value="LT">👑 Trưởng ban</option>
               <option value="MEMBER">👤 Thành viên</option>
             </select>
 
-            <Button type="submit">Tìm kiếm</Button>
+            <Button type="submit">🔍 Tìm kiếm</Button>
 
             {(search || departmentFilter || roleFilter) && (
               <Button type="button" variant="outline" onClick={handleResetFilters}>
@@ -308,8 +302,56 @@ export default function ChapterManagerMembersPage() {
           </form>
         </Card>
 
+        {/* Filter Result Summary & Page Size Controls */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-1 mb-3 text-xs text-[#737686]">
+          <div className="font-medium flex items-center gap-2">
+            <span>
+              Đang hiển thị <span className="text-[#2563EB] font-bold">{memberRows.length}</span> trên tổng số{' '}
+              <span className="text-[#172554] font-bold">{summary.totalMembers}</span> tài khoản
+              {(search || departmentFilter || roleFilter) && (
+                <span> (kết quả lọc: <strong className="text-[#172554]">{pagination.totalItems}</strong> tài khoản)</span>
+              )}
+            </span>
+            {loading && (
+              <span className="inline-flex items-center gap-1 text-[#2563EB] font-semibold animate-pulse">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#2563EB]"></span> Đang tải...
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span>Hiển thị mỗi trang:</span>
+            <select
+              value={limit}
+              disabled={loading}
+              onChange={(e) => {
+                const newLimit = Number(e.target.value);
+                setLimit(newLimit);
+                setPage(1);
+                setLoading(true);
+                loadMembers(user?.chapterId, search, true, 1, departmentFilter, roleFilter, newLimit);
+              }}
+              className="px-2.5 py-1 border border-[#cbdbf5] rounded-lg bg-white font-semibold text-[#172554] text-xs disabled:opacity-60"
+            >
+              <option value={10}>10 dòng</option>
+              <option value={20}>20 dòng</option>
+              <option value={50}>50 dòng</option>
+            </select>
+          </div>
+        </div>
+
         {/* Members Table */}
-        <Card className="p-0 overflow-hidden border border-[#eff4ff] shadow-sm">
+        <Card className="p-0 overflow-hidden border border-[#eff4ff] shadow-sm relative">
+          {/* Subtle loading transition overlay */}
+          {loading && members.length > 0 && (
+            <div className="absolute inset-0 bg-white/60 backdrop-blur-[1px] flex items-center justify-center z-20 transition-all">
+              <div className="bg-white/95 px-4 py-2 rounded-xl shadow-md border border-[#cbdbf5] flex items-center gap-2 text-xs font-bold text-[#2563EB]">
+                <span className="w-2 h-2 rounded-full bg-[#2563EB] animate-ping" />
+                Đang cập nhật danh sách...
+              </div>
+            </div>
+          )}
+
           {loading && members.length === 0 ? (
             <div className="p-8 space-y-4 animate-pulse">
               {[1, 2, 3].map((n) => (
@@ -327,7 +369,7 @@ export default function ChapterManagerMembersPage() {
               )}
             </div>
           ) : (
-            <div className={`overflow-x-auto transition-opacity duration-200 ${isPageChanging ? 'opacity-40 pointer-events-none' : 'opacity-100'}`}>
+            <div className={`overflow-x-auto transition-opacity duration-200 ${(isPageChanging || loading) ? 'opacity-40 pointer-events-none' : 'opacity-100'}`}>
               <table className="w-full text-left text-sm">
                 <thead className="bg-[#f8f9ff] text-[#434655] font-semibold border-b border-[#eff4ff]">
                   <tr>
@@ -362,7 +404,7 @@ export default function ChapterManagerMembersPage() {
                               </span>
                             ) : m.isLead ? (
                               <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-200">
-                                👑 LT Ban
+                                👑 Trưởng ban
                               </span>
                             ) : null}
                             <span className={`text-xs font-semibold ${m.department ? 'text-blue-700' : 'text-amber-700'}`}>

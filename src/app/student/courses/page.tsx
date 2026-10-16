@@ -71,7 +71,7 @@ export default function StudentCoursesPage() {
             ) : courses.length === 0 ? (
               <Card className="text-center py-12 border border-[#eff4ff]">
                 <p className="text-lg font-semibold text-[#172554] mb-2">Chưa có khóa học nào</p>
-                <p className="text-sm text-[#737686]">Vui lòng quay lại sau hoặc liên hệ BĐHU để biết thêm chi tiết.</p>
+                <p className="text-sm text-[#737686]">Vui lòng quay lại sau hoặc liên hệ Lead Chapter để biết thêm chi tiết.</p>
               </Card>
             ) : (
               <div className="grid md:grid-cols-2 gap-6">
