@@ -3,6 +3,7 @@ import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { canAccessChapterPermission, resolveSingleManagedChapter } from '@/lib/authorization'
 import { listChapterMembers } from '@/lib/chapter-members'
+import { countCompletedLessonsByCourse } from '@/lib/progress/completed-lesson-counts'
 
 /**
  * GET /api/v1/chapters/[chapterId]/dashboard/courses
@@ -54,39 +55,21 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
     prisma.course.count({ where: { status: 'PUBLISHED' } }),
   ])
 
-  // Collect all lessonIds for the current page courses
-  const allLessonIds = courses.flatMap((c) => c.sessions.flatMap((s) => s.lessons.map((l) => l.id)))
-
-  // Batch query all completed progresses for chapter student members
-  const allCompletedProgress = (totalMembers > 0 && allLessonIds.length > 0)
-    ? await prisma.lessonProgress.findMany({
-        where: {
-          user_id: { in: memberUserIds },
-          lesson_id: { in: allLessonIds },
-          completed: true,
-        },
-        select: {
-          user_id: true,
-          lesson_id: true,
-        },
-      })
-    : []
-
-  const completedSet = new Set(allCompletedProgress.map((p) => `${p.user_id}:${p.lesson_id}`))
+  const completedRows = await countCompletedLessonsByCourse(memberUserIds, courses.map((course) => course.id))
+  const completedByCourse = new Map<string, number>()
+  const totalLessonsByCourse = new Map(courses.map((course) => [course.id, course.sessions.reduce((count, session) => count + session.lessons.length, 0)]))
+  for (const row of completedRows) {
+    if (Number(row.completed_count) === totalLessonsByCourse.get(row.course_id)) {
+      completedByCourse.set(row.course_id, (completedByCourse.get(row.course_id) || 0) + 1)
+    }
+  }
 
   const items = courses.map((course) => {
     const lessonIds = course.sessions.flatMap((s) => s.lessons.map((l) => l.id))
     const totalLessons = lessonIds.length
 
-    let completedCount = 0
-    if (totalLessons > 0 && totalMembers > 0) {
-      for (const userId of memberUserIds) {
-        const allLessonsDone = lessonIds.every((lId) => completedSet.has(`${userId}:${lId}`))
-        if (allLessonsDone) {
-          completedCount++
-        }
-      }
-    }
+    // Preserve the existing empty-course rule: every member counts as complete.
+    const completedCount = totalLessons === 0 ? totalMembers : (completedByCourse.get(course.id) || 0)
 
     const completionRate = totalMembers > 0 ? Math.round((completedCount / totalMembers) * 100) : 0
 

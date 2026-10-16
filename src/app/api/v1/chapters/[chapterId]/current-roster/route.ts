@@ -4,7 +4,6 @@ import { canAccessChapterPermission } from '@/lib/authorization'
 import { prisma } from '@/lib/prisma'
 import { EXACT_7_BANS, ORDERED_7_BANS } from '@/lib/departments'
 import { listChapterMembers } from '@/lib/chapter-members'
-import { applyDueChapterReorganizations } from '@/lib/chapter-reorganizations'
 
 export async function GET(
   request: NextRequest,
@@ -18,9 +17,6 @@ export async function GET(
   if (!isLeader && !hasPerm) {
     return NextResponse.json({ error: { code: 'AccessDenied' } }, { status: 403 })
   }
-
-  // Tự động kiểm tra và áp dụng đợt chuyển giao nếu đã đến hạn
-  await applyDueChapterReorganizations(new Date()).catch(() => {})
 
   const chapter = await prisma.chapter.findUnique({
     where: { id: params.chapterId },

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
-import { getOrganizationUnitTreeIds } from '@/lib/learning-assignments'
 import { prisma } from '@/lib/prisma'
 import { calculateChapterLeaderboardMetrics, calculateMandatoryCompletionPercentByUser, CHAPTER_LEADERBOARD_WEIGHTS, parseChapterKpiMonthStart, scoreChapterLeaderboard } from '@/lib/chapter-leaderboard-rules'
 import { getCachedChapterLeaderboard, setCachedChapterLeaderboard } from '@/lib/chapter-leaderboard-cache'
@@ -47,13 +46,54 @@ export async function GET(request: NextRequest) {
     prisma.chapterMonthlyKpi.findMany({ where: { month_start: { gte: monthStart, lt: nextMonth } }, select: { chapter_id: true, status: true, updated_at: true } }),
     prisma.chapterMonthlyKpi.findMany({ distinct: ['month_start'], orderBy: { month_start: 'desc' }, select: { month_start: true } }),
   ])
-  const chapterMembers = await Promise.all(chapters.map(async (chapter) => {
-    const unitIds = chapter.organization_unit_id ? await getOrganizationUnitTreeIds(chapter.organization_unit_id) : []
-    const scopes: any[] = [{ chapter_members: { some: { chapter_id: chapter.id } } }]
-    if (unitIds.length) scopes.push({ organization_memberships: { some: { unit_id: { in: unitIds }, status: 'ACTIVE', starts_at: { lte: asOf }, OR: [{ ends_at: null }, { ends_at: { gt: monthStart } }] } } })
-    const members = await prisma.user.findMany({ where: { status: 'ACTIVE', role: 'MEMBER', OR: scopes, position_assignments: { none: { position: { code: 'DNA_LEAD' }, starts_at: { lte: asOf }, OR: [{ ends_at: null }, { ends_at: { gt: monthStart } }] } } }, select: { id: true } })
-    return { chapter, memberIds: members.map((member) => member.id) }
-  }))
+  const units = await prisma.organizationUnit.findMany({ select: { id: true, parent_id: true } })
+  const childrenByParent = new Map<string, string[]>()
+  for (const unit of units) {
+    if (!unit.parent_id) continue
+    const children = childrenByParent.get(unit.parent_id) || []
+    children.push(unit.id)
+    childrenByParent.set(unit.parent_id, children)
+  }
+  const chaptersByUnit = new Map<string, Set<string>>()
+  for (const chapter of chapters) {
+    if (!chapter.organization_unit_id) continue
+    const seen = new Set<string>()
+    const frontier = [chapter.organization_unit_id]
+    while (frontier.length) {
+      const unitId = frontier.pop()!
+      if (seen.has(unitId)) continue
+      seen.add(unitId)
+      const owners = chaptersByUnit.get(unitId) || new Set<string>()
+      owners.add(chapter.id)
+      chaptersByUnit.set(unitId, owners)
+      frontier.push(...(childrenByParent.get(unitId) || []))
+    }
+  }
+  const chapterIds = chapters.map((chapter) => chapter.id)
+  const membershipFilter = { unit_id: { in: Array.from(chaptersByUnit.keys()) }, status: 'ACTIVE' as const, starts_at: { lte: asOf }, OR: [{ ends_at: null }, { ends_at: { gt: monthStart } }] }
+  const eligibleUsers = chapterIds.length ? await prisma.user.findMany({
+    where: {
+      status: 'ACTIVE', role: 'MEMBER',
+      OR: [
+        { chapter_members: { some: { chapter_id: { in: chapterIds } } } },
+        { organization_memberships: { some: membershipFilter } },
+      ],
+      position_assignments: { none: { position: { code: 'DNA_LEAD' }, starts_at: { lte: asOf }, OR: [{ ends_at: null }, { ends_at: { gt: monthStart } }] } },
+    },
+    select: {
+      id: true,
+      chapter_members: { where: { chapter_id: { in: chapterIds } }, select: { chapter_id: true } },
+      organization_memberships: { where: membershipFilter, select: { unit_id: true } },
+    },
+  }) : []
+  const memberIdsByChapter = new Map(chapterIds.map((id) => [id, new Set<string>()]))
+  for (const user of eligibleUsers) {
+    for (const membership of user.chapter_members) memberIdsByChapter.get(membership.chapter_id)?.add(user.id)
+    for (const membership of user.organization_memberships) {
+      for (const chapterId of Array.from(chaptersByUnit.get(membership.unit_id) || [])) memberIdsByChapter.get(chapterId)?.add(user.id)
+    }
+  }
+  const chapterMembers = chapters.map((chapter) => ({ chapter, memberIds: Array.from(memberIdsByChapter.get(chapter.id) || []) }))
   const allMemberIds = Array.from(new Set(chapterMembers.flatMap((item) => item.memberIds)))
   const [completionByUser, starRows] = await Promise.all([
     calculateMandatoryCompletion(allMemberIds, asOf),

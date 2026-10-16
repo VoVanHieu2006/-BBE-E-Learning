@@ -40,3 +40,6 @@ nul
 *-tmp.html
 scratch/
 graphify-out/
+
+.vercel
+.env*

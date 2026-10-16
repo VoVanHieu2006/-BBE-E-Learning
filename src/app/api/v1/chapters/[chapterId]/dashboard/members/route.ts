@@ -80,22 +80,30 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
   const totalItems = filteredMembers.length
   const members = filteredMembers.slice(skip, skip + limit)
   const allChapterUserIds = rawMembers.map((member) => member.userId)
-  const [progressMap, allStarRows] = await Promise.all([
-    calculateBatchUsersProgress(allChapterUserIds, sys),
+  const [progressMap, overallProgressRows, allStarRows] = await Promise.all([
+    calculateBatchUsersProgress(members.map((member) => member.userId), sys),
+    allChapterUserIds.length && sys.allLessonIdSet.size
+      ? prisma.lessonProgress.groupBy({
+          where: { user_id: { in: allChapterUserIds }, lesson_id: { in: Array.from(sys.allLessonIdSet) }, completed: true },
+          by: ['user_id'],
+          _count: { id: true },
+        })
+      : Promise.resolve([]),
     allChapterUserIds.length
       ? prisma.starLedger.groupBy({ where: { user_id: { in: allChapterUserIds } }, by: ['user_id'], _sum: { amount: true } })
       : Promise.resolve([]),
   ])
+  const overallProgressByUser = new Map(overallProgressRows.map((row) => [row.user_id, sys.totalLessons ? Math.round((row._count.id / sys.totalLessons) * 100) : 0]))
   const starsByUser = new Map(allStarRows.map((row) => [row.user_id, row._sum.amount || 0]))
   const totalStars = allStarRows.reduce((sum, row) => sum + (row._sum.amount || 0), 0)
 
   const activeRawMembers = rawMembers.filter((m) => m.status === 'ACTIVE')
-  const allProgressValues = activeRawMembers.map((m) => progressMap.get(m.userId)?.overallProgressPercent || 0)
+  const allProgressValues = activeRawMembers.map((m) => overallProgressByUser.get(m.userId) || 0)
   const avgChapterProgress = allProgressValues.length > 0
     ? Math.round(allProgressValues.reduce((a, b) => a + b, 0) / allProgressValues.length)
     : 0
 
-  const membersOver70 = activeRawMembers.filter((m) => (progressMap.get(m.userId)?.overallProgressPercent || 0) >= 70).length
+  const membersOver70 = activeRawMembers.filter((m) => (overallProgressByUser.get(m.userId) || 0) >= 70).length
 
   const summary = {
     totalMembers: rawMembers.length,

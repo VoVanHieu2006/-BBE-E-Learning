@@ -3,6 +3,7 @@ import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { canAccessChapterPermission, listAccessibleChapterIds } from '@/lib/authorization'
 import { listChapterMembers } from '@/lib/chapter-members'
+import { countCompletedLessonsByCourse } from '@/lib/progress/completed-lesson-counts'
 
 /**
  * GET /api/v1/courses/[courseId]/students
@@ -100,17 +101,11 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
   }
 
   const userIds = users.map((u) => u.id)
-  const progressRows =
-    userIds.length > 0 && lessonIds.length > 0
-      ? await prisma.lessonProgress.findMany({
-          where: { user_id: { in: userIds }, lesson_id: { in: lessonIds }, completed: true },
-          select: { user_id: true, lesson_id: true },
-        })
-      : []
-  const completedSet = new Set(progressRows.map((p) => `${p.user_id}:${p.lesson_id}`))
+  const progressRows = await countCompletedLessonsByCourse(userIds, [courseId])
+  const completedByUser = new Map(progressRows.map((row) => [row.user_id, Number(row.completed_count)]))
 
   const items = users.map((u) => {
-    const completedLessons = lessonIds.filter((l) => completedSet.has(`${u.id}:${l}`)).length
+    const completedLessons = completedByUser.get(u.id) || 0
     const progressPercent = lessonIds.length > 0 ? Math.round((completedLessons / lessonIds.length) * 100) : 0
     const state = progressPercent >= 100 ? 'COMPLETED' : completedLessons > 0 ? 'IN_PROGRESS' : 'NOT_STARTED'
 

@@ -68,7 +68,7 @@ FROM "_final_question_map" m JOIN "question_options" o ON o."question_id" = m."s
 CREATE UNIQUE INDEX ON "_final_option_map"("assessment_id", "source_id");
 
 INSERT INTO "question_options" ("id", "question_id", "option_text", "is_correct", "sort_order")
-SELECT "copy_id", "question_id", o."option_text", o."is_correct", o."sort_order"
+SELECT m."copy_id", m."question_id", o."option_text", o."is_correct", o."sort_order"
 FROM "_final_option_map" m JOIN "question_options" o ON o."id" = m."source_id";
 
 UPDATE "attempt_answers" aa SET "selected_option_id" = om."copy_id"

@@ -90,6 +90,7 @@ export async function POST(request: NextRequest) {
         .setProtectedHeader({ alg: 'HS256' })
         .setExpirationTime('7d')
         .setIssuedAt()
+        .setJti(crypto.randomUUID())
         .sign(refreshSecret),
     ])
 
