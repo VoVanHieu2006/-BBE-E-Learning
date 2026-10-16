@@ -32,7 +32,19 @@ export async function listChapterMembers(
       where: { chapter_id: chapterId, ...relationFilter } as any,
       select: {
         joined_at: true,
-        user: { select: { id: true, email: true, display_name: true, status: true, role: true, created_at: true } },
+        user: {
+          select: {
+            id: true,
+            email: true,
+            display_name: true,
+            status: true,
+            role: true,
+            created_at: true,
+            deactivated_by_user_id: true,
+            deactivated_by_role: true,
+            cascade_lead_id: true,
+          },
+        },
       },
     }),
     unitIds.length
@@ -47,7 +59,19 @@ export async function listChapterMembers(
           select: {
             starts_at: true,
             unit: { select: { id: true, name: true, type: true } },
-            user: { select: { id: true, email: true, display_name: true, status: true, role: true, created_at: true } },
+            user: {
+              select: {
+                id: true,
+                email: true,
+                display_name: true,
+                status: true,
+                role: true,
+                created_at: true,
+                deactivated_by_user_id: true,
+                deactivated_by_role: true,
+                cascade_lead_id: true,
+              },
+            },
           },
         })
       : Promise.resolve([]),
@@ -61,6 +85,9 @@ export async function listChapterMembers(
     createdAt: row.user.created_at,
     joinedAt: row.joined_at,
     displayName: row.user.display_name,
+    deactivatedByUserId: row.user.deactivated_by_user_id,
+    deactivatedByRole: row.user.deactivated_by_role,
+    cascadeLeadId: row.user.cascade_lead_id,
   })
   const mapOrganization = (row: (typeof organizationRows)[number]): ChapterMemberRecord => ({
     userId: row.user.id,
@@ -71,6 +98,9 @@ export async function listChapterMembers(
     joinedAt: row.starts_at,
     displayName: row.user.display_name,
     department: row.unit.type === 'DEPARTMENT' ? { id: row.unit.id, name: row.unit.name } : null,
+    deactivatedByUserId: row.user.deactivated_by_user_id,
+    deactivatedByRole: row.user.deactivated_by_role,
+    cascadeLeadId: row.user.cascade_lead_id,
   })
   return mergeChapterMemberRecords(legacyRows.map(mapLegacy), organizationRows.map(mapOrganization))
 }

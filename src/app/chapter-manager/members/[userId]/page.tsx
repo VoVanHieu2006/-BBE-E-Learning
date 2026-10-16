@@ -4,6 +4,7 @@ import Link from 'next/link';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
+import Toast, { ToastMessage } from '@/components/ui/Toast';
 import { apiFetch, getCachedApiData, clearApiCache } from '@/lib/api/client';
 
 const STATE_META: Record<string, { label: string; badge: string; bar: string }> = {
@@ -19,6 +20,7 @@ export default function MemberDetailPage({ params }: { params: { userId: string 
   const [error, setError] = useState<string | null>(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+  const [toast, setToast] = useState<ToastMessage | null>(null);
 
   const canManageMembers = user?.role === 'CHAPTER_LEADER' || user?.role === 'ADMIN' || user?.canManageMembers === true;
 
@@ -39,6 +41,16 @@ export default function MemberDetailPage({ params }: { params: { userId: string 
       }));
       clearApiCache('/api/v1/chapters');
       clearApiCache('/api/v1/users');
+      setToast({
+        type: nextStatus === 'ACTIVE' ? 'success' : 'info',
+        message: nextStatus === 'ACTIVE' ? 'Đã kích hoạt tài khoản thành công.' : 'Đã vô hiệu hóa tài khoản.',
+      });
+    } else {
+      setToast({
+        type: 'error',
+        message: res.error?.message || 'Không thể thay đổi trạng thái tài khoản.',
+        title: 'Thao tác không thành công',
+      });
     }
   };
 
@@ -177,6 +189,7 @@ export default function MemberDetailPage({ params }: { params: { userId: string 
 
   return (
     <div className="min-h-screen bg-[#f8f9ff]">
+      <Toast toast={toast} onClose={() => setToast(null)} />
       <main className="px-8 py-10 w-full min-w-0 max-w-5xl">
         <div className="mb-6">
           <Link

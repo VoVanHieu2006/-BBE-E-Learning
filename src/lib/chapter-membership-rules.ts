@@ -7,6 +7,9 @@ export interface ChapterMemberRecord {
   joinedAt: Date
   displayName?: string | null
   department?: { id: string; name: string } | null
+  deactivatedByUserId?: string | null
+  deactivatedByRole?: string | null
+  cascadeLeadId?: string | null
 }
 
 /** Merge legacy and organization memberships without double-counting a learner. */
@@ -20,9 +23,24 @@ export function mergeChapterMemberRecords(...groups: ReadonlyArray<ReadonlyArray
         continue
       }
       if (record.joinedAt.getTime() < existing.joinedAt.getTime()) {
-        byUserId.set(record.userId, { ...existing, ...record, joinedAt: record.joinedAt, department: record.department || existing.department })
+        byUserId.set(record.userId, {
+          ...existing,
+          ...record,
+          joinedAt: record.joinedAt,
+          department: record.department || existing.department,
+          deactivatedByUserId: record.deactivatedByUserId || existing.deactivatedByUserId,
+          deactivatedByRole: record.deactivatedByRole || existing.deactivatedByRole,
+          cascadeLeadId: record.cascadeLeadId || existing.cascadeLeadId,
+        })
       } else {
-        byUserId.set(record.userId, { ...existing, displayName: record.displayName || existing.displayName, department: record.department || existing.department })
+        byUserId.set(record.userId, {
+          ...existing,
+          displayName: record.displayName || existing.displayName,
+          department: record.department || existing.department,
+          deactivatedByUserId: record.deactivatedByUserId || existing.deactivatedByUserId,
+          deactivatedByRole: record.deactivatedByRole || existing.deactivatedByRole,
+          cascadeLeadId: record.cascadeLeadId || existing.cascadeLeadId,
+        })
       }
     }
   }

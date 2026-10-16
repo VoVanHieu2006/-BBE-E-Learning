@@ -66,6 +66,7 @@ export async function POST(request: NextRequest) {
         data: { 
           failed_login_count: newCount, 
           status: isLocked ? 'LOCKED' : user.status,
+          lock_reason: isLocked ? 'PASSWORD_LOCK' : user.lock_reason,
           locked_until: isLocked ? new Date(Date.now() + 30 * 60 * 1000) : null,
         },
       })

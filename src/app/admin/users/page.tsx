@@ -46,6 +46,10 @@ export default function AdminUsersPage() {
     user: any;
     nextStatus: 'ACTIVE' | 'INACTIVE';
   } | null>(null);
+  const [unlockExtensionModal, setUnlockExtensionModal] = useState<{
+    user: any;
+    extensionDays: number;
+  } | null>(null);
 
   const [toast, setToast] = useState<ToastMessage | null>(null);
 
@@ -147,9 +151,40 @@ export default function AdminUsersPage() {
     loadUsers(appliedFilters, 1, newLimit);
   };
 
-  const handleOpenConfirmModal = (targetUser: any) => {
-    const nextStatus = targetUser.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+  const handleOpenConfirmModal = (targetUser: any, desiredNextStatus?: 'ACTIVE' | 'INACTIVE') => {
+    const nextStatus = desiredNextStatus || (targetUser.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE');
     setConfirmStatusModal({ user: targetUser, nextStatus });
+  };
+
+  const handleExecuteUnlockExtension = async () => {
+    if (!unlockExtensionModal) return;
+    const { user: targetUser, extensionDays } = unlockExtensionModal;
+    const userId = targetUser.userId || targetUser.id;
+
+    setActionUserId(userId);
+    setUnlockExtensionModal(null);
+    clearApiCache('/api/v1/users');
+    clearApiCache('/api/v1/admin/overview');
+
+    const res = await apiFetch(`/api/v1/users/${userId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'ACTIVE', extensionDays }),
+    });
+
+    if (res.ok) {
+      showToast(
+        'success',
+        `Tài khoản ${targetUser.email} đã được mở khóa và gia hạn thêm ${extensionDays} ngày hoàn thành bài học.`,
+        '✅ Đã mở khóa & gia hạn thành công'
+      );
+      clearApiCache('/api/v1/users');
+      clearApiCache('/api/v1/admin/overview');
+      await loadUsers(appliedFilters, page, limit, true);
+    } else {
+      showToast('error', res.error?.message || 'Lỗi khi mở khóa tài khoản.', 'Thao tác thất bại');
+      await loadUsers(appliedFilters, page, limit, true);
+    }
+    setActionUserId(null);
   };
 
   const handleOpenUserDetail = async (user: any) => {
@@ -482,12 +517,6 @@ export default function AdminUsersPage() {
                     const isActive = u.status === 'ACTIVE';
                     const isBusy = actionUserId === uId;
                     const isLeader = u.role === 'CHAPTER_LEADER';
-                    const hasDetailedRole = Boolean(
-                      u.effectivePositions?.some((position: any) => position.code === 'DNA_LEAD') ||
-                      u.role === 'CHAPTER_LEADER' ||
-                      u.department ||
-                      u.dna?.active
-                    );
 
                     return (
                       <tr key={uId} className="hover:bg-[#f8f9ff] transition">
@@ -499,24 +528,44 @@ export default function AdminUsersPage() {
                           </div>
                         </td>
                         <td className="px-6 py-4">
-                          {!hasDetailedRole && <div>{getRoleBadge(u.role)}</div>}
-                          <div className="mt-1 flex flex-wrap gap-1.5">
-                            {u.effectivePositions?.some((position: any) => position.code === 'DNA_LEAD') && (
-                              <span className="inline-flex whitespace-nowrap rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">⭐ Lead DNA</span>
-                            )}
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {/* Lead Chapter */}
                             {u.role === 'CHAPTER_LEADER' && (
-                              <span className="inline-flex whitespace-nowrap rounded-full bg-purple-50 px-2 py-0.5 text-[10px] font-semibold text-purple-700">🏅 Lead Chapter · {formatChapterName(u.chapter?.name)}</span>
-                            )}
-                            {u.department && (
-                              <span className="inline-flex whitespace-nowrap rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
-                                {formatDepartmentName(u.department.name) === 'Chủ tịch'
-                                  ? '⭐ Chủ tịch'
-                                  : u.effectivePositions?.some((position: any) => ['DEPARTMENT_LEAD', 'LT'].includes(position.code))
-                                  ? `👑 LT ${formatDepartmentName(u.department.name)}`
-                                  : `👤 Thành viên · ${formatDepartmentName(u.department.name)}`}
+                              <span className="inline-flex whitespace-nowrap rounded-full bg-purple-50 border border-purple-200 px-2.5 py-0.5 text-[11px] font-bold text-purple-700">
+                                🏅 Lead Chapter · {formatChapterName(u.chapter?.name)}
                               </span>
                             )}
-                            {u.dna?.active && !u.effectivePositions?.some((position: any) => position.code === 'DNA_LEAD') && <span className="inline-flex whitespace-nowrap rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">🧬 Thành viên DNA{u.dna.group ? ` · ${u.dna.group}` : ''}</span>}
+
+                            {/* Member Department or "Chưa có ban" */}
+                            {u.role === 'MEMBER' && (
+                              u.department ? (
+                                <span className="inline-flex whitespace-nowrap rounded-full bg-blue-50 border border-blue-200 px-2.5 py-0.5 text-[11px] font-semibold text-blue-700">
+                                  {formatDepartmentName(u.department.name) === 'Chủ tịch'
+                                    ? '⭐ Chủ tịch'
+                                    : u.effectivePositions?.some((position: any) => ['DEPARTMENT_LEAD', 'LT'].includes(position.code))
+                                    ? `👑 LT ${formatDepartmentName(u.department.name)}`
+                                    : `👤 Thành viên · ${formatDepartmentName(u.department.name)}`}
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-amber-50 border border-amber-200 px-2.5 py-0.5 text-[11px] font-semibold text-amber-800 shadow-2xs">
+                                  <span>⚠️</span> Chưa có ban
+                                </span>
+                              )
+                            )}
+
+                            {/* Lead DNA */}
+                            {u.effectivePositions?.some((position: any) => position.code === 'DNA_LEAD') && (
+                              <span className="inline-flex whitespace-nowrap rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700">
+                                ⭐ Lead DNA{u.dna?.group ? ` · ${u.dna.group}` : ''}
+                              </span>
+                            )}
+
+                            {/* DNA Member */}
+                            {u.dna?.active && !u.effectivePositions?.some((position: any) => position.code === 'DNA_LEAD') && (
+                              <span className="inline-flex whitespace-nowrap rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700">
+                                🧬 Thành viên DNA{u.dna.group ? ` · ${u.dna.group}` : ''}
+                              </span>
+                            )}
                           </div>
                         </td>
                         <td className="px-6 py-4">
@@ -559,20 +608,41 @@ export default function AdminUsersPage() {
                           )}
                         </td>
                         <td className="px-6 py-4 text-center">
-                          <span
-                            className={`whitespace-nowrap inline-flex items-center justify-center text-xs font-bold px-2.5 py-1 rounded-full ${
-                              isActive
-                                ? 'bg-green-100 text-green-700'
-                                : u.status === 'LOCKED'
-                                ? 'bg-amber-100 text-amber-700'
-                                : 'bg-red-100 text-red-700'
-                            }`}
-                          >
-                            {u.accountState === 'OVERDUE_LOCK' ? 'OVERDUE LOCK' : u.accountState === 'PASSWORD_LOCK' ? 'PASSWORD LOCK' : isActive ? '✓ Hoạt động' : 'INACTIVE'}
-                          </span>
+                          {u.accountState === 'OVERDUE_LOCK' ? (
+                            <div>
+                              <span className="whitespace-nowrap inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full bg-rose-100 text-rose-800 border border-rose-300 shadow-2xs">
+                                <span>⏰</span> Khóa: Quá hạn bài học
+                              </span>
+                              <div className="text-[10px] text-rose-600 mt-0.5">Quá hạn bài học bắt buộc</div>
+                            </div>
+                          ) : u.accountState === 'PASSWORD_LOCK' ? (
+                            <div>
+                              <span className="whitespace-nowrap inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-900 border border-amber-300 shadow-2xs">
+                                <span>🔒</span> Khóa: Quên/Sai MK
+                              </span>
+                              <div className="text-[10px] text-amber-700 mt-0.5">Quên hoặc sai MK quá 10 lần</div>
+                            </div>
+                          ) : isActive ? (
+                            <span className="whitespace-nowrap inline-flex items-center text-xs font-bold px-2.5 py-1 rounded-full bg-green-100 text-green-700">
+                              ✓ Hoạt động
+                            </span>
+                          ) : (
+                            <div>
+                              <span className="whitespace-nowrap inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full bg-red-100 text-red-700">
+                                <span>⛔</span> Vô hiệu hóa
+                              </span>
+                              {u.cascadeLeadId ? (
+                                <div className="text-[10px] text-red-500 mt-0.5">Theo Lead Chapter</div>
+                              ) : u.deactivatedByRole === 'LEAD' ? (
+                                <div className="text-[10px] text-red-500 mt-0.5">Bởi Lead Chapter</div>
+                              ) : u.deactivatedByRole === 'ADMIN' ? (
+                                <div className="text-[10px] text-red-500 mt-0.5">Bởi Admin</div>
+                              ) : null}
+                            </div>
+                          )}
                         </td>
                         <td className="px-6 py-4 text-right">
-                          <div className="flex items-center justify-end gap-2">
+                          <div className="flex items-center justify-end gap-1.5 flex-wrap">
                             <button
                               onClick={() => void handleOpenUserDetail(u)}
                               className="px-2.5 py-1 text-xs font-semibold text-[#2563EB] hover:bg-blue-50 rounded-lg transition"
@@ -580,25 +650,77 @@ export default function AdminUsersPage() {
                               Xem chi tiết
                             </button>
 
-                            <button
-                              disabled={isBusy}
-                              onClick={() => void handleSendPasswordReset(u)}
-                              className="whitespace-nowrap px-2.5 py-1 text-xs font-semibold text-indigo-700 hover:bg-indigo-50 rounded-lg transition disabled:opacity-50"
-                            >
-                              Gửi link đặt lại mật khẩu
-                            </button>
+                            {/* Password reset button */}
+                            {u.accountState === 'PASSWORD_LOCK' ? (
+                              <button
+                                disabled={isBusy}
+                                onClick={() => void handleSendPasswordReset(u)}
+                                className="whitespace-nowrap px-2.5 py-1 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-2xs transition disabled:opacity-50"
+                              >
+                                ✉️ Gửi link đặt lại MK
+                              </button>
+                            ) : (
+                              <button
+                                disabled={isBusy}
+                                onClick={() => void handleSendPasswordReset(u)}
+                                className="whitespace-nowrap px-2.5 py-1 text-xs font-semibold text-indigo-700 hover:bg-indigo-50 rounded-lg transition disabled:opacity-50"
+                              >
+                                Gửi link đặt lại MK
+                              </button>
+                            )}
 
-                            <button
-                              disabled={isBusy || loading}
-                              onClick={() => handleOpenConfirmModal(u)}
-                              className={`whitespace-nowrap px-2.5 py-1 text-xs font-semibold rounded-lg transition ${
-                                isActive
-                                  ? 'text-red-600 hover:bg-red-50 disabled:opacity-50'
-                                  : 'text-green-700 hover:bg-green-50 disabled:opacity-50'
-                              }`}
-                            >
-                              {isBusy ? 'Đang cập nhật...' : isActive ? 'Vô hiệu hóa' : 'Kích hoạt'}
-                            </button>
+                            {/* Status and unlock actions */}
+                            {u.accountState === 'OVERDUE_LOCK' ? (
+                              <>
+                                <button
+                                  disabled={isBusy || loading}
+                                  onClick={() => setUnlockExtensionModal({ user: u, extensionDays: 7 })}
+                                  className="whitespace-nowrap px-2.5 py-1 text-xs font-bold text-white bg-[#2563EB] hover:bg-blue-700 rounded-lg shadow-2xs transition disabled:opacity-50"
+                                >
+                                  Mở khóa & Gia hạn
+                                </button>
+                                <button
+                                  disabled={isBusy || loading}
+                                  onClick={() => handleOpenConfirmModal(u, 'INACTIVE')}
+                                  className="whitespace-nowrap px-2.5 py-1 text-xs font-semibold text-red-600 hover:bg-red-50 rounded-lg transition disabled:opacity-50"
+                                >
+                                  Vô hiệu hóa
+                                </button>
+                              </>
+                            ) : u.accountState === 'PASSWORD_LOCK' ? (
+                              <>
+                                <button
+                                  disabled={isBusy || loading}
+                                  onClick={() => handleOpenConfirmModal(u, 'ACTIVE')}
+                                  className="whitespace-nowrap px-2.5 py-1 text-xs font-semibold text-green-700 hover:bg-green-50 rounded-lg transition disabled:opacity-50"
+                                >
+                                  Mở khóa
+                                </button>
+                                <button
+                                  disabled={isBusy || loading}
+                                  onClick={() => handleOpenConfirmModal(u, 'INACTIVE')}
+                                  className="whitespace-nowrap px-2.5 py-1 text-xs font-semibold text-red-600 hover:bg-red-50 rounded-lg transition disabled:opacity-50"
+                                >
+                                  Vô hiệu hóa
+                                </button>
+                              </>
+                            ) : isActive ? (
+                              <button
+                                disabled={isBusy || loading}
+                                onClick={() => handleOpenConfirmModal(u, 'INACTIVE')}
+                                className="whitespace-nowrap px-2.5 py-1 text-xs font-semibold text-red-600 hover:bg-red-50 rounded-lg transition disabled:opacity-50"
+                              >
+                                {isBusy ? 'Đang xử lý...' : 'Vô hiệu hóa'}
+                              </button>
+                            ) : (
+                              <button
+                                disabled={isBusy || loading}
+                                onClick={() => handleOpenConfirmModal(u, 'ACTIVE')}
+                                className="whitespace-nowrap px-2.5 py-1 text-xs font-semibold text-green-700 hover:bg-green-50 rounded-lg transition disabled:opacity-50"
+                              >
+                                {isBusy ? 'Đang xử lý...' : 'Kích hoạt'}
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -685,7 +807,7 @@ export default function AdminUsersPage() {
                   <h3 className="text-lg font-bold text-[#172554]">
                     {confirmStatusModal.nextStatus === 'INACTIVE'
                       ? 'Xác nhận vô hiệu hóa tài khoản?'
-                      : 'Xác nhận kích hoạt tài khoản?'}
+                      : 'Xác nhận kích hoạt / mở khóa tài khoản?'}
                   </h3>
                   <p className="text-xs font-semibold text-[#2563EB] truncate">
                     {confirmStatusModal.user.email}
@@ -694,20 +816,42 @@ export default function AdminUsersPage() {
               </div>
 
               {confirmStatusModal.nextStatus === 'INACTIVE' ? (
-                <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-2xl text-xs text-amber-900 space-y-1.5">
-                  <div className="font-bold flex items-center gap-1.5 text-amber-800">
-                    <span>⚠️ Cảnh báo quan trọng:</span>
+                <div className="space-y-2">
+                  <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-2xl text-xs text-amber-900 space-y-1.5">
+                    <div className="font-bold flex items-center gap-1.5 text-amber-800">
+                      <span>⚠️ Cảnh báo quan trọng:</span>
+                    </div>
+                    <p className="leading-relaxed text-[#78350f]">
+                      Khi vô hiệu hóa, tài khoản này sẽ bị <strong>chặn đăng nhập ngay lập tức</strong> và ngừng toàn bộ quyền truy cập bài học cũng như bài kiểm tra trên hệ thống BBE.
+                    </p>
                   </div>
-                  <p className="leading-relaxed text-[#78350f]">
-                    Khi vô hiệu hóa, tài khoản này sẽ bị <strong>chặn đăng nhập ngay lập tức</strong> và ngừng toàn bộ quyền truy cập bài học cũng như bài kiểm tra trên hệ thống BBE.
-                  </p>
+                  {confirmStatusModal.user.role === 'CHAPTER_LEADER' && (
+                    <div className="p-3.5 bg-red-50 border border-red-200 rounded-2xl text-xs text-red-900 space-y-1.5">
+                      <div className="font-bold flex items-center gap-1.5 text-red-800">
+                        <span>🚨 Lưu ý đặc biệt: Lead Chapter</span>
+                      </div>
+                      <p className="leading-relaxed text-red-700">
+                        Khi vô hiệu hóa Lead Chapter, <strong>toàn bộ tài khoản thành viên đang hoạt động trong Chapter sẽ tự động bị vô hiệu hóa</strong> theo. Khi Admin kích hoạt lại Lead Chapter, các tài khoản thành viên bị vô hiệu hóa theo sẽ được tự động mở lại.
+                      </p>
+                    </div>
+                  )}
                 </div>
               ) : (
-                <div className="p-3.5 bg-blue-50 border border-blue-200 rounded-2xl text-xs text-blue-900 space-y-1">
-                  <div className="font-bold text-blue-800">Thông tin kích hoạt:</div>
-                  <p className="leading-relaxed">
-                    Tài khoản sẽ được mở khóa lại và học viên/Lead Chapter có thể đăng nhập bình thường.
-                  </p>
+                <div className="space-y-2">
+                  <div className="p-3.5 bg-blue-50 border border-blue-200 rounded-2xl text-xs text-blue-900 space-y-1">
+                    <div className="font-bold text-blue-800">Thông tin kích hoạt:</div>
+                    <p className="leading-relaxed">
+                      Tài khoản sẽ được mở khóa lại và học viên/Lead Chapter có thể đăng nhập bình thường.
+                    </p>
+                  </div>
+                  {confirmStatusModal.user.role === 'CHAPTER_LEADER' && (
+                    <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs text-emerald-900 space-y-1">
+                      <div className="font-bold text-emerald-800">Tự động kích hoạt thành viên Chapter:</div>
+                      <p className="leading-relaxed">
+                        Hệ thống sẽ tự động kích hoạt lại các tài khoản thành viên trong Chapter đã bị vô hiệu hóa theo đợt của Lead này (những tài khoản bị vô hiệu hóa riêng trước đó vẫn giữ nguyên).
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -728,6 +872,97 @@ export default function AdminUsersPage() {
                   onClick={handleExecuteStatusToggle}
                 >
                   {confirmStatusModal.nextStatus === 'INACTIVE' ? 'Xác nhận vô hiệu hóa' : 'Xác nhận kích hoạt'}
+                </Button>
+              </div>
+            </div>
+          )}
+        </Modal>
+
+        {/* Modal: Unlock & Extension Days */}
+        <Modal
+          isOpen={Boolean(unlockExtensionModal)}
+          onClose={() => setUnlockExtensionModal(null)}
+          maxWidth="max-w-md"
+        >
+          {unlockExtensionModal && (
+            <div className="p-6 space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-700 flex items-center justify-center text-2xl shrink-0">
+                  ⏰
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-lg font-bold text-[#172554]">
+                    Mở khóa & Gia hạn bài học
+                  </h3>
+                  <p className="text-xs font-semibold text-[#2563EB] truncate">
+                    {unlockExtensionModal.user.email}
+                  </p>
+                </div>
+              </div>
+
+              <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-900 space-y-1">
+                <div className="font-bold text-rose-800">Lý do khóa: Quá hạn bài học bắt buộc</div>
+                <p className="leading-relaxed">
+                  Tài khoản bị khóa tự động do chưa hoàn thành các khóa học bắt buộc trong thời hạn quy định. Chỉ Quản trị viên (Admin) mới có quyền mở khóa.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-xs font-bold text-[#172554]">
+                  Gia hạn thêm số ngày trước khi hệ thống đánh giá khóa lại:
+                </label>
+                <div className="grid grid-cols-4 gap-2">
+                  {[3, 7, 14, 30].map((days) => (
+                    <button
+                      key={days}
+                      type="button"
+                      onClick={() => setUnlockExtensionModal({ ...unlockExtensionModal, extensionDays: days })}
+                      className={`py-2 text-xs font-bold rounded-xl border transition ${
+                        unlockExtensionModal.extensionDays === days
+                          ? 'bg-[#2563EB] text-white border-[#2563EB] shadow-xs'
+                          : 'bg-white text-[#172554] border-[#cbdbf5] hover:bg-[#eff4ff]'
+                      }`}
+                    >
+                      +{days} ngày
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-2 flex items-center gap-2">
+                  <span className="text-xs text-[#737686]">Hoặc số ngày khác:</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={365}
+                    value={unlockExtensionModal.extensionDays}
+                    onChange={(e) =>
+                      setUnlockExtensionModal({
+                        ...unlockExtensionModal,
+                        extensionDays: Math.max(1, Math.min(365, Number(e.target.value) || 1)),
+                      })
+                    }
+                    className="w-20 px-2 py-1 text-xs border border-[#cbdbf5] rounded-lg text-center font-bold text-[#172554]"
+                  />
+                  <span className="text-xs text-[#737686]">ngày kể từ hôm nay</span>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={Boolean(actionUserId)}
+                  onClick={() => setUnlockExtensionModal(null)}
+                >
+                  Hủy bỏ
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  loading={Boolean(actionUserId)}
+                  loadingText="Đang mở khóa..."
+                  onClick={handleExecuteUnlockExtension}
+                >
+                  Xác nhận Mở khóa (+{unlockExtensionModal.extensionDays} ngày)
                 </Button>
               </div>
             </div>
@@ -758,23 +993,70 @@ export default function AdminUsersPage() {
               </div>
 
               <div className="space-y-4">
-                <div className="flex flex-wrap gap-2 rounded-xl border border-[#eff4ff] p-3 text-xs"><span className="font-semibold text-[#172554]">Phạm vi hiện tại:</span><span>{selectedUserDetail.chapter?.name || 'Không thuộc Chapter'}</span><span>·</span><span>{selectedUserDetail.department ? `Ban ${selectedUserDetail.department.name}` : 'Không thuộc Ban'}</span><span>·</span><span>{selectedUserDetail.dna?.active ? `DNA ${selectedUserDetail.dna.group ? `(${selectedUserDetail.dna.group})` : ''}` : 'Không thuộc DNA'}</span></div>
+                <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[#eff4ff] p-3 text-xs">
+                  <span className="font-semibold text-[#172554]">Phạm vi hiện tại:</span>
+                  <span>{selectedUserDetail.chapter?.name ? formatChapterName(selectedUserDetail.chapter.name) : 'Chưa gán Chapter'}</span>
+                  <span>·</span>
+                  <span className={selectedUserDetail.department ? 'text-blue-700 font-semibold' : 'text-amber-800 font-semibold'}>
+                    {selectedUserDetail.department ? `Ban ${formatDepartmentName(selectedUserDetail.department.name)}` : '⚠️ Chưa có ban'}
+                  </span>
+                  <span>·</span>
+                  <span className={selectedUserDetail.dna?.active ? 'text-emerald-700 font-semibold' : 'text-slate-500'}>
+                    {selectedUserDetail.dna?.active ? `DNA ${selectedUserDetail.dna.group ? `(${selectedUserDetail.dna.group})` : ''}` : 'Không thuộc DNA'}
+                  </span>
+                </div>
+
                 <div className="grid grid-cols-2 gap-3">
                   <div className="p-3 bg-[#f8f9ff] rounded-xl">
                     <span className="text-xs text-[#737686] block">Chức vụ</span>
-                    <div className="mt-1">{getRoleBadge(selectedUserDetail.role)}</div>
+                    <div className="mt-1">
+                      {selectedUserDetail.role === 'CHAPTER_LEADER' ? (
+                        <span className="inline-flex whitespace-nowrap rounded-full bg-purple-50 border border-purple-200 px-2.5 py-0.5 text-xs font-bold text-purple-700">
+                          🏅 Lead Chapter
+                        </span>
+                      ) : selectedUserDetail.department ? (
+                        <span className="inline-flex whitespace-nowrap rounded-full bg-blue-50 border border-blue-200 px-2.5 py-0.5 text-xs font-semibold text-blue-700">
+                          👤 Thành viên · {formatDepartmentName(selectedUserDetail.department.name)}
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-amber-50 border border-amber-200 px-2.5 py-0.5 text-xs font-semibold text-amber-800">
+                          <span>⚠️</span> Chưa có ban
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <div className="p-3 bg-[#f8f9ff] rounded-xl">
                     <span className="text-xs text-[#737686] block">Trạng thái</span>
-                    <span
-                      className={`text-xs font-bold mt-1 inline-block px-2.5 py-0.5 rounded-full ${
-                        selectedUserDetail.status === 'ACTIVE'
-                          ? 'bg-green-100 text-green-700'
-                          : 'bg-red-100 text-red-700'
-                      }`}
-                    >
-                      {selectedUserDetail.status === 'ACTIVE' ? '✓ Đang hoạt động' : 'Đã vô hiệu hóa'}
-                    </span>
+                    <div className="mt-1">
+                      {selectedUserDetail.accountState === 'OVERDUE_LOCK' ? (
+                        <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-rose-100 text-rose-800 border border-rose-300 inline-flex items-center gap-1">
+                          ⏰ Khóa: Quá hạn bài học
+                        </span>
+                      ) : selectedUserDetail.accountState === 'PASSWORD_LOCK' ? (
+                        <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-900 border border-amber-300 inline-flex items-center gap-1">
+                          🔒 Khóa: Quên/Sai mật khẩu
+                        </span>
+                      ) : selectedUserDetail.status === 'ACTIVE' ? (
+                        <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-green-100 text-green-700 inline-block">
+                          ✓ Đang hoạt động
+                        </span>
+                      ) : (
+                        <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-red-100 text-red-700 inline-flex items-center gap-1">
+                          ⛔ Đã vô hiệu hóa
+                        </span>
+                      )}
+                      {selectedUserDetail.status === 'INACTIVE' && (
+                        <div className="text-[10px] text-[#737686] mt-1">
+                          {selectedUserDetail.cascadeLeadId ? (
+                            <span className="text-red-500 font-medium">Vô hiệu hóa theo Lead Chapter</span>
+                          ) : selectedUserDetail.deactivatedByRole === 'LEAD' ? (
+                            <span className="text-red-500 font-medium">Vô hiệu hóa bởi Lead Chapter</span>
+                          ) : selectedUserDetail.deactivatedByRole === 'ADMIN' ? (
+                            <span className="text-red-500 font-medium">Vô hiệu hóa bởi Admin</span>
+                          ) : null}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -782,7 +1064,7 @@ export default function AdminUsersPage() {
                   <div className="flex justify-between text-sm">
                     <span className="text-[#737686]">Chapter:</span>
                     <span className="font-semibold text-[#172554]">
-                      {selectedUserDetail.chapter?.name || 'Chưa thuộc Chapter'}
+                      {selectedUserDetail.chapter?.name ? formatChapterName(selectedUserDetail.chapter.name) : 'Chưa thuộc Chapter'}
                     </span>
                   </div>
                   <div className="flex justify-between text-sm">
@@ -899,16 +1181,69 @@ export default function AdminUsersPage() {
                 </section>
               )}
 
-              <div className="flex justify-end gap-3 pt-3 border-t border-[#eff4ff]">
-                <Button
-                  variant={selectedUserDetail.status === 'ACTIVE' ? 'danger' : 'primary'}
-                  onClick={() => {
-                    handleOpenConfirmModal(selectedUserDetail);
-                    handleCloseUserDetail();
-                  }}
+              <div className="flex flex-wrap items-center justify-end gap-3 pt-3 border-t border-[#eff4ff]">
+                <button
+                  disabled={Boolean(actionUserId)}
+                  onClick={() => void handleSendPasswordReset(selectedUserDetail)}
+                  className="px-3 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-50 border border-indigo-200 rounded-xl transition"
                 >
-                  {selectedUserDetail.status === 'ACTIVE' ? 'Vô hiệu hóa tài khoản' : 'Kích hoạt tài khoản'}
-                </Button>
+                  ✉️ Gửi link đặt lại mật khẩu
+                </button>
+
+                {selectedUserDetail.accountState === 'OVERDUE_LOCK' ? (
+                  <>
+                    <Button
+                      variant="primary"
+                      onClick={() => {
+                        const target = selectedUserDetail;
+                        handleCloseUserDetail();
+                        setUnlockExtensionModal({ user: target, extensionDays: 7 });
+                      }}
+                    >
+                      Mở khóa & Gia hạn
+                    </Button>
+                    <Button
+                      variant="danger"
+                      onClick={() => {
+                        handleOpenConfirmModal(selectedUserDetail, 'INACTIVE');
+                        handleCloseUserDetail();
+                      }}
+                    >
+                      Vô hiệu hóa tài khoản
+                    </Button>
+                  </>
+                ) : selectedUserDetail.accountState === 'PASSWORD_LOCK' ? (
+                  <>
+                    <Button
+                      variant="primary"
+                      onClick={() => {
+                        handleOpenConfirmModal(selectedUserDetail, 'ACTIVE');
+                        handleCloseUserDetail();
+                      }}
+                    >
+                      Mở khóa tài khoản
+                    </Button>
+                    <Button
+                      variant="danger"
+                      onClick={() => {
+                        handleOpenConfirmModal(selectedUserDetail, 'INACTIVE');
+                        handleCloseUserDetail();
+                      }}
+                    >
+                      Vô hiệu hóa tài khoản
+                    </Button>
+                  </>
+                ) : (
+                  <Button
+                    variant={selectedUserDetail.status === 'ACTIVE' ? 'danger' : 'primary'}
+                    onClick={() => {
+                      handleOpenConfirmModal(selectedUserDetail);
+                      handleCloseUserDetail();
+                    }}
+                  >
+                    {selectedUserDetail.status === 'ACTIVE' ? 'Vô hiệu hóa tài khoản' : 'Kích hoạt tài khoản'}
+                  </Button>
+                )}
                 <Button variant="secondary" onClick={handleCloseUserDetail}>
                   Đóng
                 </Button>

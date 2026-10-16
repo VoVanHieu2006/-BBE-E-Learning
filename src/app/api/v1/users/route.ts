@@ -226,11 +226,16 @@ export async function GET(request: NextRequest) {
       status: u.status,
       accountState: u.status === 'INACTIVE'
         ? 'INACTIVE'
-        : u.restrictions[0]?.type === 'DEADLINE'
+        : u.restrictions[0]?.type === 'DEADLINE' || u.lock_reason === 'OVERDUE_LOCK'
           ? 'OVERDUE_LOCK'
-          : u.status === 'LOCKED' || u.failed_login_count >= 10
+          : u.status === 'LOCKED' || u.failed_login_count >= 10 || u.lock_reason === 'PASSWORD_LOCK'
             ? 'PASSWORD_LOCK'
             : 'ACTIVE',
+      deactivatedByUserId: u.deactivated_by_user_id,
+      deactivatedByRole: u.deactivated_by_role,
+      deactivatedAt: u.deactivated_at,
+      cascadeLeadId: u.cascade_lead_id,
+      lockReason: u.lock_reason,
       effectivePositions: u.position_assignments.map((assignment) => ({
         code: assignment.position.code,
         name: assignment.position.name,

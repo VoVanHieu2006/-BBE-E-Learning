@@ -59,7 +59,7 @@ async function enforceDeadlines(request: NextRequest) {
 
       const lock = await tx.user.updateMany({
         where: { id: assignment.user_id, role: { not: 'ADMIN' }, status: { not: 'LOCKED' } },
-        data: { status: 'LOCKED', auth_version: { increment: 1 } },
+        data: { status: 'LOCKED', lock_reason: 'OVERDUE_LOCK', auth_version: { increment: 1 } },
       })
       const currentTarget = await tx.user.findUnique({ where: { id: assignment.user_id }, select: { id: true, role: true } })
       if (!currentTarget || !canDeadlineLockAccount(currentTarget.role)) {

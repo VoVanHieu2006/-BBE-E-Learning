@@ -24,7 +24,12 @@ export default function ChapterManagerMembersPage() {
   const [inviteEmail, setInviteEmail] = useState('');
   const [sendingInvite, setSendingInvite] = useState(false);
   const [actionUserId, setActionUserId] = useState<string | null>(null);
-  const [confirmToggle, setConfirmToggle] = useState<{ userId: string; email: string; currentStatus: string } | null>(null);
+  const [confirmToggle, setConfirmToggle] = useState<{
+    userId: string;
+    email: string;
+    currentStatus: string;
+    nextStatus: 'ACTIVE' | 'INACTIVE';
+  } | null>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const canManageMembers = user?.role === 'CHAPTER_LEADER' || user?.canManageMembers === true;
 
@@ -153,13 +158,12 @@ export default function ChapterManagerMembersPage() {
     setSendingInvite(false);
   };
 
-  const handleToggleStatus = async (userId: string, currentStatus: string) => {
-    if (!canManageMembers || currentStatus !== 'ACTIVE') {
-      showToast('info', 'Chỉ Admin mới được mở khóa hoặc kích hoạt lại tài khoản.');
+  const handleToggleStatus = async (userId: string, nextStatus: 'ACTIVE' | 'INACTIVE') => {
+    if (!canManageMembers) {
+      showToast('error', 'Bạn không có quyền quản lý thành viên Chapter.');
       setConfirmToggle(null);
       return;
     }
-    const nextStatus = 'INACTIVE';
 
     setActionUserId(userId);
     setMembers((prev) =>
@@ -184,6 +188,12 @@ export default function ChapterManagerMembersPage() {
           'error',
           'Thành viên đã bị vô hiệu hóa. Người dùng sẽ bị chặn đăng nhập và ngừng toàn bộ quyền truy cập học tập.',
           '⚠️ Đã vô hiệu hóa thành viên'
+        );
+      } else {
+        showToast(
+          'success',
+          'Thành viên đã được kích hoạt lại thành công. Người dùng có thể tiếp tục học tập.',
+          '✅ Đã kích hoạt tài khoản'
         );
       }
       clearApiCache('/api/v1/chapters');
@@ -385,7 +395,14 @@ export default function ChapterManagerMembersPage() {
                   {memberRows.map((m) => {
                     const mId = m.userId || m.id;
                     const isActive = m.status === 'ACTIVE';
+                    const isLocked = m.status === 'LOCKED';
+                    const isInactive = m.status === 'INACTIVE';
                     const isBusy = actionUserId === mId;
+                    const currentLeadUserId = user?.id || user?.userId;
+                    const canLeadReactivate =
+                      isInactive &&
+                      m.deactivatedByRole === 'LEAD' &&
+                      Boolean(m.deactivatedByUserId && m.deactivatedByUserId === currentLeadUserId);
 
                     return (
                       <tr key={mId} className="hover:bg-[#f8f9ff] transition">
@@ -430,15 +447,33 @@ export default function ChapterManagerMembersPage() {
                           </div>
                         </td>
                         <td className="px-6 py-4 text-center">
-                          <span
-                            className={`whitespace-nowrap inline-flex items-center text-xs font-bold px-2.5 py-1 rounded-full ${
-                              isActive
-                                ? 'bg-green-100 text-green-700'
-                                : 'bg-red-100 text-red-700'
-                            }`}
-                          >
-                            {isActive ? '✓ Hoạt động' : 'Đã vô hiệu hóa'}
-                          </span>
+                          {isLocked ? (
+                            <div>
+                              <span className="whitespace-nowrap inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full bg-rose-100 text-rose-800 border border-rose-300">
+                                <span>🔒</span> Tạm khóa hệ thống
+                              </span>
+                              <div className="text-[10px] text-slate-500 mt-0.5">Chỉ Admin mới mở được</div>
+                            </div>
+                          ) : isActive ? (
+                            <span className="whitespace-nowrap inline-flex items-center text-xs font-bold px-2.5 py-1 rounded-full bg-green-100 text-green-700">
+                              ✓ Hoạt động
+                            </span>
+                          ) : (
+                            <div>
+                              <span className="whitespace-nowrap inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full bg-red-100 text-red-700">
+                                <span>⛔</span> Đã vô hiệu hóa
+                              </span>
+                              {m.cascadeLeadId ? (
+                                <div className="text-[10px] text-red-500 mt-0.5">Theo Lead Chapter</div>
+                              ) : m.deactivatedByRole === 'ADMIN' ? (
+                                <div className="text-[10px] text-red-500 mt-0.5">Bởi Admin</div>
+                              ) : m.deactivatedByRole === 'LEAD' ? (
+                                <div className="text-[10px] text-red-500 mt-0.5">
+                                  {canLeadReactivate ? 'Bởi bạn' : 'Bởi Lead khác'}
+                                </div>
+                              ) : null}
+                            </div>
+                          )}
                         </td>
                         <td className="px-6 py-4 text-center text-xs text-[#737686]" suppressHydrationWarning>
                           {m.joinedAt ? new Date(m.joinedAt).toLocaleDateString('vi-VN') : '—'}
@@ -452,17 +487,48 @@ export default function ChapterManagerMembersPage() {
                               Chi tiết
                             </Link>
 
-                            {canManageMembers && isActive && (
+                            {/* Active or Locked accounts can be deactivated */}
+                            {canManageMembers && (isActive || isLocked) && (
                               <button
                                 disabled={isBusy}
-                                onClick={() => setConfirmToggle({ userId: mId, email: m.email, currentStatus: m.status })}
+                                onClick={() =>
+                                  setConfirmToggle({
+                                    userId: mId,
+                                    email: m.email,
+                                    currentStatus: m.status,
+                                    nextStatus: 'INACTIVE',
+                                  })
+                                }
                                 className="whitespace-nowrap px-2.5 py-1 text-xs font-semibold rounded-lg text-red-600 hover:bg-red-50 transition"
                               >
                                 Vô hiệu hóa
                               </button>
                             )}
-                            {canManageMembers && !isActive && (
-                              <span className="text-[11px] text-slate-500">Chỉ Admin mở khóa</span>
+
+                            {/* Inactive accounts: only the deactivating lead or admin can reactivate */}
+                            {canManageMembers && isInactive && (
+                              canLeadReactivate ? (
+                                <button
+                                  disabled={isBusy}
+                                  onClick={() =>
+                                    setConfirmToggle({
+                                      userId: mId,
+                                      email: m.email,
+                                      currentStatus: m.status,
+                                      nextStatus: 'ACTIVE',
+                                    })
+                                  }
+                                  className="whitespace-nowrap px-2.5 py-1 text-xs font-semibold rounded-lg text-green-700 hover:bg-green-50 transition"
+                                >
+                                  Kích hoạt
+                                </button>
+                              ) : (
+                                <span className="text-[11px] text-slate-500">
+                                  {m.deactivatedByRole === 'ADMIN'
+                                    ? 'Chỉ Admin mới mở lại'
+                                    : 'Chỉ Lead vô hiệu hóa mới mở lại'}
+                                </span>
+                              )
                             )}
                           </div>
                         </td>
@@ -578,22 +644,25 @@ export default function ChapterManagerMembersPage() {
         >
           <div className="p-6 space-y-4">
             <h3 className="text-xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
-              Vô hiệu hóa tài khoản?
+              {confirmToggle?.nextStatus === 'INACTIVE' ? 'Vô hiệu hóa tài khoản?' : 'Kích hoạt lại tài khoản?'}
             </h3>
             <p className="text-sm text-[#737686]">
-              {`Thành viên ${confirmToggle?.email} sẽ không thể đăng nhập và ngừng toàn bộ quyền truy cập học tập. Chỉ Admin mới có thể mở khóa.`}
+              {confirmToggle?.nextStatus === 'INACTIVE'
+                ? `Thành viên ${confirmToggle?.email} sẽ không thể đăng nhập và ngừng toàn bộ quyền truy cập học tập. Bạn hoặc Quản trị viên (Admin) có thể kích hoạt lại sau này.`
+                : `Thành viên ${confirmToggle?.email} sẽ được kích hoạt lại và có thể tiếp tục học tập bình thường.`}
             </p>
             <div className="flex justify-end gap-3 pt-2">
               <Button variant="outline" type="button" onClick={() => setConfirmToggle(null)}>
                 Hủy
               </Button>
               <Button
+                variant={confirmToggle?.nextStatus === 'INACTIVE' ? 'danger' : 'primary'}
                 type="button"
                 loading={!!actionUserId}
                 loadingText="Đang xử lý..."
-                onClick={() => confirmToggle && handleToggleStatus(confirmToggle.userId, confirmToggle.currentStatus)}
+                onClick={() => confirmToggle && handleToggleStatus(confirmToggle.userId, confirmToggle.nextStatus)}
               >
-                Xác nhận
+                {confirmToggle?.nextStatus === 'INACTIVE' ? 'Xác nhận vô hiệu hóa' : 'Xác nhận kích hoạt'}
               </Button>
             </div>
           </div>

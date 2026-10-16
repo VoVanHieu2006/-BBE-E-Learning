@@ -195,6 +195,13 @@ model User {
   updated_at       DateTime   @updatedAt @db.Timestamp
   auth_version     Int        @default(1)
 
+  deactivated_by_user_id String?   @db.Uuid
+  deactivated_by_role    String?   @db.VarChar(50)
+  deactivated_at         DateTime? @db.Timestamp
+  deactivated_reason     String?   @db.Text
+  cascade_lead_id        String?   @db.Uuid
+  lock_reason            String?   @db.VarChar(50)
+
   chapter_members  ChapterMember[]
   invitations      Invitation[] @relation("InvitedBy")
   courses          Course[]
@@ -218,6 +225,8 @@ model User {
   @@index([email])
   @@index([status])
   @@index([role])
+  @@index([cascade_lead_id])
+  @@index([deactivated_by_user_id])
 }
 
 model Chapter {
