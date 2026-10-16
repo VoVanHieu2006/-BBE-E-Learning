@@ -69,7 +69,7 @@ const adminNav: NavItem[] = [
 const chapterManagerNav: NavItem[] = [
   { label: 'Tổng quan', href: '/chapter-manager/dashboard', icon: '📊' },
   { label: 'Thành viên & Tiến trình', href: '/chapter-manager/members', icon: '👥' },
-  { label: 'Bảng xếp hạng', href: '/leaderboard', icon: '🏆' },
+  { label: 'Bảng xếp hạng', href: '/chapter-manager/leaderboard', icon: '🏆', prefetchUrls: ['/api/v1/leaderboard/chapters'] },
   { label: 'Khóa học', href: '/chapter-manager/courses', icon: '📚' },
   { label: 'Mời thành viên', href: '/chapter-manager/invitations', icon: '✉️' },
   { label: 'Chuyển giao nhiệm kỳ', href: '/chapter-manager/term-transition', icon: '🔄' },

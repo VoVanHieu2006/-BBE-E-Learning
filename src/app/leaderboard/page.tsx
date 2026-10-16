@@ -1,5 +1,5 @@
-'use client';
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Sidebar from '@/components/layout/Sidebar';
 import Card from '@/components/ui/Card';
@@ -9,6 +9,7 @@ import MonthPicker from '@/components/ui/MonthPicker';
 import { apiFetch, getCachedApiData } from '@/lib/api/client';
 
 export default function LeaderboardPage() {
+  const router = useRouter();
   const [user, setUser] = useState<any>(null);
   const [mounted, setMounted] = useState(false);
 
@@ -41,8 +42,12 @@ export default function LeaderboardPage() {
         } catch {}
       }
     }
+    if (currentUser?.role === 'CHAPTER_LEADER') {
+      router.replace('/chapter-manager/leaderboard');
+      return;
+    }
     loadData(currentUser);
-  }, []);
+  }, [router]);
 
   async function loadData(currentUser?: any) {
     // BĐHU & Thành viên chỉ xem bảng xếp hạng thành viên trong chapter của mình (không global)

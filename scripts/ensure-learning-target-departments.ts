@@ -1,7 +1,7 @@
 import { PrismaClient } from '@prisma/client'
 
 const prisma = new PrismaClient()
-const names = ['Ban Chủ tịch', 'Ban Nội dung', 'Ban Khách mời', 'Ban Thành viên', 'Ban Chất lượng', 'Ban TT&SK', 'Ban Thư ký']
+const names = ['Ban chất lượng', 'Ban nội dung', 'Ban khách mời', 'Ban TT&SK', 'Ban Thành viên', 'Ban Thư ký', 'Chủ tịch']
 
 async function main() {
   const chapters = await prisma.organizationUnit.findMany({ where: { type: 'CHAPTER' }, select: { id: true, name: true } })
