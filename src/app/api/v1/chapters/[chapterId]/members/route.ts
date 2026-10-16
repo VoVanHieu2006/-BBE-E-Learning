@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { canAccessChapterPermission } from '@/lib/authorization'
 import { listChapterMembers } from '@/lib/chapter-members'
+import { canViewInactiveChapterMember } from '@/lib/inactive-member-access'
 
 export async function GET(request: NextRequest, { params }: { params: { chapterId: string } }) {
   const auth = await authenticate(request)
@@ -17,6 +18,10 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
 
   const url = new URL(request.url)
   const statusParam = url.searchParams.get('status')
+  const mayViewInactive = await canViewInactiveChapterMember(auth.context!, chapterId)
+  if (statusParam && statusParam !== 'ACTIVE' && !mayViewInactive) {
+    return NextResponse.json({ error: { code: 'AccessDenied', message: 'Only Admin or this Chapter lead may view inactive accounts' } }, { status: 403 })
+  }
   if (statusParam && !['ACTIVE', 'INACTIVE', 'LOCKED'].includes(statusParam)) {
     return NextResponse.json({ error: { code: 'ValidationError', message: 'status filter không hợp lệ' } }, { status: 400 })
   }
@@ -31,7 +36,7 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
   const roleFilter = (auth as any).context!.role === 'ADMIN' ? undefined : 'MEMBER'
   const allMembers = await listChapterMembers(chapterId, {
     ...(roleFilter ? { roles: [roleFilter as 'MEMBER' | 'CHAPTER_LEADER'] } : {}),
-    ...(statusParam ? { status: statusParam as 'ACTIVE' | 'INACTIVE' | 'LOCKED' } : {}),
+    ...((statusParam || !mayViewInactive) ? { status: (statusParam || 'ACTIVE') as 'ACTIVE' | 'INACTIVE' | 'LOCKED' } : {}),
     search,
   })
   const totalItems = allMembers.length

@@ -2,6 +2,8 @@ import { prisma } from './prisma'
 import { hashToken, generateToken } from './tokens'
 import { sendInvitationEmail } from './email'
 import { reconcileLearningAssignmentsForUser } from './learning-assignments'
+import { invalidateChapterLeaderboardCache } from './chapter-leaderboard-cache'
+import { invalidateMemberLeaderboardCache } from './member-leaderboard-cache'
 type UserRole = 'ADMIN' | 'CHAPTER_LEADER' | 'MEMBER';
 type InvitationRole = 'CHAPTER_LEADER' | 'DNA_LEAD' | 'MEMBER';
 type InvitationStatus = 'PENDING' | 'ACCEPTED' | 'EXPIRED' | 'CANCELLED';
@@ -119,7 +121,7 @@ export async function sendChapterLeaderInvitation(
   chapterName: string,
   chapterDescription: string | undefined,
   invitedBy: string
-): Promise<{ ok: true; invitationId: string; chapterId: string; status: InvitationStatus; expiresAt: Date; token: string; emailSent: boolean; emailError?: string } | SendInvitationError> {
+): Promise<{ ok: true; invitationId: string; chapterId: string | null; status: InvitationStatus; expiresAt: Date; token: string; emailSent: boolean; emailError?: string } | SendInvitationError> {
   // BR-02 (issue #10): no invitation if email already belongs to ANY account
   if (await emailHasAnyAccount(email)) {
     const u = await prisma.user.findUnique({ where: { email } })
@@ -136,17 +138,11 @@ export async function sendChapterLeaderInvitation(
     return { ok: false, code: 'ChapterNameConflict', message: 'Tên chapter đã tồn tại' }
   }
 
-  // Use transaction to create chapter + invitation in DB first
-  const created = await prisma.$transaction(async (tx) => {
-    // Create chapter
-    const chapter = await tx.chapter.create({
-      data: {
-        name: chapterName,
-        description: chapterDescription,
-        status: 'ACTIVE',
-      },
-    })
+  const pendingName = await prisma.invitation.findFirst({ where: { role: 'CHAPTER_LEADER', status: 'PENDING', chapter_name: chapterName, expires_at: { gt: new Date() } }, select: { id: true } })
+  if (pendingName) return { ok: false, code: 'ChapterNameConflict', message: 'Chapter name is reserved by a pending invitation' }
 
+  // Persist the invitation only; the Chapter is created on acceptance.
+  const created = await prisma.$transaction(async (tx) => {
     // Check for existing pending invitation
     const existingPending = await tx.invitation.findFirst({
       where: { email, status: 'PENDING' },
@@ -166,7 +162,8 @@ export async function sendChapterLeaderInvitation(
       data: {
         email,
         role: 'CHAPTER_LEADER',
-        chapter_id: chapter.id,
+        chapter_name: chapterName,
+        chapter_description: chapterDescription,
         invited_by: invitedBy,
         token_hash: tokenHash,
         status: 'PENDING',
@@ -176,7 +173,7 @@ export async function sendChapterLeaderInvitation(
 
     return {
       invitationId: invitation.id,
-      chapterId: chapter.id,
+      chapterId: null,
       expiresAt,
       token,
     }
@@ -333,7 +330,7 @@ export async function validateInvitationToken(
     ok: true,
     email: invitation.email,
     role: invitation.role as InvitationRole,
-    chapterName: invitation.chapter?.name || invitation.organization_unit?.name || 'BBE',
+    chapterName: invitation.chapter_name || invitation.chapter?.name || invitation.organization_unit?.name || 'BBE',
     organizationUnitId: invitation.organization_unit_id || undefined,
     expiresAt: invitation.expires_at,
   }
@@ -377,6 +374,13 @@ export async function acceptInvitation(
 
     let chapterId = invitation.chapter_id
     let organizationUnitId = invitation.organization_unit_id
+    if (!chapterId && invitation.role === 'CHAPTER_LEADER' && invitation.chapter_name) {
+      const unit = await tx.organizationUnit.create({ data: { name: invitation.chapter_name, type: 'CHAPTER' } })
+      const chapter = await tx.chapter.create({ data: { name: invitation.chapter_name, description: invitation.chapter_description, organization_unit_id: unit.id } })
+      chapterId = chapter.id
+      organizationUnitId = unit.id
+      await tx.invitation.update({ where: { id: invitation.id }, data: { chapter_id: chapter.id, organization_unit_id: unit.id } })
+    }
     if (chapterId) {
       const chapter = await tx.chapter.findUnique({ where: { id: chapterId }, select: { id: true, name: true, organization_unit_id: true } })
       if (!chapter) throw new Error('Invitation Chapter no longer exists')
@@ -467,6 +471,8 @@ export async function acceptInvitation(
     }
   })
   if (accepted.ok) {
+    invalidateChapterLeaderboardCache()
+    invalidateMemberLeaderboardCache()
     try {
       await reconcileLearningAssignmentsForUser(accepted.userId)
     } catch (error) {
@@ -540,7 +546,7 @@ export async function getInvitations(params: {
       chapterId: inv.chapter_id,
       organizationUnitId: inv.organization_unit_id,
       organizationUnitType: inv.organization_unit?.type || null,
-      chapterName: inv.chapter?.name || inv.organization_unit?.name || 'N/A',
+      chapterName: inv.chapter_name || inv.chapter?.name || inv.organization_unit?.name || 'N/A',
       invitedBy: inv.invited_by,
       invitedByEmail: inv.invited_by_user?.email || 'N/A',
       status: inv.status,

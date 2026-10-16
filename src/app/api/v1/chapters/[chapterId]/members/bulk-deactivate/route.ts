@@ -3,6 +3,8 @@ import { authenticate } from '@/lib/auth'
 import { canAccessChapterPermission } from '@/lib/authorization'
 import { getOrganizationUnitTreeIds } from '@/lib/learning-assignments'
 import { prisma } from '@/lib/prisma'
+import { invalidateChapterLeaderboardCache } from '@/lib/chapter-leaderboard-cache'
+import { invalidateMemberLeaderboardCache } from '@/lib/member-leaderboard-cache'
 
 export async function POST(
   request: NextRequest,
@@ -83,6 +85,8 @@ export async function POST(
     })
   })
 
+  invalidateChapterLeaderboardCache()
+  invalidateMemberLeaderboardCache()
   return NextResponse.json({
     success: true,
     count: userIds.length,

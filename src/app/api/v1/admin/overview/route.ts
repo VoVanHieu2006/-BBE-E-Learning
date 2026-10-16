@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getAdminOverviewCache, setAdminOverviewCache } from '@/lib/server-cache'
+import { getActiveMetricChapterIds } from '@/lib/active-chapters'
 
 const SERVER_CACHE_TTL = 15000 // 15 seconds
 
@@ -34,7 +35,7 @@ export async function GET(request: NextRequest) {
     completedProgressCount,
     totalProgressCount,
   ] = await Promise.all([
-    prisma.chapter.count({ where: { status: 'ACTIVE' } }),
+    getActiveMetricChapterIds().then((ids) => ids.length),
     prisma.user.groupBy({
       by: ['status'],
       where: { role: { not: 'ADMIN' } },
@@ -48,13 +49,13 @@ export async function GET(request: NextRequest) {
     prisma.lessonProgress.count({
       where: {
         completed: true,
-        user: { role: 'MEMBER' },
+        user: { role: 'MEMBER', status: 'ACTIVE' },
         lesson: { session: { course: { status: 'PUBLISHED' } } },
       },
     }),
     prisma.lessonProgress.count({
       where: {
-        user: { role: 'MEMBER' },
+        user: { role: 'MEMBER', status: 'ACTIVE' },
         lesson: { session: { course: { status: 'PUBLISHED' } } },
       },
     }),

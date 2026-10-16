@@ -257,6 +257,8 @@ model Invitation {
   id            String            @id @default(uuid()) @db.Uuid
   email         String            @db.VarChar(255)
   display_name  String?           @db.VarChar(120)
+  chapter_name  String?           @db.VarChar(255)
+  chapter_description String?      @db.Text
   role          InvitationRole
   chapter_id    String?           @db.Uuid
   organization_unit_id String?     @db.Uuid

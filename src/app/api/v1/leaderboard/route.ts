@@ -2,14 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getPublishedSystemData, calculateBatchUsersProgress } from '@/lib/progress/calculator'
-
-interface CachedLeaderboard {
-  timestamp: number
-  allResults: any[]
-}
-
-let leaderboardCache: CachedLeaderboard | null = null
-const LEADERBOARD_CACHE_TTL_MS = 30_000 // 30 seconds in-memory cache
+import { getActiveMetricChapterIds } from '@/lib/active-chapters'
+import { getCachedMemberLeaderboard, setCachedMemberLeaderboard } from '@/lib/member-leaderboard-cache'
 
 /**
  * GET /api/v1/leaderboard
@@ -29,15 +23,22 @@ export async function GET(request: NextRequest) {
 
   let allResults: any[] = []
   const now = Date.now()
-
-  if (leaderboardCache && now - leaderboardCache.timestamp < LEADERBOARD_CACHE_TTL_MS) {
-    allResults = leaderboardCache.allResults
+  const cached = getCachedMemberLeaderboard(now)
+  if (cached) {
+    allResults = cached
   } else {
     const sys = await getPublishedSystemData()
 
     // 1. Fetch ALL active members (no pagination here — sort must happen globally first)
+    const activeChapterIds = await getActiveMetricChapterIds(new Date())
     const allMembers = await prisma.user.findMany({
-      where: { status: 'ACTIVE', role: 'MEMBER', position_assignments: { none: { position: { code: 'DNA_LEAD' }, starts_at: { lte: new Date() }, OR: [{ ends_at: null }, { ends_at: { gt: new Date() } }] } } },
+      where: { status: 'ACTIVE', role: 'MEMBER', OR: [
+        { chapter_members: { some: { chapter_id: { in: activeChapterIds } } } },
+        { organization_memberships: { some: { status: 'ACTIVE', OR: [
+          { unit: { chapter: { id: { in: activeChapterIds } } } },
+          { unit: { parent: { chapter: { id: { in: activeChapterIds } } } } },
+        ] } } },
+      ], position_assignments: { none: { position: { code: 'DNA_LEAD' }, starts_at: { lte: new Date() }, OR: [{ ends_at: null }, { ends_at: { gt: new Date() } }] } } },
       select: {
         id: true,
         email: true,
@@ -93,11 +94,7 @@ export async function GET(request: NextRequest) {
 
     // Equal Star balances are won by the member who reached that balance first.
     allResults.sort((a, b) => b.stars - a.stars || new Date(a.starsAchievedAt || 8640000000000000).getTime() - new Date(b.starsAchievedAt || 8640000000000000).getTime() || a.email.localeCompare(b.email))
-
-    leaderboardCache = {
-      timestamp: now,
-      allResults,
-    }
+    setCachedMemberLeaderboard(allResults, now)
   }
 
   // 4. THEN paginate by slicing the globally-sorted array
@@ -108,7 +105,7 @@ export async function GET(request: NextRequest) {
     { items, page, limit, totalCount },
     {
       headers: {
-        'Cache-Control': 'public, max-age=30, stale-while-revalidate=120',
+        'Cache-Control': 'no-store',
       },
     }
   )

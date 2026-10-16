@@ -5,7 +5,7 @@ import { invalidateInvitationsServerCache } from '@/lib/server-cache'
 
 /**
  * POST /api/v1/invitations/chapter-leader
- * Send invitation to a new Chapter Leader + create their chapter.
+ * Send invitation to a new Chapter Leader. The Chapter is created on acceptance.
  * Requires: ADMIN role
  */
 export async function POST(request: NextRequest) {

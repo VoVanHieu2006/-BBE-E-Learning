@@ -6,6 +6,7 @@ import { getOrganizationUnitTreeIds } from '@/lib/learning-assignments'
 import { listChapterMembers } from '@/lib/chapter-members'
 import { isOrganizationId } from '@/lib/organization-admin-rules'
 import { calculateUserProgress } from '@/lib/progress/calculator'
+import { canViewInactiveChapterMember } from '@/lib/inactive-member-access'
 
 /** Detailed course/module/video/quiz/Star progress within an authorized organization scope. */
 export async function GET(_request: NextRequest, { params }: { params: { unitId: string; userId: string } }) {
@@ -23,6 +24,9 @@ export async function GET(_request: NextRequest, { params }: { params: { unitId:
     select: { id: true, email: true, status: true, role: true, created_at: true },
   })
   if (!target || target.role !== 'MEMBER') return NextResponse.json({ error: { code: 'MemberNotFound' } }, { status: 404 })
+  if (target.status !== 'ACTIVE' && !(auth.context!.role === 'ADMIN' || (unit.chapter && await canViewInactiveChapterMember(auth.context!, unit.chapter.id)))) {
+    return NextResponse.json({ error: { code: 'AccessDenied' } }, { status: 403 })
+  }
 
   const now = new Date()
   let joinedAt: Date | null = null

@@ -3,6 +3,7 @@ import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { calculateChapterLeaderboardMetrics, calculateMandatoryCompletionPercentByUser, CHAPTER_LEADERBOARD_WEIGHTS, parseChapterKpiMonthStart, scoreChapterLeaderboard } from '@/lib/chapter-leaderboard-rules'
 import { getCachedChapterLeaderboard, setCachedChapterLeaderboard } from '@/lib/chapter-leaderboard-cache'
+import { getActiveMetricChapterIds } from '@/lib/active-chapters'
 
 export const dynamic = 'force-dynamic'
 
@@ -39,10 +40,11 @@ export async function GET(request: NextRequest) {
   const asOf = new Date(nextMonth.getTime() - 1)
   const cacheKey = monthStart.toISOString().slice(0, 7)
   const cachedData = getCachedChapterLeaderboard(cacheKey)
-  if (cachedData) return NextResponse.json(cachedData, { headers: { 'Cache-Control': 'private, max-age=15' } })
+  if (cachedData) return NextResponse.json(cachedData, { headers: { 'Cache-Control': 'no-store' } })
+  const activeChapterIds = await getActiveMetricChapterIds(now)
 
   const [chapters, kpis, availableMonths] = await Promise.all([
-    prisma.chapter.findMany({ where: { status: 'ACTIVE' }, select: { id: true, name: true, description: true, organization_unit_id: true } }),
+    prisma.chapter.findMany({ where: { id: { in: activeChapterIds } }, select: { id: true, name: true, description: true, organization_unit_id: true } }),
     prisma.chapterMonthlyKpi.findMany({ where: { month_start: { gte: monthStart, lt: nextMonth } }, select: { chapter_id: true, status: true, updated_at: true } }),
     prisma.chapterMonthlyKpi.findMany({ distinct: ['month_start'], orderBy: { month_start: 'desc' }, select: { month_start: true } }),
   ])
@@ -121,5 +123,5 @@ export async function GET(request: NextRequest) {
   const excluded = candidates.filter((item) => !item.eligible).map((item) => ({ chapterId: item.chapter.id, id: item.chapter.id, name: item.chapter.name, description: item.chapter.description, memberCount: item.memberCount, atLeast70Percent: Math.round(item.at70Rate * 1000) / 10, kpiStatus: item.kpi?.status || null, reasons: [...(!item.kpi ? ['KPI_MISSING'] : []), ...(item.memberCount < 20 ? ['MINIMUM_MEMBERS'] : []), ...(item.at70Rate < .5 ? ['COMPLETION_THRESHOLD'] : []), ...(item.kpi?.status === 'RED' || item.kpi?.status === 'BLACK' ? [`KPI_${item.kpi.status}`] : [])] }))
   const data = { month: monthStart.toISOString(), availableMonths: availableMonths.map((item) => item.month_start.toISOString().slice(0, 7)), formulaVersion: 'chapter-v6', updatedAt: new Date().toISOString(), sourceUpdatedAt: kpis.reduce<string | null>((latest, kpi) => !latest || kpi.updated_at.toISOString() > latest ? kpi.updated_at.toISOString() : latest, null), weights: CHAPTER_LEADERBOARD_WEIGHTS, items, excluded }
   setCachedChapterLeaderboard(data, cacheKey)
-  return NextResponse.json(data, { headers: { 'Cache-Control': 'private, max-age=15' } })
+  return NextResponse.json(data, { headers: { 'Cache-Control': 'no-store' } })
 }

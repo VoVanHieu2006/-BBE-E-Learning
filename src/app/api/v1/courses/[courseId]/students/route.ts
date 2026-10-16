@@ -72,7 +72,7 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
     const userIds = Array.from(new Set([...assigned.map((row) => row.user_id), ...withProgress.map((row) => row.id)]))
     users = userIds.length > 0
       ? await prisma.user.findMany({
-          where: { id: { in: userIds }, role: 'MEMBER' },
+          where: { id: { in: userIds }, role: 'MEMBER', status: 'ACTIVE' },
           select: { id: true, email: true, display_name: true, status: true },
           orderBy: { email: 'asc' },
         })

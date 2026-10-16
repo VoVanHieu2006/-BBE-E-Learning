@@ -5,6 +5,8 @@ import { getOrganizationUnitTreeIds } from '@/lib/learning-assignments'
 import { prisma } from '@/lib/prisma'
 import { invalidateServerUsersCache, invalidateAdminOverviewCache } from '@/lib/server-cache'
 import { createChapterCascadeRestrictions, getChapterAccountUserIds, getUserManagedChapterScopes, hasActiveAccountRestrictions } from '@/lib/account-restrictions'
+import { invalidateChapterLeaderboardCache } from '@/lib/chapter-leaderboard-cache'
+import { invalidateMemberLeaderboardCache } from '@/lib/member-leaderboard-cache'
 
 export async function PATCH(request: NextRequest, { params }: { params: { userId: string } }) {
   const auth = await authenticate(request)
@@ -140,6 +142,8 @@ export async function PATCH(request: NextRequest, { params }: { params: { userId
       affectedUserIds.forEach(invalidateUserAuthCache)
       invalidateServerUsersCache()
       invalidateAdminOverviewCache()
+      invalidateChapterLeaderboardCache()
+      invalidateMemberLeaderboardCache()
       return NextResponse.json({ userId, status: 'LOCKED', cascadedChapterIds: cascadeChapters.map((chapter) => chapter.chapterId), lockedUsers: affectedUserIds.length }, { status: 200 })
     }
   }
@@ -151,6 +155,8 @@ export async function PATCH(request: NextRequest, { params }: { params: { userId
   invalidateUserAuthCache(userId)
   invalidateServerUsersCache()
   invalidateAdminOverviewCache()
+  invalidateChapterLeaderboardCache()
+  invalidateMemberLeaderboardCache()
 
   // Audit log
   await prisma.auditLog.create({

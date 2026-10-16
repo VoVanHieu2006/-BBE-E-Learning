@@ -7,6 +7,7 @@ import { getOrganizationUnitTreeIds, reconcileLearningAssignmentsForUser } from 
 import { listChapterMembers } from '@/lib/chapter-members'
 import { isOrganizationId, normalizeOrganizationPagination, normalizeOrganizationSearch } from '@/lib/organization-admin-rules'
 import { calculateBatchUsersProgress, getPublishedSystemData } from '@/lib/progress/calculator'
+import { canViewInactiveChapterMember } from '@/lib/inactive-member-access'
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -44,6 +45,9 @@ export async function GET(request: NextRequest, { params }: { params: { unitId: 
   const paramsUrl = new URL(request.url).searchParams
   const search = normalizeOrganizationSearch(paramsUrl.get('search'))
   const includeInactive = paramsUrl.get('includeInactive') === '1'
+  if (includeInactive && !(auth.context!.role === 'ADMIN' || (unit.chapter && await canViewInactiveChapterMember(auth.context!, unit.chapter.id)))) {
+    return NextResponse.json({ error: { code: 'AccessDenied' } }, { status: 403 })
+  }
   const now = new Date()
   let members: Array<{ userId: string; email: string; role: string; status: string; joinedAt: Date }> = []
 

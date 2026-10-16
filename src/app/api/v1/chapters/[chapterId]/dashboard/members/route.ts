@@ -5,6 +5,7 @@ import { getPublishedSystemData, calculateBatchUsersProgress } from '@/lib/progr
 import { canAccessChapterPermission, resolveSingleManagedChapter } from '@/lib/authorization'
 import { listChapterMembers } from '@/lib/chapter-members'
 import { applyDueChapterReorganizations } from '@/lib/chapter-reorganizations'
+import { canViewInactiveChapterMember } from '@/lib/inactive-member-access'
 
 /**
  * GET /api/v1/chapters/[chapterId]/dashboard/members
@@ -36,6 +37,8 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
   const departmentParam = url.searchParams.get('department') || ''
   const roleTypeParam = url.searchParams.get('roleType') || ''
   const includeInactive = url.searchParams.get('includeInactive') === '1'
+  const mayViewInactive = await canViewInactiveChapterMember(auth.context!, chapterId)
+  if (includeInactive && !mayViewInactive) return NextResponse.json({ error: { code: 'AccessDenied', message: 'Only Admin or this Chapter lead may view inactive accounts' } }, { status: 403 })
   const page = Math.max(parseInt(url.searchParams.get('page') || '1', 10), 1)
   const limit = Math.min(Math.max(parseInt(url.searchParams.get('limit') || '20', 10), 1), 100)
   const skip = (page - 1) * limit
@@ -83,7 +86,7 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
 
   const totalItems = filteredMembers.length
   const members = filteredMembers.slice(skip, skip + limit)
-  const allChapterUserIds = rawMembers.map((member) => member.userId)
+  const allChapterUserIds = rawMembers.filter((member) => member.status === 'ACTIVE').map((member) => member.userId)
   const [progressMap, overallProgressRows, allStarRows] = await Promise.all([
     calculateBatchUsersProgress(members.map((member) => member.userId), sys),
     allChapterUserIds.length && sys.allLessonIdSet.size
@@ -110,7 +113,7 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
   const membersOver70 = activeRawMembers.filter((m) => (overallProgressByUser.get(m.userId) || 0) >= 70).length
 
   const summary = {
-    totalMembers: rawMembers.length,
+    totalMembers: activeRawMembers.length,
     activeMembers: rawMembers.filter((m) => m.status === 'ACTIVE').length,
     avgChapterProgress,
     totalStars,

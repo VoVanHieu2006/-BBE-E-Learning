@@ -4,6 +4,7 @@ import { canAccessChapterPermission } from '@/lib/authorization'
 import { getOrganizationUnitTreeIds } from '@/lib/learning-assignments'
 import { prisma } from '@/lib/prisma'
 import { calculateBatchUsersProgress, getPublishedSystemData } from '@/lib/progress/calculator'
+import { getActiveMetricChapterIds } from '@/lib/active-chapters'
 
 /** Individual member standings are ordered by Star balance, with learning progress as tie-break. */
 export async function GET(request: NextRequest, { params }: { params: { chapterId: string } }) {
@@ -14,6 +15,9 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
   if (!chapter) return NextResponse.json({ error: { code: 'ChapterNotFound', message: 'Không tìm thấy chapter' } }, { status: 404 })
 
   const context = auth.context!
+  if (!(await getActiveMetricChapterIds()).includes(chapter.id)) {
+    return NextResponse.json({ chapterId: chapter.id, items: [] }, { headers: { 'Cache-Control': 'no-store' } })
+  }
   if (context.role !== 'ADMIN') {
     const unitIds = chapter.organization_unit_id ? await getOrganizationUnitTreeIds(chapter.organization_unit_id) : []
     const [hasProgressPermission, legacyMembership, organizationMembership] = await Promise.all([

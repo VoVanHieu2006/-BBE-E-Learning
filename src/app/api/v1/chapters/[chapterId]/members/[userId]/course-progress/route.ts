@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { calculateUserProgress } from '@/lib/progress/calculator'
 import { hasChapterPermission, resolveSingleManagedChapter } from '@/lib/authorization'
 import { getOrganizationUnitTreeIds } from '@/lib/learning-assignments'
+import { canViewInactiveChapterMember } from '@/lib/inactive-member-access'
 
 /**
  * GET /api/v1/chapters/[chapterId]/members/[userId]/course-progress
@@ -58,6 +59,9 @@ export async function GET(
 
   if (!target || target.role !== 'MEMBER') {
     return NextResponse.json({ error: { code: 'NotFound', message: 'Thành viên không thuộc chapter này' } }, { status: 404 })
+  }
+  if (target.status !== 'ACTIVE' && !await canViewInactiveChapterMember(auth.context!, chapterId)) {
+    return NextResponse.json({ error: { code: 'AccessDenied', message: 'Only Admin or this Chapter lead may view inactive accounts' } }, { status: 403 })
   }
 
   const legacyMembership = target.chapter_members.find((cm) => cm.chapter_id === chapterId)
