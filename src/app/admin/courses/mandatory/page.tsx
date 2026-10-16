@@ -23,7 +23,9 @@ export default function MandatoryCourseMatrixPage() {
     return data.courses.flatMap((course: any) => data.targets.flatMap((target: any) => {
       const before = data.cells[course.id][target.key]
       const after = draft[course.id][target.key]
-      return before.enabled !== after.enabled || Number(before.dueDays || 30) !== Number(after.dueDays || 30) ? [{ courseId: course.id, targetKey: target.key, enabled: after.enabled, dueDays: Number(after.dueDays || 30) }] : []
+      const enabledChanged = before.enabled !== after.enabled
+      const enabledDueDaysChanged = after.enabled && Number(before.dueDays || 30) !== Number(after.dueDays || 30)
+      return enabledChanged || enabledDueDaysChanged ? [{ courseId: course.id, targetKey: target.key, enabled: after.enabled, dueDays: Number(after.dueDays || 30) }] : []
     }))
   }, [data, draft])
   const rowDefaults = useMemo(() => data ? data.courses.filter((course:any)=>Number(rowDays[course.id]||30)!==Number(course.defaultDueDays||30)).map((course:any)=>({courseId:course.id,dueDays:Number(rowDays[course.id]||30)})) : [], [data,rowDays])

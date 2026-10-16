@@ -475,6 +475,12 @@ export default function AdminUsersPage() {
                     const isActive = u.status === 'ACTIVE';
                     const isBusy = actionUserId === uId;
                     const isLeader = u.role === 'CHAPTER_LEADER';
+                    const hasDetailedRole = Boolean(
+                      u.effectivePositions?.some((position: any) => position.code === 'DNA_LEAD') ||
+                      u.role === 'CHAPTER_LEADER' ||
+                      u.department ||
+                      u.dna?.active
+                    );
 
                     return (
                       <tr key={uId} className="hover:bg-[#f8f9ff] transition">
@@ -486,7 +492,7 @@ export default function AdminUsersPage() {
                           </div>
                         </td>
                         <td className="px-6 py-4">
-                          <div>{getRoleBadge(u.role)}</div>
+                          {!hasDetailedRole && <div>{getRoleBadge(u.role)}</div>}
                           <div className="mt-1 flex flex-wrap gap-1">
                             {u.effectivePositions?.some((position: any) => position.code === 'DNA_LEAD') ? (
                               <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">Lead DNA</span>

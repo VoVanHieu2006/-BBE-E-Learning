@@ -630,6 +630,7 @@ model OrganizationMembership {
   @@index([user_id, status])
   @@index([user_id, status, starts_at, ends_at])
   @@index([unit_id, status])
+  @@index([unit_id, status, starts_at, ends_at])
   @@map("organization_memberships")
 }
 
@@ -711,6 +712,7 @@ model LearningRule {
 
   @@index([course_id, effective_from, effective_until])
   @@index([organization_unit_id, position_id])
+  @@index([course_id, organization_unit_id, position_id, effective_until])
   @@map("learning_rules")
 }
 
@@ -736,6 +738,7 @@ model UserLearningAssignment {
   @@index([user_id, status, due_at])
   @@index([course_id, status])
   @@index([rule_id])
+  @@index([rule_id, status])
   @@map("user_learning_assignments")
 }
 
