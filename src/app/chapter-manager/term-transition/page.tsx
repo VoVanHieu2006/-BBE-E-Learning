@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, FormEvent, useRef } from 'react';
+import { useState, useEffect, useCallback, FormEvent, useRef } from 'react';
 import Link from 'next/link';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
@@ -11,6 +11,77 @@ import { ORDERED_7_BANS } from '@/lib/departments';
 
 const SAMPLE_SHEET_URL =
   'https://docs.google.com/spreadsheets/d/1MA9pJ1E8oHEZe8d1g6j0Ns6JqLoOCdhSVSgOflO0JBI/edit?gid=0#gid=0';
+
+/**
+ * Đồng hồ đếm ngược thời gian thực siêu nhẹ (Zero-Lag)
+ * Chỉ tính toán chênh lệch millisecond thuần trong bộ nhớ trình duyệt, không gây chậm hệ thống.
+ * Tự động gọi onExpire() khi đếm về 0.
+ */
+function TermTransitionCountdown({
+  targetDate,
+  onExpire,
+}: {
+  targetDate: string;
+  onExpire: () => void;
+}) {
+  const [timeLeft, setTimeLeft] = useState<{
+    days: number;
+    hours: number;
+    minutes: number;
+    seconds: number;
+    isDue: boolean;
+  } | null>(null);
+
+  useEffect(() => {
+    const targetMs = new Date(targetDate).getTime();
+    if (isNaN(targetMs)) return;
+
+    let hasExpired = false;
+
+    function calculate() {
+      const diff = targetMs - Date.now();
+      if (diff <= 0) {
+        setTimeLeft({ days: 0, hours: 0, minutes: 0, seconds: 0, isDue: true });
+        if (!hasExpired) {
+          hasExpired = true;
+          onExpire();
+        }
+        return;
+      }
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
+      const minutes = Math.floor((diff / (1000 * 60)) % 60);
+      const seconds = Math.floor((diff / 1000) % 60);
+      setTimeLeft({ days, hours, minutes, seconds, isDue: false });
+    }
+
+    calculate();
+    const interval = setInterval(calculate, 1000);
+    return () => clearInterval(interval);
+  }, [targetDate, onExpire]);
+
+  if (!timeLeft) return null;
+
+  if (timeLeft.isDue) {
+    return (
+      <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-500 text-white rounded-xl text-xs font-bold shadow-xs animate-pulse">
+        <span>⚡</span>
+        <span>Đã đến giờ hiệu lực! Đang tự động chuyển giao...</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="inline-flex items-center gap-2 px-3 py-1 bg-gradient-to-r from-blue-700 via-indigo-600 to-blue-600 text-white rounded-xl text-xs shadow-xs font-mono">
+      <span className="text-amber-300 animate-pulse">⏳</span>
+      <span className="font-sans font-semibold text-[11px] text-blue-100">Còn lại:</span>
+      <span className="font-extrabold tracking-wider">
+        {timeLeft.days > 0 ? `${timeLeft.days} ngày ` : ''}
+        {String(timeLeft.hours).padStart(2, '0')}:{String(timeLeft.minutes).padStart(2, '0')}:{String(timeLeft.seconds).padStart(2, '0')}
+      </span>
+    </div>
+  );
+}
 
 export default function ChapterManagerTermTransitionPage() {
   const [user, setUser] = useState<any>(null);
@@ -73,6 +144,13 @@ export default function ChapterManagerTermTransitionPage() {
     setMessage({ type, text });
     setToast({ type, message: text });
   };
+
+  // Tự động kích hoạt làm mới và áp dụng khi đồng hồ đếm ngược về 0
+  const handleAutoApplyScheduled = useCallback(() => {
+    if (!user?.chapterId) return;
+    notify('success', '🎉 Đã đến thời gian hiệu lực! Đang tự động áp dụng chuyển giao nhiệm kỳ...');
+    loadCurrentRoster(user.chapterId);
+  }, [user?.chapterId]);
 
   useEffect(() => {
     setMounted(true);
@@ -709,13 +787,112 @@ export default function ChapterManagerTermTransitionPage() {
           </div>
         )}
 
-          {/* ĐỢT CHUYỂN GIAO NHIỆM KỲ ĐÃ LÊN LỊCH (NẾU CÓ) */}
+          {/* KHU VỰC THÀNH VIÊN CHƯA CÓ BAN (ĐẶT NGAY DƯỚI SƠ ĐỒ NHIỆM KỲ HIỆN TẠI ĐỂ DỄ THAO TÁC) */}
+          <Card className="border border-amber-200 bg-amber-50/20 p-5 shadow-xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-amber-200/60 pb-3 mb-4">
+              <div>
+                <h3 className="text-sm font-bold text-amber-900 flex items-center gap-1.5">
+                  <span>⚠️ Thành viên chưa có Ban ({unassignedMembers.length})</span>
+                </h3>
+                <p className="text-xs text-[#737686] mt-0.5">
+                  Các thành viên thuộc Chapter nhưng chưa phân ban (bao gồm thành viên không có trong sheet sau khi chuyển giao). Bạn có thể gán Ban hoặc vô hiệu hóa tài khoản.
+                </p>
+              </div>
+            </div>
+
+            {unassignedMembers.length === 0 ? (
+              <p className="text-xs text-[#737686] italic py-2">
+                Tất cả thành viên trong Chapter đã được phân vào các Ban đầy đủ.
+              </p>
+            ) : (
+              <div className="overflow-x-auto max-h-72 overflow-y-auto">
+                <table className="w-full text-left text-xs bg-white rounded-xl border border-amber-200/80 overflow-hidden">
+                  <thead className="bg-slate-100 border-b-2 border-slate-300 text-slate-900 font-extrabold text-[11px] uppercase tracking-wider sticky top-0">
+                    <tr>
+                      <th className="py-2.5 px-4">Thành viên</th>
+                      <th className="py-2.5 px-4">Email</th>
+                      <th className="py-2.5 px-4 text-center">Gán vào Ban</th>
+                      <th className="py-2.5 px-4 text-right">Thao tác</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-amber-100">
+                    {unassignedMembers.map((m) => (
+                      <tr key={m.userId} className="hover:bg-amber-50/30 transition">
+                        <td className="py-2.5 px-4">
+                          <Link
+                            href={`/chapter-manager/members/${m.userId}`}
+                            className="font-semibold text-[#172554] hover:text-[#2563EB]"
+                          >
+                            {m.displayName}
+                          </Link>
+                        </td>
+                        <td className="py-2.5 px-4 text-[#737686]">{m.email}</td>
+                        <td className="py-2.5 px-4 text-center">
+                          <select
+                            value={changeDeptModal?.userId === m.userId ? selectedDeptId : ''}
+                            disabled={Boolean(actionLoading)}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val) {
+                                setSelectedDeptId(val);
+                                setChangeDeptModal({
+                                  userId: m.userId,
+                                  displayName: m.displayName,
+                                });
+                                const deptObj = availableDepartments.find((d: any) => d.id === val);
+                                setMakeLead(deptObj?.name === 'Chủ Tịch');
+                              }
+                            }}
+                            className="text-xs border border-[#cbdbf5] rounded-lg px-2.5 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-[#2563EB] disabled:opacity-50"
+                          >
+                            <option value="">➕ Chọn ban để gán...</option>
+                            {availableDepartments.map((d: any) => (
+                              <option key={d.id} value={d.id}>
+                                {d.name}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                        <td className="py-2.5 px-4 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <Link
+                              href={`/chapter-manager/members/${m.userId}`}
+                              className="text-blue-600 hover:underline font-semibold"
+                            >
+                              Chi tiết
+                            </Link>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-red-700 bg-red-50 hover:bg-red-100 border-red-200 font-semibold text-xs py-1 px-2.5"
+                              loading={deactivatingUserId === m.userId}
+                              onClick={() => handleIndividualDeactivate(m.userId, m.displayName)}
+                            >
+                              ⛔ Vô hiệu hóa
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+
+          {/* ĐỢT CHUYỂN GIAO NHIỆM KỲ ĐÃ LÊN LỊCH (ĐẶT DƯỚI THÀNH VIÊN CHƯA CÓ BAN) */}
           {scheduledBatch && (
             <Card className="p-5 border-2 border-blue-300 bg-gradient-to-r from-blue-50/50 via-white to-blue-50/30 rounded-2xl shadow-sm space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-blue-100 pb-3">
                 <div>
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-100 text-[#2563EB] rounded-full text-xs font-bold mb-1">
-                    <span>📅</span> Đợt chuyển giao nhiệm kỳ tiếp theo (Đã lên lịch)
+                  <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-100 text-[#2563EB] rounded-full text-xs font-bold">
+                      <span>📅</span> Đợt chuyển giao nhiệm kỳ tiếp theo (Đã lên lịch)
+                    </span>
+                    <TermTransitionCountdown
+                      targetDate={scheduledBatch.effectiveAt}
+                      onExpire={handleAutoApplyScheduled}
+                    />
                   </div>
                   <h3 className="text-lg font-bold text-[#172554]">
                     Dự kiến hiệu lực lúc: {new Date(scheduledBatch.effectiveAt).toLocaleString('vi-VN')}
@@ -842,99 +1019,6 @@ export default function ChapterManagerTermTransitionPage() {
               )}
             </Card>
           )}
-
-          {/* KHU VỰC THÀNH VIÊN CHƯA CÓ BAN */}
-          <Card className="border border-amber-200 bg-amber-50/20 p-5 shadow-xs">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-amber-200/60 pb-3 mb-4">
-              <div>
-                <h3 className="text-sm font-bold text-amber-900 flex items-center gap-1.5">
-                  <span>⚠️ Thành viên chưa có Ban ({unassignedMembers.length})</span>
-                </h3>
-                <p className="text-xs text-[#737686] mt-0.5">
-                  Các thành viên thuộc Chapter nhưng chưa phân ban (bao gồm thành viên không có trong sheet sau khi chuyển giao). Bạn có thể gán Ban hoặc vô hiệu hóa tài khoản.
-                </p>
-              </div>
-            </div>
-
-            {unassignedMembers.length === 0 ? (
-              <p className="text-xs text-[#737686] italic py-2">
-                Tất cả thành viên trong Chapter đã được phân vào các Ban đầy đủ.
-              </p>
-            ) : (
-              <div className="overflow-x-auto max-h-72 overflow-y-auto">
-                <table className="w-full text-left text-xs bg-white rounded-xl border border-amber-200/80 overflow-hidden">
-                  <thead className="bg-slate-100 border-b-2 border-slate-300 text-slate-900 font-extrabold text-[11px] uppercase tracking-wider sticky top-0">
-                    <tr>
-                      <th className="py-2.5 px-4">Thành viên</th>
-                      <th className="py-2.5 px-4">Email</th>
-                      <th className="py-2.5 px-4 text-center">Gán vào Ban</th>
-                      <th className="py-2.5 px-4 text-right">Thao tác</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-amber-100">
-                    {unassignedMembers.map((m) => (
-                      <tr key={m.userId} className="hover:bg-amber-50/30 transition">
-                        <td className="py-2.5 px-4">
-                          <Link
-                            href={`/chapter-manager/members/${m.userId}`}
-                            className="font-semibold text-[#172554] hover:text-[#2563EB]"
-                          >
-                            {m.displayName}
-                          </Link>
-                        </td>
-                        <td className="py-2.5 px-4 text-[#737686]">{m.email}</td>
-                        <td className="py-2.5 px-4 text-center">
-                          <select
-                            value={changeDeptModal?.userId === m.userId ? selectedDeptId : ''}
-                            disabled={Boolean(actionLoading)}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              if (val) {
-                                setSelectedDeptId(val);
-                                setChangeDeptModal({
-                                  userId: m.userId,
-                                  displayName: m.displayName,
-                                });
-                                const deptObj = availableDepartments.find((d: any) => d.id === val);
-                                setMakeLead(deptObj?.name === 'Chủ Tịch');
-                              }
-                            }}
-                            className="text-xs border border-[#cbdbf5] rounded-lg px-2.5 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-[#2563EB] disabled:opacity-50"
-                          >
-                            <option value="">➕ Chọn ban để gán...</option>
-                            {availableDepartments.map((d: any) => (
-                              <option key={d.id} value={d.id}>
-                                {d.name}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-                        <td className="py-2.5 px-4 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <Link
-                              href={`/chapter-manager/members/${m.userId}`}
-                              className="text-blue-600 hover:underline font-semibold"
-                            >
-                              Chi tiết
-                            </Link>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="text-red-700 bg-red-50 hover:bg-red-100 border-red-200 font-semibold text-xs py-1 px-2.5"
-                              loading={deactivatingUserId === m.userId}
-                              onClick={() => handleIndividualDeactivate(m.userId, m.displayName)}
-                            >
-                              ⛔ Vô hiệu hóa
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </Card>
 
           {/* ═══════════════════════════════════════════════════════════════════
               KHU VỰC NHẬP GOOGLE SHEET CHUYỂN GIAO NHIỆM KỲ MỚI (NẰM PHÍA DƯỚI)
