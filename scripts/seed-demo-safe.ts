@@ -45,7 +45,14 @@ async function main() {
   const dna = await ensureUnit('DNA Điều hành', 'DNA', root.id)
   const dnaGroups = await Promise.all(['TT', 'LDC', 'SGDC'].map((name) => ensureUnit(name, 'DNA_GROUP', dna.id)))
   const chapterUnit = await ensureUnit('Chapter Demo', 'CHAPTER', root.id)
-  const department = await ensureUnit('Ban Nội dung', 'DEPARTMENT', chapterUnit.id)
+  const existingChair = await prisma.organizationUnit.findFirst({ where: { name: 'Chủ tịch', type: 'DEPARTMENT', parent_id: chapterUnit.id } })
+  if (!existingChair) {
+    const legacyChair = await prisma.organizationUnit.findFirst({ where: { name: 'Ban Chủ tịch', type: 'DEPARTMENT', parent_id: chapterUnit.id } })
+    if (legacyChair) await prisma.organizationUnit.update({ where: { id: legacyChair.id }, data: { name: 'Chủ tịch' } })
+  }
+  const departmentNames = ['Ban Chất lượng', 'Ban Nội dung', 'Ban Khách mời', 'Ban TT&SK', 'Ban Thành viên', 'Ban Thư ký', 'Chủ tịch'] as const
+  const departments = await Promise.all(departmentNames.map((name) => ensureUnit(name, 'DEPARTMENT', chapterUnit.id)))
+  const department = departments[1]
   const chapter = await prisma.chapter.upsert({
     where: { name: 'Chapter Demo' }, update: { organization_unit_id: chapterUnit.id, status: 'ACTIVE' },
     create: { name: 'Chapter Demo', description: 'Chapter mẫu để kiểm tra phân quyền.', organization_unit_id: chapterUnit.id },
@@ -63,13 +70,17 @@ async function main() {
     ['dna.lead.demo@bbe.vn', dna.id, positions[0].id],
     ['chapter.lead.demo@bbe.vn', chapterUnit.id, positions[1].id],
     ['department.lead.demo@bbe.vn', department.id, positions[2].id],
-    ['member.demo@bbe.vn', department.id, positions[3].id],
+    ['member.demo@bbe.vn', departments[6].id, positions[3].id],
     ['dna.member.demo@bbe.vn', department.id, positions[3].id],
   ] as const
   for (const [email, unitId, positionId] of assignments) {
     const userId = created[email].id
     if (!await prisma.organizationMembership.findFirst({ where: { user_id: userId, unit_id: unitId, status: 'ACTIVE', ends_at: null } })) await prisma.organizationMembership.create({ data: { user_id: userId, unit_id: unitId } })
     if (!await prisma.positionAssignment.findFirst({ where: { user_id: userId, unit_id: unitId, position_id: positionId, ends_at: null } })) await prisma.positionAssignment.create({ data: { user_id: userId, unit_id: unitId, position_id: positionId, is_primary: true, appointed_by: adminId } })
+  }
+  const chairId = created['member.demo@bbe.vn'].id
+  if (!await prisma.positionAssignment.findFirst({ where: { user_id: chairId, unit_id: departments[6].id, position_id: positions[2].id, ends_at: null } })) {
+    await prisma.positionAssignment.create({ data: { user_id: chairId, unit_id: departments[6].id, position_id: positions[2].id, appointed_by: adminId } })
   }
   const dnaMemberId = created['dna.member.demo@bbe.vn'].id
   if (!await prisma.organizationMembership.findFirst({ where: { user_id: dnaMemberId, unit_id: dnaGroups[0].id, status: 'ACTIVE', ends_at: null } })) {

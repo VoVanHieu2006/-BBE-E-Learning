@@ -37,6 +37,7 @@ export async function GET(request: NextRequest) {
     prisma.chapter.count({ where: { status: 'ACTIVE' } }),
     prisma.user.groupBy({
       by: ['status'],
+      where: { role: { not: 'ADMIN' } },
       _count: true,
     }),
     prisma.course.groupBy({

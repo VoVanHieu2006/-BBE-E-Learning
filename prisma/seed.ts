@@ -191,7 +191,7 @@ async function main(): Promise<void> {
   const dnaGroups = await Promise.all(["TT", "LDC", "SGDC"].map((name) => prisma.organizationUnit.create({ data: { name, type: "DNA_GROUP", parent_id: dnaUnit.id } })));
   const chapterUnits = await Promise.all(chapters.map((chapter) => prisma.organizationUnit.create({ data: { name: chapter.name, type: "CHAPTER", parent_id: rootUnit.id } })));
   await Promise.all(chapters.map((chapter, index) => prisma.chapter.update({ where: { id: chapter.id }, data: { organization_unit_id: chapterUnits[index].id } })));
-  const departments = await Promise.all(["Ban Chủ tịch", "Ban Nội dung", "Ban Khách mời", "Ban Thành viên", "Ban Chất lượng", "Ban TT&SK", "Ban Thư ký"].map((name) => prisma.organizationUnit.create({ data: { name, type: "DEPARTMENT", parent_id: chapterUnits[0].id } })));
+  const departments = await Promise.all(["Ban Chất lượng", "Ban Nội dung", "Ban Khách mời", "Ban TT&SK", "Ban Thành viên", "Ban Thư ký", "Chủ tịch"].map((name) => prisma.organizationUnit.create({ data: { name, type: "DEPARTMENT", parent_id: chapterUnits[0].id } })));
   const [dnaLeadPosition, chapterLeadPosition, departmentLeadPosition, memberPosition] = await Promise.all([
     prisma.position.create({ data: { code: "DNA_LEAD", name: "Lead DNA", scope: "DNA", is_manager: true } }),
     prisma.position.create({ data: { code: "CHAPTER_LEAD", name: "Trưởng Chapter", scope: "CHAPTER", is_manager: true } }),
@@ -214,7 +214,7 @@ async function main(): Promise<void> {
     { email: "dna.lead.demo@bbe.vn", unit: dnaUnit, position: dnaLeadPosition },
     { email: "chapter.lead.demo@bbe.vn", unit: chapterUnits[0], position: chapterLeadPosition },
     { email: "department.lead.demo@bbe.vn", unit: departments[0], position: departmentLeadPosition },
-    { email: "member.demo@bbe.vn", unit: departments[0], position: memberPosition },
+    { email: "member.demo@bbe.vn", unit: departments[6], position: memberPosition },
     { email: "dna.member.demo@bbe.vn", unit: departments[0], position: memberPosition },
   ];
   for (const item of demoAssignments) {
@@ -222,6 +222,7 @@ async function main(): Promise<void> {
     await prisma.organizationMembership.create({ data: { user_id: user.id, unit_id: item.unit.id } });
     await prisma.positionAssignment.create({ data: { user_id: user.id, unit_id: item.unit.id, position_id: item.position.id, is_primary: true, appointed_by: admin.id } });
   }
+  await prisma.positionAssignment.create({ data: { user_id: users["member.demo@bbe.vn"].id, unit_id: departments[6].id, position_id: departmentLeadPosition.id, appointed_by: admin.id } });
   await prisma.organizationMembership.create({ data: { user_id: users["dna.member.demo@bbe.vn"].id, unit_id: dnaGroups[0].id } });
 
   console.log("🎓 Creating courses, sessions, lessons...");

@@ -57,6 +57,10 @@ export default function AdminUsersPage() {
     const core = name.replace(/^BBE\s+/i, '').replace(/^Chapter\s+/i, '').replace(/\s+Chapter$/i, '').trim();
     return `BBE ${core} Chapter`;
   };
+  const formatDepartmentName = (name?: string) => {
+    if (!name) return '';
+    return name.replace(/^Ban\s+Chủ tịch$/i, 'Chủ tịch');
+  };
 
   useEffect(() => {
     const cachedUsers = getCachedApiData<any>('/api/v1/users?page=1&limit=20');
@@ -462,7 +466,7 @@ export default function AdminUsersPage() {
                 <thead className="bg-[#f8f9ff] text-[#434655] font-semibold border-b border-[#eff4ff]">
                   <tr>
                     <th className="px-6 py-4 min-w-[220px]">Tài khoản / Email</th>
-                    <th className="px-6 py-4 min-w-[180px]">Vai trò</th>
+                    <th className="px-6 py-4 min-w-[260px]">Vai trò</th>
                     <th className="px-6 py-4 min-w-[160px]">Chapter</th>
                     <th className="px-6 py-4 text-center min-w-[190px]">Tiến độ khóa học</th>
                     <th className="px-6 py-4 text-center min-w-[140px]">Trạng thái</th>
@@ -493,15 +497,21 @@ export default function AdminUsersPage() {
                         </td>
                         <td className="px-6 py-4">
                           {!hasDetailedRole && <div>{getRoleBadge(u.role)}</div>}
-                          <div className="mt-1 flex flex-wrap gap-1">
+                          <div className="mt-1 flex flex-wrap gap-1.5">
                             {u.effectivePositions?.some((position: any) => position.code === 'DNA_LEAD') ? (
-                              <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">Lead DNA</span>
+                              <span className="inline-flex whitespace-nowrap rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">Lead DNA</span>
                             ) : u.role === 'CHAPTER_LEADER' ? (
-                              <span className="rounded-full bg-purple-50 px-2 py-0.5 text-[10px] font-semibold text-purple-700">Lead Chapter · {formatChapterName(u.chapter?.name)}</span>
+                              <span className="inline-flex whitespace-nowrap rounded-full bg-purple-50 px-2 py-0.5 text-[10px] font-semibold text-purple-700">Lead Chapter · {formatChapterName(u.chapter?.name)}</span>
                             ) : u.department ? (
-                              <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700">{u.effectivePositions?.some((position: any) => ['DEPARTMENT_LEAD', 'LT'].includes(position.code)) ? 'LT' : 'Thành viên'} · {u.department.name}</span>
+                              <span className="inline-flex whitespace-nowrap rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
+                                {formatDepartmentName(u.department.name) === 'Chủ tịch'
+                                  ? 'Chủ tịch'
+                                  : u.effectivePositions?.some((position: any) => ['DEPARTMENT_LEAD', 'LT'].includes(position.code))
+                                  ? `LT ${formatDepartmentName(u.department.name)}`
+                                  : `Thành viên · ${formatDepartmentName(u.department.name)}`}
+                              </span>
                             ) : null}
-                            {u.dna?.active && !u.effectivePositions?.some((position: any) => position.code === 'DNA_LEAD') && <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">Thành viên DNA{u.dna.group ? ` · ${u.dna.group}` : ''}</span>}
+                            {u.dna?.active && !u.effectivePositions?.some((position: any) => position.code === 'DNA_LEAD') && <span className="inline-flex whitespace-nowrap rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">Thành viên DNA{u.dna.group ? ` · ${u.dna.group}` : ''}</span>}
                           </div>
                         </td>
                         <td className="px-6 py-4">
