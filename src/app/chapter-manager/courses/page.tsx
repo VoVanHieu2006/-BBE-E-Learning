@@ -26,6 +26,15 @@ export default function ChapterManagerCoursesPage() {
   const [contentModal, setContentModal] = useState<any | null>(null);
   const [contentLoading, setContentLoading] = useState(false);
 
+  // Modal: Xem video (có thể tua)
+  const [videoModal, setVideoModal] = useState<{ title: string; youtubeVideoId?: string } | null>(null);
+
+  // Modal: Xem quiz / câu hỏi & kết quả
+  const [quizModal, setQuizModal] = useState<{ assessmentId: string; title: string } | null>(null);
+  const [quizLoading, setQuizLoading] = useState(false);
+  const [quizData, setQuizData] = useState<any | null>(null);
+  const [quizSearch, setQuizSearch] = useState('');
+
   useEffect(() => {
     let currentChapter = 'me';
     if (typeof window !== 'undefined') {
@@ -92,6 +101,48 @@ export default function ChapterManagerCoursesPage() {
     }
     setContentLoading(false);
   };
+
+  function extractYouTubeId(raw?: string): string {
+    if (!raw) return '';
+    const text = raw.trim();
+    const match = text.match(
+      /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=|shorts\/)|youtu\.be\/)([^"&?\/\s]{11})/i
+    );
+    if (match && match[1]) return match[1];
+    if (/^[a-zA-Z0-9_-]{11}$/.test(text)) return text;
+    return text;
+  }
+
+  const openVideoModal = (lesson: any) => {
+    const vidId = lesson.video?.youtubeVideoId || lesson.youtubeVideoId || '';
+    setVideoModal({
+      title: lesson.title,
+      youtubeVideoId: vidId,
+    });
+  };
+
+  const openQuizModal = async (assessment: any, title?: string) => {
+    const aId = assessment.assessmentId || assessment.id;
+    if (!aId) return;
+    setQuizModal({ assessmentId: aId, title: title || assessment.title || 'Bài kiểm tra' });
+    setQuizSearch('');
+    setQuizLoading(true);
+    setQuizData(null);
+    const res = await apiFetch(`/api/v1/assessments/${aId}`);
+    if (res.ok && res.data) {
+      setQuizData(res.data);
+    }
+    setQuizLoading(false);
+  };
+
+  const filteredQuestions = (quizData?.questions || []).filter((q: any) => {
+    if (!quizSearch.trim()) return true;
+    const term = quizSearch.toLowerCase().trim();
+    const inQuestion = (q.questionText || '').toLowerCase().includes(term);
+    const inOptions = (q.options || []).some((o: any) => (o.optionText || '').toLowerCase().includes(term));
+    const inExplanation = (q.explanation || '').toLowerCase().includes(term);
+    return inQuestion || inOptions || inExplanation;
+  });
 
   const formatDuration = (sec?: number) => {
     const s = Number(sec) || 0;
@@ -287,14 +338,26 @@ export default function ChapterManagerCoursesPage() {
                                   {lesson.documents?.length > 0 ? ` • ${lesson.documents.length} tài liệu` : ''}
                                 </p>
                               </div>
-                              <div className="flex items-center gap-2 shrink-0">
-                                {lesson.assessment && (
-                                  <span className="text-xs text-slate-500">
-                                    📝 Quiz: {lesson.assessment.questionCount || lesson.assessment._count?.questions || 0} câu
-                                  </span>
-                                )}
+                              <div className="flex flex-wrap items-center gap-2 shrink-0">
                                 {lesson.hasVideo && (
-                                  <span className="text-xs text-slate-500">▶ Video</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => openVideoModal(lesson)}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-50 text-[#2563EB] hover:bg-blue-100 transition shadow-sm border border-blue-200/60"
+                                    title="Xem video bài học (cho phép tua)"
+                                  >
+                                    <span>▶</span> Xem video
+                                  </button>
+                                )}
+                                {lesson.assessment && (
+                                  <button
+                                    type="button"
+                                    onClick={() => openQuizModal(lesson.assessment, lesson.title)}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-50 text-amber-700 hover:bg-amber-100 transition shadow-sm border border-amber-200/60"
+                                    title="Xem toàn bộ câu hỏi và kết quả quiz"
+                                  >
+                                    <span>📝</span> Xem quiz ({lesson.assessment.questionCount || lesson.assessment._count?.questions || 0} câu)
+                                  </button>
                                 )}
                               </div>
                             </div>
@@ -304,11 +367,253 @@ export default function ChapterManagerCoursesPage() {
                     )}
                   </div>
                 ))}
+                {contentModal.finalAssessment && (
+                  <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-amber-900 bg-amber-200/80 px-2 py-0.5 rounded-md">
+                          Đánh giá cuối khóa
+                        </span>
+                        <h4 className="font-bold text-sm text-[#172554]">{contentModal.finalAssessment.title || 'Bài kiểm tra cuối khóa'}</h4>
+                      </div>
+                      <p className="text-xs text-[#737686] mt-1">
+                        {contentModal.finalAssessment.questionCount || contentModal.finalAssessment._count?.questions || 0} câu hỏi đánh giá tổng hợp khóa học
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => openQuizModal(contentModal.finalAssessment, 'Bài kiểm tra cuối khóa')}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-amber-600 text-white hover:bg-amber-700 transition shadow-sm shrink-0"
+                    >
+                      <span>📝</span> Xem quiz cuối khóa
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
-            <div className="flex justify-end pt-2">
+            <div className="flex justify-end pt-2 border-t border-[#eff4ff]">
               <Button variant="secondary" onClick={() => setContentModal(null)}>
+                Đóng
+              </Button>
+            </div>
+          </div>
+        </Modal>
+
+        {/* Modal: Xem video (có thể tua) */}
+        <Modal
+          isOpen={!!videoModal}
+          onClose={() => setVideoModal(null)}
+          maxWidth="max-w-3xl"
+        >
+          <div className="p-6 space-y-4">
+            <div className="flex justify-between items-center border-b border-[#eff4ff] pb-3">
+              <div>
+                <span className="text-[11px] font-bold px-2 py-0.5 bg-blue-100 text-[#2563EB] rounded-md">
+                  Chế độ BĐHU (Có thể tua video)
+                </span>
+                <h3 className="text-lg font-bold text-[#172554] mt-1" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
+                  ▶ {videoModal?.title}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setVideoModal(null)}
+                className="text-[#737686] hover:text-[#172554] text-xl font-bold p-1 rounded-lg hover:bg-slate-100 transition"
+              >
+                ✕
+              </button>
+            </div>
+
+            {videoModal && (
+              <div className="space-y-3">
+                {extractYouTubeId(videoModal.youtubeVideoId) ? (
+                  <div className="aspect-video w-full rounded-2xl overflow-hidden bg-black shadow-lg">
+                    <iframe
+                      src={`https://www.youtube.com/embed/${extractYouTubeId(videoModal.youtubeVideoId)}?autoplay=1&controls=1&rel=0`}
+                      title={videoModal.title}
+                      className="w-full h-full"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                    />
+                  </div>
+                ) : (
+                  <div className="p-12 text-center text-[#737686] bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                    <p className="text-3xl mb-2">📹</p>
+                    <p className="font-semibold text-[#172554]">Chưa cấu hình Video ID cho bài học này</p>
+                    <p className="text-xs text-[#737686] mt-1">Vui lòng cập nhật YouTube Video ID trong trang quản trị khóa học.</p>
+                  </div>
+                )}
+                <p className="text-xs text-[#737686] flex items-center gap-1.5">
+                  <span>💡</span> Video trong chế độ xem trước dành cho Ban Định Hướng, hỗ trợ tua thời gian và chỉnh tốc độ tự do.
+                </p>
+              </div>
+            )}
+
+            <div className="flex justify-end pt-2 border-t border-[#eff4ff]">
+              <Button variant="secondary" onClick={() => setVideoModal(null)}>
+                Đóng
+              </Button>
+            </div>
+          </div>
+        </Modal>
+
+        {/* Modal: Xem toàn bộ câu hỏi và kết quả quiz */}
+        <Modal
+          isOpen={!!quizModal}
+          onClose={() => setQuizModal(null)}
+          maxWidth="max-w-3xl"
+        >
+          <div className="p-6 space-y-4 max-h-[88vh] flex flex-col">
+            {/* Header */}
+            <div className="flex justify-between items-center border-b border-[#eff4ff] pb-3 shrink-0">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-bold px-2 py-0.5 bg-amber-100 text-amber-800 rounded-md">
+                    Ngân hàng câu hỏi & Đáp án
+                  </span>
+                  {quizData && (
+                    <span className="text-xs font-semibold text-[#737686]">
+                      {quizData.questions?.length || 0} câu hỏi
+                    </span>
+                  )}
+                </div>
+                <h3 className="text-lg font-bold text-[#172554] mt-1" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
+                  📝 {quizModal?.title}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setQuizModal(null)}
+                className="text-[#737686] hover:text-[#172554] text-xl font-bold p-1 rounded-lg hover:bg-slate-100 transition"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Search Box */}
+            <div className="shrink-0">
+              <div className="relative">
+                <input
+                  type="text"
+                  value={quizSearch}
+                  onChange={(e) => setQuizSearch(e.target.value)}
+                  placeholder="🔍 Tìm kiếm câu hỏi, nội dung đáp án hoặc giải thích..."
+                  className="w-full px-4 py-2.5 text-sm border border-[#cbdbf5] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB] pr-10"
+                />
+                {quizSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setQuizSearch('')}
+                    className="absolute right-3 top-3 text-xs text-[#737686] hover:text-[#172554] font-bold"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+              {quizData && quizSearch && (
+                <p className="text-xs text-[#737686] mt-1.5">
+                  Tìm thấy <strong className="text-[#172554]">{filteredQuestions.length}</strong> câu hỏi phù hợp với từ khóa &ldquo;{quizSearch}&rdquo;
+                </p>
+              )}
+            </div>
+
+            {/* Content / Question List */}
+            <div className="flex-1 overflow-y-auto pr-1 space-y-4">
+              {quizLoading ? (
+                <div className="py-16 text-center text-[#737686] space-y-2">
+                  <div className="animate-spin text-2xl">⏳</div>
+                  <p className="text-sm">Đang tải câu hỏi và kết quả quiz...</p>
+                </div>
+              ) : !quizData?.questions || quizData.questions.length === 0 ? (
+                <div className="py-12 text-center text-[#737686]">
+                  <p className="text-2xl mb-1">📋</p>
+                  <p className="font-medium text-[#172554]">Quiz này chưa có câu hỏi nào.</p>
+                </div>
+              ) : filteredQuestions.length === 0 ? (
+                <div className="py-12 text-center text-[#737686]">
+                  <p className="text-2xl mb-1">🔍</p>
+                  <p className="font-medium text-[#172554]">Không tìm thấy câu hỏi phù hợp</p>
+                  <p className="text-xs text-[#737686] mt-1">Thử tìm kiếm bằng từ khóa khác.</p>
+                </div>
+              ) : (
+                filteredQuestions.map((q: any, qIdx: number) => {
+                  const letterList = ['A', 'B', 'C', 'D', 'E', 'F'];
+                  return (
+                    <div
+                      key={q.questionId || q.id || qIdx}
+                      className="p-4 rounded-2xl border border-[#eff4ff] bg-white shadow-sm space-y-3"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-2">
+                          <span className="w-7 h-7 rounded-lg bg-[#eff4ff] text-[#2563EB] font-bold text-xs flex items-center justify-center shrink-0">
+                            {qIdx + 1}
+                          </span>
+                          <span className="text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-[#434655]">
+                            {q.points || 1} điểm
+                          </span>
+                          {q.durationSeconds ? (
+                            <span className="text-xs text-[#737686]">
+                              ⏱️ {q.durationSeconds}s
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+
+                      <p className="text-sm font-semibold text-[#172554] whitespace-pre-wrap leading-relaxed">
+                        {q.questionText}
+                      </p>
+
+                      {/* Options */}
+                      <div className="space-y-2 pt-1">
+                        {q.options?.map((opt: any, oIdx: number) => {
+                          const isCorrect = Boolean(opt.isCorrect);
+                          return (
+                            <div
+                              key={opt.optionId || opt.id || oIdx}
+                              className={`p-3 rounded-xl border text-xs flex items-start justify-between gap-3 transition ${
+                                isCorrect
+                                  ? 'border-emerald-300 bg-emerald-50 text-emerald-950 font-medium'
+                                  : 'border-slate-200 bg-slate-50/50 text-[#434655]'
+                              }`}
+                            >
+                              <div className="flex items-start gap-2.5 min-w-0">
+                                <span
+                                  className={`w-5 h-5 rounded-md flex items-center justify-center font-bold text-[11px] shrink-0 ${
+                                    isCorrect
+                                      ? 'bg-emerald-600 text-white'
+                                      : 'bg-slate-200 text-slate-700'
+                                  }`}
+                                >
+                                  {letterList[oIdx] || oIdx + 1}
+                                </span>
+                                <span className="leading-relaxed whitespace-pre-wrap pt-0.5">{opt.optionText}</span>
+                              </div>
+                              {isCorrect && (
+                                <span className="shrink-0 px-2 py-0.5 bg-emerald-600 text-white rounded-md text-[10px] font-bold flex items-center gap-1">
+                                  ✓ Đáp án đúng
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Explanation */}
+                      {q.explanation && (
+                        <div className="p-3 bg-amber-50/80 rounded-xl border border-amber-200/80 text-xs text-amber-900 leading-relaxed">
+                          <span className="font-bold">💡 Giải thích đáp án:</span> {q.explanation}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="flex justify-end pt-3 border-t border-[#eff4ff] shrink-0">
+              <Button variant="secondary" onClick={() => setQuizModal(null)}>
                 Đóng
               </Button>
             </div>

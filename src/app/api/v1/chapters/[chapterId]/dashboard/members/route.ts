@@ -56,15 +56,26 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
   })
   const totalItems = allMembers.length
   const members = allMembers.slice(skip, skip + limit)
-
   const memberUserIds = members.map((member) => member.userId)
+  const allMemberUserIds = allMembers.map((member) => member.userId)
   const [progressMap, starRows] = await Promise.all([
-    calculateBatchUsersProgress(memberUserIds, sys),
+    calculateBatchUsersProgress(allMemberUserIds, sys),
     memberUserIds.length
       ? prisma.starLedger.groupBy({ where: { user_id: { in: memberUserIds } }, by: ['user_id'], _sum: { amount: true } })
       : Promise.resolve([]),
   ])
   const starsByUser = new Map(starRows.map((row) => [row.user_id, row._sum.amount || 0]))
+
+  const allProgressValues = allMembers.map((m) => progressMap.get(m.userId)?.overallProgressPercent || 0)
+  const avgChapterProgress = allProgressValues.length > 0
+    ? Math.round(allProgressValues.reduce((a, b) => a + b, 0) / allProgressValues.length)
+    : 0
+
+  const summary = {
+    totalMembers: totalItems,
+    activeMembers: allMembers.filter((m) => m.status === 'ACTIVE').length,
+    avgChapterProgress,
+  }
 
   const items = members.map((m) => {
     const p = progressMap.get(m.userId)
@@ -90,6 +101,7 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
 
   return NextResponse.json({
     items,
+    summary,
     totalItems,
     totalPages: Math.ceil(totalItems / limit),
     page,

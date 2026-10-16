@@ -88,11 +88,10 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
         description: l.description,
         sortOrder: l.sort_order,
         hasVideo: !!l.video,
-        // This endpoint provides the outline, not playable media. A video URL
-        // is returned only by the progression-gated lesson endpoint (or Admin).
-        videoId: auth.ok && (auth as any).context!.role === 'ADMIN' ? l.video?.id || null : null,
+        // Outline provides playable media preview for Admin and Chapter Leader.
+        videoId: auth.ok && ['ADMIN', 'CHAPTER_LEADER'].includes((auth as any).context!.role) ? l.video?.id || null : null,
         video: l.video ? {
-          ...(auth.ok && (auth as any).context!.role === 'ADMIN'
+          ...(auth.ok && ['ADMIN', 'CHAPTER_LEADER'].includes((auth as any).context!.role)
             ? { videoId: l.video.id, youtubeVideoId: l.video.youtube_video_id }
             : {}),
           durationSeconds: l.video.duration_seconds,

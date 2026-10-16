@@ -20,9 +20,10 @@ export async function GET(request: NextRequest, { params }: { params: { assessme
   if (!auth.ok) {
     return NextResponse.json({ error: { code: 'Unauthorized' } }, { status: 401 })
   }
-  if ((auth as any).context!.role !== 'ADMIN') {
+  const userRole = (auth as any).context!.role
+  if (userRole !== 'ADMIN' && userRole !== 'CHAPTER_LEADER') {
     return NextResponse.json(
-      { error: { code: 'AccessDenied', message: 'Chỉ Admin được xem ngân hàng câu hỏi.' } },
+      { error: { code: 'AccessDenied', message: 'Bạn không có quyền xem ngân hàng câu hỏi.' } },
       { status: 403 },
     )
   }

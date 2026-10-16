@@ -211,7 +211,7 @@ export default function Sidebar({
       : 'Học viên';
 
   return (
-    <aside className="fixed left-0 top-0 h-full w-64 bg-white border-r border-[#e5eeff] flex flex-col z-50 shadow-sm select-none">
+    <aside className="fixed left-0 top-0 h-screen max-h-screen w-64 bg-white border-r border-[#e5eeff] flex flex-col z-50 shadow-sm select-none">
       {/* Official BBE Logo */}
       <div className="p-5 border-b border-[#eff4ff]">
         <Link href="/" className="flex items-center gap-3 group">

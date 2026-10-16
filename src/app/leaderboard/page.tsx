@@ -509,14 +509,14 @@ export default function LeaderboardPage() {
   );
 
   return (
-    <div className="min-h-screen bg-[#f8f9ff] flex">
+    <div className="h-screen overflow-hidden bg-[#f8f9ff] flex">
       {mounted && user ? (
         <>
           <Sidebar role={user.role} user={{ email: user.email, chapterName: user.chapterName }} />
-          <main className="ml-64 flex-1 flex flex-col">{content}</main>
+          <main className="ml-64 flex-1 h-screen overflow-y-auto flex flex-col">{content}</main>
         </>
       ) : (
-        <div className="flex flex-col flex-1">
+        <div className="flex flex-col flex-1 h-screen overflow-y-auto">
           <header className="bg-white/95 backdrop-blur-md border-b border-[#e5eeff] px-6 py-3 sticky top-0 z-50">
             <div className="max-w-5xl mx-auto flex items-center justify-between">
               <Link href="/" className="flex items-center gap-3">

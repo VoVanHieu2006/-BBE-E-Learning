@@ -14,6 +14,8 @@ export default function ChapterManagerMembersPage() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({ totalItems: 0, totalPages: 1 });
+  const [summary, setSummary] = useState({ totalMembers: 0, activeMembers: 0, avgChapterProgress: 0 });
+  const [isPageChanging, setIsPageChanging] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
@@ -41,10 +43,14 @@ export default function ChapterManagerMembersPage() {
       }
 
       // Read cache immediately on client mount
-      const url = `/api/v1/chapters/${currentChapter}/dashboard/members?search=${encodeURIComponent(search)}&includeInactive=1`;
+      const url = `/api/v1/chapters/${currentChapter}/dashboard/members?search=${encodeURIComponent(search)}&includeInactive=1&page=1&limit=10`;
       const cached = getCachedApiData<any>(url);
       if (cached?.items) {
         setMembers(cached.items);
+        if (cached.summary) setSummary(cached.summary);
+        if (cached.totalItems !== undefined) {
+          setPagination({ totalItems: cached.totalItems, totalPages: cached.totalPages || 1 });
+        }
         setLoading(false);
       }
     }
@@ -61,12 +67,19 @@ export default function ChapterManagerMembersPage() {
     const cached = noCache ? null : getCachedApiData<any>(url);
     if (cached?.items) {
       setMembers(cached.items);
+      if (cached.summary) setSummary(cached.summary);
+      if (cached.totalItems !== undefined) {
+        setPagination({ totalItems: cached.totalItems, totalPages: cached.totalPages || 1 });
+      }
       setLoading(false);
     }
 
     const res = await apiFetch(url, { noCache });
     if (res.ok && res.data) {
       setMembers(res.data.items || []);
+      if (res.data.summary) {
+        setSummary(res.data.summary);
+      }
       setPagination({ totalItems: res.data.totalItems || 0, totalPages: res.data.totalPages || 1 });
     }
     setLoading(false);
@@ -76,7 +89,15 @@ export default function ChapterManagerMembersPage() {
     e.preventDefault();
     setLoading(true);
     setPage(1);
-    loadMembers(user?.chapterId, search);
+    loadMembers(user?.chapterId, search, true, 1);
+  };
+
+  const handlePageChange = async (newPage: number) => {
+    if (newPage < 1 || newPage > pagination.totalPages || newPage === page || isPageChanging) return;
+    setIsPageChanging(true);
+    setPage(newPage);
+    await loadMembers(user?.chapterId, search, true, newPage);
+    setIsPageChanging(false);
   };
 
   const handleInvite = async (e: React.FormEvent) => {
@@ -188,17 +209,17 @@ export default function ChapterManagerMembersPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           <Card shadow="md" className="p-4 border border-[#eff4ff]">
             <div className="text-xs font-semibold text-[#737686]">Tổng thành viên</div>
-            <div className="text-2xl font-bold text-[#172554] mt-1">{memberRows.length}</div>
-            <div className="text-[11px] text-[#737686] mt-0.5">Trong Chapter</div>
+            <div className="text-2xl font-bold text-[#172554] mt-1">{summary.totalMembers}</div>
+            <div className="text-[11px] text-[#737686] mt-0.5">Toàn bộ Chapter</div>
           </Card>
           <Card shadow="md" className="p-4 border border-[#eff4ff]">
             <div className="text-xs font-semibold text-green-700">Đang hoạt động (Active)</div>
-            <div className="text-2xl font-bold text-green-700 mt-1">{activeCount}</div>
+            <div className="text-2xl font-bold text-green-700 mt-1">{summary.activeMembers}</div>
             <div className="text-[11px] text-[#737686] mt-0.5">Có quyền đăng nhập học</div>
           </Card>
           <Card shadow="md" className="p-4 border border-[#eff4ff]">
             <div className="text-xs font-semibold text-blue-700">Tiến độ TB Chapter</div>
-            <div className="text-2xl font-bold text-[#2563EB] mt-1">{avgChapterProgress}%</div>
+            <div className="text-2xl font-bold text-[#2563EB] mt-1">{summary.avgChapterProgress}%</div>
             <div className="text-[11px] text-[#737686] mt-0.5">Tất cả khóa học</div>
           </Card>
         </div>
@@ -216,7 +237,6 @@ export default function ChapterManagerMembersPage() {
             <Button type="submit">Tìm kiếm</Button>
           </form>
         </Card>
-        {pagination.totalPages > 1 && <div className="mt-5 flex items-center justify-between"><p className="text-sm text-[#737686]">Tổng {pagination.totalItems} thành viên · Trang {page}/{pagination.totalPages}</p><div className="flex gap-2"><Button variant="outline" disabled={page<=1} onClick={()=>{const p=page-1;setPage(p);void loadMembers(user?.chapterId,search,true,p)}}>← Trước</Button><Button variant="outline" disabled={page>=pagination.totalPages} onClick={()=>{const p=page+1;setPage(p);void loadMembers(user?.chapterId,search,true,p)}}>Tiếp →</Button></div></div>}
 
         {/* Members Table */}
         <Card className="p-0 overflow-hidden border border-[#eff4ff] shadow-sm">
@@ -237,7 +257,7 @@ export default function ChapterManagerMembersPage() {
               )}
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className={`overflow-x-auto transition-opacity duration-200 ${isPageChanging ? 'opacity-40 pointer-events-none' : 'opacity-100'}`}>
               <table className="w-full text-left text-sm">
                 <thead className="bg-[#f8f9ff] text-[#434655] font-semibold border-b border-[#eff4ff]">
                   <tr>
@@ -326,6 +346,59 @@ export default function ChapterManagerMembersPage() {
                   })}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {/* Pagination Controls */}
+          {pagination.totalPages > 1 && (
+            <div className="p-4 border-t border-[#eff4ff] bg-[#f8f9ff] flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="text-xs text-[#737686]">
+                Trang <span className="font-bold text-[#172554]">{page}</span> / {pagination.totalPages} (Tổng {pagination.totalItems} thành viên)
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={page <= 1 || loading || isPageChanging}
+                  onClick={() => handlePageChange(page - 1)}
+                  className="px-3 py-1 text-xs"
+                >
+                  ← Trước
+                </Button>
+
+                {Array.from({ length: pagination.totalPages }, (_, i) => i + 1)
+                  .filter((p) => p === 1 || p === pagination.totalPages || Math.abs(p - page) <= 1)
+                  .map((p, idx, arr) => {
+                    const prevP = arr[idx - 1];
+                    return (
+                      <span key={p} className="flex items-center">
+                        {prevP && p - prevP > 1 && <span className="px-1 text-[#737686]">...</span>}
+                        <button
+                          disabled={loading || isPageChanging}
+                          onClick={() => handlePageChange(p)}
+                          className={`w-8 h-8 rounded-lg text-xs font-bold transition disabled:opacity-60 ${
+                            p === page
+                              ? 'bg-[#2563EB] text-white shadow-sm'
+                              : 'bg-white text-[#434655] hover:bg-[#eff4ff] border border-[#cbdbf5]'
+                          }`}
+                        >
+                          {p}
+                        </button>
+                      </span>
+                    );
+                  })}
+
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={page >= pagination.totalPages || loading || isPageChanging}
+                  onClick={() => handlePageChange(page + 1)}
+                  className="px-3 py-1 text-xs"
+                >
+                  Sau →
+                </Button>
+              </div>
             </div>
           )}
         </Card>
