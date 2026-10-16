@@ -415,8 +415,29 @@ model Assessment {
   questions     Question[]
   attempts      Attempt[]
   question_pools QuestionPool[]
+  final_exam_versions FinalExamVersion[]
 
   @@map("assessments")
+}
+
+model FinalExamVersion {
+  id               String     @id @default(uuid()) @db.Uuid
+  assessment_id    String     @db.Uuid
+  version_number   Int
+  is_active        Boolean    @default(false)
+  question_count   Int
+  duration_minutes Int
+  title            String     @db.VarChar(255)
+  description      String?    @db.Text
+  created_at       DateTime   @default(now()) @db.Timestamp
+
+  assessment       Assessment @relation(fields: [assessment_id], references: [id], onDelete: Cascade)
+  questions        Question[]
+  attempts         Attempt[]
+
+  @@unique([assessment_id, version_number])
+  @@index([assessment_id, is_active])
+  @@map("final_exam_versions")
 }
 
 model Question {
@@ -431,16 +452,20 @@ model Question {
   created_at      DateTime       @default(now()) @db.Timestamp
   updated_at      DateTime       @updatedAt @db.Timestamp
   pool_id         String?        @db.Uuid
+  final_exam_version_id String?  @db.Uuid
+  source_assessment_id String?   @db.Uuid
 
   assessment      Assessment     @relation(fields: [assessment_id], references: [id], onDelete: Cascade)
   options         QuestionOption[]
   attempt_questions AttemptQuestion[]
   attempt_answers  AttemptAnswer[]
   pool             QuestionPool? @relation(fields: [pool_id], references: [id], onDelete: SetNull)
+  final_exam_version FinalExamVersion? @relation(fields: [final_exam_version_id], references: [id], onDelete: Cascade)
 
   @@map("questions")
   @@index([assessment_id, sort_order])
   @@index([pool_id])
+  @@index([final_exam_version_id])
 }
 
 model QuestionOption {
@@ -461,6 +486,7 @@ model QuestionOption {
 model Attempt {
   id                String           @id @default(uuid()) @db.Uuid
   assessment_id     String           @db.Uuid
+  final_exam_version_id String?      @db.Uuid
   user_id           String           @db.Uuid
   attempt_number    Int
   status            AttemptStatus    @default(IN_PROGRESS)
@@ -472,6 +498,7 @@ model Attempt {
   created_at        DateTime         @default(now()) @db.Timestamp
 
   assessment        Assessment       @relation(fields: [assessment_id], references: [id], onDelete: Cascade)
+  final_exam_version FinalExamVersion? @relation(fields: [final_exam_version_id], references: [id], onDelete: Restrict)
   user              User             @relation(fields: [user_id], references: [id], onDelete: Cascade)
   attempt_questions AttemptQuestion[]
   attempt_answers   AttemptAnswer[]
@@ -480,6 +507,7 @@ model Attempt {
   @@index([user_id, assessment_id])
   @@index([user_id, status, assessment_id, submitted_at])
   @@index([assessment_id, user_id, created_at])
+  @@index([final_exam_version_id])
   @@index([status])
 }
 

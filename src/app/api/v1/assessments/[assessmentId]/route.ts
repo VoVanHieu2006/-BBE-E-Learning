@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { assertFinalExamBankCapacity, finalExamBankError, lockCourseExamBank } from '@/lib/final-exam-bank'
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -39,6 +40,9 @@ export async function GET(request: NextRequest, { params }: { params: { assessme
     },
   })
   if (!assessment) return NextResponse.json({ error: { code: 'AssessmentNotFound', message: 'Bài kiểm tra không tồn tại' } }, { status: 404 })
+  if (assessment.type === 'COURSE_FINAL' && userRole !== 'ADMIN') {
+    return NextResponse.json({ error: { code: 'AccessDenied', message: 'Ngân hàng đề cuối khóa chỉ dành cho Admin.' } }, { status: 403 })
+  }
 
   return NextResponse.json({
     assessmentId: assessment.id,
@@ -85,6 +89,10 @@ export async function PATCH(request: NextRequest, { params }: { params: { assess
 
   const existing = await prisma.assessment.findUnique({ where: { id: assessmentId } })
   if (!existing) return NextResponse.json({ error: { code: 'AssessmentNotFound', message: 'Bài kiểm tra không tồn tại' } }, { status: 404 })
+  if (existing.type === 'COURSE_FINAL') return NextResponse.json({ error: { code: 'UseFinalExamEditor', message: 'Hãy cập nhật bài thi cuối khóa tại trang cấu hình để tạo phiên bản mới.' } }, { status: 409 })
+  const lesson = await prisma.lesson.findUnique({ where: { id: existing.lesson_id! }, select: { session: { select: { course_id: true } } } })
+  if (!lesson) return NextResponse.json({ error: { code: 'LessonNotFound' } }, { status: 404 })
+  const courseId = lesson.session.course_id
 
   const body = await request.json()
   const { title, description, questions } = body || {}
@@ -96,7 +104,10 @@ export async function PATCH(request: NextRequest, { params }: { params: { assess
     }
   }
 
-  await prisma.$transaction(async (tx) => {
+  try {
+    await prisma.$transaction(async (tx) => {
+      await lockCourseExamBank(tx, courseId)
+    if (Array.isArray(questions) && await tx.attempt.count({ where: { assessment_id: assessmentId } })) throw new Error('AssessmentVersionRequired')
     if (title || description !== undefined) {
       await tx.assessment.update({
         where: { id: assessmentId },
@@ -131,6 +142,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { assess
           is_correct: Boolean(opt.isCorrect ?? opt.is_correct ?? false),
           sort_order: Number(opt.sortOrder ?? opt.sort_order ?? oIdx),
         }))
+        if (options.length < 2 || !options.some((option: any) => option.is_correct)) throw new Error('InvalidQuestionOptions')
 
         return {
           question: {
@@ -160,11 +172,16 @@ export async function PATCH(request: NextRequest, { params }: { params: { assess
       if (allOptionRows.length > 0) {
         await tx.questionOption.createMany({ data: allOptionRows })
       }
+      await assertFinalExamBankCapacity(tx, courseId)
     }
-  }, {
-    timeout: 15000,
-    maxWait: 5000,
-  })
+    }, { timeout: 15000, maxWait: 5000 })
+  } catch (error) {
+    const bankError = finalExamBankError(error)
+    if (bankError) return NextResponse.json(bankError, { status: 409 })
+    if (error instanceof Error && error.message === 'AssessmentVersionRequired') return NextResponse.json({ error: { code: 'AssessmentVersionRequired', message: 'Quiz đã có lượt làm; không thể thay đổi lịch sử.' } }, { status: 409 })
+    if (error instanceof Error && error.message === 'InvalidQuestionOptions') return NextResponse.json({ error: { code: 'ValidationError', message: 'Mỗi câu hỏi cần ít nhất hai đáp án và một đáp án đúng.' } }, { status: 400 })
+    throw error
+  }
 
   return NextResponse.json({
     assessmentId,
@@ -200,7 +217,23 @@ export async function DELETE(request: NextRequest, { params }: { params: { asses
   }
 
   // Child question/option rows cascade; no learner attempts are deleted.
-  await prisma.assessment.delete({ where: { id: assessmentId } })
+  if (existing.type === 'LESSON' && existing.lesson_id) {
+    const lesson = await prisma.lesson.findUnique({ where: { id: existing.lesson_id }, select: { session: { select: { course_id: true } } } })
+    if (!lesson) return NextResponse.json({ error: { code: 'LessonNotFound' } }, { status: 404 })
+    try {
+      await prisma.$transaction(async (tx) => {
+        await lockCourseExamBank(tx, lesson.session.course_id)
+        if (await tx.attempt.count({ where: { assessment_id: assessmentId } })) throw new Error('AssessmentVersionRequired')
+        await tx.assessment.delete({ where: { id: assessmentId } })
+        await assertFinalExamBankCapacity(tx, lesson.session.course_id)
+      })
+    } catch (error) {
+      const bankError = finalExamBankError(error)
+      if (bankError) return NextResponse.json(bankError, { status: 409 })
+      if (error instanceof Error && error.message === 'AssessmentVersionRequired') return NextResponse.json({ error: { code: 'AssessmentVersionRequired', message: 'Quiz đã có lượt làm; không thể xóa lịch sử.' } }, { status: 409 })
+      throw error
+    }
+  } else await prisma.assessment.delete({ where: { id: assessmentId } })
 
   return NextResponse.json({
     success: true,

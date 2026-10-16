@@ -29,7 +29,7 @@ export async function GET(request: NextRequest, { params }: { params: { assessme
   const attempts: any[] = await prisma.attempt.findMany({
     where: { assessment_id: params.assessmentId, user_id: userId },
     orderBy: { started_at: 'desc' },
-    select: { id: true, attempt_number: true, status: true, score: true, passed: true, submitted_at: true, created_at: true },
+    select: { id: true, attempt_number: true, status: true, score: true, passed: true, submitted_at: true, created_at: true, final_exam_version: { select: { version_number: true } } },
   })
 
   // Tính thời gian Cooldown từ lượt làm bài gần nhất (Nộp hoặc Hủy)
@@ -57,6 +57,7 @@ export async function GET(request: NextRequest, { params }: { params: { assessme
     items: attempts.map((a: any) => ({
       attemptId: a.id,
       attemptNumber: a.attempt_number,
+      versionNumber: a.final_exam_version?.version_number || null,
       status: a.status,
       score: a.score === null ? null : Number(a.score) * 100,
       passed: a.passed,

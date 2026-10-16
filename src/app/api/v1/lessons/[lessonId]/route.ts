@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { assertFinalExamBankCapacity, finalExamBankError, lockCourseExamBank } from '@/lib/final-exam-bank'
 import { MAX_VIDEO_DURATION_SECONDS, MIN_VIDEO_DURATION_SECONDS, normalizeDurationSeconds } from '@/lib/validation/duration'
 import { checkLessonProgression } from '@/lib/progression'
 
@@ -182,10 +183,23 @@ export async function DELETE(request: NextRequest, { params }: { params: { lesso
   }
 
   const lessonId = params.lessonId
-  const lesson = await prisma.lesson.findUnique({ where: { id: lessonId } })
+  const lesson = await prisma.lesson.findUnique({ where: { id: lessonId }, select: { session: { select: { course_id: true } } } })
   if (!lesson) return NextResponse.json({ error: { code: 'LessonNotFound', message: 'Bài học không tồn tại' } }, { status: 404 })
 
-  await prisma.lesson.delete({ where: { id: lessonId } })
+  try {
+    await prisma.$transaction(async (tx) => {
+      await lockCourseExamBank(tx, lesson.session.course_id)
+      const attempts = await tx.attempt.count({ where: { assessment: { lesson_id: lessonId } } })
+      if (attempts) throw new Error('LessonHasAttempts')
+      await tx.lesson.delete({ where: { id: lessonId } })
+      await assertFinalExamBankCapacity(tx, lesson.session.course_id)
+    })
+  } catch (error) {
+    const bankError = finalExamBankError(error)
+    if (bankError) return NextResponse.json(bankError, { status: 409 })
+    if (error instanceof Error && error.message === 'LessonHasAttempts') return NextResponse.json({ error: { code: 'AssessmentVersionRequired', message: 'Bài học đã có lượt làm quiz; không thể xóa lịch sử.' } }, { status: 409 })
+    throw error
+  }
 
   return NextResponse.json({ success: true, message: 'Đã xóa bài học thành công' }, { status: 200 })
 }

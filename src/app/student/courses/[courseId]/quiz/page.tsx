@@ -61,7 +61,7 @@ export default function StudentCourseFinalExamPage({ params }: { params: { cours
     : 0;
   const cooldownSeconds = Math.ceil(cooldownRemainingMs / 1000);
   const cooldownLabel = `${Math.floor(cooldownSeconds / 3600).toString().padStart(2, '0')}:${Math.floor((cooldownSeconds % 3600) / 60).toString().padStart(2, '0')}:${(cooldownSeconds % 60).toString().padStart(2, '0')}`;
-  const canStart = Boolean(data?.gateReady && !data?.alreadyPassed && cooldownRemainingMs === 0);
+  const canStart = Boolean(data?.canStart && !data?.alreadyPassed);
 
   if (loading) {
     return <div className="min-h-screen flex items-center justify-center bg-[#f8f9ff]"><p className="text-sm text-slate-500">Đang tải bài thi cuối khóa…</p></div>;
@@ -146,7 +146,7 @@ export default function StudentCourseFinalExamPage({ params }: { params: { cours
               </div>
             ) : (
               <div className="space-y-4">
-                <p className="text-sm text-slate-600">Bài thi chỉ mở sau khi bạn hoàn tất 100% tất cả video và đạt mọi quiz từng bài học. Backend sẽ xác minh lại các điều kiện này khi bắt đầu và nộp bài.</p>
+                <p className="text-sm text-slate-600">Bài thi mở sau khi bạn hoàn tất 100% video và đạt mọi quiz từng bài học. Điều kiện được xác minh khi bắt đầu; lượt đang làm tiếp tục theo phiên bản đề đã nhận.</p>
                 <Button onClick={() => { setAttemptKey((key) => key + 1); setStarted(true); }} className="w-full sm:w-auto">Bắt đầu bài thi cuối khóa</Button>
               </div>
             )}
@@ -157,7 +157,7 @@ export default function StudentCourseFinalExamPage({ params }: { params: { cours
                 <ul className="space-y-2">
                   {data.attempts.map((attempt: any) => (
                     <li key={attempt.attemptId} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2 text-xs">
-                      <span>Lần {attempt.attemptNumber} · {attempt.submittedAt ? new Date(attempt.submittedAt).toLocaleDateString('vi-VN') : 'Đang làm'}</span>
+                      <span>Lần {attempt.attemptNumber}{attempt.versionNumber ? ` · Đề v${attempt.versionNumber}` : ''} · {attempt.submittedAt ? new Date(attempt.submittedAt).toLocaleDateString('vi-VN') : 'Đang làm'}</span>
                       <span className={attempt.passed ? 'font-bold text-emerald-700' : 'text-slate-600'}>
                         {attempt.score === null ? attempt.status : `${attempt.score}%${attempt.passed ? ' · Đạt' : ' · Chưa đạt'}`}
                       </span>

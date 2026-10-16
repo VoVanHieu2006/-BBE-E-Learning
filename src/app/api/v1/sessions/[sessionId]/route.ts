@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { assertFinalExamBankCapacity, finalExamBankError, lockCourseExamBank } from '@/lib/final-exam-bank'
 
 export async function GET(request: NextRequest, { params }: { params: { sessionId: string } }) {
   const sessionId = params.sessionId
@@ -96,7 +97,20 @@ export async function DELETE(request: NextRequest, { params }: { params: { sessi
   const session = await prisma.session.findUnique({ where: { id: sessionId } })
   if (!session) return NextResponse.json({ error: { code: 'SessionNotFound', message: 'Session không tồn tại' } }, { status: 404 })
 
-  await prisma.session.delete({ where: { id: sessionId } })
+  try {
+    await prisma.$transaction(async (tx) => {
+      await lockCourseExamBank(tx, session.course_id)
+      const attempts = await tx.attempt.count({ where: { assessment: { lesson: { session_id: sessionId } } } })
+      if (attempts) throw new Error('SessionHasAttempts')
+      await tx.session.delete({ where: { id: sessionId } })
+      await assertFinalExamBankCapacity(tx, session.course_id)
+    })
+  } catch (error) {
+    const bankError = finalExamBankError(error)
+    if (bankError) return NextResponse.json(bankError, { status: 409 })
+    if (error instanceof Error && error.message === 'SessionHasAttempts') return NextResponse.json({ error: { code: 'AssessmentVersionRequired', message: 'Buổi học có quiz đã được làm; không thể xóa lịch sử.' } }, { status: 409 })
+    throw error
+  }
 
   return NextResponse.json({ success: true, message: 'Đã xóa session thành công' }, { status: 200 })
 }

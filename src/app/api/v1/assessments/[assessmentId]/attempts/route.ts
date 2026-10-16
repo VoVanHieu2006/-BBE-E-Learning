@@ -6,6 +6,8 @@ import { hasWatchedFullVideo } from '@/lib/video-progress-rules'
 import { selectQuizQuestions } from '@/lib/quiz-pool-selection'
 import { randomInt } from 'crypto'
 import { isLearningManager } from '@/lib/manager-learning-access'
+import { selectBalancedFinalExamQuestions } from '@/lib/final-exam-selection'
+import { lockCourseExamBank } from '@/lib/final-exam-bank'
 
 function shuffleSecurely<T>(items: readonly T[]): T[] {
   const shuffled = [...items]
@@ -53,10 +55,15 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
     },
   })
   if (!assessment) return NextResponse.json({ error: { code: 'AssessmentNotFound' } }, { status: 404 })
+  const body = await request.json().catch(() => ({}))
+  const forceNew = body?.forceNew === true
+  const resumableFinalAttempt = assessment.type === 'COURSE_FINAL' && !forceNew
+    ? await prisma.attempt.findFirst({ where: { assessment_id: assessmentId, user_id: userId, status: 'IN_PROGRESS', expires_at: { gt: new Date() } }, select: { id: true } })
+    : null
 
   const isAdmin = (auth as any).context!.role === 'ADMIN'
   const gate = assessment.type === 'COURSE_FINAL' && assessment.course_id
-    ? await checkCourseFinalProgression(userId, assessment.course_id, isAdmin)
+    ? resumableFinalAttempt ? { ok: true as const, courseId: assessment.course_id, canEarnStars: false } : await checkCourseFinalProgression(userId, assessment.course_id, isAdmin)
     : assessment.lesson_id
       ? await checkLessonProgression(userId, assessment.lesson_id, 'ASSESS', isAdmin)
       : { ok: false as const, code: 'InvalidAssessmentOwner', message: 'Assessment owner is missing.' }
@@ -84,7 +91,7 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
 
   // 1. Kiểm tra Cooldown: Mỗi lần làm (dù nộp hay hủy) cần đợi khoảng thời gian quy định
   const { QUIZ_COOLDOWN_MS, QUIZ_COOLDOWN_MINUTES } = await import('@/lib/config/quiz')
-  if (QUIZ_COOLDOWN_MS > 0) {
+  if (QUIZ_COOLDOWN_MS > 0 && !resumableFinalAttempt) {
     const lastAttempt = await prisma.attempt.findFirst({
       where: {
         assessment_id: assessmentId,
@@ -126,9 +133,6 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
       submitted_at: new Date(),
     },
   })
-
-  const body = await request.json().catch(() => ({}))
-  const forceNew = body?.forceNew === true
 
   // 3. Kiểm tra xem có bài thi nào ĐANG còn trong thời hạn hay không (nếu không forceNew)
   if (!forceNew) {
@@ -180,9 +184,18 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
     }
   }
 
+  const finalVersion = assessment.type === 'COURSE_FINAL'
+    ? await prisma.finalExamVersion.findFirst({ where: { assessment_id: assessmentId, is_active: true }, select: { id: true, question_count: true, duration_minutes: true } })
+    : null
+  if (assessment.type === 'COURSE_FINAL') {
+    if (!finalVersion) return NextResponse.json({ error: { code: 'FinalExamVersionUnavailable', message: 'Bài thi cuối khóa chưa có phiên bản đề hợp lệ.' } }, { status: 422 })
+    const passed = await prisma.attempt.count({ where: { assessment_id: assessmentId, user_id: userId, passed: true, status: { in: ['SUBMITTED', 'AUTO_SUBMITTED'] } } })
+    if (passed) return NextResponse.json({ error: { code: 'FinalExamAlreadyPassed', message: 'Bạn đã đạt bài thi cuối khóa.' } }, { status: 409 })
+  }
+
   const questions = await prisma.question.findMany({
     where: assessment.type === 'COURSE_FINAL' && assessment.course_id
-      ? { assessment: { type: 'LESSON', lesson: { session: { course_id: assessment.course_id } } } }
+      ? { final_exam_version_id: finalVersion!.id }
       : { assessment_id: assessmentId },
     include: { options: true },
     orderBy: { sort_order: 'asc' },
@@ -198,18 +211,8 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
   })
   const poolSelection = assessment.type === 'COURSE_FINAL'
     ? (() => {
-        const groups = new Map<string, typeof questions>()
-        for (const question of questions) groups.set(question.assessment_id, [...(groups.get(question.assessment_id) || []), question])
-        const queues: (typeof questions)[] = shuffleSecurely(Array.from(groups.values())).map((group) => shuffleSecurely(group))
-        const selected: typeof questions = []
-        while (selected.length < assessment.question_count && queues.some((queue) => queue.length > 0)) {
-          for (const queue of queues) {
-            const question = queue.shift()
-            if (question) selected.push(question)
-            if (selected.length >= assessment.question_count) break
-          }
-        }
-        return selected.length === assessment.question_count
+        const selected = selectBalancedFinalExamQuestions(questions, finalVersion!.question_count, shuffleSecurely)
+        return selected
           ? { ok: true as const, questions: selected }
           : { ok: false as const, code: 'QuestionPoolIncomplete' as const }
       })()
@@ -220,6 +223,7 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
         assessment.question_count,
       )
   if (poolSelection.ok === false) {
+    if (assessment.type === 'COURSE_FINAL') return NextResponse.json({ error: { code: 'FinalExamBankTooSmall', message: `Bài thi cần ${finalVersion!.question_count} câu nhưng phiên bản đề hiện không đủ câu. Vui lòng báo quản trị viên.` } }, { status: 422 })
     const messages = {
       QuestionPoolCountInvalid: 'Bài kiểm tra cần từ 1 đến 20 nhóm câu hỏi.',
       QuestionPoolQuestionUnassigned: 'Mỗi câu hỏi phải thuộc một nhóm đã cấu hình.',
@@ -228,9 +232,18 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
     return NextResponse.json({ error: { code: poolSelection.code, message: messages[poolSelection.code] } }, { status: 422 })
   }
   const selectedQuestions = poolSelection.questions
-  const expiresAt = new Date(Date.now() + assessment.duration_minutes * 60 * 1000)
+  const expiresAt = new Date(Date.now() + (finalVersion?.duration_minutes || assessment.duration_minutes) * 60 * 1000)
 
-  const attempt = await prisma.$transaction(async (tx) => {
+  let attempt: { id: string; attempt_number: number; expires_at: Date }
+  try {
+    attempt = await prisma.$transaction(async (tx) => {
+    await lockCourseExamBank(tx, gate.courseId)
+    if (assessment.type === 'COURSE_FINAL' && assessment.course_id) {
+      const current = await tx.finalExamVersion.findFirst({ where: { assessment_id: assessmentId, is_active: true }, select: { id: true } })
+      if (current?.id !== finalVersion?.id) throw new Error('FinalExamVersionChanged')
+      if (await tx.attempt.count({ where: { assessment_id: assessmentId, user_id: userId, passed: true, status: { in: ['SUBMITTED', 'AUTO_SUBMITTED'] } } })) throw new Error('FinalExamAlreadyPassed')
+    }
+    if (!forceNew && await tx.attempt.count({ where: { assessment_id: assessmentId, user_id: userId, status: 'IN_PROGRESS', expires_at: { gt: new Date() } } })) throw new Error('AttemptAlreadyInProgress')
     // Do not discard a resumable attempt until every prerequisite and the full
     // question-pool configuration above have passed validation.
     if (forceNew) {
@@ -252,6 +265,7 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
     const a = await tx.attempt.create({
       data: {
         assessment_id: assessmentId,
+        final_exam_version_id: finalVersion?.id || null,
         user_id: userId,
         status: 'IN_PROGRESS',
         started_at: new Date(),
@@ -269,7 +283,15 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
     })
 
     return a
-  })
+    })
+  } catch (error) {
+    if (error instanceof Error && error.message === 'FinalExamVersionChanged') {
+      return NextResponse.json({ error: { code: 'FinalExamVersionChanged', message: 'Đề thi vừa được cập nhật. Hãy tải lại trang để bắt đầu phiên bản mới.' } }, { status: 409 })
+    }
+    if (error instanceof Error && error.message === 'FinalExamAlreadyPassed') return NextResponse.json({ error: { code: 'FinalExamAlreadyPassed', message: 'Bạn đã đạt bài thi cuối khóa.' } }, { status: 409 })
+    if (error instanceof Error && error.message === 'AttemptAlreadyInProgress') return NextResponse.json({ error: { code: 'AttemptAlreadyInProgress', message: 'Đã có lượt làm đang mở. Hãy tải lại trang để tiếp tục.' } }, { status: 409 })
+    throw error
+  }
 
   // Reuse precisely the same selection/order stored in AttemptQuestion.
   const shuffledQs = selectedQuestions.map((q) => ({

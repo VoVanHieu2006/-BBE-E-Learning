@@ -16,7 +16,7 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
     where: { id: courseId },
     include: {
       final_assessment: {
-        select: { id: true, title: true, description: true, _count: { select: { questions: true } } },
+        select: { id: true, title: true, description: true, question_count: true },
       },
       sessions: {
         include: {
@@ -66,7 +66,7 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
       assessmentType: 'COURSE_FINAL',
       title: courseDetail.final_assessment.title,
       description: courseDetail.final_assessment.description,
-      questionCount: courseDetail.final_assessment._count.questions,
+      questionCount: courseDetail.final_assessment.question_count,
     } : null,
     finalAssessment: courseDetail.final_assessment ? {
       assessmentId: courseDetail.final_assessment.id,
@@ -74,7 +74,7 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
       assessmentType: 'COURSE_FINAL',
       title: courseDetail.final_assessment.title,
       description: courseDetail.final_assessment.description,
-      questionCount: courseDetail.final_assessment._count.questions,
+      questionCount: courseDetail.final_assessment.question_count,
     } : null,
     sessions: courseDetail.sessions.map((s) => ({
       sessionId: s.id,

@@ -3,7 +3,7 @@ import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { awardStars, canEarnStarsForCourse } from '@/lib/stars'
 import { syncCourseAssignmentCompletion } from '@/lib/learning-assignments'
-import { checkCourseFinalProgression, checkLessonProgression } from '@/lib/progression'
+import { checkLessonProgression } from '@/lib/progression'
 import { QUIZ_PASS_PERCENT } from '@/lib/config/quiz'
 import { gradeQuizAttempt, validateAttemptAnswerSelections } from '@/lib/quiz-attempt-rules'
 
@@ -20,8 +20,10 @@ export async function POST(request: NextRequest, { params }: { params: { attempt
   if (!attempt) return NextResponse.json({ error: { code: 'AttemptNotFound' } }, { status: 404 })
   if (attempt.user_id !== userId) return NextResponse.json({ error: { code: 'AccessDenied' } }, { status: 403 })
 
+  // A final attempt was authorized at start. Later edits must not strand an
+  // in-progress learner on the version already attached to this attempt.
   const progression = attempt.assessment.type === 'COURSE_FINAL' && attempt.assessment.course_id
-    ? await checkCourseFinalProgression(userId, attempt.assessment.course_id, (auth as any).context!.role === 'ADMIN')
+    ? { ok: true as const }
     : attempt.assessment.lesson_id
       ? await checkLessonProgression(userId, attempt.assessment.lesson_id, 'ASSESS', (auth as any).context!.role === 'ADMIN')
       : { ok: false as const, code: 'InvalidAssessmentOwner', message: 'Assessment owner is missing.' }

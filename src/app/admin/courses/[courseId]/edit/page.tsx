@@ -26,6 +26,7 @@ interface QuestionForm {
 export default function AdminEditCoursePage({ params }: { params: { courseId: string } }) {
   const [course, setCourse] = useState<any>(null);
   const [assessment, setAssessment] = useState<any>(null);
+  const [finalAvailableQuestions, setFinalAvailableQuestions] = useState(0);
 
   const [form, setForm] = useState({
     title: '',
@@ -270,6 +271,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
       return;
     }
     const assessData = result.data?.assessment || null;
+    setFinalAvailableQuestions(Number(result.data?.availableQuestions || 0));
     setQuizPoolNames([]);
     setAssessment(assessData);
     setAssessmentForm({
@@ -1285,6 +1287,12 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
       showToast('error', 'Không xác định được bài học cần gắn bài kiểm tra');
       return;
     }
+    if (activeAssessmentMode === 'COURSE_FINAL' && assessmentForm.questionCount > finalAvailableQuestions) {
+      const msg = `Bài thi cần ${assessmentForm.questionCount} câu, nhưng quiz các bài học chỉ có ${finalAvailableQuestions} câu. Hãy giảm số câu hoặc bổ sung ngân hàng.`;
+      setAssessmentFormError(msg);
+      showToast('error', msg);
+      return;
+    }
 
     setAssessmentSaving(true);
     clearApiCache('/api/v1/courses');
@@ -1324,6 +1332,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
       setAssessment(res.data);
 
       if (activeAssessmentMode === 'COURSE_FINAL') {
+        setFinalAvailableQuestions(Number(res.data?.availableQuestions || 0));
         setCourse((prev: any) => prev ? { ...prev, assessment: res.data, finalAssessment: res.data } : prev);
       } else setCourse((prev: any) => {
         if (!prev) return prev;
@@ -2136,11 +2145,12 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2">
-                <label className="text-sm font-semibold text-[#172554]">Số câu mỗi lượt<input type="number" min={1} max={activeAssessmentMode === 'COURSE_FINAL' ? 1000 : assessmentForm.questions.length} value={assessmentForm.questionCount} onChange={(e) => setAssessmentForm({ ...assessmentForm, questionCount: Number(e.target.value) })} className="mt-1 w-full rounded-xl border border-[#cbdbf5] px-3 py-2 font-normal"/></label>
+                <label className="text-sm font-semibold text-[#172554]">Số câu mỗi lượt<input type="number" min={1} max={activeAssessmentMode === 'COURSE_FINAL' ? finalAvailableQuestions : assessmentForm.questions.length} value={assessmentForm.questionCount} onChange={(e) => setAssessmentForm({ ...assessmentForm, questionCount: Number(e.target.value) })} className="mt-1 w-full rounded-xl border border-[#cbdbf5] px-3 py-2 font-normal"/></label>
                 <label className="text-sm font-semibold text-[#172554]">Thời gian (phút)<input type="number" min={1} max={240} value={assessmentForm.durationMinutes} onChange={(e) => setAssessmentForm({ ...assessmentForm, durationMinutes: Number(e.target.value) })} className="mt-1 w-full rounded-xl border border-[#cbdbf5] px-3 py-2 font-normal"/></label>
               </div>
 
-              {activeAssessmentMode === 'COURSE_FINAL' && <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">Câu hỏi cuối khóa được lấy đều từ quiz của tất cả bài học. Trong từng bài học, hệ thống chọn ngẫu nhiên giữa các nhóm câu hỏi.</div>}
+              {activeAssessmentMode === 'COURSE_FINAL' && <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">Ngân hàng quiz hiện có {finalAvailableQuestions} câu. Bài thi sẽ lưu một phiên bản đề riêng và lấy câu hỏi đều từ các bài học. Nếu số câu giảm xuống dưới mức đã cấu hình, hệ thống sẽ chặn thao tác sửa/xóa quiz và hướng dẫn điều chỉnh.</div>}
+              {activeAssessmentMode === 'COURSE_FINAL' && finalAvailableQuestions < assessmentForm.questionCount && <p className="text-sm font-semibold text-red-700">Đang thiếu {assessmentForm.questionCount - finalAvailableQuestions} câu so với cấu hình. Hãy giảm số câu mỗi lượt hoặc bổ sung quiz bài học.</p>}
               {activeAssessmentMode === 'LESSON' && <>
               {/* Dynamic Questions Builder with Up/Down buttons (Request 8) */}
               <div className="space-y-4">

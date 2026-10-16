@@ -21,7 +21,8 @@
     "db:fix-durations": "ts-node -P scripts/tsconfig.json scripts/fix-video-durations.ts",
     "db:reset": "prisma migrate reset --force",
     "db:generate": "prisma generate",
-    "db:audit-strict-video": "ts-node -P scripts/tsconfig.json scripts/audit-strict-video-migration.ts"
+    "db:audit-strict-video": "ts-node -P scripts/tsconfig.json scripts/audit-strict-video-migration.ts",
+    "db:audit-final-exam-versions": "node scripts/audit-final-exam-versions.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1121.0",

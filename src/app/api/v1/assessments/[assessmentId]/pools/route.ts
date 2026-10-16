@@ -24,8 +24,9 @@ export async function PUT(request: NextRequest, { params }: { params: { assessme
   if (pools.length !== 5 || pools.some((pool: unknown) => !pool || typeof (pool as any).name !== 'string' || !(pool as any).name.trim())) {
     return NextResponse.json({ error: { code: 'ValidationError', message: 'Exactly five named pools are required.' } }, { status: 400 })
   }
-  const assessment = await prisma.assessment.findUnique({ where: { id: params.assessmentId }, select: { id: true } })
+  const assessment = await prisma.assessment.findUnique({ where: { id: params.assessmentId }, select: { id: true, type: true } })
   if (!assessment) return NextResponse.json({ error: { code: 'AssessmentNotFound' } }, { status: 404 })
+  if (assessment.type === 'COURSE_FINAL') return NextResponse.json({ error: { code: 'UseFinalExamEditor', message: 'Bài thi cuối khóa phải được cập nhật bằng phiên bản mới.' } }, { status: 409 })
 
   const questions = await prisma.question.findMany({
     where: { assessment_id: assessment.id },

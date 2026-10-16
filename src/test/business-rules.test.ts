@@ -14,6 +14,7 @@ import { canDeleteLessonComment, hasPermissionInOrganizationScope, isLegacyChapt
 import { calculateChapterLeaderboardMetrics, calculateMandatoryCompletionPercentByUser, normalizeChapterKpiInput, parseChapterKpiMonthStart, scoreChapterLeaderboard } from '../lib/chapter-leaderboard-rules'
 import { getCachedChapterLeaderboard, invalidateChapterLeaderboardCache, setCachedChapterLeaderboard } from '../lib/chapter-leaderboard-cache'
 import { evaluateCourseFinalRequirements } from '../lib/course-final-assessment-rules'
+import { selectBalancedFinalExamQuestions } from '../lib/final-exam-selection'
 import { canActivateAfterRestrictionLift, canDeadlineLockAccount, collectChapterAccountIds } from '../lib/account-restriction-rules'
 
 describe('Account restriction rules', () => {
@@ -56,6 +57,27 @@ describe('Course-final assessment progression', () => {
 
   it('does not consider an empty course ready for a final assessment', () => {
     assert.equal(evaluateCourseFinalRequirements([], new Set()).code, 'CourseHasNoLessons')
+  })
+})
+
+describe('Course-final version question selection', () => {
+  const bank = [
+    ...Array.from({ length: 4 }, (_, index) => ({ id: `a${index}`, assessment_id: 'final', source_assessment_id: 'lesson-a' })),
+    ...Array.from({ length: 2 }, (_, index) => ({ id: `b${index}`, assessment_id: 'final', source_assessment_id: 'lesson-b' })),
+  ]
+  const keepOrder = <T>(items: readonly T[]) => [...items]
+
+  it('rejects a version with fewer questions than configured instead of shrinking the exam', () => {
+    assert.equal(selectBalancedFinalExamQuestions(bank, 7, keepOrder), null)
+    assert.equal(selectBalancedFinalExamQuestions([], 1, keepOrder), null)
+  })
+
+  it('draws the exact count across lessons and redistributes when one lesson runs out', () => {
+    const selected = selectBalancedFinalExamQuestions(bank, 5, keepOrder)
+    assert.equal(selected?.length, 5)
+    assert.deepEqual(selected?.map((question) => question.source_assessment_id), [
+      'lesson-a', 'lesson-b', 'lesson-a', 'lesson-b', 'lesson-a',
+    ])
   })
 })
 

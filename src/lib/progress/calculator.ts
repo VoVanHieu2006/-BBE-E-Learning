@@ -190,7 +190,7 @@ export async function calculateUserProgress(
     const allVideosDone = c.totalLessons > 0 && courseDoneCount >= c.totalLessons
     const lessonQuizzesPassed = c.lessonAssessmentIds.every((assessmentId) => passedAssessmentIds.has(assessmentId))
     const finalExamPassed = !c.finalAssessmentId || passedAssessmentIds.has(c.finalAssessmentId)
-    const isCompleted = allVideosDone && lessonQuizzesPassed && finalExamPassed
+    const isCompleted = Boolean(c.finalAssessmentId && passedAssessmentIds.has(c.finalAssessmentId)) || (allVideosDone && lessonQuizzesPassed && finalExamPassed)
     if (isCompleted) {
       completedCoursesCount++
     }
@@ -355,7 +355,7 @@ export async function calculateBatchUsersProgress(
       const allVideosDone = c.totalLessons > 0 && courseDoneCount >= c.totalLessons
       const lessonQuizzesPassed = c.lessonAssessmentIds.every((assessmentId) => passedAssessmentIds.has(assessmentId))
       const finalExamPassed = !c.finalAssessmentId || passedAssessmentIds.has(c.finalAssessmentId)
-      if (allVideosDone && lessonQuizzesPassed && finalExamPassed) {
+      if (Boolean(c.finalAssessmentId && passedAssessmentIds.has(c.finalAssessmentId)) || (allVideosDone && lessonQuizzesPassed && finalExamPassed)) {
         completedCoursesCount++
       }
     }
