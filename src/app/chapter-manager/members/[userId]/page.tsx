@@ -2,7 +2,9 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Card from '@/components/ui/Card';
-import { apiFetch, getCachedApiData } from '@/lib/api/client';
+import Button from '@/components/ui/Button';
+import Modal from '@/components/ui/Modal';
+import { apiFetch, getCachedApiData, clearApiCache } from '@/lib/api/client';
 
 const STATE_META: Record<string, { label: string; badge: string; bar: string }> = {
   COMPLETED: { label: '✓ Hoàn thành', badge: 'bg-green-100 text-green-700', bar: 'bg-green-500' },
@@ -15,6 +17,30 @@ export default function MemberDetailPage({ params }: { params: { userId: string 
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
+
+  const canManageMembers = user?.role === 'CHAPTER_LEADER' || user?.role === 'ADMIN' || user?.canManageMembers === true;
+
+  const handleToggleUserStatus = async () => {
+    if (!data?.user?.userId) return;
+    setActionLoading(true);
+    const nextStatus = data.user.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+    const res = await apiFetch(`/api/v1/users/${data.user.userId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: nextStatus, chapterId: user?.chapterId }),
+    });
+    setActionLoading(false);
+    setShowConfirmModal(false);
+    if (res.ok) {
+      setData((prev: any) => ({
+        ...prev,
+        user: { ...prev.user, status: nextStatus },
+      }));
+      clearApiCache('/api/v1/chapters');
+      clearApiCache('/api/v1/users');
+    }
+  };
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -170,26 +196,93 @@ export default function MemberDetailPage({ params }: { params: { userId: string 
           </Card>
         ) : (
           <div className="space-y-6">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <h1 className="text-3xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
-                  {data?.user?.email}
+                  {data?.user?.displayName ? data.user.displayName : data?.user?.email}
                 </h1>
-                <p className="text-[#737686] mt-1 text-sm" suppressHydrationWarning>
+                <p className="text-[#737686] mt-0.5 text-sm font-medium">
+                  {data?.user?.email}
+                </p>
+                <p className="text-[#737686] mt-1 text-xs" suppressHydrationWarning>
                   Ngày tham gia:{' '}
                   {data?.user?.joinedAt ? new Date(data.user.joinedAt).toLocaleDateString('vi-VN') : 'Mới tham gia'}
                 </p>
               </div>
-              <span
-                className={`text-xs font-bold px-3 py-1 rounded-full ${
-                  data?.user?.status === 'ACTIVE'
-                    ? 'bg-green-100 text-green-700'
-                    : 'bg-red-100 text-red-700'
-                }`}
-              >
-                {data?.user?.status === 'ACTIVE' ? '✓ Đang hoạt động' : 'Đã vô hiệu hóa'}
-              </span>
+
+              <div className="flex items-center gap-3">
+                <span
+                  className={`text-xs font-bold px-3 py-1 rounded-full ${
+                    data?.user?.status === 'ACTIVE'
+                      ? 'bg-green-100 text-green-700'
+                      : 'bg-red-100 text-red-700'
+                  }`}
+                >
+                  {data?.user?.status === 'ACTIVE' ? '✓ Đang hoạt động' : 'Đã vô hiệu hóa'}
+                </span>
+
+                {canManageMembers && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className={
+                      data?.user?.status === 'ACTIVE'
+                        ? 'bg-red-50 text-red-700 border-red-300 hover:bg-red-100 font-bold text-xs'
+                        : 'bg-green-50 text-green-700 border-green-300 hover:bg-green-100 font-bold text-xs'
+                    }
+                    onClick={() => setShowConfirmModal(true)}
+                    loading={actionLoading}
+                  >
+                    {data?.user?.status === 'ACTIVE' ? '⛔ Vô hiệu hóa tài khoản' : '✓ Kích hoạt lại'}
+                  </Button>
+                )}
+              </div>
             </div>
+
+            {/* Modal xác nhận vô hiệu hóa */}
+            {showConfirmModal && (
+              <Modal
+                isOpen={showConfirmModal}
+                onClose={() => setShowConfirmModal(false)}
+                maxWidth="max-w-md"
+              >
+                <div className="space-y-4 p-2">
+                  <div className="flex items-center justify-between pb-2 border-b border-[#eff4ff]">
+                    <h3 className="text-base font-bold text-red-700">
+                      {data?.user?.status === 'ACTIVE'
+                        ? 'Xác nhận vô hiệu hóa tài khoản'
+                        : 'Xác nhận kích hoạt tài khoản'}
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmModal(false)}
+                      className="text-[#737686] hover:text-[#172554] text-base font-bold px-2 py-1"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <p className="text-xs text-[#596174] leading-relaxed">
+                    {data?.user?.status === 'ACTIVE'
+                      ? `Bạn có chắc muốn vô hiệu hóa tài khoản ${data?.user?.email}? Tài khoản này sẽ không thể đăng nhập học tập và không tính vào các báo cáo nhiệm kỳ mới.`
+                      : `Bạn có chắc muốn kích hoạt lại tài khoản ${data?.user?.email}?`}
+                  </p>
+                  <div className="flex justify-end gap-2 pt-2 border-t border-[#eff4ff]">
+                    <Button variant="outline" size="sm" onClick={() => setShowConfirmModal(false)}>
+                      Hủy
+                    </Button>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      className={data?.user?.status === 'ACTIVE' ? 'bg-red-600 hover:bg-red-700 text-white font-bold' : 'bg-green-600 hover:bg-green-700 text-white font-bold'}
+                      loading={actionLoading}
+                      onClick={handleToggleUserStatus}
+                    >
+                      {data?.user?.status === 'ACTIVE' ? 'Xác nhận vô hiệu hóa' : 'Kích hoạt lại'}
+                    </Button>
+                  </div>
+                </div>
+              </Modal>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <Card shadow="md" className="border border-[#eff4ff]">

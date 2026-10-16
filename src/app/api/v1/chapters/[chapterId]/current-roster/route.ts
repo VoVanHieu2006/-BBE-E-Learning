@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { canAccessChapterPermission } from '@/lib/authorization'
 import { prisma } from '@/lib/prisma'
-import { EXACT_7_BANS } from '@/lib/departments'
+import { EXACT_7_BANS, ORDERED_7_BANS } from '@/lib/departments'
+import { listChapterMembers } from '@/lib/chapter-members'
 
 export async function GET(
   request: NextRequest,
@@ -26,56 +27,48 @@ export async function GET(
     return NextResponse.json({ error: { code: 'ChapterNotFound' } }, { status: 404 })
   }
 
-  const departments = await prisma.organizationUnit.findMany({
-    where: {
-      parent_id: chapter.organization_unit_id,
-      type: 'DEPARTMENT',
-      name: { in: Array.from(EXACT_7_BANS) },
-    },
-    include: {
-      memberships: {
-        where: {
-          status: 'ACTIVE',
-          OR: [{ ends_at: null }, { ends_at: { gt: new Date() } }],
-        },
-        include: {
-          user: {
-            select: {
-              id: true,
-              email: true,
-              display_name: true,
-              role: true,
-              status: true,
+  const [departments, allChapterMembers] = await Promise.all([
+    prisma.organizationUnit.findMany({
+      where: {
+        parent_id: chapter.organization_unit_id,
+        type: 'DEPARTMENT',
+      },
+      include: {
+        memberships: {
+          where: {
+            status: 'ACTIVE',
+            OR: [{ ends_at: null }, { ends_at: { gt: new Date() } }],
+          },
+          include: {
+            user: {
+              select: {
+                id: true,
+                email: true,
+                display_name: true,
+                role: true,
+                status: true,
+              },
             },
           },
         },
-      },
-      positions: {
-        where: {
-          OR: [{ ends_at: null }, { ends_at: { gt: new Date() } }],
+        positions: {
+          where: {
+            OR: [{ ends_at: null }, { ends_at: { gt: new Date() } }],
+          },
+          include: {
+            position: true,
+          },
         },
-        include: {
-          position: true,
-        },
       },
-    },
-  })
-
-  // Sắp xếp các ban theo thứ tự trực quan: Chủ tịch đầu tiên, sau đó 6 ban còn lại
-  const orderedBans = [
-    'Chủ tịch',
-    'Ban Thành viên',
-    'Ban Thư ký',
-    'Ban khách mời',
-    'Ban TT&SK',
-    'Ban nội dung',
-    'Ban chất lượng',
-  ]
+    }),
+    listChapterMembers(params.chapterId, { roles: ['MEMBER'], status: 'ACTIVE' }),
+  ])
 
   const deptMap = new Map(departments.map((d) => [d.name, d]))
+  const assignedUserIds = new Set<string>()
 
-  const roster = orderedBans.map((banName) => {
-    const dept = deptMap.get(banName)
+  const roster = ORDERED_7_BANS.map((banName) => {
+    const dept = deptMap.get(banName) || departments.find(d => d.name.toLowerCase() === banName.toLowerCase())
     if (!dept) {
       return {
         id: null,
@@ -98,7 +91,8 @@ export async function GET(
     const memberItems = dept.memberships
       .filter((m) => m.user)
       .map((m) => {
-        const isLead = leadUserIds.has(m.user.id) || (banName === 'Chủ tịch' && m.user.role === 'CHAPTER_LEADER')
+        assignedUserIds.add(m.user.id)
+        const isLead = leadUserIds.has(m.user.id) || (banName === 'Chủ Tịch' && m.user.role === 'MEMBER' && leadUserIds.has(m.user.id))
         return {
           userId: m.user.id,
           email: m.user.email,
@@ -127,10 +121,28 @@ export async function GET(
     }
   })
 
+  // Các thành viên Chapter chưa có ban
+  const unassignedMembers = allChapterMembers
+    .filter((m) => !assignedUserIds.has(m.userId) && m.email !== 'chapter.lead.demo@bbe.vn')
+    .map((m) => ({
+      userId: m.userId,
+      email: m.email,
+      displayName: m.displayName || m.email.split('@')[0],
+      role: m.role,
+      status: m.status,
+    }))
+
+  const availableDepartments = roster
+    .filter((r) => r.id)
+    .map((r) => ({ id: r.id!, name: r.name }))
+
   return NextResponse.json({
     chapterId: chapter.id,
     chapterName: chapter.name,
     roster,
+    unassignedMembers,
+    departments: availableDepartments,
     totalMembers: roster.reduce((sum, r) => sum + r.total, 0),
   })
 }
+

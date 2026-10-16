@@ -4,6 +4,7 @@ import { canAccessChapterPermission } from '@/lib/authorization'
 import { parseCsv, extractGoogleDocRef, buildGoogleExportUrl } from '@/lib/quiz/import'
 import { listChapterMembers } from '@/lib/chapter-members'
 import { prisma } from '@/lib/prisma'
+import { ORDERED_7_BANS } from '@/lib/departments'
 
 const MEMBER_PATTERN = /^\s*(.*?)\s*\(([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})\)\s*$/i
 const EMAIL_ONLY_PATTERN = /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i
@@ -23,13 +24,13 @@ function matchStandardDepartmentName(header: string, depts: Array<{ id: string; 
   if (direct) return direct
 
   // Synonym / flexible matching
-  if (norm.includes('chu tich')) return depts.find((d) => d.name === 'Chủ tịch')
-  if (norm.includes('chat luong')) return depts.find((d) => d.name === 'Ban chất lượng')
-  if (norm.includes('noi dung')) return depts.find((d) => d.name === 'Ban nội dung')
-  if (norm.includes('khach moi')) return depts.find((d) => d.name === 'Ban khách mời')
-  if (norm.includes('tt&sk') || norm.includes('tt & sk') || norm.includes('truyen thong')) return depts.find((d) => d.name === 'Ban TT&SK')
-  if (norm.includes('thanh vien')) return depts.find((d) => d.name === 'Ban Thành viên')
-  if (norm.includes('thu ky')) return depts.find((d) => d.name === 'Ban Thư ký')
+  if (norm.includes('chu tich')) return depts.find((d) => normalized(d.name).includes('chu tich'))
+  if (norm.includes('chat luong')) return depts.find((d) => normalized(d.name).includes('chat luong'))
+  if (norm.includes('noi dung')) return depts.find((d) => normalized(d.name).includes('noi dung'))
+  if (norm.includes('khach moi')) return depts.find((d) => normalized(d.name).includes('khach moi'))
+  if (norm.includes('tt&sk') || norm.includes('tt & sk') || norm.includes('truyen thong')) return depts.find((d) => normalized(d.name).includes('tt') || normalized(d.name).includes('truyen thong'))
+  if (norm.includes('thanh vien')) return depts.find((d) => normalized(d.name).includes('thanh vien'))
+  if (norm.includes('thu ky')) return depts.find((d) => normalized(d.name).includes('thu ky'))
   return null
 }
 
@@ -190,19 +191,9 @@ export async function POST(request: NextRequest, { params }: { params: { chapter
   }
 
   // Tổ chức 7 cột Nhiệm kỳ mới cho các thành viên khớp
-  const orderedBans = [
-    'Chủ tịch',
-    'Ban Thành viên',
-    'Ban Thư ký',
-    'Ban khách mời',
-    'Ban TT&SK',
-    'Ban nội dung',
-    'Ban chất lượng',
-  ]
-
-  const matchedNewTerm = orderedBans.map((banName) => {
-    const dept = departments.find((d) => d.name === banName)
-    const deptItems = matchedCandidateItems.filter((item) => item.departmentName === banName)
+  const matchedNewTerm = ORDERED_7_BANS.map((banName) => {
+    const dept = departments.find((d) => normalized(d.name) === normalized(banName))
+    const deptItems = matchedCandidateItems.filter((item) => normalized(item.departmentName) === normalized(banName))
     const lead = deptItems.find((item) => item.isLead) || deptItems[0] || null
     return {
       departmentId: dept?.id || null,

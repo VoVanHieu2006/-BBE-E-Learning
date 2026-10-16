@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { listAccessibleChapterIds } from '@/lib/authorization'
+import { canAccessChapterPermission, listAccessibleChapterIds } from '@/lib/authorization'
 import { listChapterMembers } from '@/lib/chapter-members'
 
 /**
@@ -17,11 +17,23 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
   const context = auth.context!
   const isAdmin = context.role === 'ADMIN'
   const requestedChapterId = new URL(request.url).searchParams.get('chapterId')
-  const accessibleChapterIds = isAdmin ? [] : requestedChapterId
-    ? (await listAccessibleChapterIds(context, 'VIEW_MEMBER_PROGRESS')).filter((id) => id === requestedChapterId)
-    : await listAccessibleChapterIds(context, 'VIEW_MEMBER_PROGRESS')
-  if (!isAdmin && accessibleChapterIds.length === 0) {
-    return NextResponse.json({ error: { code: 'AccessDenied', message: 'Không có quyền' } }, { status: 403 })
+
+  let accessibleChapterIds: string[] = []
+  if (!isAdmin) {
+    if (context.role === 'CHAPTER_LEADER' && context.chapterId && (!requestedChapterId || requestedChapterId === context.chapterId)) {
+      accessibleChapterIds = [context.chapterId]
+    } else if (requestedChapterId) {
+      const allowed = await canAccessChapterPermission(context, requestedChapterId, 'VIEW_MEMBER_PROGRESS')
+      if (!allowed) {
+        return NextResponse.json({ error: { code: 'AccessDenied', message: 'Không có quyền' } }, { status: 403 })
+      }
+      accessibleChapterIds = [requestedChapterId]
+    } else {
+      accessibleChapterIds = await listAccessibleChapterIds(context, 'VIEW_MEMBER_PROGRESS')
+      if (accessibleChapterIds.length === 0) {
+        return NextResponse.json({ error: { code: 'AccessDenied', message: 'Không có quyền' } }, { status: 403 })
+      }
+    }
   }
 
   const courseId = params.courseId
@@ -68,17 +80,23 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
     const membersByChapter = await Promise.all(accessibleChapterIds.map((chapterId) =>
       listChapterMembers(chapterId, { roles: ['MEMBER'], status: 'ACTIVE' }),
     ))
-    const memberIds = Array.from(new Set(membersByChapter.reduce<string[]>(
-      (ids, members) => ids.concat(members.map((member) => member.userId)),
-      [],
-    )))
-    users = memberIds.length > 0
-      ? await prisma.user.findMany({
-          where: { id: { in: memberIds }, status: 'ACTIVE', role: 'MEMBER' },
-          select: { id: true, email: true, display_name: true, status: true },
-          orderBy: { email: 'asc' },
-        })
-      : []
+    const seenUserIds = new Set<string>()
+    const memberList: typeof users = []
+    for (const group of membersByChapter) {
+      for (const m of group) {
+        if (!seenUserIds.has(m.userId) && m.status === 'ACTIVE') {
+          seenUserIds.add(m.userId)
+          memberList.push({
+            id: m.userId,
+            email: m.email,
+            display_name: m.displayName || m.email.split('@')[0],
+            status: m.status,
+          })
+        }
+      }
+    }
+    memberList.sort((a, b) => a.email.localeCompare(b.email))
+    users = memberList
   }
 
   const userIds = users.map((u) => u.id)

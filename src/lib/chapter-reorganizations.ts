@@ -19,17 +19,29 @@ export async function applyDueChapterReorganizations(now = new Date()): Promise<
       const chapter = await tx.chapter.findUnique({ where: { id: batch.chapter_id }, select: { organization_unit_id: true } })
       if (!chapter?.organization_unit_id) throw new Error('ChapterOrganizationUnitNotFound')
       const unitIds = await getOrganizationUnitTreeIds(chapter.organization_unit_id)
-      const userIds = batch.items.map((item) => item.user_id)
+      // Department units under this chapter
+      const deptUnits = await tx.organizationUnit.findMany({
+        where: { parent_id: chapter.organization_unit_id, type: 'DEPARTMENT' },
+        select: { id: true },
+      })
+      const deptUnitIds = deptUnits.map((u) => u.id)
+
       for (const item of batch.items) {
         if (item.display_name) await tx.user.update({ where: { id: item.user_id }, data: { display_name: item.display_name } })
       }
-      await tx.organizationMembership.updateMany({
-        where: { user_id: { in: userIds }, unit_id: { in: unitIds }, status: 'ACTIVE', ends_at: null },
-        data: { status: 'ENDED', ends_at: now },
-      })
-      await tx.positionAssignment.updateMany({
-        where: { user_id: { in: userIds }, unit_id: { in: unitIds }, ends_at: null }, data: { ends_at: now },
-      })
+
+      // Kết thúc toàn bộ ban và chức vụ cũ trong các Ban của Chapter
+      // Thành viên không có tên trong sheet chuyển giao sẽ mất ban và chuyển về chưa phân ban
+      if (deptUnitIds.length) {
+        await tx.organizationMembership.updateMany({
+          where: { unit_id: { in: deptUnitIds }, status: 'ACTIVE', ends_at: null },
+          data: { status: 'ENDED', ends_at: now },
+        })
+        await tx.positionAssignment.updateMany({
+          where: { unit_id: { in: deptUnitIds }, ends_at: null },
+          data: { ends_at: now },
+        })
+      }
       await tx.organizationMembership.createMany({ data: batch.items.map((item) => ({ user_id: item.user_id, unit_id: item.department_unit_id, starts_at: now })) })
       await tx.positionAssignment.createMany({ data: batch.items.filter((item) => item.position_id).map((item) => ({ user_id: item.user_id, unit_id: item.department_unit_id, position_id: item.position_id!, is_primary: item.is_primary, starts_at: now, appointed_by: batch.created_by_user_id })) })
       return true

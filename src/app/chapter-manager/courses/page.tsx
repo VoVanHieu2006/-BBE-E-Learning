@@ -80,11 +80,19 @@ export default function ChapterManagerCoursesPage() {
   // ─── Modal 1: Học viên trong khóa ─────────────────────────────────────────────
   const openStudents = async (course: any) => {
     setStudentsModal(course);
-    setStudents([]);
-    setStudentsSummary(null);
-    setStudentsLoading(true);
     const chapterId = user?.chapterId || JSON.parse(localStorage.getItem('user') || '{}')?.chapterId;
-    const res = await apiFetch(`/api/v1/courses/${course.courseId || course.id}/students?chapterId=${encodeURIComponent(chapterId || '')}`);
+    const url = `/api/v1/courses/${course.courseId || course.id}/students?chapterId=${encodeURIComponent(chapterId || '')}`;
+    const cached = getCachedApiData<any>(url);
+    if (cached) {
+      setStudents(cached.items || []);
+      setStudentsSummary(cached.summary || null);
+      setStudentsLoading(false);
+    } else {
+      setStudents([]);
+      setStudentsSummary(null);
+      setStudentsLoading(true);
+    }
+    const res = await apiFetch(url);
     if (res.ok && res.data) {
       setStudents(res.data.items || []);
       setStudentsSummary(res.data.summary || null);

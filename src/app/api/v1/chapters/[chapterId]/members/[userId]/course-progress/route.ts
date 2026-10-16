@@ -27,13 +27,13 @@ export async function GET(
   }
 
   // Authorization check
-  const positionScope = (auth as any).context!.role !== 'ADMIN' && await hasChapterPermission((auth as any).context!.userId, chapterId, 'VIEW_MEMBER_PROGRESS')
-  if ((auth as any).context!.role === 'CHAPTER_LEADER') {
-    if ((auth as any).context!.chapterId !== chapterId) {
-      return NextResponse.json({ error: { code: 'AccessDenied', message: 'BĐHU chỉ có quyền xem chapter của mình' } }, { status: 403 })
+  const isLeader = auth.context!.role === 'CHAPTER_LEADER' && auth.context!.chapterId === chapterId
+  const isAdmin = auth.context!.role === 'ADMIN'
+  if (!isLeader && !isAdmin) {
+    const hasPerm = await hasChapterPermission(auth.context!.userId, chapterId, 'VIEW_MEMBER_PROGRESS')
+    if (!hasPerm) {
+      return NextResponse.json({ error: { code: 'AccessDenied', message: 'Không có quyền' } }, { status: 403 })
     }
-  } else if ((auth as any).context!.role !== 'ADMIN' && !positionScope) {
-    return NextResponse.json({ error: { code: 'AccessDenied', message: 'Không có quyền' } }, { status: 403 })
   }
 
   const targetUserId = params.userId
@@ -48,6 +48,7 @@ export async function GET(
     select: {
       id: true,
       email: true,
+      display_name: true,
       status: true,
       role: true,
       created_at: true,
@@ -60,21 +61,25 @@ export async function GET(
   }
 
   const legacyMembership = target.chapter_members.find((cm) => cm.chapter_id === chapterId)
-  const unitIds = chapter.organization_unit_id ? await getOrganizationUnitTreeIds(chapter.organization_unit_id) : []
-  const organizationMembership = unitIds.length
-    ? await prisma.organizationMembership.findFirst({
-        where: {
-          user_id: targetUserId,
-          unit_id: { in: unitIds },
-          status: 'ACTIVE',
-          starts_at: { lte: new Date() },
-          OR: [{ ends_at: null }, { ends_at: { gt: new Date() } }],
-        },
-        select: { starts_at: true },
-      })
-    : null
-  if (!isAdminAllScope && !legacyMembership && !organizationMembership) {
-    return NextResponse.json({ error: { code: 'NotFound', message: 'Thành viên không thuộc chapter này' } }, { status: 404 })
+  let joinedAt = legacyMembership?.joined_at || target.created_at
+  if (!isAdminAllScope && !legacyMembership) {
+    const unitIds = chapter.organization_unit_id ? await getOrganizationUnitTreeIds(chapter.organization_unit_id) : []
+    const organizationMembership = unitIds.length
+      ? await prisma.organizationMembership.findFirst({
+          where: {
+            user_id: targetUserId,
+            unit_id: { in: unitIds },
+            status: 'ACTIVE',
+            starts_at: { lte: new Date() },
+            OR: [{ ends_at: null }, { ends_at: { gt: new Date() } }],
+          },
+          select: { starts_at: true },
+        })
+      : null
+    if (!organizationMembership) {
+      return NextResponse.json({ error: { code: 'NotFound', message: 'Thành viên không thuộc chapter này' } }, { status: 404 })
+    }
+    joinedAt = organizationMembership.starts_at
   }
 
   const userSummary = await calculateUserProgress(targetUserId)
@@ -219,7 +224,8 @@ export async function GET(
         userId: target.id,
         email: target.email,
         status: target.status,
-        joinedAt: legacyMembership?.joined_at || organizationMembership?.starts_at || target.created_at,
+        joinedAt,
+        displayName: target.display_name,
         completedLessons: userSummary.completedLessons,
         totalLessons: userSummary.totalLessons,
         overallProgressPercent: userSummary.overallProgressPercent,

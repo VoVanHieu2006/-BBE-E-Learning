@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import Card from '@/components/ui/Card';
 import { apiFetch, getCachedApiData } from '@/lib/api/client';
 
@@ -93,9 +94,12 @@ export default function ChapterManagerLeaderboardPage() {
                 <Card className="p-6 text-center border-t-4 border-t-slate-400 bg-gradient-to-b from-slate-50/50 to-white hover:shadow-md transition">
                   <div className="text-4xl mb-2">🥈</div>
                   <div className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Hạng 2</div>
-                  <h3 className="text-base font-bold text-[#172554] truncate">
+                  <Link
+                    href={`/chapter-manager/members/${topThree[1].userId || topThree[1].id}`}
+                    className="text-base font-bold text-[#172554] hover:text-[#2563EB] truncate block transition"
+                  >
                     {topThree[1].displayName || topThree[1].email?.split('@')[0]}
-                  </h3>
+                  </Link>
                   <p className="text-xs text-[#737686] truncate mb-3">{topThree[1].email}</p>
                   <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-800 rounded-full text-sm font-extrabold border border-amber-200">
                     <span>⭐</span> {topThree[1].stars?.toLocaleString('vi-VN') || 0}
@@ -116,9 +120,12 @@ export default function ChapterManagerLeaderboardPage() {
                   </div>
                   <div className="text-5xl mb-2">🥇</div>
                   <div className="text-xs font-bold uppercase tracking-wider text-amber-700 mb-1">Quán quân</div>
-                  <h3 className="text-lg font-bold text-[#172554] truncate">
+                  <Link
+                    href={`/chapter-manager/members/${topThree[0].userId || topThree[0].id}`}
+                    className="text-lg font-bold text-[#172554] hover:text-[#2563EB] truncate block transition"
+                  >
                     {topThree[0].displayName || topThree[0].email?.split('@')[0]}
-                  </h3>
+                  </Link>
                   <p className="text-xs text-[#737686] truncate mb-3">{topThree[0].email}</p>
                   <div className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-amber-100 text-amber-900 rounded-full text-base font-black border border-amber-300 shadow-inner">
                     <span>⭐</span> {topThree[0].stars?.toLocaleString('vi-VN') || 0}
@@ -136,9 +143,12 @@ export default function ChapterManagerLeaderboardPage() {
                 <Card className="p-6 text-center border-t-4 border-t-amber-700/60 bg-gradient-to-b from-amber-50/20 to-white hover:shadow-md transition">
                   <div className="text-4xl mb-2">🥉</div>
                   <div className="text-xs font-bold uppercase tracking-wider text-amber-800 mb-1">Hạng 3</div>
-                  <h3 className="text-base font-bold text-[#172554] truncate">
+                  <Link
+                    href={`/chapter-manager/members/${topThree[2].userId || topThree[2].id}`}
+                    className="text-base font-bold text-[#172554] hover:text-[#2563EB] truncate block transition"
+                  >
                     {topThree[2].displayName || topThree[2].email?.split('@')[0]}
-                  </h3>
+                  </Link>
                   <p className="text-xs text-[#737686] truncate mb-3">{topThree[2].email}</p>
                   <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-800 rounded-full text-sm font-extrabold border border-amber-200">
                     <span>⭐</span> {topThree[2].stars?.toLocaleString('vi-VN') || 0}
@@ -170,16 +180,16 @@ export default function ChapterManagerLeaderboardPage() {
                     <th className="py-3 px-6">Ban</th>
                     <th className="py-3 px-6 text-right">Tổng ⭐ Star</th>
                     <th className="py-3 px-6 text-center">Khóa hoàn thành</th>
-                    <th className="py-3 px-6 text-right">Tiến độ chung</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#eff4ff]">
                   {members.map((m: any, index: number) => {
                     const isTopThree = index < 3;
-                    const deptName = typeof m.department === 'string' ? m.department : (m.department?.name || '—');
+                    const deptName = typeof m.department === 'string' ? m.department : (m.department?.name || 'Chưa phân ban');
+                    const mId = m.userId || m.id;
                     return (
                       <tr
-                        key={m.userId || m.id || index}
+                        key={mId || index}
                         className={`hover:bg-blue-50/40 transition ${
                           isTopThree ? 'bg-amber-50/15 font-medium' : ''
                         }`}
@@ -200,13 +210,20 @@ export default function ChapterManagerLeaderboardPage() {
                           </span>
                         </td>
                         <td className="py-3.5 px-6">
-                          <div className="font-semibold text-[#172554]">
+                          <Link
+                            href={`/chapter-manager/members/${mId}`}
+                            className="font-semibold text-[#172554] hover:text-[#2563EB] transition block"
+                          >
                             {m.displayName || m.email?.split('@')[0]}
-                          </div>
+                          </Link>
                           <div className="text-xs text-[#737686]">{m.email}</div>
                         </td>
                         <td className="py-3.5 px-6">
-                          <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-100">
+                          <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                            deptName === 'Chưa phân ban'
+                              ? 'bg-slate-100 text-slate-600 border border-slate-200'
+                              : 'bg-blue-50 text-blue-700 border border-blue-100'
+                          }`}>
                             {deptName}
                           </span>
                         </td>
@@ -217,19 +234,6 @@ export default function ChapterManagerLeaderboardPage() {
                         </td>
                         <td className="py-3.5 px-6 text-center text-xs font-semibold text-[#434655]">
                           {m.completedCourses ?? 0} khóa
-                        </td>
-                        <td className="py-3.5 px-6 text-right">
-                          <div className="inline-flex items-center gap-2">
-                            <div className="w-16 bg-slate-100 rounded-full h-2 overflow-hidden border border-slate-200">
-                              <div
-                                className="bg-emerald-500 h-2 rounded-full"
-                                style={{ width: `${Math.min(100, Math.max(0, m.avgProgress ?? 0))}%` }}
-                              />
-                            </div>
-                            <span className="font-bold text-xs text-[#172554] w-9 text-right">
-                              {Math.round(m.avgProgress ?? 0)}%
-                            </span>
-                          </div>
                         </td>
                       </tr>
                     );

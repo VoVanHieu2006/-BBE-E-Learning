@@ -29,35 +29,58 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
 
   const url = new URL(request.url)
   const search = url.searchParams.get('search') || ''
+  const departmentParam = url.searchParams.get('department') || ''
+  const roleTypeParam = url.searchParams.get('roleType') || ''
   const includeInactive = url.searchParams.get('includeInactive') === '1'
   const page = Math.max(parseInt(url.searchParams.get('page') || '1', 10), 1)
   const limit = Math.min(Math.max(parseInt(url.searchParams.get('limit') || '20', 10), 1), 100)
   const skip = (page - 1) * limit
 
-  const userFilter: any = {
-    // Mặc định chỉ lấy ACTIVE; ?includeInactive=1 để BĐHU thấy cả thành viên bị vô hiệu hóa
-    ...(includeInactive ? {} : { status: 'ACTIVE' }),
-    ...(search ? { email: { contains: search, mode: 'insensitive' } } : {}),
-  }
-  // Chỉ tính thành viên học tập (MEMBER); tài khoản BĐHU (CHAPTER_LEADER / ADMIN) không tính vào tiến trình thành viên chapter
-  userFilter.role = 'MEMBER'
+  const [sys, chapter, rawMembers] = await Promise.all([
+    getPublishedSystemData(),
+    prisma.chapter.findUnique({ where: { id: chapterId }, select: { organization_unit_id: true } }),
+    listChapterMembers(chapterId, {
+      roles: ['MEMBER'],
+      status: includeInactive ? undefined : 'ACTIVE',
+      search,
+    }),
+  ])
 
-  const where: any = {
-    chapter_id: chapterId,
-    user: userFilter,
-  }
+  const leadAssignments = chapter?.organization_unit_id
+    ? await prisma.positionAssignment.findMany({
+        where: {
+          position: { code: { in: ['DEPARTMENT_LEAD', 'CHAPTER_MANAGER'] } },
+          starts_at: { lte: new Date() },
+          OR: [{ ends_at: null }, { ends_at: { gt: new Date() } }],
+        },
+        select: { user_id: true },
+      })
+    : []
+  const leadUserIds = new Set(leadAssignments.map((a) => a.user_id))
 
-  const sys = await getPublishedSystemData()
-
-  const allMembers = await listChapterMembers(chapterId, {
-    roles: ['MEMBER'],
-    status: includeInactive ? undefined : 'ACTIVE',
-    search,
+  // Lọc theo Ban và Chức vụ
+  const filteredMembers = rawMembers.filter((m) => {
+    if (departmentParam) {
+      if (departmentParam === 'unassigned') {
+        if (m.department?.name) return false
+      } else {
+        if (!m.department?.name || m.department.name.toLowerCase() !== departmentParam.toLowerCase()) {
+          return false
+        }
+      }
+    }
+    if (roleTypeParam) {
+      const isLead = leadUserIds.has(m.userId)
+      if (roleTypeParam === 'LT' && !isLead) return false
+      if (roleTypeParam === 'MEMBER' && isLead) return false
+    }
+    return true
   })
-  const totalItems = allMembers.length
-  const members = allMembers.slice(skip, skip + limit)
+
+  const totalItems = filteredMembers.length
+  const members = filteredMembers.slice(skip, skip + limit)
   const memberUserIds = members.map((member) => member.userId)
-  const allMemberUserIds = allMembers.map((member) => member.userId)
+  const allMemberUserIds = filteredMembers.map((member) => member.userId)
   const [progressMap, allStarRows] = await Promise.all([
     calculateBatchUsersProgress(allMemberUserIds, sys),
     allMemberUserIds.length
@@ -67,16 +90,16 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
   const starsByUser = new Map(allStarRows.map((row) => [row.user_id, row._sum.amount || 0]))
   const totalStars = allStarRows.reduce((sum, row) => sum + (row._sum.amount || 0), 0)
 
-  const allProgressValues = allMembers.map((m) => progressMap.get(m.userId)?.overallProgressPercent || 0)
+  const allProgressValues = rawMembers.map((m) => progressMap.get(m.userId)?.overallProgressPercent || 0)
   const avgChapterProgress = allProgressValues.length > 0
     ? Math.round(allProgressValues.reduce((a, b) => a + b, 0) / allProgressValues.length)
     : 0
 
-  const membersOver70 = allMembers.filter((m) => (progressMap.get(m.userId)?.overallProgressPercent || 0) >= 70).length
+  const membersOver70 = rawMembers.filter((m) => (progressMap.get(m.userId)?.overallProgressPercent || 0) >= 70).length
 
   const summary = {
-    totalMembers: totalItems,
-    activeMembers: allMembers.filter((m) => m.status === 'ACTIVE').length,
+    totalMembers: rawMembers.length,
+    activeMembers: rawMembers.filter((m) => m.status === 'ACTIVE').length,
     avgChapterProgress,
     totalStars,
     membersOver70,
@@ -92,6 +115,7 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
       displayName: m.displayName,
       department: m.department,
       role: m.role,
+      isLead: leadUserIds.has(m.userId),
       status: m.status,
       joinedAt: m.joinedAt,
       completedCourses: p?.completedCourses || 0,

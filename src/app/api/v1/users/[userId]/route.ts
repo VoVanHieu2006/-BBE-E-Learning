@@ -38,8 +38,20 @@ export async function PATCH(request: NextRequest, { params }: { params: { userId
     }
   } else if ((auth as any).context!.role === 'CHAPTER_LEADER') {
     // BĐHU can only update members in their chapter; not Admin, not themselves
-    const membership = await prisma.chapterMember.findFirst({ where: { user_id: userId, chapter_id: (auth as any).context!.chapterId } })
-    if (!membership) return NextResponse.json({ error: { code: 'AccessDenied', message: 'Chỉ quản lý thành viên trong chapter mình' } }, { status: 403 })
+    const targetChapterId = (auth as any).context!.chapterId
+    const membership = await prisma.chapterMember.findFirst({ where: { user_id: userId, chapter_id: targetChapterId } })
+    let isMember = Boolean(membership)
+    if (!isMember && targetChapterId) {
+      const ch = await prisma.chapter.findUnique({ where: { id: targetChapterId }, select: { organization_unit_id: true } })
+      const uIds = ch?.organization_unit_id ? await getOrganizationUnitTreeIds(ch.organization_unit_id) : []
+      if (uIds.length) {
+        const orgMem = await prisma.organizationMembership.findFirst({
+          where: { user_id: userId, unit_id: { in: uIds }, status: 'ACTIVE', starts_at: { lte: new Date() }, OR: [{ ends_at: null }, { ends_at: { gt: new Date() } }] },
+        })
+        isMember = Boolean(orgMem)
+      }
+    }
+    if (!isMember) return NextResponse.json({ error: { code: 'AccessDenied', message: 'Chỉ quản lý thành viên trong chapter mình' } }, { status: 403 })
     if (target.role === 'ADMIN' || target.role === 'CHAPTER_LEADER') {
       return NextResponse.json({ error: { code: 'AccessDenied', message: 'Không thể thay đổi trạng thái Admin/BĐHU' } }, { status: 403 })
     }

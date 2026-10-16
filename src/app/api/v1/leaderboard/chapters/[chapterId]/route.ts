@@ -62,9 +62,24 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
   const memberIds = members.map((member) => member.id)
   if (!memberIds.length) return NextResponse.json({ chapterId: chapter.id, items: [] })
 
-  const [system, starRows] = await Promise.all([
+  const [system, starRows, deptRows] = await Promise.all([
     getPublishedSystemData(),
     prisma.starLedger.findMany({ where: { user_id: { in: memberIds } }, select: { user_id: true, amount: true, awarded_at: true } }),
+    unitIds.length
+      ? prisma.organizationMembership.findMany({
+          where: {
+            user_id: { in: memberIds },
+            unit: { parent_id: chapter.organization_unit_id, type: 'DEPARTMENT' },
+            status: 'ACTIVE',
+            starts_at: { lte: now },
+            OR: [{ ends_at: null }, { ends_at: { gt: now } }],
+          },
+          select: {
+            user_id: true,
+            unit: { select: { id: true, name: true } },
+          },
+        })
+      : Promise.resolve([]),
   ])
   const progressMap = await calculateBatchUsersProgress(memberIds, system)
   const starsByUser = new Map<string, number>()
@@ -74,12 +89,20 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
     if (row.amount > 0 && (!achievedAtByUser.has(row.user_id) || row.awarded_at > achievedAtByUser.get(row.user_id)!)) achievedAtByUser.set(row.user_id, row.awarded_at)
   }
 
+  const deptByUser = new Map<string, { id: string; name: string }>()
+  for (const row of deptRows) {
+    if (!deptByUser.has(row.user_id) && row.unit) {
+      deptByUser.set(row.user_id, { id: row.unit.id, name: row.unit.name })
+    }
+  }
+
   const items = members.map((member) => {
     const progress = progressMap.get(member.id)
     return {
       userId: member.id,
       email: member.email,
       displayName: member.display_name,
+      department: deptByUser.get(member.id) || null,
       stars: starsByUser.get(member.id) || 0,
       starsAchievedAt: achievedAtByUser.get(member.id)?.toISOString() || null,
       completedLessons: progress?.completedLessons || 0,

@@ -12,6 +12,8 @@ export default function ChapterManagerMembersPage() {
   const [members, setMembers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [departmentFilter, setDepartmentFilter] = useState('');
+  const [roleFilter, setRoleFilter] = useState('');
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({ totalItems: 0, totalPages: 1 });
   const [summary, setSummary] = useState({ totalMembers: 0, activeMembers: 0, avgChapterProgress: 0 });
@@ -57,11 +59,27 @@ export default function ChapterManagerMembersPage() {
     loadMembers(currentChapter, search);
   }, []);
 
-  async function loadMembers(chapterId?: string, query?: string, noCache = false, targetPage = page) {
+  async function loadMembers(
+    chapterId?: string,
+    query?: string,
+    noCache = false,
+    targetPage = page,
+    dept = departmentFilter,
+    role = roleFilter
+  ) {
     const targetChapter = chapterId || user?.chapterId || 'me';
     const searchQuery = query !== undefined ? query : search;
 
-    const url = `/api/v1/chapters/${targetChapter}/dashboard/members?search=${encodeURIComponent(searchQuery)}&includeInactive=1&page=${targetPage}&limit=10`;
+    const params = new URLSearchParams({
+      search: searchQuery,
+      includeInactive: '1',
+      page: String(targetPage),
+      limit: '10',
+    });
+    if (dept) params.set('department', dept);
+    if (role) params.set('roleType', role);
+
+    const url = `/api/v1/chapters/${targetChapter}/dashboard/members?${params.toString()}`;
 
     // Cache-first: hiện dữ liệu cache ngay trong khi revalidate nền
     const cached = noCache ? null : getCachedApiData<any>(url);
@@ -89,14 +107,23 @@ export default function ChapterManagerMembersPage() {
     e.preventDefault();
     setLoading(true);
     setPage(1);
-    loadMembers(user?.chapterId, search, true, 1);
+    loadMembers(user?.chapterId, search, true, 1, departmentFilter, roleFilter);
+  };
+
+  const handleResetFilters = () => {
+    setSearch('');
+    setDepartmentFilter('');
+    setRoleFilter('');
+    setPage(1);
+    setLoading(true);
+    loadMembers(user?.chapterId, '', true, 1, '', '');
   };
 
   const handlePageChange = async (newPage: number) => {
     if (newPage < 1 || newPage > pagination.totalPages || newPage === page || isPageChanging) return;
     setIsPageChanging(true);
     setPage(newPage);
-    await loadMembers(user?.chapterId, search, true, newPage);
+    await loadMembers(user?.chapterId, search, true, newPage, departmentFilter, roleFilter);
     setIsPageChanging(false);
   };
 
@@ -224,17 +251,60 @@ export default function ChapterManagerMembersPage() {
           </Card>
         </div>
 
-        {/* Search Bar */}
+        {/* Search & Filter Bar */}
         <Card className="p-4 mb-6 border border-[#eff4ff] shadow-sm">
-          <form onSubmit={handleSearch} className="flex gap-3">
+          <form onSubmit={handleSearch} className="flex flex-col md:flex-row gap-3">
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="🔍 Tìm kiếm thành viên theo email..."
+              placeholder="🔍 Tìm kiếm thành viên theo tên hoặc email..."
               className="flex-1 px-4 py-2.5 border border-[#cbdbf5] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
             />
+
+            {/* Bộ lọc theo Ban */}
+            <select
+              value={departmentFilter}
+              onChange={(e) => {
+                setDepartmentFilter(e.target.value);
+                setPage(1);
+                loadMembers(user?.chapterId, search, true, 1, e.target.value, roleFilter);
+              }}
+              className="px-3.5 py-2.5 border border-[#cbdbf5] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB] bg-white text-[#172554] font-medium"
+            >
+              <option value="">🏢 Tất cả các Ban</option>
+              <option value="Chủ Tịch">Chủ Tịch</option>
+              <option value="Ban Thành Viên">Ban Thành Viên</option>
+              <option value="Ban Thư Ký">Ban Thư Ký</option>
+              <option value="Ban Khách Mời">Ban Khách Mời</option>
+              <option value="Ban TT&SK">Ban TT&SK</option>
+              <option value="Ban Nội Dung">Ban Nội Dung</option>
+              <option value="Ban Chất Lượng">Ban Chất Lượng</option>
+              <option value="unassigned">⚠️ Chưa phân Ban</option>
+            </select>
+
+            {/* Bộ lọc theo Chức vụ */}
+            <select
+              value={roleFilter}
+              onChange={(e) => {
+                setRoleFilter(e.target.value);
+                setPage(1);
+                loadMembers(user?.chapterId, search, true, 1, departmentFilter, e.target.value);
+              }}
+              className="px-3.5 py-2.5 border border-[#cbdbf5] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB] bg-white text-[#172554] font-medium"
+            >
+              <option value="">👔 Tất cả chức vụ</option>
+              <option value="LT">👑 Trưởng ban (LT)</option>
+              <option value="MEMBER">👤 Thành viên</option>
+            </select>
+
             <Button type="submit">Tìm kiếm</Button>
+
+            {(search || departmentFilter || roleFilter) && (
+              <Button type="button" variant="outline" onClick={handleResetFilters}>
+                ✕ Xóa lọc
+              </Button>
+            )}
           </form>
         </Card>
 
@@ -285,7 +355,20 @@ export default function ChapterManagerMembersPage() {
                             {m.displayName || 'Chưa cập nhật tên'}
                           </Link>
                           <p className="mt-0.5 text-xs text-[#737686]">{m.email}</p>
-                          <p className={`mt-1 text-xs font-semibold ${m.department ? 'text-blue-700' : 'text-amber-700'}`}>{m.department?.name || 'Không có Ban'}</p>
+                          <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                            {m.department?.name === 'Chủ Tịch' ? (
+                              <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-amber-200/80 text-amber-900 shadow-2xs">
+                                ⭐ Chủ tịch Chapter
+                              </span>
+                            ) : m.isLead ? (
+                              <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-200">
+                                👑 LT Ban
+                              </span>
+                            ) : null}
+                            <span className={`text-xs font-semibold ${m.department ? 'text-blue-700' : 'text-amber-700'}`}>
+                              {m.department?.name || 'Chưa phân Ban'}
+                            </span>
+                          </div>
                         </td>
                         <td className="px-6 py-4 text-center font-medium text-[#172554]">
                           {m.completedCourses || 0} / {m.totalCourses || 0} khóa
