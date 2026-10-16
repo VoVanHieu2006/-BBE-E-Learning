@@ -7,6 +7,7 @@ import { listChapterMembers } from '@/lib/chapter-members'
 import { isOrganizationId } from '@/lib/organization-admin-rules'
 import { calculateUserProgress } from '@/lib/progress/calculator'
 import { canViewInactiveChapterMember } from '@/lib/inactive-member-access'
+import { getActiveMetricChapterIds, getParentChapterId } from '@/lib/active-chapters'
 
 /** Detailed course/module/video/quiz/Star progress within an authorized organization scope. */
 export async function GET(_request: NextRequest, { params }: { params: { unitId: string; userId: string } }) {
@@ -19,12 +20,16 @@ export async function GET(_request: NextRequest, { params }: { params: { unitId:
 
   const unit = await prisma.organizationUnit.findUnique({ where: { id: params.unitId }, select: { id: true, chapter: { select: { id: true } } } })
   if (!unit) return NextResponse.json({ error: { code: 'OrganizationUnitNotFound' } }, { status: 404 })
+  const parentChapterId = await getParentChapterId(unit.id)
+  if (parentChapterId && auth.context!.role !== 'ADMIN' && !(await getActiveMetricChapterIds()).includes(parentChapterId)) {
+    return NextResponse.json({ error: { code: 'AccessDenied' } }, { status: 403 })
+  }
   const target = await prisma.user.findUnique({
     where: { id: params.userId },
     select: { id: true, email: true, status: true, role: true, created_at: true },
   })
   if (!target || target.role !== 'MEMBER') return NextResponse.json({ error: { code: 'MemberNotFound' } }, { status: 404 })
-  if (target.status !== 'ACTIVE' && !(auth.context!.role === 'ADMIN' || (unit.chapter && await canViewInactiveChapterMember(auth.context!, unit.chapter.id)))) {
+  if (target.status !== 'ACTIVE' && !(auth.context!.role === 'ADMIN' || (parentChapterId && await canViewInactiveChapterMember(auth.context!, parentChapterId)))) {
     return NextResponse.json({ error: { code: 'AccessDenied' } }, { status: 403 })
   }
 

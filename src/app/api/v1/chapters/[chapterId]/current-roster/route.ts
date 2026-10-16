@@ -4,6 +4,8 @@ import { canAccessChapterPermission } from '@/lib/authorization'
 import { prisma } from '@/lib/prisma'
 import { EXACT_7_BANS, ORDERED_7_BANS } from '@/lib/departments'
 import { listChapterMembers } from '@/lib/chapter-members'
+import { getActiveMetricChapterIds } from '@/lib/active-chapters'
+import { applyDueChapterReorganizations } from '@/lib/chapter-reorganizations'
 
 export async function GET(
   request: NextRequest,
@@ -12,11 +14,19 @@ export async function GET(
   const auth = await authenticate(request)
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: 401 })
 
-  const isLeader = auth.context!.role === 'CHAPTER_LEADER' || auth.context!.role === 'ADMIN'
+  const isLeader = auth.context!.role === 'ADMIN' || (auth.context!.role === 'CHAPTER_LEADER' && auth.context!.chapterId === params.chapterId)
   const hasPerm = await canAccessChapterPermission(auth.context!, params.chapterId, 'VIEW_MEMBER_PROGRESS')
   if (!isLeader && !hasPerm) {
     return NextResponse.json({ error: { code: 'AccessDenied' } }, { status: 403 })
   }
+  if (auth.context!.role !== 'ADMIN' && !(await getActiveMetricChapterIds()).includes(params.chapterId)) {
+    return NextResponse.json({ error: { code: 'AccessDenied' } }, { status: 403 })
+  }
+
+  // Tự động kiểm tra và áp dụng chuyển giao nhiệm kỳ nếu đã đến thời gian hiệu lực
+  await applyDueChapterReorganizations(new Date()).catch((err) => {
+    console.error('[current-roster] applyDueChapterReorganizations error:', err)
+  })
 
   const chapter = await prisma.chapter.findUnique({
     where: { id: params.chapterId },
@@ -94,7 +104,7 @@ export async function GET(
 
     // Tách thành viên và lead (loại bỏ Lead Chapter và Admin)
     const memberItems = dept.memberships
-      .filter((m) => m.user && m.user.role === 'MEMBER' && m.user.email !== 'chapter.lead.demo@bbe.vn')
+      .filter((m) => m.user && m.user.status === 'ACTIVE' && m.user.role === 'MEMBER' && m.user.email !== 'chapter.lead.demo@bbe.vn')
       .map((m) => {
         assignedUserIds.add(m.user.id)
         const isLead = leadUserIds.has(m.user.id) || (banName === 'Chủ Tịch' && m.user.role === 'MEMBER' && leadUserIds.has(m.user.id))
@@ -146,7 +156,7 @@ export async function GET(
   if (scheduledBatchRecord && scheduledBatchRecord.items.length > 0) {
     const itemUserIds = Array.from(new Set(scheduledBatchRecord.items.map((i) => i.user_id)))
     const itemUsers = await prisma.user.findMany({
-      where: { id: { in: itemUserIds } },
+      where: { id: { in: itemUserIds }, status: 'ACTIVE' },
       select: { id: true, email: true, display_name: true },
     })
     const userMap = new Map(itemUsers.map((u) => [u.id, u]))
@@ -155,7 +165,7 @@ export async function GET(
     const newTerm = ORDERED_7_BANS.map((banName) => {
       const dept = departments.find((d) => d.name.toLowerCase() === banName.toLowerCase())
       const deptItems = scheduledBatchRecord.items
-        .filter((i) => deptIdToName.get(i.department_unit_id)?.toLowerCase() === banName.toLowerCase())
+        .filter((i) => userMap.has(i.user_id) && deptIdToName.get(i.department_unit_id)?.toLowerCase() === banName.toLowerCase())
         .map((i) => ({
           userId: i.user_id,
           email: userMap.get(i.user_id)?.email || '',
@@ -183,7 +193,7 @@ export async function GET(
     const userToCurrentDeptName = new Map<string, string>()
     for (const d of departments) {
       for (const m of d.memberships) {
-        if (m.user?.id) {
+        if (m.user?.id && m.user.status === 'ACTIVE') {
           userToCurrentDeptName.set(m.user.id, d.name)
         }
       }
@@ -202,7 +212,7 @@ export async function GET(
       id: scheduledBatchRecord.id,
       effectiveAt: scheduledBatchRecord.effective_at,
       sourceUrl: scheduledBatchRecord.source_url,
-      totalItems: scheduledBatchRecord.items.length,
+      totalItems: newTerm.reduce((sum, department) => sum + department.total, 0),
       status: scheduledBatchRecord.status,
       newTerm,
       unmatchedCurrentMembers,

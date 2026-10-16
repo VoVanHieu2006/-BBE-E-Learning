@@ -3,6 +3,7 @@ import { authenticate } from '@/lib/auth'
 import { canAccessChapterPermission } from '@/lib/authorization'
 import { listChapterMembers } from '@/lib/chapter-members'
 import { canViewInactiveChapterMember } from '@/lib/inactive-member-access'
+import { getActiveMetricChapterIds } from '@/lib/active-chapters'
 
 export async function GET(request: NextRequest, { params }: { params: { chapterId: string } }) {
   const auth = await authenticate(request)
@@ -14,6 +15,9 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
   // Legacy BĐHU or an active scoped position with VIEW_MEMBER_PROGRESS.
   if (!await canAccessChapterPermission(auth.context!, chapterId, 'VIEW_MEMBER_PROGRESS')) {
     return NextResponse.json({ error: { code: 'AccessDenied', message: 'Không có quyền' } }, { status: 403 })
+  }
+  if (auth.context!.role !== 'ADMIN' && !(await getActiveMetricChapterIds()).includes(chapterId)) {
+    return NextResponse.json({ error: { code: 'AccessDenied' } }, { status: 403 })
   }
 
   const url = new URL(request.url)

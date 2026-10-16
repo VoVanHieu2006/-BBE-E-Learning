@@ -4,11 +4,15 @@ import { prisma } from '@/lib/prisma'
 import { canAccessChapterPermission } from '@/lib/authorization'
 import { normalizeChapterKpiInput } from '@/lib/chapter-leaderboard-rules'
 import { invalidateChapterLeaderboardCache } from '@/lib/chapter-leaderboard-cache'
+import { getActiveMetricChapterIds } from '@/lib/active-chapters'
 
 export async function GET(request: NextRequest, { params }: { params: { chapterId: string } }) {
   const auth = await authenticate(request)
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: 401 })
   if (!await canAccessChapterPermission(auth.context!, params.chapterId, 'VIEW_MEMBER_PROGRESS')) {
+    return NextResponse.json({ error: { code: 'AccessDenied' } }, { status: 403 })
+  }
+  if (auth.context!.role !== 'ADMIN' && !(await getActiveMetricChapterIds()).includes(params.chapterId)) {
     return NextResponse.json({ error: { code: 'AccessDenied' } }, { status: 403 })
   }
   const items = await prisma.chapterMonthlyKpi.findMany({ where: { chapter_id: params.chapterId }, orderBy: { month_start: 'desc' }, include: { configured_by: { select: { email: true } } } })

@@ -149,7 +149,12 @@ export default function ChapterManagerTermTransitionPage() {
   const handleAutoApplyScheduled = useCallback(() => {
     if (!user?.chapterId) return;
     notify('success', '🎉 Đã đến thời gian hiệu lực! Đang tự động áp dụng chuyển giao nhiệm kỳ...');
-    loadCurrentRoster(user.chapterId);
+    loadCurrentRoster(user.chapterId, true);
+    setTimeout(() => {
+      if (user?.chapterId) {
+        loadCurrentRoster(user.chapterId, true);
+      }
+    }, 2500);
   }, [user?.chapterId]);
 
   useEffect(() => {
@@ -176,21 +181,38 @@ export default function ChapterManagerTermTransitionPage() {
     }
   }, []);
 
-  async function loadCurrentRoster(chapterId: string) {
+  async function loadCurrentRoster(chapterId: string, force = false) {
     setRosterLoading(true);
-    const res = await apiFetch(`/api/v1/chapters/${chapterId}/current-roster`);
+    if (force) {
+      clearApiCache('/api/v1/chapters');
+    }
+    const res = await apiFetch(`/api/v1/chapters/${chapterId}/current-roster`, { noCache: force });
     if (res.ok && res.data) {
       setRosterData(res.data.roster || []);
       setUnassignedMembers(res.data.unassignedMembers || []);
       setAvailableDepartments(res.data.departments || []);
       setScheduledBatch(res.data.scheduledBatch || null);
     }
+    // Nếu force refresh, đồng bộ lại thông tin user session từ server nếu chức vụ hoặc quyền đã thay đổi
+    if (force) {
+      try {
+        const meRes = await apiFetch('/api/v1/auth/me', { noCache: true });
+        if (meRes.ok && meRes.data?.user) {
+          const updated = { ...user, ...meRes.data.user };
+          localStorage.setItem('user', JSON.stringify(updated));
+          setUser(updated);
+        }
+      } catch {}
+    }
     setRosterLoading(false);
   }
 
-  async function loadHistory(chapterId: string) {
+  async function loadHistory(chapterId: string, force = false) {
     setHistoryLoading(true);
-    const res = await apiFetch(`/api/v1/chapters/${chapterId}/reorganizations`);
+    if (force) {
+      clearApiCache('/api/v1/chapters');
+    }
+    const res = await apiFetch(`/api/v1/chapters/${chapterId}/reorganizations`, { noCache: force });
     if (res.ok && res.data) {
       setHistoryList(res.data.items || []);
     }
@@ -633,8 +655,15 @@ export default function ChapterManagerTermTransitionPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => user?.chapterId && loadCurrentRoster(user.chapterId)}
+              onClick={() => {
+                if (user?.chapterId) {
+                  loadCurrentRoster(user.chapterId, true);
+                  notify('success', 'Đang tải lại sơ đồ và đồng bộ trạng thái mới nhất...');
+                }
+              }}
               loading={rosterLoading}
+              loadingText="Đang tải lại sơ đồ..."
+              disabled={rosterLoading}
             >
               🔄 Tải lại sơ đồ
             </Button>
@@ -1388,8 +1417,15 @@ export default function ChapterManagerTermTransitionPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => user?.chapterId && loadHistory(user.chapterId)}
+              onClick={() => {
+                if (user?.chapterId) {
+                  loadHistory(user.chapterId, true);
+                  notify('success', 'Đang tải lại lịch sử chuyển giao nhiệm kỳ...');
+                }
+              }}
               loading={historyLoading}
+              loadingText="Đang tải lại..."
+              disabled={historyLoading}
             >
               🔄 Tải lại
             </Button>

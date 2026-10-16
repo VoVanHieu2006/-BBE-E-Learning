@@ -15,6 +15,11 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
     return NextResponse.json({ error: { code: 'AccessDenied' } }, { status: 403 })
   }
 
+  // Tự động kiểm tra và áp dụng chuyển giao nhiệm kỳ nếu đã đến thời gian hiệu lực
+  await applyDueChapterReorganizations(new Date()).catch((err) => {
+    console.error('[reorganizations:GET] applyDueChapterReorganizations error:', err)
+  })
+
   const batches = await prisma.chapterReorganization.findMany({
     where: { chapter_id: params.chapterId },
     include: { items: true },

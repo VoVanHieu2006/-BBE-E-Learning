@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Card from '@/components/ui/Card';
-import { apiFetch, getCachedApiData } from '@/lib/api/client';
+import { apiFetch, clearApiCache, getCachedApiData } from '@/lib/api/client';
 import { useAdmin } from '../AdminContext';
 
 export default function AdminDashboard() {
@@ -10,6 +10,7 @@ export default function AdminDashboard() {
 
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     // SWR: grab cached data immediately on mount if available
@@ -21,12 +22,20 @@ export default function AdminDashboard() {
     loadOverview();
   }, []);
 
-  async function loadOverview() {
-    const res = await apiFetch('/api/v1/admin/overview');
-    if (res.ok && res.data) {
-      setData(res.data);
+  async function loadOverview(noCache = false) {
+    if (noCache) {
+      setRefreshing(true);
+      clearApiCache('/api/v1/admin');
     }
-    setLoading(false);
+    try {
+      const res = await apiFetch('/api/v1/admin/overview', { noCache });
+      if (res.ok && res.data) {
+        setData(res.data);
+      }
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
   }
 
   const isDataReady = mounted && !loading && Boolean(data);
@@ -72,13 +81,14 @@ export default function AdminDashboard() {
           <p className="text-[#737686] mt-1 text-sm">BBE E-Learning Platform Management</p>
         </div>
         <button
-          onClick={() => {
-            setLoading(true);
-            loadOverview();
-          }}
-          className="px-4 py-2 bg-white border border-[#cbdbf5] hover:bg-[#eff4ff] text-[#172554] text-sm font-medium rounded-xl shadow-sm transition flex items-center gap-2"
+          type="button"
+          disabled={refreshing}
+          onClick={() => loadOverview(true)}
+          className="px-4 py-2 bg-white border border-[#cbdbf5] hover:bg-[#eff4ff] active:scale-95 text-[#172554] text-sm font-semibold rounded-xl shadow-xs transition flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
+          title="Làm mới chỉ số toàn hệ thống"
         >
-          🔄 Làm mới
+          <span className={refreshing ? 'animate-spin inline-block' : ''}>🔄</span>
+          <span>{refreshing ? 'Đang làm mới...' : 'Làm mới'}</span>
         </button>
       </div>
 

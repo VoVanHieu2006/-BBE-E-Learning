@@ -167,9 +167,20 @@ export async function apiFetch<T = any>(
     } catch {}
   }
 
-  // 2. In-flight request deduplication for concurrent identical GETs
+  // If noCache is requested, immediately invalidate stale cache for this key
+  if (options.noCache) {
+    apiCache.delete(cacheKey)
+    inFlightRequests.delete(cacheKey)
+    if (typeof window !== 'undefined') {
+      try {
+        sessionStorage.removeItem(`api_cache:${cacheKey}`)
+      } catch {}
+    }
+  }
+
+  // 2. In-flight request deduplication for concurrent identical GETs (skip if noCache is requested)
   // Deduplicate in-flight requests
-  if (isGet && inFlightRequests.has(cacheKey)) {
+  if (isGet && !options.noCache && inFlightRequests.has(cacheKey)) {
     return inFlightRequests.get(cacheKey)!
   }
 
@@ -189,8 +200,13 @@ export async function apiFetch<T = any>(
       headers.set('Pragma', 'no-cache')
     }
 
+    // Add cache-busting timestamp parameter to prevent browser or intermediate caching
+    const fetchUrl = options.noCache
+      ? `${path}${path.includes('?') ? '&' : '?'}_t=${Date.now()}`
+      : path
+
     try {
-      const res = await fetch(path, {
+      const res = await fetch(fetchUrl, {
         ...options,
         cache: options.noCache ? 'no-store' : options.cache,
         headers,
@@ -246,7 +262,8 @@ export async function apiFetch<T = any>(
       }
 
       // 4. Save to memory and sessionStorage cache for GET requests
-      if (isGet && !options.noCache) {
+      // Always store the latest successful response so subsequent reads have fresh data
+      if (isGet) {
         const entry = { data, timestamp: Date.now() }
         apiCache.set(cacheKey, entry)
         if (typeof window !== 'undefined') {

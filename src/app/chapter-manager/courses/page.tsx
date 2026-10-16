@@ -4,7 +4,7 @@ import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
 import YouTubePlayer from '@/components/YouTubePlayer';
-import { apiFetch, getCachedApiData } from '@/lib/api/client';
+import { apiFetch, clearApiCache, getCachedApiData } from '@/lib/api/client';
 
 const STATE_META: Record<string, { label: string; badge: string; bar: string }> = {
   COMPLETED: { label: '✓ Đã hoàn thành', badge: 'bg-green-100 text-green-700', bar: 'bg-green-500' },
@@ -16,6 +16,7 @@ export default function ChapterManagerCoursesPage() {
   const [user, setUser] = useState<any>(null);
   const [courses, setCourses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Modal: Học viên của khóa
   const [studentsModal, setStudentsModal] = useState<any | null>(null);
@@ -63,18 +64,28 @@ export default function ChapterManagerCoursesPage() {
     const targetChapter = user?.chapterId || (typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user') || 'null')?.chapterId : null) || 'me';
     const url = `/api/v1/chapters/${targetChapter}/dashboard/courses`;
 
-    const cached = noCache ? null : getCachedApiData<any>(url);
-    if (cached?.items) {
-      setCourses(cached.items);
+    if (noCache) {
+      setRefreshing(true);
+      clearApiCache('/api/v1/chapters');
+      clearApiCache('/api/v1/courses');
     } else {
-      setLoading(true);
+      const cached = getCachedApiData<any>(url);
+      if (cached?.items) {
+        setCourses(cached.items);
+      } else {
+        setLoading(true);
+      }
     }
 
-    const res = await apiFetch(url, { noCache });
-    if (res.ok && res.data) {
-      setCourses(res.data.items || []);
+    try {
+      const res = await apiFetch(url, { noCache });
+      if (res.ok && res.data) {
+        setCourses(res.data.items || []);
+      }
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
-    setLoading(false);
   }
 
   // ─── Modal 1: Học viên trong khóa ─────────────────────────────────────────────
@@ -193,10 +204,14 @@ export default function ChapterManagerCoursesPage() {
             <p className="text-[#737686] mt-1">Tỷ lệ hoàn thành, học viên, nội dung và bài kiểm tra của từng khóa học</p>
           </div>
           <button
+            type="button"
+            disabled={refreshing}
             onClick={() => loadCourses(true)}
-            className="px-4 py-2 bg-white border border-[#cbdbf5] hover:bg-[#eff4ff] text-[#172554] text-sm font-medium rounded-xl shadow-sm transition"
+            className="px-4 py-2 bg-white border border-[#cbdbf5] hover:bg-[#eff4ff] active:scale-95 text-[#172554] text-sm font-semibold rounded-xl shadow-xs transition flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
+            title="Làm mới danh sách khóa học và tiến độ hoàn thành"
           >
-            🔄 Làm mới
+            <span className={refreshing ? 'animate-spin inline-block' : ''}>🔄</span>
+            <span>{refreshing ? 'Đang làm mới...' : 'Làm mới'}</span>
           </button>
         </div>
 

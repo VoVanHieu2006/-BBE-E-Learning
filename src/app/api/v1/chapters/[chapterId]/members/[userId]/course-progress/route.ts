@@ -5,6 +5,7 @@ import { calculateUserProgress } from '@/lib/progress/calculator'
 import { hasChapterPermission, resolveSingleManagedChapter } from '@/lib/authorization'
 import { getOrganizationUnitTreeIds } from '@/lib/learning-assignments'
 import { canViewInactiveChapterMember } from '@/lib/inactive-member-access'
+import { getActiveMetricChapterIds } from '@/lib/active-chapters'
 
 /**
  * GET /api/v1/chapters/[chapterId]/members/[userId]/course-progress
@@ -30,6 +31,9 @@ export async function GET(
   // Authorization check
   const isLeader = auth.context!.role === 'CHAPTER_LEADER' && auth.context!.chapterId === chapterId
   const isAdmin = auth.context!.role === 'ADMIN'
+  if (!isAdmin && !(await getActiveMetricChapterIds()).includes(chapterId)) {
+    return NextResponse.json({ error: { code: 'AccessDenied' } }, { status: 403 })
+  }
   if (!isLeader && !isAdmin) {
     const hasPerm = await hasChapterPermission(auth.context!.userId, chapterId, 'VIEW_MEMBER_PROGRESS')
     if (!hasPerm) {

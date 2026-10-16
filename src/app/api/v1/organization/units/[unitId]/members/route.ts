@@ -8,6 +8,7 @@ import { listChapterMembers } from '@/lib/chapter-members'
 import { isOrganizationId, normalizeOrganizationPagination, normalizeOrganizationSearch } from '@/lib/organization-admin-rules'
 import { calculateBatchUsersProgress, getPublishedSystemData } from '@/lib/progress/calculator'
 import { canViewInactiveChapterMember } from '@/lib/inactive-member-access'
+import { getActiveMetricChapterIds, getParentChapterId } from '@/lib/active-chapters'
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -41,11 +42,15 @@ export async function GET(request: NextRequest, { params }: { params: { unitId: 
     select: { id: true, name: true, type: true, chapter: { select: { id: true } } },
   })
   if (!unit) return NextResponse.json({ error: { code: 'OrganizationUnitNotFound' } }, { status: 404 })
+  const parentChapterId = await getParentChapterId(unit.id)
+  if (parentChapterId && auth.context!.role !== 'ADMIN' && !(await getActiveMetricChapterIds()).includes(parentChapterId)) {
+    return NextResponse.json({ error: { code: 'AccessDenied' } }, { status: 403 })
+  }
 
   const paramsUrl = new URL(request.url).searchParams
   const search = normalizeOrganizationSearch(paramsUrl.get('search'))
   const includeInactive = paramsUrl.get('includeInactive') === '1'
-  if (includeInactive && !(auth.context!.role === 'ADMIN' || (unit.chapter && await canViewInactiveChapterMember(auth.context!, unit.chapter.id)))) {
+  if (includeInactive && !(auth.context!.role === 'ADMIN' || (parentChapterId && await canViewInactiveChapterMember(auth.context!, parentChapterId)))) {
     return NextResponse.json({ error: { code: 'AccessDenied' } }, { status: 403 })
   }
   const now = new Date()

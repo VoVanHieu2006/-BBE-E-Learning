@@ -2,13 +2,14 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Card from '@/components/ui/Card';
-import { apiFetch, getCachedApiData } from '@/lib/api/client';
+import { apiFetch, clearApiCache, getCachedApiData } from '@/lib/api/client';
 
 export default function ChapterManagerDashboard() {
   const [user, setUser] = useState<any>(null);
   const [membersData, setMembersData] = useState<any>(null);
   const [coursesData, setCoursesData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -41,28 +42,35 @@ export default function ChapterManagerDashboard() {
     const membersUrl = `/api/v1/chapters/${targetChapter}/dashboard/members`;
     const coursesUrl = `/api/v1/chapters/${targetChapter}/dashboard/courses`;
 
-    // Cache-first: hiện dữ liệu cache ngay trong khi revalidate nền
-    if (!noCache) {
+    if (noCache) {
+      setRefreshing(true);
+      clearApiCache('/api/v1/chapters');
+    } else {
       const cachedMembers = getCachedApiData<any>(membersUrl);
       const cachedCourses = getCachedApiData<any>(coursesUrl);
       if (cachedMembers) setMembersData(cachedMembers);
       if (cachedCourses) setCoursesData(cachedCourses);
-    } else {
-      setLoading(true);
+      if (!cachedMembers && !cachedCourses) {
+        setLoading(true);
+      }
     }
 
-    const [membersRes, coursesRes] = await Promise.all([
-      apiFetch(membersUrl, { noCache }),
-      apiFetch(coursesUrl, { noCache }),
-    ]);
+    try {
+      const [membersRes, coursesRes] = await Promise.all([
+        apiFetch(membersUrl, { noCache }),
+        apiFetch(coursesUrl, { noCache }),
+      ]);
 
-    if (membersRes.ok && membersRes.data) {
-      setMembersData(membersRes.data);
+      if (membersRes.ok && membersRes.data) {
+        setMembersData(membersRes.data);
+      }
+      if (coursesRes.ok && coursesRes.data) {
+        setCoursesData(coursesRes.data);
+      }
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
-    if (coursesRes.ok && coursesRes.data) {
-      setCoursesData(coursesRes.data);
-    }
-    setLoading(false);
   }
 
   const summary = membersData?.summary;
@@ -84,10 +92,14 @@ export default function ChapterManagerDashboard() {
             </p>
           </div>
           <button
+            type="button"
+            disabled={refreshing}
             onClick={() => loadDashboard(user?.chapterId, true)}
-            className="px-4 py-2 bg-white border border-[#cbdbf5] hover:bg-[#eff4ff] text-[#172554] text-sm font-medium rounded-xl shadow-sm transition flex items-center gap-2"
+            className="px-4 py-2 bg-white border border-[#cbdbf5] hover:bg-[#eff4ff] active:scale-95 text-[#172554] text-sm font-semibold rounded-xl shadow-xs transition flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
+            title="Làm mới chỉ số và số liệu học viên mới nhất"
           >
-            🔄 Làm mới
+            <span className={refreshing ? 'animate-spin inline-block' : ''}>🔄</span>
+            <span>{refreshing ? 'Đang làm mới...' : 'Làm mới'}</span>
           </button>
         </div>
 

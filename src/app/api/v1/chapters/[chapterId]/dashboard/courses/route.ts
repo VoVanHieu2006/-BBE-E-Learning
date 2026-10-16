@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { canAccessChapterPermission, resolveSingleManagedChapter } from '@/lib/authorization'
 import { listChapterMembers } from '@/lib/chapter-members'
 import { countCompletedLessonsByCourse } from '@/lib/progress/completed-lesson-counts'
+import { getActiveMetricChapterIds } from '@/lib/active-chapters'
 
 /**
  * GET /api/v1/chapters/[chapterId]/dashboard/courses
@@ -25,6 +26,9 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
   // Position-based managers are checked against the exact requested Chapter.
   if (!await canAccessChapterPermission(auth.context!, chapterId, 'VIEW_MEMBER_PROGRESS')) {
     return NextResponse.json({ error: { code: 'AccessDenied', message: 'Không có quyền' } }, { status: 403 })
+  }
+  if (auth.context!.role !== 'ADMIN' && !(await getActiveMetricChapterIds()).includes(chapterId)) {
+    return NextResponse.json({ error: { code: 'AccessDenied' } }, { status: 403 })
   }
 
   const url = new URL(request.url)

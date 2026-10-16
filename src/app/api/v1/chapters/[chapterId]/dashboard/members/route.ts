@@ -6,6 +6,7 @@ import { canAccessChapterPermission, resolveSingleManagedChapter } from '@/lib/a
 import { listChapterMembers } from '@/lib/chapter-members'
 import { applyDueChapterReorganizations } from '@/lib/chapter-reorganizations'
 import { canViewInactiveChapterMember } from '@/lib/inactive-member-access'
+import { getActiveMetricChapterIds } from '@/lib/active-chapters'
 
 /**
  * GET /api/v1/chapters/[chapterId]/dashboard/members
@@ -27,6 +28,9 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
   // Position-based managers are checked against the exact requested Chapter.
   if (!await canAccessChapterPermission(auth.context!, chapterId, 'VIEW_MEMBER_PROGRESS')) {
     return NextResponse.json({ error: { code: 'AccessDenied', message: 'Không có quyền' } }, { status: 403 })
+  }
+  if (auth.context!.role !== 'ADMIN' && !(await getActiveMetricChapterIds()).includes(chapterId)) {
+    return NextResponse.json({ error: { code: 'AccessDenied' } }, { status: 403 })
   }
 
   // Tự động kiểm tra và áp dụng chuyển giao nhiệm kỳ nếu đã đến hạn
