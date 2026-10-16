@@ -457,6 +457,54 @@ export default function YouTubePlayer({
   const furthestPercent = duration > 0 ? (furthest / duration) * 100 : 0;
   const canSeekFree = allowFreeSeek || isGuest;
 
+  const seekDelta = (deltaSeconds: number) => {
+    if (!playerRef.current) return;
+    try {
+      const ct = playerRef.current.getCurrentTime?.() || 0;
+      const d = durationRef.current || duration || Infinity;
+      if (deltaSeconds < 0) {
+        const targetTime = Math.max(0, ct + deltaSeconds);
+        playerRef.current.seekTo(targetTime, true);
+        setCurrentTime(targetTime);
+        setShowControls(true);
+        scheduleHideControls();
+      } else {
+        const maxAllowed = canSeekFree ? d : furthestRef.current;
+        const targetTime = Math.min(d, ct + deltaSeconds);
+        const allowedTarget = Math.min(targetTime, maxAllowed);
+        if (canSeekFree || allowedTarget > ct) {
+          playerRef.current.seekTo(allowedTarget, true);
+          setCurrentTime(allowedTarget);
+          setShowControls(true);
+          scheduleHideControls();
+        }
+      }
+    } catch {}
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return;
+      }
+
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        seekDelta(-10);
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        seekDelta(10);
+      } else if (e.key === ' ' || e.key === 'k') {
+        e.preventDefault();
+        togglePlay();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [canSeekFree, duration, furthest, isPlaying, isReady]);
+
   return (
     <div
       ref={wrapperRef}
@@ -546,12 +594,33 @@ export default function YouTubePlayer({
               <button
                 onClick={togglePlay}
                 className="w-8 h-8 flex items-center justify-center bg-white/20 hover:bg-white/30 rounded-lg text-sm transition"
-                title={isPlaying ? 'Tạm dừng' : 'Phát video'}
+                title={isPlaying ? 'Tạm dừng (Phím cách/Space)' : 'Phát video (Phím cách/Space)'}
               >
                 {isPlaying ? '⏸' : '▶'}
               </button>
 
-              <span>
+              {/* Rewind 10s */}
+              <button
+                onClick={() => seekDelta(-10)}
+                className="px-2 py-1 flex items-center gap-1 bg-white/10 hover:bg-white/25 rounded-lg text-[11px] font-semibold transition text-slate-200 hover:text-white"
+                title="Tua lùi 10 giây (Phím mũi tên trái ←)"
+              >
+                <span>↺</span>
+                <span>10s</span>
+              </button>
+
+              {/* Forward 10s */}
+              <button
+                disabled={!canSeekFree && currentTime + 5 >= furthest}
+                onClick={() => seekDelta(10)}
+                className="px-2 py-1 flex items-center gap-1 bg-white/10 hover:bg-white/25 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg text-[11px] font-semibold transition text-slate-200 hover:text-white"
+                title={canSeekFree || currentTime + 5 < furthest ? 'Tua tới 10 giây (Phím mũi tên phải →)' : 'Học viên không thể tua tới đoạn chưa học'}
+              >
+                <span>10s</span>
+                <span>↻</span>
+              </button>
+
+              <span className="text-xs">
                 {formatTime(currentTime)} / {formatTime(duration)}
               </span>
 

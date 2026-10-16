@@ -65,16 +65,12 @@ export default function ChapterManagerDashboard() {
     setLoading(false);
   }
 
-  const totalMembers = membersData?.totalItems ?? (loading ? '...' : 0);
+  const summary = membersData?.summary;
+  const totalMembers = summary?.totalMembers ?? membersData?.totalItems ?? (loading ? '...' : 0);
   const totalCourses = coursesData?.totalItems ?? (loading ? '...' : 0);
-
-  const memberList = membersData?.items || [];
-  const avgProgress =
-    memberList.length > 0
-      ? Math.round(
-          memberList.reduce((sum: number, m: any) => sum + (m.avgProgress || 0), 0) / memberList.length
-        )
-      : 0;
+  const avgProgress = summary?.avgChapterProgress ?? 0;
+  const totalStars = summary?.totalStars ?? (loading ? '...' : 0);
+  const membersOver70 = summary?.membersOver70 ?? 0;
 
   return (
     <div>
@@ -95,21 +91,35 @@ export default function ChapterManagerDashboard() {
           </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <Card shadow="md" className="p-5 border border-[#eff4ff]">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+          <Card shadow="md" className="p-4 border border-[#eff4ff]">
             <div className="text-xs font-semibold text-[#737686] mb-1">Thành viên Chapter</div>
-            <div className="text-3xl font-bold text-[#172554] mb-1">{totalMembers}</div>
-            <div className="text-xs text-[#737686]">Học viên trong Chapter</div>
+            <div className="text-2xl font-bold text-[#172554] mb-0.5">{totalMembers}</div>
+            <div className="text-[11px] text-[#737686]">Toàn bộ Chapter</div>
           </Card>
-          <Card shadow="md" className="p-5 border border-[#eff4ff]">
+          <Card shadow="md" className="p-4 border border-[#eff4ff]">
             <div className="text-xs font-semibold text-[#737686] mb-1">Khóa học Published</div>
-            <div className="text-3xl font-bold text-[#172554] mb-1">{totalCourses}</div>
-            <div className="text-xs text-[#737686]">Chương trình đào tạo hiện có</div>
+            <div className="text-2xl font-bold text-[#172554] mb-0.5">{totalCourses}</div>
+            <div className="text-[11px] text-[#737686]">Chương trình đào tạo</div>
           </Card>
-          <Card shadow="md" className="p-5 border border-[#eff4ff]">
+          <Card shadow="md" className="p-4 border border-[#eff4ff]">
             <div className="text-xs font-semibold text-blue-700 mb-1">Tiến độ TB Chapter</div>
-            <div className="text-3xl font-bold text-[#2563EB] mb-1">{avgProgress}%</div>
-            <div className="text-xs text-[#737686]">Tất cả các khóa học</div>
+            <div className="text-2xl font-bold text-[#2563EB] mb-0.5">{avgProgress}%</div>
+            <div className="text-[11px] text-[#737686]">Tất cả các khóa học</div>
+          </Card>
+          <Card shadow="md" className="p-4 border border-[#eff4ff]">
+            <div className="text-xs font-semibold text-amber-700 mb-1">Tổng ⭐ Star Chapter</div>
+            <div className="text-2xl font-bold text-amber-600 mb-0.5">⭐ {totalStars}</div>
+            <div className="text-[11px] text-[#737686]">Học tập & Quiz tích lũy</div>
+          </Card>
+          <Card shadow="md" className="p-4 border border-[#eff4ff]">
+            <div className="text-xs font-semibold text-emerald-700 mb-1">Đạt tiến độ ≥ 70%</div>
+            <div className="text-2xl font-bold text-emerald-600 mb-0.5">
+              {membersOver70} <span className="text-xs font-normal text-[#737686]">/ {totalMembers}</span>
+            </div>
+            <div className="text-[11px] text-[#737686]">
+              {Number(totalMembers) > 0 ? Math.round((Number(membersOver70) / Number(totalMembers)) * 100) : 0}% thành viên
+            </div>
           </Card>
         </div>
 

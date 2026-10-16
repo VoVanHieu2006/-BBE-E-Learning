@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
+import YouTubePlayer from '@/components/YouTubePlayer';
 import { apiFetch, getCachedApiData } from '@/lib/api/client';
 
 const STATE_META: Record<string, { label: string; badge: string; bar: string }> = {
@@ -428,13 +429,11 @@ export default function ChapterManagerCoursesPage() {
             {videoModal && (
               <div className="space-y-3">
                 {extractYouTubeId(videoModal.youtubeVideoId) ? (
-                  <div className="aspect-video w-full rounded-2xl overflow-hidden bg-black shadow-lg">
-                    <iframe
-                      src={`https://www.youtube.com/embed/${extractYouTubeId(videoModal.youtubeVideoId)}?autoplay=1&controls=1&rel=0`}
-                      title={videoModal.title}
-                      className="w-full h-full"
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                      allowFullScreen
+                  <div className="w-full rounded-2xl overflow-hidden shadow-lg border border-[#cbdbf5]">
+                    <YouTubePlayer
+                      youtubeVideoId={extractYouTubeId(videoModal.youtubeVideoId)}
+                      lessonId="chapter-preview"
+                      allowFreeSeek={true}
                     />
                   </div>
                 ) : (

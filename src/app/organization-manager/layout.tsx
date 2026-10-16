@@ -31,9 +31,28 @@ export default function OrganizationManagerLayout({ children }: { children: Reac
     return () => { cancelled = true; };
   }, [router]);
 
-  if (checking) return <div className="min-h-screen bg-[#f8f9ff] p-8 text-sm text-[#737686]">Đang kiểm tra phạm vi quản lý…</div>;
-  return <div className="flex min-h-screen bg-[#f8f9ff]">
-    <Sidebar role={user?.role || 'MEMBER'} user={{ email: user?.email, chapterName: user?.chapterName, isOrganizationManager: true, managerKind: user?.managerKind }} />
-    <main className="ml-64 w-full min-w-0 px-5 py-8 md:px-8"><ContentTransition>{children}</ContentTransition></main>
-  </div>;
+  return (
+    <div className="flex min-h-screen bg-[#f8f9ff]">
+      <Sidebar
+        role={user?.role || 'MEMBER'}
+        user={{
+          email: user?.email,
+          chapterName: user?.chapterName,
+          isOrganizationManager: true,
+          managerKind: user?.managerKind,
+          canManageMembers: user?.canManageMembers,
+        }}
+      />
+      <main className="ml-64 w-full min-w-0 px-5 py-8 md:px-8">
+        {checking ? (
+          <div className="p-8 text-sm text-[#737686] flex items-center gap-2">
+            <div className="animate-spin text-lg">⏳</div>
+            <span>Đang kiểm tra phạm vi quản lý…</span>
+          </div>
+        ) : (
+          <ContentTransition>{children}</ContentTransition>
+        )}
+      </main>
+    </div>
+  );
 }
