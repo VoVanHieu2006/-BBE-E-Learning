@@ -237,6 +237,7 @@ model Chapter {
   created_at  DateTime   @default(now()) @db.Timestamp
   updated_at  DateTime   @updatedAt @db.Timestamp
   organization_unit_id String? @unique @db.Uuid
+  current_term_number  Int?
 
   chapter_members ChapterMember[]
   invitations     Invitation[]
@@ -860,6 +861,7 @@ model ChapterReorganization {
   id                String                      @id @default(uuid()) @db.Uuid
   chapter_id        String                      @db.Uuid
   effective_at      DateTime                    @db.Timestamp
+  term_number       Int?
   status            ChapterReorganizationStatus @default(DRAFT)
   source_url        String?                     @db.Text
   created_by_user_id String                     @db.Uuid

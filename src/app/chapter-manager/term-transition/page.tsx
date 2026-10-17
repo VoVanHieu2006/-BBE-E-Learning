@@ -13,6 +13,45 @@ const SAMPLE_SHEET_URL =
   'https://docs.google.com/spreadsheets/d/1MA9pJ1E8oHEZe8d1g6j0Ns6JqLoOCdhSVSgOflO0JBI/edit?gid=0#gid=0';
 
 /**
+ * Chuyển đổi số nguyên sang số La Mã (Roman Numerals)
+ */
+function toRoman(num: number): string {
+  if (!num || num <= 0) return '';
+  const romanMap: [number, string][] = [
+    [1000, 'M'],
+    [900, 'CM'],
+    [500, 'D'],
+    [400, 'CD'],
+    [100, 'C'],
+    [90, 'XC'],
+    [50, 'L'],
+    [40, 'XL'],
+    [10, 'X'],
+    [9, 'IX'],
+    [5, 'V'],
+    [4, 'IV'],
+    [1, 'I'],
+  ];
+  let result = '';
+  let n = Math.floor(num);
+  for (const [val, roman] of romanMap) {
+    while (n >= val) {
+      result += roman;
+      n -= val;
+    }
+  }
+  return result;
+}
+
+/**
+ * Định dạng nhãn nhiệm kỳ bao gồm cả số thường và số La Mã (Ví dụ: Nhiệm kỳ 6 - VI)
+ */
+function formatTermBadge(termNum?: number | null): string {
+  if (!termNum || termNum <= 0) return '';
+  return `Nhiệm kỳ ${termNum} - ${toRoman(termNum)}`;
+}
+
+/**
  * Đồng hồ đếm ngược thời gian thực siêu nhẹ (Zero-Lag)
  * Chỉ tính toán chênh lệch millisecond thuần trong bộ nhớ trình duyệt, không gây chậm hệ thống.
  * Tự động gọi onExpire() khi đếm về 0.
@@ -94,6 +133,8 @@ export default function ChapterManagerTermTransitionPage() {
   const [rosterData, setRosterData] = useState<any[]>([]);
   const [unassignedMembers, setUnassignedMembers] = useState<any[]>([]);
   const [availableDepartments, setAvailableDepartments] = useState<any[]>([]);
+  const [currentTermNumber, setCurrentTermNumber] = useState<number | null>(null);
+  const [selectedTermNumber, setSelectedTermNumber] = useState<number | ''>('');
   const [rosterLoading, setRosterLoading] = useState(true);
 
   // Đợt chuyển giao nhiệm kỳ đã lên lịch (chờ hiệu lực)
@@ -200,6 +241,7 @@ export default function ChapterManagerTermTransitionPage() {
       setUnassignedMembers(res.data.unassignedMembers || []);
       setAvailableDepartments(res.data.departments || []);
       setScheduledBatch(res.data.scheduledBatch || null);
+      setCurrentTermNumber(res.data.currentTermNumber ?? null);
     }
     // Nếu force refresh, đồng bộ lại thông tin user session từ server nếu chức vụ hoặc quyền đã thay đổi
     if (force) {
@@ -214,6 +256,40 @@ export default function ChapterManagerTermTransitionPage() {
     }
     setRosterLoading(false);
   }
+
+  // Tự động gợi ý và ràng buộc số thứ tự nhiệm kỳ tiếp theo
+  useEffect(() => {
+    if (currentTermNumber) {
+      setSelectedTermNumber((prev) => {
+        if (!prev || typeof prev !== 'number' || prev <= currentTermNumber) {
+          return currentTermNumber + 1;
+        }
+        return prev;
+      });
+    } else if (selectedTermNumber === '') {
+      setSelectedTermNumber(1);
+    }
+  }, [currentTermNumber]);
+
+  // Xác định số nhiệm kỳ hiển thị cho Sơ đồ 7 Ban
+  // Nếu chưa có currentTermNumber mà đã có scheduledBatch thì suy luận nhiệm kỳ hiện tại = scheduledBatch.termNumber - 1
+  const displayTermNumber =
+    currentTermNumber ??
+    (scheduledBatch?.termNumber && scheduledBatch.termNumber > 1 ? scheduledBatch.termNumber - 1 : null);
+
+  // Danh sách các lựa chọn nhiệm kỳ chuyển giao hợp lệ
+  const termOptions = (() => {
+    const start = currentTermNumber ? currentTermNumber + 1 : 1;
+    const count = 25;
+    const list: { value: number; label: string }[] = [];
+    for (let i = start; i < start + count; i++) {
+      list.push({
+        value: i,
+        label: formatTermBadge(i),
+      });
+    }
+    return list;
+  })();
 
   async function loadHistory(chapterId: string, force = false) {
     setHistoryLoading(true);
@@ -611,6 +687,10 @@ export default function ChapterManagerTermTransitionPage() {
   // Xác nhận chuyển giao nhiệm kỳ
   const handleConfirmTransition = async () => {
     if (!user?.chapterId || !parsedResult?.items || !effectiveAt) return;
+    if (!selectedTermNumber) {
+      notify('error', 'Vui lòng chọn số thứ tự nhiệm kỳ chuyển giao trước khi xác nhận.');
+      return;
+    }
     setScheduling(true);
     setMessage(null);
 
@@ -619,6 +699,7 @@ export default function ChapterManagerTermTransitionPage() {
       body: JSON.stringify({
         sourceUrl: rosterUrl,
         effectiveAt: new Date(effectiveAt).toISOString(),
+        termNumber: Number(selectedTermNumber),
         items: parsedResult.items.map((item: any) => ({
           userId: item.userId,
           displayName: item.displayName,
@@ -706,8 +787,17 @@ export default function ChapterManagerTermTransitionPage() {
         <div className="space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div>
-              <h2 className="text-base font-bold text-[#172554] flex items-center gap-2">
-                <span>🏛️ Sơ đồ 7 Ban nhiệm kỳ hiện tại</span>
+              <h2 className="text-base font-bold text-[#172554] flex items-center gap-2 flex-wrap">
+                {displayTermNumber ? (
+                  <>
+                    <span>🏛️ Sơ đồ 7 Ban</span>
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-blue-100 text-[#2563EB] text-xs font-bold border border-blue-200">
+                      {formatTermBadge(displayTermNumber)}
+                    </span>
+                  </>
+                ) : (
+                  <span>🏛️ Sơ đồ 7 Ban nhiệm kỳ hiện tại</span>
+                )}
               </h2>
               <p className="text-xs text-[#737686] mt-0.5">
                 Người đứng đầu mỗi Ban là Trưởng ban. Bấm vào thành viên để xem chi tiết hoặc đổi Ban. Bảng cuộn ngang ↔ để xem đủ 7 cột.
@@ -994,7 +1084,7 @@ export default function ChapterManagerTermTransitionPage() {
                 <div>
                   <div className="flex flex-wrap items-center gap-2 mb-1.5">
                     <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-100 text-[#2563EB] rounded-full text-xs font-bold">
-                      <span>📅</span> Đợt chuyển giao nhiệm kỳ tiếp theo (Đã lên lịch)
+                      <span>📅</span> Đợt chuyển giao {scheduledBatch.termNumber ? formatTermBadge(scheduledBatch.termNumber) : 'nhiệm kỳ tiếp theo'} (Đã lên lịch)
                     </span>
                     <TermTransitionCountdown
                       targetDate={scheduledBatch.effectiveAt}
@@ -1218,20 +1308,46 @@ export default function ChapterManagerTermTransitionPage() {
                   </div>
                 </div>
 
-                <div className="max-w-xs">
-                  <label className="block text-xs font-bold text-[#172554] mb-1">
-                    Thời gian bắt đầu có hiệu lực *
-                  </label>
-                  <input
-                    required
-                    type="datetime-local"
-                    value={effectiveAt}
-                    onChange={(e) => setEffectiveAt(e.target.value)}
-                    className="w-full rounded-xl border border-[#cbdbf5] px-3.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
-                  />
-                  <p className="text-[11px] text-[#737686] mt-1">
-                    Nếu đặt ngày hiện tại, hệ thống sẽ áp dụng và đổi Ban cho Chapter ngay lập tức.
-                  </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-xl">
+                  <div>
+                    <label className="block text-xs font-bold text-[#172554] mb-1">
+                      Nhiệm kỳ chuyển giao *
+                    </label>
+                    <select
+                      required
+                      value={selectedTermNumber}
+                      onChange={(e) => setSelectedTermNumber(e.target.value ? Number(e.target.value) : '')}
+                      className="w-full rounded-xl border border-[#cbdbf5] px-3.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB] bg-white font-medium text-[#172554]"
+                    >
+                      <option value="">-- Chọn số thứ tự nhiệm kỳ --</option>
+                      {termOptions.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-[11px] text-[#737686] mt-1">
+                      {currentTermNumber
+                        ? `Nhiệm kỳ hiện tại: ${formatTermBadge(currentTermNumber)} (Chỉ được chọn lớn hơn)`
+                        : 'Chọn số nhiệm kỳ cho đợt chuyển giao này'}
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-[#172554] mb-1">
+                      Thời gian bắt đầu có hiệu lực *
+                    </label>
+                    <input
+                      required
+                      type="datetime-local"
+                      value={effectiveAt}
+                      onChange={(e) => setEffectiveAt(e.target.value)}
+                      className="w-full rounded-xl border border-[#cbdbf5] px-3.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                    />
+                    <p className="text-[11px] text-[#737686] mt-1">
+                      Nếu đặt ngày hiện tại, hệ thống sẽ áp dụng và đổi Ban cho Chapter ngay lập tức.
+                    </p>
+                  </div>
                 </div>
               </form>
             </Card>
@@ -1526,49 +1642,65 @@ export default function ChapterManagerTermTransitionPage() {
             </div>
           ) : (
             <div className="divide-y divide-[#eff4ff]">
-              {historyList.map((term: any) => (
-                <div
-                  key={term.id}
-                  className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-[#f8f9ff] px-3 rounded-xl transition"
-                >
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-[#172554] text-sm">
-                        Nhiệm kỳ áp dụng lúc: {new Date(term.effectiveAt).toLocaleString('vi-VN')}
-                      </span>
-                      <span
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                          term.status === 'APPLIED'
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : 'bg-blue-100 text-blue-800'
-                        }`}
-                      >
-                        {term.status === 'APPLIED' ? 'Đã áp dụng' : 'Đã lên lịch'}
-                      </span>
-                    </div>
-                    <p className="text-xs text-[#737686] mt-1">
-                      Tổng nhân sự phân ban: <strong>{term.itemCount}</strong> thành viên
-                      {term.sourceUrl && (
-                        <span>
-                          {' · '}
-                          <a
-                            href={term.sourceUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-blue-600 underline"
-                          >
-                            Nguồn Google Sheet
-                          </a>
-                        </span>
-                      )}
-                    </p>
-                  </div>
+              {historyList.map((term: any) => {
+                const dateObj = term.appliedAt || term.effectiveAt ? new Date(term.appliedAt || term.effectiveAt) : null;
+                const dateStr = dateObj && !isNaN(dateObj.getTime())
+                  ? dateObj.toLocaleString('vi-VN')
+                  : 'Chưa xác định';
+                const totalCount = term.itemCount ?? term.items?.length ?? 0;
+                const termTitle = term.termNumber
+                  ? `Sơ đồ 7 Ban ${formatTermBadge(term.termNumber)}`
+                  : 'Sơ đồ 7 Ban nhiệm kỳ chuyển giao';
 
-                  <Button size="sm" variant="outline" onClick={() => setSelectedHistoryTerm(term)}>
-                    👁️ Xem cơ cấu
-                  </Button>
-                </div>
-              ))}
+                return (
+                  <div
+                    key={term.id}
+                    className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-[#f8f9ff] px-3 rounded-xl transition"
+                  >
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-[#172554] text-sm">
+                          {termTitle}
+                        </span>
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            term.status === 'APPLIED'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : 'bg-blue-100 text-blue-800'
+                          }`}
+                        >
+                          {term.status === 'APPLIED' ? 'Đã áp dụng' : 'Đã lên lịch'}
+                        </span>
+                      </div>
+                      <div className="text-xs text-[#737686] mt-1 space-y-0.5">
+                        <p>
+                          <span className="font-medium text-slate-700">Đã áp dụng lúc:</span> {dateStr}
+                        </p>
+                        <p>
+                          <span className="font-medium text-slate-700">Tổng nhân sự phân ban:</span> <strong>{totalCount}</strong> thành viên
+                          {term.sourceUrl && (
+                            <span>
+                              {' · '}
+                              <a
+                                href={term.sourceUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-blue-600 underline"
+                              >
+                                Nguồn Google Sheet
+                              </a>
+                            </span>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+
+                    <Button size="sm" variant="outline" onClick={() => setSelectedHistoryTerm(term)}>
+                      👁️ Xem cơ cấu
+                    </Button>
+                  </div>
+                );
+              })}
             </div>
           )}
         </Card>
@@ -1585,10 +1717,15 @@ export default function ChapterManagerTermTransitionPage() {
             <div className="flex items-center justify-between border-b border-[#eff4ff] pb-3">
               <div>
                 <h3 className="text-lg font-bold text-[#172554]">
-                  Cơ cấu nhân sự nhiệm kỳ ({new Date(selectedHistoryTerm.effectiveAt).toLocaleDateString('vi-VN')})
+                  {selectedHistoryTerm.termNumber
+                    ? `Cơ cấu nhân sự ${formatTermBadge(selectedHistoryTerm.termNumber)}`
+                    : 'Cơ cấu nhân sự nhiệm kỳ'}
+                  {selectedHistoryTerm.appliedAt || selectedHistoryTerm.effectiveAt
+                    ? ` (${new Date(selectedHistoryTerm.appliedAt || selectedHistoryTerm.effectiveAt).toLocaleDateString('vi-VN')})`
+                    : ''}
                 </h3>
                 <p className="text-xs text-[#737686]">
-                  Tổng {selectedHistoryTerm.itemCount} thành viên được phân bổ
+                  Tổng {selectedHistoryTerm.itemCount ?? selectedHistoryTerm.items?.length ?? 0} thành viên được phân bổ
                 </p>
               </div>
               <button

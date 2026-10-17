@@ -16,6 +16,12 @@ export async function applyDueChapterReorganizations(now = new Date()): Promise<
         where: { id: batch.id, status: 'SCHEDULED' }, data: { status: 'APPLIED', applied_at: now },
       })
       if (!claimed.count) return false
+      if (batch.term_number) {
+        await tx.chapter.update({
+          where: { id: batch.chapter_id },
+          data: { current_term_number: batch.term_number },
+        })
+      }
       const chapter = await tx.chapter.findUnique({ where: { id: batch.chapter_id }, select: { organization_unit_id: true } })
       if (!chapter?.organization_unit_id) throw new Error('ChapterOrganizationUnitNotFound')
       // Department units under this chapter

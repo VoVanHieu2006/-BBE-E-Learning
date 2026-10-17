@@ -1,5 +1,7 @@
 'use client';
+
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
@@ -175,7 +177,17 @@ export default function ChapterManagerCoursesPage() {
       <div key={st.userId} className="px-5 py-3.5">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <p className="font-semibold text-[#172554] truncate">{st.displayName || 'Chưa cập nhật tên'}</p>
+            {st.userId ? (
+              <Link
+                href={`/chapter-manager/members/${st.userId}`}
+                className="font-semibold text-[#172554] hover:text-[#2563EB] hover:underline truncate inline-block"
+                title="Xem chi tiết lộ trình học viên"
+              >
+                {st.displayName || 'Chưa cập nhật tên'}
+              </Link>
+            ) : (
+              <p className="font-semibold text-[#172554] truncate">{st.displayName || 'Chưa cập nhật tên'}</p>
+            )}
             <p className="text-[11px] text-[#737686] truncate">{st.email}</p>
             <p className="text-xs text-[#737686]">
               {st.completedLessons}/{st.totalLessons} bài học

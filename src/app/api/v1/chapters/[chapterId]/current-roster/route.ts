@@ -30,7 +30,7 @@ export async function GET(
 
   const chapter = await prisma.chapter.findUnique({
     where: { id: params.chapterId },
-    select: { id: true, name: true, organization_unit_id: true },
+    select: { id: true, name: true, organization_unit_id: true, current_term_number: true },
   })
 
   if (!chapter || !chapter.organization_unit_id) {
@@ -211,6 +211,7 @@ export async function GET(
     scheduledBatch = {
       id: scheduledBatchRecord.id,
       effectiveAt: scheduledBatchRecord.effective_at,
+      termNumber: scheduledBatchRecord.term_number,
       sourceUrl: scheduledBatchRecord.source_url,
       totalItems: newTerm.reduce((sum, department) => sum + department.total, 0),
       status: scheduledBatchRecord.status,
@@ -222,6 +223,7 @@ export async function GET(
   return NextResponse.json({
     chapterId: chapter.id,
     chapterName: chapter.name,
+    currentTermNumber: chapter.current_term_number,
     roster,
     unassignedMembers,
     departments: availableDepartments,

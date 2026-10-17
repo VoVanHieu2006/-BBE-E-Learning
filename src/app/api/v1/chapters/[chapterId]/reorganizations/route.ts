@@ -44,6 +44,10 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
 
   const enriched = batches.map((b) => ({
     ...b,
+    effectiveAt: b.effective_at,
+    appliedAt: b.applied_at,
+    termNumber: b.term_number,
+    itemCount: b.items.length,
     items: b.items.map((i) => ({
       ...i,
       email: userMap.get(i.user_id)?.email || '',
@@ -68,12 +72,14 @@ export async function POST(request: NextRequest, { params }: { params: { chapter
 
   const body = await request.json().catch(() => null)
   const effectiveAt = body?.effectiveAt ? new Date(body.effectiveAt) : null
+  const termNumber = body?.termNumber != null ? Number(body.termNumber) : null
   const rows = Array.isArray(body?.items) ? body.items : []
 
   if (
     !effectiveAt ||
     !Number.isFinite(effectiveAt.getTime()) ||
     !rows.length ||
+    (termNumber != null && (!Number.isInteger(termNumber) || termNumber < 1)) ||
     rows.some(
       (row: any) =>
         !row ||
@@ -85,7 +91,7 @@ export async function POST(request: NextRequest, { params }: { params: { chapter
     )
   ) {
     return NextResponse.json(
-      { error: { code: 'ValidationError', message: 'Vui lòng chọn ngày giờ hiệu lực hợp lệ và kiểm tra đầy đủ danh sách phân ban trước khi xác nhận chuyển giao.' } },
+      { error: { code: 'ValidationError', message: 'Vui lòng chọn ngày giờ hiệu lực hợp lệ, số thứ tự nhiệm kỳ và kiểm tra đầy đủ danh sách phân ban trước khi xác nhận chuyển giao.' } },
       { status: 400 }
     )
   }
@@ -96,10 +102,22 @@ export async function POST(request: NextRequest, { params }: { params: { chapter
 
   const chapter = await prisma.chapter.findUnique({
     where: { id: params.chapterId },
-    select: { organization_unit_id: true },
+    select: { organization_unit_id: true, current_term_number: true },
   })
   if (!chapter?.organization_unit_id) {
     return NextResponse.json({ error: { code: 'ChapterNotFound' } }, { status: 404 })
+  }
+
+  if (chapter.current_term_number && termNumber != null && termNumber <= chapter.current_term_number) {
+    return NextResponse.json(
+      {
+        error: {
+          code: 'InvalidTermNumber',
+          message: `Nhiệm kỳ mới (Nhiệm kỳ ${termNumber}) phải lớn hơn nhiệm kỳ hiện tại của Chapter (Nhiệm kỳ ${chapter.current_term_number}).`,
+        },
+      },
+      { status: 400 }
+    )
   }
 
   const allowedUnits = new Set(await getOrganizationUnitTreeIds(chapter.organization_unit_id))
@@ -152,6 +170,7 @@ export async function POST(request: NextRequest, { params }: { params: { chapter
     data: {
       chapter_id: params.chapterId,
       effective_at: effectiveAt,
+      term_number: termNumber,
       status: 'SCHEDULED',
       source_url: typeof body.sourceUrl === 'string' ? body.sourceUrl.slice(0, 2000) : null,
       created_by_user_id: auth.context!.userId,
