@@ -1535,21 +1535,42 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
 
                 <div>
                   <label className="block text-sm font-semibold text-[#172554] mb-2">Ảnh bìa khóa học</label>
-                  <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+                  <div className="flex flex-col sm:flex-row gap-4 sm:items-start">
                     {course.coverUrl ? (
-                      <img src={course.coverUrl} alt="Ảnh bìa khóa học" className="w-40 h-24 rounded-xl object-cover border border-[#cbdbf5]" />
+                      <div className="relative group shrink-0">
+                        <img
+                          src={course.coverUrl}
+                          alt="Ảnh bìa khóa học"
+                          className="aspect-video w-56 rounded-xl object-cover border border-[#cbdbf5] shadow-xs"
+                        />
+                        <div className="absolute inset-0 rounded-xl bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-semibold pointer-events-none">
+                          Tỷ lệ chuẩn 16:9
+                        </div>
+                      </div>
                     ) : (
-                      <div className="w-40 h-24 rounded-xl border border-dashed border-[#cbdbf5] bg-[#f8f9ff] flex items-center justify-center text-xs text-[#737686]">Chưa có ảnh bìa</div>
+                      <div className="aspect-video w-56 rounded-xl border-2 border-dashed border-[#cbdbf5] bg-[#f8f9ff] flex flex-col items-center justify-center text-xs text-[#737686] gap-1 p-2 text-center shrink-0">
+                        <span className="text-2xl">🖼️</span>
+                        <span className="font-medium">Chưa có ảnh bìa</span>
+                        <span className="text-[10px] text-slate-400">Khuyến nghị 16:9</span>
+                      </div>
                     )}
-                    <div>
+                    <div className="space-y-2 flex-1">
                       <input
                         type="file"
                         accept="image/jpeg,image/png,image/webp"
                         disabled={isPublished || coverUploading}
                         onChange={(event) => { void handleCoverUpload(event.target.files?.[0]); event.currentTarget.value = ''; }}
-                        className="block text-sm text-[#172554] file:mr-3 file:rounded-lg file:border-0 file:bg-[#eff4ff] file:px-3 file:py-2 file:text-sm file:font-semibold file:text-[#2563EB] hover:file:bg-[#dbeafe] disabled:opacity-60"
+                        className="block text-sm text-[#172554] file:mr-3 file:rounded-lg file:border-0 file:bg-[#eff4ff] file:px-3 file:py-2 file:text-sm file:font-semibold file:text-[#2563EB] hover:file:bg-[#dbeafe] disabled:opacity-60 cursor-pointer"
                       />
-                      <p className="mt-1 text-xs text-[#737686]">JPG, PNG hoặc WebP · tối đa 8 MB {coverUploading ? '· đang tải...' : ''}</p>
+                      <div className="p-3 bg-blue-50/70 border border-blue-200/80 rounded-xl text-xs space-y-1">
+                        <p className="font-semibold text-blue-900 flex items-center gap-1.5">
+                          <span>💡</span> Kích thước chuẩn khuyến nghị: <strong className="text-[#2563EB]">1280 × 720 px</strong> (Tỷ lệ vàng 16:9)
+                        </p>
+                        <p className="text-blue-800/80 text-[11px] leading-relaxed">
+                          • Định dạng: <strong>JPG, PNG, WebP</strong> · Tối đa <strong>8 MB</strong> {coverUploading ? '· đang tải lên...' : ''}.<br />
+                          • Độ phân giải tối thiểu: <strong>640 × 360 px</strong> (hoặc 1920 × 1080 px Full HD). Tỷ lệ chuẩn 16:9 đảm bảo ảnh bìa hiển thị sắc nét, đồng bộ và không bị méo mó trên toàn hệ thống.
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </div>

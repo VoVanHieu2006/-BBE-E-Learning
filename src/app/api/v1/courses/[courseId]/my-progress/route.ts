@@ -16,6 +16,17 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
     select: {
       id: true,
       status: true,
+      final_assessment: {
+        select: {
+          id: true,
+          attempts: {
+            where: { user_id: userId, status: { in: ['SUBMITTED', 'AUTO_SUBMITTED'] } },
+            orderBy: { created_at: 'desc' },
+            take: 1,
+            select: { id: true, passed: true, score: true },
+          },
+        },
+      },
       sessions: {
         orderBy: { sort_order: 'asc' },
         select: {
@@ -75,6 +86,7 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
   })
 
   const progressPercentage = totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0
+  const latestFinal = course.final_assessment?.attempts?.[0] || null
 
   return NextResponse.json(
     {
@@ -84,6 +96,10 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
       percentage: progressPercentage,
       totalLessons,
       completedLessons,
+      finalAssessmentAttempt: latestFinal ? {
+        passed: Boolean(latestFinal.passed),
+        score: latestFinal.score !== null ? Number(latestFinal.score) : null,
+      } : null,
       sessions,
     },
     {

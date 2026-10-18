@@ -48,6 +48,10 @@ export default function LeaderboardPage() {
       router.replace('/chapter-manager/leaderboard');
       return;
     }
+    if (currentUser?.role === 'MEMBER') {
+      router.replace('/student/leaderboard');
+      return;
+    }
     loadData(currentUser);
   }, [router]);
 

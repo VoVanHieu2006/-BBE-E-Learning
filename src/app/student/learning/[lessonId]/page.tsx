@@ -442,6 +442,26 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                   </button>
                 )
               )}
+
+              {!nextLesson && courseId && (
+                canGoNext ? (
+                  <Link
+                    href={courseData?.assessment || courseData?.finalAssessment ? `/student/courses/${courseId}/quiz` : `/student/courses/${courseId}`}
+                    className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-700 hover:to-yellow-700 text-white text-xs font-bold shadow-md transition hover:scale-[1.02] active:scale-[0.98]"
+                  >
+                    <span>{courseData?.assessment || courseData?.finalAssessment ? '🎓 Làm bài thi cuối khóa →' : '✓ Hoàn tất khóa học →'}</span>
+                  </Link>
+                ) : (
+                  <button
+                    type="button"
+                    disabled
+                    className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-slate-200 text-slate-500 text-xs font-bold transition shadow-2xs opacity-75 cursor-not-allowed"
+                    title={hasQuiz ? 'Cần hoàn thành bài kiểm tra để mở bài thi cuối khóa' : 'Cần xem video trước'}
+                  >
+                    <span>🔒 {courseData?.assessment || courseData?.finalAssessment ? 'Bài thi cuối khóa →' : 'Hoàn tất khóa học →'}</span>
+                  </button>
+                )
+              )}
             </div>
 
             <div className="flex items-center gap-3 text-xs text-[#737686]">

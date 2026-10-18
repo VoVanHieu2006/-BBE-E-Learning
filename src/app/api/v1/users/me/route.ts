@@ -3,6 +3,22 @@ import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getLearningManagerKind } from '@/lib/manager-learning-access'
 
+function toRoman(num: number): string {
+  if (!num || num <= 0) return ''
+  const romanLookup: [number, string][] = [
+    [10, 'X'], [9, 'IX'], [5, 'V'], [4, 'IV'], [1, 'I'],
+  ]
+  let result = ''
+  let n = num
+  for (const [val, rom] of romanLookup) {
+    while (n >= val) {
+      result += rom
+      n -= val
+    }
+  }
+  return result || String(num)
+}
+
 /**
  * GET /api/v1/users/me
  * Get current user info.
@@ -18,7 +34,7 @@ export async function GET(request: NextRequest) {
     include: {
       chapter_members: {
         take: 1,
-        include: { chapter: { select: { id: true, name: true } } },
+        include: { chapter: { select: { id: true, name: true, current_term_number: true } } },
       },
     },
   })
@@ -28,7 +44,7 @@ export async function GET(request: NextRequest) {
   }
 
   const now = new Date()
-  const [memberships, positions, formerLt] = await Promise.all([
+  const [memberships, positions, formerLt, allDepartmentMemberships, appliedReorgItems] = await Promise.all([
     prisma.organizationMembership.findMany({
       where: { user_id: user.id, status: 'ACTIVE', starts_at: { lte: now }, OR: [{ ends_at: null }, { ends_at: { gt: now } }] },
       select: { unit: { select: { id: true, name: true, type: true, parent: { select: { id: true, name: true, type: true } } } } },
@@ -38,10 +54,51 @@ export async function GET(request: NextRequest) {
       select: { position: { select: { code: true, name: true, scope: true } }, unit: { select: { id: true, name: true, type: true } } },
     }),
     prisma.positionAssignment.findFirst({ where: { user_id: user.id, position: { code: 'DEPARTMENT_LEAD' } }, select: { id: true } }),
+    prisma.organizationMembership.findMany({
+      where: { user_id: user.id, unit: { type: 'DEPARTMENT' } },
+      include: { unit: true },
+      orderBy: { starts_at: 'desc' },
+    }),
+    prisma.chapterReorganizationItem.findMany({
+      where: { user_id: user.id, reorganization: { status: 'APPLIED' } },
+      include: { reorganization: true },
+      orderBy: { reorganization: { applied_at: 'desc' } },
+    }),
   ])
+
   const dnaMembership = memberships.find(({ unit }) => unit.type === 'DNA' || unit.type === 'DNA_GROUP')
   const departmentMembership = memberships.find(({ unit }) => unit.type === 'DEPARTMENT')
   const managerKind = await getLearningManagerKind(user.id, user.role)
+
+  const chapter = user.chapter_members?.[0]?.chapter || null
+  const currentTermNumber = chapter?.current_term_number || null
+  const currentTermLabel = currentTermNumber ? `Nhiệm kỳ ${currentTermNumber} (${toRoman(currentTermNumber)})` : null
+
+  const currentDepartment = departmentMembership ? {
+    id: departmentMembership.unit.id,
+    name: departmentMembership.unit.name,
+    termNumber: currentTermNumber,
+    termLabel: currentTermLabel,
+  } : null
+
+  const departmentHistory = allDepartmentMemberships.map((m, idx) => {
+    const isCurrent = m.status === 'ACTIVE' && (!m.ends_at || m.ends_at > now)
+    const matchingReorg = appliedReorgItems.find((r) => r.department_unit_id === m.unit_id)
+    const termNum = isCurrent
+      ? currentTermNumber
+      : (matchingReorg?.reorganization?.term_number || (currentTermNumber && currentTermNumber > idx ? currentTermNumber - idx : null))
+    const termLbl = termNum ? `Nhiệm kỳ ${termNum} (${toRoman(termNum)})` : null
+    return {
+      id: m.id,
+      departmentId: m.unit_id,
+      departmentName: m.unit.name,
+      termNumber: termNum,
+      termLabel: termLbl,
+      status: isCurrent ? 'ACTIVE' : 'ENDED',
+      startsAt: m.starts_at,
+      endsAt: m.ends_at,
+    }
+  })
 
   return NextResponse.json({
     id: user.id,
@@ -49,8 +106,12 @@ export async function GET(request: NextRequest) {
     displayName: user.display_name,
     role: user.role,
     status: user.status,
-    chapterId: managerKind === 'LEAD_DNA' ? null : user.chapter_members?.[0]?.chapter?.id || null,
-    chapterName: managerKind === 'LEAD_DNA' ? null : user.chapter_members?.[0]?.chapter?.name || null,
+    chapterId: managerKind === 'LEAD_DNA' ? null : chapter?.id || null,
+    chapterName: managerKind === 'LEAD_DNA' ? null : chapter?.name || null,
+    currentTermNumber,
+    currentTermLabel,
+    currentDepartment,
+    departmentHistory,
     department: departmentMembership ? { id: departmentMembership.unit.id, name: departmentMembership.unit.name } : null,
     dna: dnaMembership ? {
       active: true,

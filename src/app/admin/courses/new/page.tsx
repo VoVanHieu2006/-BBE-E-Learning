@@ -128,6 +128,16 @@ export default function AdminNewCoursePage() {
                 </label>
               </div>
             </div>
+
+            <div className="p-4 bg-blue-50/70 border border-blue-200/80 rounded-xl text-xs space-y-1">
+              <p className="font-semibold text-blue-900 flex items-center gap-1.5">
+                <span>💡</span> Hướng dẫn ảnh bìa khóa học:
+              </p>
+              <p className="text-blue-800/80 text-[11px] leading-relaxed">
+                Sau khi bấm <strong>Tạo khóa học</strong>, bạn sẽ tải ảnh bìa trực tiếp tại trang chỉnh sửa nội dung. Hãy chuẩn bị ảnh với <strong>tỷ lệ vàng 16:9</strong> (Kích thước chuẩn khuyến nghị: <strong>1280 × 720 px</strong> hoặc <strong>1920 × 1080 px</strong>, định dạng JPG/PNG/WebP, tối đa 8 MB) để đảm bảo hình ảnh hiển thị đồng bộ và đẹp mắt nhất trên toàn hệ thống.
+              </p>
+            </div>
+
             <div className="pt-3 border-t border-[#eff4ff] flex justify-end gap-3">
               <Link href="/admin/courses">
                 <Button variant="outline" type="button">

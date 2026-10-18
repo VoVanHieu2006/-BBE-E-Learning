@@ -1,7 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import Sidebar from '@/components/layout/Sidebar';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import { apiFetch } from '@/lib/api/client';
@@ -150,77 +149,179 @@ export default function CourseDetailPage({ params }: { params: { courseId: strin
               Nội dung chương trình học
             </h2>
 
-            {course.sessions?.map((session: any, sIdx: number) => {
-              const progSession = progressData?.sessions?.find((ps: any) => ps.sessionId === (session.sessionId || session.id));
-              return (
-                <div key={session.sessionId || session.id} className="bg-white rounded-2xl border border-[#eff4ff] shadow-sm p-6 space-y-4">
-                  <div className="flex items-center gap-3 border-b border-[#eff4ff] pb-4">
-                    <span className="w-8 h-8 bg-[#eff4ff] text-[#2563EB] rounded-lg font-bold flex items-center justify-center text-sm">
-                      {sIdx + 1}
-                    </span>
-                    <div>
-                      <h3 className="text-lg font-bold text-[#172554]">{session.title}</h3>
-                      {session.description && <p className="text-xs text-[#737686]">{session.description}</p>}
+            {(() => {
+              let hasEncounteredIncomplete = false;
+              return course.sessions?.map((session: any, sIdx: number) => {
+                const progSession = progressData?.sessions?.find((ps: any) => ps.sessionId === (session.sessionId || session.id));
+                return (
+                  <div key={session.sessionId || session.id} className="bg-white rounded-2xl border border-[#eff4ff] shadow-sm p-6 space-y-4">
+                    <div className="flex items-center gap-3 border-b border-[#eff4ff] pb-4">
+                      <span className="w-8 h-8 bg-[#eff4ff] text-[#2563EB] rounded-lg font-bold flex items-center justify-center text-sm">
+                        {sIdx + 1}
+                      </span>
+                      <div>
+                        <h3 className="text-lg font-bold text-[#172554]">{session.title}</h3>
+                        {session.description && <p className="text-xs text-[#737686]">{session.description}</p>}
+                      </div>
                     </div>
-                  </div>
 
-                  <div className="space-y-3">
-                    {session.lessons?.map((lesson: any, lIdx: number) => {
-                      const lessonProg = progSession?.lessons?.find((pl: any) => pl.lessonId === (lesson.lessonId || lesson.id));
-                      const isCompleted = isLeaderOrAdmin || lessonProg?.completed;
+                    <div className="space-y-3">
+                      {session.lessons?.map((lesson: any, lIdx: number) => {
+                        const lessonProg = progSession?.lessons?.find((pl: any) => pl.lessonId === (lesson.lessonId || lesson.id));
+                        const isCompleted = Boolean(isLeaderOrAdmin || lessonProg?.completed);
+                        const isLocked = !isLeaderOrAdmin && hasEncounteredIncomplete;
 
-                      return (
-                        <Link
-                          key={lesson.lessonId || lesson.id}
-                          href={`/student/learning/${lesson.lessonId || lesson.id}`}
-                          className="block p-4 bg-[#f8f9ff] hover:bg-[#eef4ff] rounded-xl border border-[#eff4ff] transition group"
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                              <span className="text-xs font-bold text-[#737686] group-hover:text-[#2563EB]">
-                                {sIdx + 1}.{lIdx + 1}
-                              </span>
-                              <div>
-                                <h4 className="font-semibold text-sm text-[#172554] group-hover:text-[#2563EB] transition">
-                                  {lesson.title}
-                                </h4>
-                                {lesson.description && (
-                                  <p className="text-xs text-[#434655] mt-0.5 line-clamp-1">{lesson.description}</p>
-                                )}
-                                <div className="flex flex-wrap items-center gap-2 text-xs text-[#737686] mt-1">
-                                  <span>📹 Video bài giảng</span>
-                                  {lesson.assessment && (
-                                    <span className="inline-flex items-center gap-1 font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md text-[11px]">
-                                      📝 Quiz ({lesson.assessment.questionCount || lesson.assessment._count?.questions || 0} câu)
-                                    </span>
-                                  )}
-                                  {lesson.documents?.length > 0 && (
-                                    <span>• 📄 {lesson.documents.length} tài liệu</span>
-                                  )}
+                        if (!isCompleted) {
+                          hasEncounteredIncomplete = true;
+                        }
+
+                        if (isLocked) {
+                          return (
+                            <div
+                              key={lesson.lessonId || lesson.id}
+                              className="p-4 bg-[#f8f9ff]/70 rounded-xl border border-dashed border-[#cbdbf5] opacity-75 select-none"
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                  <span className="text-xs font-bold text-slate-400">
+                                    {sIdx + 1}.{lIdx + 1}
+                                  </span>
+                                  <div>
+                                    <h4 className="font-semibold text-sm text-slate-600 flex items-center gap-1.5">
+                                      <span>🔒</span> {lesson.title}
+                                    </h4>
+                                    {lesson.description && (
+                                      <p className="text-xs text-slate-400 mt-0.5 line-clamp-1">{lesson.description}</p>
+                                    )}
+                                    <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400 mt-1">
+                                      <span>📹 Video bài giảng</span>
+                                      {lesson.assessment && (
+                                        <span className="inline-flex items-center gap-1 font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md text-[11px]">
+                                          📝 Quiz ({lesson.assessment.questionCount || lesson.assessment._count?.questions || 0} câu)
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-medium text-slate-500 bg-slate-100 px-3 py-1 rounded-xl border border-slate-200">
+                                    🔒 Cần hoàn thành bài trước
+                                  </span>
                                 </div>
                               </div>
                             </div>
+                          );
+                        }
 
-                            <div className="flex items-center gap-2">
-                              {isCompleted ? (
-                                <span className="text-xs font-bold text-green-700 bg-green-50 px-2.5 py-1 rounded-full border border-green-200">
-                                  ✓ Đã hoàn thành
+                        return (
+                          <Link
+                            key={lesson.lessonId || lesson.id}
+                            href={`/student/learning/${lesson.lessonId || lesson.id}`}
+                            className="block p-4 bg-[#f8f9ff] hover:bg-[#eef4ff] rounded-xl border border-[#eff4ff] transition group"
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <span className="text-xs font-bold text-[#737686] group-hover:text-[#2563EB]">
+                                  {sIdx + 1}.{lIdx + 1}
                                 </span>
-                              ) : (
-                                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-[#eff4ff] group-hover:bg-[#2563EB] text-[#2563EB] group-hover:text-white text-xs font-bold transition-all shadow-xs">
-                                  Học bài này →
-                                </span>
-                              )}
+                                <div>
+                                  <h4 className="font-semibold text-sm text-[#172554] group-hover:text-[#2563EB] transition">
+                                    {lesson.title}
+                                  </h4>
+                                  {lesson.description && (
+                                    <p className="text-xs text-[#434655] mt-0.5 line-clamp-1">{lesson.description}</p>
+                                  )}
+                                  <div className="flex flex-wrap items-center gap-2 text-xs text-[#737686] mt-1">
+                                    <span>📹 Video bài giảng</span>
+                                    {lesson.assessment && (
+                                      <span className="inline-flex items-center gap-1 font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md text-[11px]">
+                                        📝 Quiz ({lesson.assessment.questionCount || lesson.assessment._count?.questions || 0} câu)
+                                      </span>
+                                    )}
+                                    {lesson.documents?.length > 0 && (
+                                      <span>• 📄 {lesson.documents.length} tài liệu</span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                {isCompleted ? (
+                                  <span className="text-xs font-bold text-green-700 bg-green-50 px-2.5 py-1 rounded-full border border-green-200">
+                                    ✓ Đã hoàn thành
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-[#eff4ff] group-hover:bg-[#2563EB] text-[#2563EB] group-hover:text-white text-xs font-bold transition-all shadow-xs">
+                                    Học bài này →
+                                  </span>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        </Link>
-                      );
-                    })}
+                          </Link>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              });
+            })()}
           </div>
+
+          {/* Final Exam Card (Item 6.2) */}
+          {course.finalAssessment && (
+            <div className={`rounded-3xl p-6 md:p-8 border transition-all ${
+              progressData?.finalAssessmentAttempt?.passed
+                ? 'bg-gradient-to-br from-emerald-50 via-teal-50/60 to-emerald-100/40 border-emerald-300 shadow-sm'
+                : allLessonsDone || isLeaderOrAdmin
+                ? 'bg-gradient-to-br from-amber-50 via-yellow-50 to-amber-100/60 border-amber-300 shadow-md ring-2 ring-amber-400/30'
+                : 'bg-slate-50 border-slate-200 opacity-80'
+            }`}>
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                <div className="space-y-2">
+                  <div className="inline-flex items-center gap-2 px-3 py-1 text-xs font-bold rounded-full bg-white shadow-xs">
+                    {progressData?.finalAssessmentAttempt?.passed ? (
+                      <span className="text-emerald-700 flex items-center gap-1">✓ Đã vượt qua bài thi</span>
+                    ) : allLessonsDone || isLeaderOrAdmin ? (
+                      <span className="text-amber-700 font-extrabold flex items-center gap-1">⭐ Đã đủ điều kiện thi cuối khóa!</span>
+                    ) : (
+                      <span className="text-slate-500 flex items-center gap-1">🔒 Bài thi đang khóa</span>
+                    )}
+                  </div>
+                  <h3 className="text-xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
+                    🎓 {course.finalAssessment.title || 'Bài thi đánh giá cuối khóa'}
+                  </h3>
+                  <p className="text-sm text-[#55586d] max-w-xl">
+                    {progressData?.finalAssessmentAttempt?.passed
+                      ? `Chúc mừng bạn đã hoàn tất xuất sắc bài thi cuối khóa với kết quả đạt chuẩn (${progressData.finalAssessmentAttempt.score !== null ? `${progressData.finalAssessmentAttempt.score}/100 điểm` : 'Đạt'})!`
+                      : allLessonsDone || isLeaderOrAdmin
+                      ? 'Bạn đã hoàn thành 100% video và bài kiểm tra các bài học. Nhấn nút bên dưới để bắt đầu làm bài thi cuối khóa và hoàn tất chương trình đào tạo!'
+                      : 'Cần hoàn thành 100% video và bài kiểm tra của tất cả các bài học trong khóa để mở khóa bài thi cuối khóa.'}
+                  </p>
+                </div>
+
+                <div className="shrink-0">
+                  {progressData?.finalAssessmentAttempt?.passed ? (
+                    <Link href={`/student/courses/${params.courseId}/quiz`}>
+                      <Button variant="secondary" size="md">
+                        Xem lại kết quả thi →
+                      </Button>
+                    </Link>
+                  ) : allLessonsDone || isLeaderOrAdmin ? (
+                    <Link href={`/student/courses/${params.courseId}/quiz`}>
+                      <Button size="lg" className="bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-700 hover:to-yellow-700 text-white font-bold shadow-md hover:shadow-lg transition">
+                        📝 Bắt đầu làm bài thi cuối khóa →
+                      </Button>
+                    </Link>
+                  ) : (
+                    <Button disabled size="md" variant="outline" className="opacity-60 cursor-not-allowed">
+                      🔒 Chưa mở khóa bài thi
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Learning & Assessment Info Section */}
           <div className="bg-gradient-to-r from-blue-50 to-indigo-50/60 rounded-3xl p-6 md:p-8 border border-blue-100 shadow-sm flex flex-col md:flex-row items-center justify-between gap-6">
@@ -262,12 +363,5 @@ export default function CourseDetailPage({ params }: { params: { courseId: strin
     </div>
   );
 
-  return (
-    <div className="min-h-screen bg-[#f8f9ff] flex">
-      {mounted && user && <Sidebar role={user.role} user={{ email: user.email }} />}
-      <main className={`${mounted && user ? 'ml-64' : ''} flex-1 flex flex-col`}>
-        {content}
-      </main>
-    </div>
-  );
+  return content;
 }

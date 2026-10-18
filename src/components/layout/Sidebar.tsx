@@ -23,13 +23,7 @@ function getStudentNav(chapterId?: string | null, isOrganizationManager = false)
       label: 'Khóa học',
       href: '/student/courses',
       icon: '📚',
-      prefetchUrls: ['/api/v1/courses'],
-    },
-    {
-      label: 'Tiến độ',
-      href: '/student/progress',
-      icon: '📈',
-      prefetchUrls: ['/api/v1/members/me/courses'],
+      prefetchUrls: ['/api/v1/courses', '/api/v1/members/me/courses', '/api/v1/members/me/deadlines'],
     },
     {
       label: 'Lịch sử Star',
@@ -39,7 +33,7 @@ function getStudentNav(chapterId?: string | null, isOrganizationManager = false)
     },
     {
       label: 'Bảng xếp hạng',
-      href: '/leaderboard',
+      href: '/student/leaderboard',
       icon: '🏆',
       prefetchUrls: chapterId ? [`/api/v1/leaderboard/chapters/${chapterId}`] : ['/api/v1/leaderboard'],
     },

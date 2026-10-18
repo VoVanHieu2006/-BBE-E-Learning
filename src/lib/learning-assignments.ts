@@ -27,7 +27,7 @@ export async function reconcileLearningAssignmentsForUser(
     db.organizationMembership.findMany({ where: { user_id: userId, status: 'ACTIVE', starts_at: { lte: now }, OR: [{ ends_at: null }, { ends_at: { gt: now } }] }, select: { unit_id: true } }),
     db.positionAssignment.findMany({ where: { user_id: userId, starts_at: { lte: now }, OR: [{ ends_at: null }, { ends_at: { gt: now } }] }, select: { position_id: true, unit_id: true } }),
     db.learningRule.findMany({ where: { effective_from: { lte: now }, OR: [{ effective_until: null }, { effective_until: { gt: now } }] } }),
-    db.userLearningAssignment.findMany({ where: { user_id: userId }, select: { id: true, rule_id: true, course_id: true, status: true, completed_at: true, ended_at: true } }),
+    db.userLearningAssignment.findMany({ where: { user_id: userId }, select: { id: true, rule_id: true, course_id: true, status: true, due_at: true, completed_at: true, ended_at: true } }),
   ])
   const unitIds = new Set<string>()
   let unitFrontier = memberships.map((membership) => membership.unit_id)
@@ -83,18 +83,21 @@ export async function reconcileLearningAssignmentsForUser(
   }
   const activeRuleIds = new Set(activeAssignments.filter((assignment) => !assignment.ended_at).map((assignment) => assignment.rule_id).filter(Boolean))
   for (const rule of applicable) {
-    const existing = activeAssignments.find((assignment) => !assignment.ended_at && assignment.rule_id === rule.id)
+    const existing = activeAssignments.find((assignment) => !assignment.ended_at && (assignment.rule_id === rule.id || assignment.course_id === rule.course_id))
     if (!existing) continue
     const completed = existing.status === 'COMPLETED' || Boolean(existing.completed_at)
+    // Rule: Không cộng thêm thời gian nếu khóa học đã có trong danh sách bắt buộc (dù đang học dở)
+    const preservedDueAt = completed ? null : (existing.due_at || (rule.due_days ? new Date(now.getTime() + rule.due_days * 86400000) : null))
     await db.userLearningAssignment.update({
       where: { id: existing.id },
       data: {
         mandatory: rule.mandatory,
+        rule_id: rule.id,
         can_view: rule.can_view,
         can_assess: rule.can_assess,
         can_earn_stars: rule.can_earn_stars,
-        status: completed ? 'COMPLETED' : 'ASSIGNED',
-        due_at: completed ? null : (rule.due_days ? new Date(now.getTime() + rule.due_days * 86400000) : null),
+        status: completed ? 'COMPLETED' : (existing.status || 'ASSIGNED'),
+        due_at: preservedDueAt,
       },
     })
   }
