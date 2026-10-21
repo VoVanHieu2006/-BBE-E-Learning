@@ -139,7 +139,7 @@ function ChapterManagerLayoutInner({ children }: { children: React.ReactNode }) 
   return (
     <div className="min-h-screen bg-[#f8f9ff] flex">
       <Sidebar role="CHAPTER_LEADER" user={{ email: user?.email, chapterName: user?.chapterName, canManageMembers: user?.canManageMembers }} />
-      <main className="ml-64 flex-1 px-8 py-10 w-full min-w-0">
+      <main className="md:ml-64 flex-1 px-4 pb-8 pt-20 md:px-8 md:py-10 w-full min-w-0">
         {user?.managedChapters?.length > 1 && (
           <div className="mb-5 flex flex-wrap items-center justify-end gap-2">
             <label htmlFor="managed-chapter" className="text-xs font-semibold text-[#596174]">Đang quản lý Chapter</label>

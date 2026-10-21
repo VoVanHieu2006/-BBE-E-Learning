@@ -76,14 +76,19 @@ export default function MandatoryCourseMatrixPage() {
   return <><Toast toast={toast} onClose={() => setToast(null)}/>
     <div className="mb-6 flex flex-wrap items-start justify-between gap-4"><div><h1 className="text-3xl font-bold text-[#172554]">Ma trận khóa học bắt buộc</h1><p className="mt-1 text-sm text-[#737686]">Chỉnh nhiều ô rồi bấm Lưu thay đổi một lần để hệ thống cập nhật nhanh và ổn định.</p></div><div className="flex gap-2"><Link href="/admin/courses"><Button variant="outline">← Khóa học</Button></Link><Button loading={saving} disabled={!changes.length&&!rowDefaults.length} onClick={save}>Lưu thay đổi {(changes.length+rowDefaults.length) ? `(${changes.length+rowDefaults.length})` : ''}</Button></div></div>
     {changes.length > 0 && <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">Có {changes.length} thay đổi chưa lưu.</div>}
-    <Card className="overflow-x-auto p-0">
-      <table className="min-w-[1800px] w-full text-sm">
+    <div className="space-y-3 md:hidden">{data?.courses?.map((course: any) => <details key={course.id} className="rounded-xl border bg-white p-4">
+      <summary className="cursor-pointer font-semibold text-slate-900">{course.title}</summary>
+      <label className="mt-3 flex items-center gap-2 text-sm">Ngân sách chung <input aria-label={`Ngày học ${course.title}`} type="number" min={1} max={3650} value={rowDays[course.id] || 30} onChange={(event) => setRowDays((current) => ({ ...current, [course.id]: Number(event.target.value) }))} className="w-20 rounded-lg border p-2" /> ngày</label>
+      <div className="mt-3 grid gap-2">{data.targets.map((target: any) => <label key={target.key} className="flex items-center gap-3 rounded-lg bg-slate-50 p-3 text-sm"><input type="checkbox" checked={Boolean(draft?.[course.id]?.[target.key]?.enabled)} onChange={(event) => setCell(course.id, target.key, { enabled: event.target.checked, dueDays: rowDays[course.id] || 30 })} />{target.label}</label>)}</div>
+    </details>)}</div>
+    <Card className="hidden overflow-x-auto p-0 md:block">
+      <table className="min-w-[900px] w-full text-sm">
         <thead className="sticky top-0 z-20 bg-[#172554] text-white">
           <tr>
-            <th className="sticky left-0 z-30 min-w-[330px] bg-[#172554] px-4 py-3 text-left">Khóa học / Đồng bộ ngày</th>
+            <th className="sticky left-0 z-30 min-w-[240px] bg-[#172554] px-4 py-3 text-left">Khóa học / Đồng bộ ngày</th>
             {data?.targets?.map((target: any) => {
               const allEnabled = data.courses.length > 0 && data.courses.every((course: any) => draft?.[course.id]?.[target.key]?.enabled)
-              return <th key={target.key} className="min-w-[175px] px-3 py-3 text-center">
+              return <th key={target.key} className="min-w-[130px] px-3 py-3 text-center">
                 <div>{target.label}</div>
                 <button type="button" onClick={() => setColumnEnabled(target.key, !allEnabled)} className="mt-2 whitespace-nowrap rounded-md bg-white/15 px-2 py-1 text-[11px] font-semibold hover:bg-white/25">
                   {allEnabled ? 'Bỏ tick cả cột' : 'Tick cả cột'}
@@ -111,7 +116,6 @@ export default function MandatoryCourseMatrixPage() {
                 const cell = draft?.[course.id]?.[target.key]
                 return <td key={target.key} className="px-3 py-3">
                   <label className="flex items-center justify-center gap-2"><input type="checkbox" checked={Boolean(cell?.enabled)} onChange={(e) => setCell(course.id, target.key, { enabled: e.target.checked, dueDays: cell?.dueDays || rowDays[course.id] || course.defaultDueDays || 30 })}/><span>Bắt buộc</span></label>
-                  <div className="mt-2 flex items-center justify-center gap-1"><input type="number" min={1} max={3650} value={cell?.dueDays ?? course.defaultDueDays ?? 30} onChange={(e) => setCell(course.id, target.key, { dueDays: e.target.value })} className="w-20 rounded-lg border px-2 py-1 text-center"/><span className="text-xs text-slate-500">ngày</span></div>
                 </td>
               })}
             </tr>

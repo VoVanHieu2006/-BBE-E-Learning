@@ -67,6 +67,7 @@ async function getChapterLeaderboard() {
 }
 
 async function cleanupFixtures() {
+  if (userIds.length) await prisma.starLedger.deleteMany({ where: { user_id: { in: userIds } } })
   if (chapterId) await prisma.chapter.deleteMany({ where: { id: chapterId } })
   if (courseId) await prisma.course.deleteMany({ where: { id: courseId } })
   if (departmentUnitId) await prisma.organizationUnit.deleteMany({ where: { id: departmentUnitId } })
@@ -113,6 +114,9 @@ try {
     select: { id: true },
   })
   chapterId = chapter.id
+  const lead = await prisma.user.create({ data: { email: `${emailPrefix}-lead@example.invalid`, password_hash: 'integration-only', role: 'CHAPTER_LEADER' } })
+  userIds.push(lead.id)
+  await prisma.chapterMember.create({ data: { chapter_id: chapter.id, user_id: lead.id } })
 
   // Ten legacy members, ten organization-tree members, and one overlap ensure the union is deduplicated.
   await prisma.chapterMember.createMany({ data: members.slice(0, 10).map(({ id }) => ({ chapter_id: chapter.id, user_id: id })) })
@@ -198,25 +202,24 @@ try {
   assert.equal(yellow.items.length, 1)
   assert.equal(yellow.items[0].memberCount, 20, 'legacy plus organization membership overlap should count only once')
   assert.equal(yellow.items[0].completion.averagePercent, 70)
-  assert.equal(yellow.items[0].completion.medianPercent, 70)
   assert.equal(yellow.items[0].completion.atLeast70Percent, 50)
   assert.equal(yellow.items[0].kpi.status, 'YELLOW')
-  assert.equal(yellow.items[0].score, 60.9)
+  assert.equal(yellow.items[0].score, 29.1)
 
   await putKpi(chapter.id, { month, status: 'GREEN' }, adminToken)
   const green = await getChapterLeaderboard()
   assert.equal(green.items[0].kpi.status, 'GREEN', 'KPI changes should invalidate the leaderboard cache immediately')
-  assert.equal(green.items[0].score, 80.9)
+  assert.equal(green.items[0].score, 49.1)
 
   await putKpi(chapter.id, { month, status: 'RED' }, adminToken)
   const red = await getChapterLeaderboard()
   assert.equal(red.items.length, 0, 'RED KPI Chapters must not enter the ranking')
-  assert.equal(red.excluded.find((item) => item.chapterId === chapter.id)?.reason, 'KPI_RED')
+  assert.ok(red.excluded.find((item) => item.chapterId === chapter.id)?.reasons.includes('KPI_RED'))
 
   console.log('Chapter leaderboard integration passed: local DB isolation, membership union/dedupe, mandatory video+quiz completion, KPI authorization/validation/month, cache invalidation, and RED exclusion.')
 } catch (error) {
   console.error('Chapter leaderboard integration failed. Fixture data is local-only and will be cleaned up.')
-  console.error(error instanceof Error ? error.message : 'Unknown test error')
+  console.error(error instanceof Error ? error.stack : 'Unknown test error')
   process.exitCode = 1
 } finally {
   try {

@@ -1,3 +1,4 @@
+import { prepareOrganizationTransition } from './organization-transition'
 import { prisma } from './prisma'
 import { hashToken, generateToken } from './tokens'
 import { sendInvitationEmail } from './email'
@@ -211,10 +212,11 @@ export async function sendDnaLeaderInvitation(email: string, invitedBy: string) 
   if (existingUser) {
     if (existingUser.status !== 'ACTIVE') return { ok: false as const, code: 'AccountInactive', message: 'Tài khoản hiện có đang bị vô hiệu hóa.' }
     const assignment = await prisma.$transaction(async (tx) => {
+      const effectiveAt = await prepareOrganizationTransition(tx, existingUser.id, dnaUnit.id, invitedBy)
       const membership = await tx.organizationMembership.findFirst({ where: { user_id: existingUser.id, unit_id: dnaUnit.id, status: 'ACTIVE', ends_at: null } })
-      if (!membership) await tx.organizationMembership.create({ data: { user_id: existingUser.id, unit_id: dnaUnit.id } })
+      if (!membership) await tx.organizationMembership.create({ data: { user_id: existingUser.id, unit_id: dnaUnit.id, starts_at: effectiveAt } })
       const position = await tx.position.upsert({ where: { code: 'DNA_LEAD' }, update: { name: 'Lead DNA', scope: 'DNA', is_manager: true }, create: { code: 'DNA_LEAD', name: 'Lead DNA', scope: 'DNA', is_manager: true } })
-      return tx.positionAssignment.create({ data: { user_id: existingUser.id, position_id: position.id, unit_id: dnaUnit.id, is_primary: true, starts_at: new Date(), appointed_by: invitedBy } })
+      return tx.positionAssignment.create({ data: { user_id: existingUser.id, position_id: position.id, unit_id: dnaUnit.id, is_primary: true, starts_at: effectiveAt, appointed_by: invitedBy } })
     })
     await reconcileLearningAssignmentsForUser(existingUser.id)
     return { ok: true as const, invitationId: assignment.id, organizationUnitId: dnaUnit.id, status: 'ACCEPTED' as InvitationStatus, expiresAt: new Date(), token: '', emailSent: true, assignedExisting: true }

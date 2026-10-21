@@ -1,8 +1,10 @@
+import { currentCycleAttemptFilter } from './learning-periods'
 import { prisma } from '@/lib/prisma'
 import { reconcileLearningAssignmentsForUser } from '@/lib/learning-assignments'
 import { hasWatchedFullVideo } from '@/lib/video-progress-rules'
 import { evaluateCourseFinalRequirements } from '@/lib/course-final-assessment-rules'
 import { hasActiveDnaAffiliation } from '@/lib/affiliation-access'
+import { canEarnStarsForCourse } from './stars'
 
 export type ProgressionAction = 'VIEW' | 'WATCH' | 'ASSESS'
 
@@ -24,6 +26,7 @@ export async function checkCourseFinalProgression(
     where: { id: courseId },
     select: {
       id: true,
+      status: true,
       final_assessment: { select: { id: true } },
       sessions: {
         select: {
@@ -45,12 +48,14 @@ export async function checkCourseFinalProgression(
   if (!course) return { ok: false, code: 'CourseNotFound', message: 'Khóa học không tồn tại.' }
   if (!course.final_assessment) return { ok: false, code: 'FinalAssessmentNotFound', message: 'Khóa học chưa có bài thi cuối khóa.' }
   if (isAdmin) return { ok: true, courseId, canEarnStars: false }
+  if (course.status !== 'PUBLISHED') return { ok: false, code: 'NotAssigned', message: 'Khóa học chưa xuất bản.' }
 
-  await reconcileLearningAssignmentsForUser(userId)
-  const [assignments, dnaAccess] = await Promise.all([prisma.userLearningAssignment.findMany({
+  const cycleFilter = await currentCycleAttemptFilter(prisma, userId)
+  const [assignments, dnaAffiliation] = await Promise.all([prisma.userLearningAssignment.findMany({
     where: { user_id: userId, course_id: courseId, ended_at: null },
     select: { can_view: true, can_assess: true, can_earn_stars: true },
   }), hasActiveDnaAffiliation(userId)])
+  const dnaAccess = dnaAffiliation || course.status === 'PUBLISHED'
   if (!dnaAccess && (!assignments.length || !assignments.every((assignment) => assignment.can_view))) {
     return { ok: false, code: 'NotAssigned', message: 'Khóa học chưa được gán vào lộ trình học của bạn.' }
   }
@@ -73,7 +78,8 @@ export async function checkCourseFinalProgression(
         where: {
           user_id: userId,
           assessment_id: { in: passedIds },
-          passed: true,
+          ...cycleFilter,
+        passed: true,
           status: { in: ['SUBMITTED', 'AUTO_SUBMITTED'] },
         },
         select: { assessment_id: true },
@@ -92,7 +98,7 @@ export async function checkCourseFinalProgression(
     passedAssessmentIds,
   )
   if (requirements.ok === false) return requirements
-  return { ok: true, courseId, canEarnStars: dnaAccess || assignments.every((assignment) => assignment.can_earn_stars) }
+  return { ok: true, courseId, canEarnStars: await canEarnStarsForCourse(userId, courseId) }
 }
 
 /**
@@ -109,18 +115,20 @@ export async function checkLessonProgression(
 ): Promise<ProgressionDecision> {
   const lesson = await prisma.lesson.findUnique({
     where: { id: lessonId },
-    select: { id: true, session_id: true, session: { select: { course_id: true } } },
+    select: { id: true, session_id: true, session: { select: { course_id: true, course: { select: { status: true } } } } },
   })
   if (!lesson) return { ok: false, code: 'NotAssigned', message: 'Bài học không tồn tại' }
   const courseId = lesson.session.course_id
 
   if (isAdmin) return { ok: true, courseId, canEarnStars: false }
+  if (lesson.session.course.status !== 'PUBLISHED') return { ok: false, code: 'NotAssigned', message: 'Khóa học chưa xuất bản.' }
 
-  await reconcileLearningAssignmentsForUser(userId)
-  const [assignments, dnaAccess] = await Promise.all([prisma.userLearningAssignment.findMany({
+  const cycleFilter = await currentCycleAttemptFilter(prisma, userId)
+  const [assignments, dnaAffiliation] = await Promise.all([prisma.userLearningAssignment.findMany({
     where: { user_id: userId, course_id: courseId, ended_at: null },
     select: { can_view: true, can_assess: true, can_earn_stars: true },
   }), hasActiveDnaAffiliation(userId)])
+  const dnaAccess = dnaAffiliation || lesson.session.course.status === 'PUBLISHED'
   if (!dnaAccess && (assignments.length === 0 || !assignments.every((assignment) => assignment.can_view))) {
     return { ok: false, code: 'NotAssigned', message: 'Nội dung này chưa được gán vào lộ trình học của bạn' }
   }
@@ -142,6 +150,8 @@ export async function checkLessonProgression(
   const currentIndex = lessons.findIndex((item) => item.id === lessonId)
   if (currentIndex < 0) return { ok: false, code: 'NotAssigned', message: 'Bài học không tồn tại trong khóa học' }
   const current = lessons[currentIndex]
+  const cycle = await prisma.learningCycle.findFirst({ where: { user_id: userId, ends_at: null }, select: { id: true } })
+  const earnedUnlock = cycle ? await prisma.cycleLessonProgress.findUnique({ where: { user_id_lesson_id_learning_cycle_id: { user_id: userId, lesson_id: lessonId, learning_cycle_id: cycle.id } }, select: { unlocked_at: true } }) : null
   const previousLessons = lessons.slice(0, currentIndex)
   const relevantLessons = action === 'ASSESS' ? [...previousLessons, current] : previousLessons
   const relevantLessonIds = relevantLessons.map((item) => item.id)
@@ -160,17 +170,18 @@ export async function checkLessonProgression(
 
   // Every earlier video must be complete; within a module, videos remain
   // sequential, but the module quiz does not interrupt the video sequence.
-  if (previousLessons.some((item) => !videoIsComplete(item))) {
+  if (!earnedUnlock?.unlocked_at && previousLessons.some((item) => !videoIsComplete(item))) {
     return { ok: false, code: 'PreviousLessonIncomplete', message: 'Bạn cần hoàn thành video trước đó trước khi tiếp tục' }
   }
 
   // Assessment(s) in an earlier module are the checkpoint that unlocks this one.
   const requiredAssessmentIds = previousLessons.flatMap((item) => item.assessment ? [item.assessment.id] : [])
-  if (requiredAssessmentIds.length) {
+  if (requiredAssessmentIds.length && !earnedUnlock?.unlocked_at) {
     const passedAttempts = await prisma.attempt.findMany({
       where: {
         user_id: userId,
         assessment_id: { in: requiredAssessmentIds },
+        ...cycleFilter,
         passed: true,
         status: { in: ['SUBMITTED', 'AUTO_SUBMITTED'] },
       },
@@ -188,5 +199,5 @@ export async function checkLessonProgression(
     return { ok: false, code: 'LessonVideoIncomplete', message: 'Hãy hoàn thành toàn bộ video trong module trước khi làm quiz' }
   }
 
-  return { ok: true, courseId, canEarnStars: dnaAccess || assignments.every((assignment) => assignment.can_earn_stars) }
+  return { ok: true, courseId, canEarnStars: await canEarnStarsForCourse(userId, courseId) }
 }

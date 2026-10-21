@@ -96,7 +96,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
       return (
         <div className="min-h-screen bg-[#f8f9ff] flex">
           <Sidebar role={user?.role || 'MEMBER'} user={{ email: user?.email, chapterName: user?.chapterName }} />
-          <main className="ml-64 flex-1 max-w-7xl mx-auto px-8 py-10 w-full min-w-0"><ContentTransition>{children}</ContentTransition></main>
+          <main className="md:ml-64 flex-1 max-w-7xl mx-auto px-4 pb-8 pt-20 md:px-8 md:py-10 w-full min-w-0"><ContentTransition>{children}</ContentTransition></main>
         </div>
       );
     }
@@ -107,7 +107,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
   return (
     <div className="min-h-screen bg-[#f8f9ff] flex">
       <Sidebar role={user?.role || 'MEMBER'} user={{ email: user?.email, chapterName: user?.chapterName }} />
-      <main className="ml-64 flex-1 max-w-7xl mx-auto px-8 py-10 w-full min-w-0"><ContentTransition>{children}</ContentTransition></main>
+      <main className="md:ml-64 flex-1 max-w-7xl mx-auto px-4 pb-8 pt-20 md:px-8 md:py-10 w-full min-w-0"><ContentTransition>{children}</ContentTransition></main>
     </div>
   );
 }

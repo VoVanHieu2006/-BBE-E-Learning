@@ -5,11 +5,11 @@ export const EXACT_7_BANS = [
   'Ban TT&SK',
   'Ban Thành Viên',
   'Ban Thư Ký',
-  'Chủ Tịch',
+  'Ban Định Hướng',
 ] as const
 
 export const ORDERED_7_BANS = [
-  'Chủ Tịch',
+  'Ban Định Hướng',
   'Ban Thành Viên',
   'Ban Thư Ký',
   'Ban Khách Mời',
@@ -19,4 +19,5 @@ export const ORDERED_7_BANS = [
 ] as const
 
 export type StandardDepartmentName = (typeof EXACT_7_BANS)[number]
+export const ORDERED_CHAPTER_ROSTER = ['Chủ Tịch', ...ORDERED_7_BANS] as const
 

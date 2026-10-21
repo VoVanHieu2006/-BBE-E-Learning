@@ -2,10 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { canAccessChapterPermission } from '@/lib/authorization'
 import { prisma } from '@/lib/prisma'
-import { EXACT_7_BANS, ORDERED_7_BANS } from '@/lib/departments'
+import { EXACT_7_BANS, ORDERED_CHAPTER_ROSTER as ORDERED_7_BANS } from '@/lib/departments'
 import { listChapterMembers } from '@/lib/chapter-members'
 import { getActiveMetricChapterIds } from '@/lib/active-chapters'
-import { applyDueChapterReorganizations } from '@/lib/chapter-reorganizations'
 
 export async function GET(
   request: NextRequest,
@@ -24,9 +23,7 @@ export async function GET(
   }
 
   // Tự động kiểm tra và áp dụng chuyển giao nhiệm kỳ nếu đã đến thời gian hiệu lực
-  await applyDueChapterReorganizations(new Date()).catch((err) => {
-    console.error('[current-roster] applyDueChapterReorganizations error:', err)
-  })
+
 
   const chapter = await prisma.chapter.findUnique({
     where: { id: params.chapterId },
@@ -37,7 +34,7 @@ export async function GET(
     return NextResponse.json({ error: { code: 'ChapterNotFound' } }, { status: 404 })
   }
 
-  const [departments, allChapterMembers, scheduledBatchRecord] = await Promise.all([
+  const [departments, allChapterMembers, scheduledBatchRecord, presidentAssignments] = await Promise.all([
     prisma.organizationUnit.findMany({
       where: {
         parent_id: chapter.organization_unit_id,
@@ -77,12 +74,20 @@ export async function GET(
       include: { items: true },
       orderBy: { effective_at: 'asc' },
     }),
+    prisma.positionAssignment.findMany({ where: { unit_id: chapter.organization_unit_id, position: { code: 'CHAPTER_PRESIDENT' }, starts_at: { lte: new Date() }, OR: [{ ends_at: null }, { ends_at: { gt: new Date() } }], user: { role: 'MEMBER', status: 'ACTIVE' } }, include: { user: { select: { id: true, email: true, display_name: true, role: true, status: true } } } }),
   ])
 
   const deptMap = new Map(departments.map((d) => [d.name, d]))
   const assignedUserIds = new Set<string>()
 
   const roster = ORDERED_7_BANS.map((banName) => {
+    if (banName === 'Chủ Tịch' && (presidentAssignments.length || !departments.some((department) => department.name === 'Chủ Tịch' && department.memberships.length))) {
+      const members = presidentAssignments.map((assignment) => {
+        assignedUserIds.add(assignment.user_id)
+        return { userId: assignment.user_id, email: assignment.user.email, displayName: assignment.user.display_name || 'Chủ tịch', role: assignment.user.role, status: assignment.user.status, isLead: true }
+      })
+      return { id: chapter.organization_unit_id, name: 'Chủ Tịch', lead: members[0] || null, members, total: members.length }
+    }
     const dept = deptMap.get(banName) || departments.find(d => d.name.toLowerCase() === banName.toLowerCase())
     if (!dept) {
       return {
@@ -165,7 +170,7 @@ export async function GET(
     const newTerm = ORDERED_7_BANS.map((banName) => {
       const dept = departments.find((d) => d.name.toLowerCase() === banName.toLowerCase())
       const deptItems = scheduledBatchRecord.items
-        .filter((i) => userMap.has(i.user_id) && deptIdToName.get(i.department_unit_id)?.toLowerCase() === banName.toLowerCase())
+        .filter((i) => userMap.has(i.user_id) && (i.department_unit_id ? deptIdToName.get(i.department_unit_id)?.toLowerCase() === banName.toLowerCase() : banName === 'Chủ Tịch'))
         .map((i) => ({
           userId: i.user_id,
           email: userMap.get(i.user_id)?.email || '',
@@ -228,7 +233,7 @@ export async function GET(
     unassignedMembers,
     departments: availableDepartments,
     scheduledBatch,
-    totalMembers: roster.reduce((sum, r) => sum + r.total, 0),
+    totalMembers: allChapterMembers.length,
   })
 }
 

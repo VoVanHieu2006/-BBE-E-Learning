@@ -1,4 +1,6 @@
 'use client';
+import ProgramCourseTree from '@/components/learning/ProgramCourseTree';
+import LearningPeriodSummary from '@/components/learning/LearningPeriodSummary';
 import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import Card from '@/components/ui/Card';
@@ -158,6 +160,8 @@ export default function StudentCoursesPage() {
 
   return (
     <div className="w-full">
+      <LearningPeriodSummary />
+      <ProgramCourseTree />
       {mounted && user ? (
         <div className="w-full space-y-8">
           {/* Welcome & Affiliation Banner */}

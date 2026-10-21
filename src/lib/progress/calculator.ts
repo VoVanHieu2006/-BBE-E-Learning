@@ -1,3 +1,4 @@
+import { currentCycleAttemptFilter } from '@/lib/learning-periods'
 import { prisma } from '@/lib/prisma'
 
 export interface PublishedCourseInfo {
@@ -125,6 +126,7 @@ export async function calculateUserProgress(
   systemData?: PublishedSystemData
 ): Promise<UserProgressSummary> {
   const sys = systemData || (await getPublishedSystemData())
+  const cycleFilter = await currentCycleAttemptFilter(prisma, userId)
 
   const [progressRecords, attempts] = await Promise.all([
     prisma.lessonProgress.findMany({
@@ -138,6 +140,7 @@ export async function calculateUserProgress(
     prisma.attempt.findMany({
       where: {
         user_id: userId,
+        ...cycleFilter,
         status: { in: ['SUBMITTED', 'AUTO_SUBMITTED'] },
       },
       select: {
@@ -190,7 +193,7 @@ export async function calculateUserProgress(
     const allVideosDone = c.totalLessons > 0 && courseDoneCount >= c.totalLessons
     const lessonQuizzesPassed = c.lessonAssessmentIds.every((assessmentId) => passedAssessmentIds.has(assessmentId))
     const finalExamPassed = !c.finalAssessmentId || passedAssessmentIds.has(c.finalAssessmentId)
-    const isCompleted = Boolean(c.finalAssessmentId && passedAssessmentIds.has(c.finalAssessmentId)) || (allVideosDone && lessonQuizzesPassed && finalExamPassed)
+    const isCompleted = (allVideosDone && lessonQuizzesPassed && finalExamPassed)
     if (isCompleted) {
       completedCoursesCount++
     }
@@ -355,7 +358,7 @@ export async function calculateBatchUsersProgress(
       const allVideosDone = c.totalLessons > 0 && courseDoneCount >= c.totalLessons
       const lessonQuizzesPassed = c.lessonAssessmentIds.every((assessmentId) => passedAssessmentIds.has(assessmentId))
       const finalExamPassed = !c.finalAssessmentId || passedAssessmentIds.has(c.finalAssessmentId)
-      if (Boolean(c.finalAssessmentId && passedAssessmentIds.has(c.finalAssessmentId)) || (allVideosDone && lessonQuizzesPassed && finalExamPassed)) {
+      if ((allVideosDone && lessonQuizzesPassed && finalExamPassed)) {
         completedCoursesCount++
       }
     }

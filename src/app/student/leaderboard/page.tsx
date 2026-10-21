@@ -1,4 +1,5 @@
 'use client';
+import PeriodLeaderboard from '@/components/learning/PeriodLeaderboard'
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
@@ -61,6 +62,7 @@ export default function StudentLeaderboardPage() {
 
   return (
     <div className="w-full max-w-6xl mx-auto space-y-8">
+      <PeriodLeaderboard />
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>

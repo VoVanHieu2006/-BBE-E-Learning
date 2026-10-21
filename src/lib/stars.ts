@@ -2,19 +2,11 @@ import { StarReason } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { hasActiveDnaAffiliation } from '@/lib/affiliation-access'
 import { isLearningManager } from '@/lib/manager-learning-access'
+import { rewardEligibility } from './learning-periods'
 export { starsForVideoDuration, starsForQuizScore } from '@/lib/reward-rules'
 
 export async function canEarnStarsForCourse(userId: string, courseId: string): Promise<boolean> {
-  if (await isLearningManager(userId)) return false
-  if (await hasActiveDnaAffiliation(userId)) return true
-  const assignments = await prisma.userLearningAssignment.findMany({
-    where: { user_id: userId, course_id: courseId, ended_at: null },
-    select: { can_earn_stars: true },
-  })
-
-  // Stars require an explicit assignment, and a restrictive matching rule
-  // cannot be overridden by a broad rule granting rewards.
-  return assignments.length > 0 && assignments.every((assignment) => assignment.can_earn_stars)
+  return rewardEligibility(prisma, userId, courseId, new Date())
 }
 
 export async function awardStars(input: {
@@ -27,6 +19,8 @@ export async function awardStars(input: {
   metadata?: Record<string, unknown>
 }) {
   if (input.amount <= 0) return { awarded: false, amount: 0 }
+  const user = await prisma.user.findUnique({ where: { id: input.userId }, select: { role: true, status: true } })
+  if (user?.role !== 'MEMBER' || user.status !== 'ACTIVE') return { awarded: false, amount: 0 }
   if (await isLearningManager(input.userId)) return { awarded: false, amount: 0 }
 
   try {

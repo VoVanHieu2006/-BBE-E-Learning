@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import LearningPeriodSummary from '@/components/learning/LearningPeriodSummary'
 import { apiFetch } from '@/lib/api/client'
 
 type StarEntry = {
@@ -81,6 +82,7 @@ export default function StudentStarsPage() {
     <main className="mx-auto w-full max-w-5xl">
       <header className="mb-7 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
+      <LearningPeriodSummary />
           <p className="mb-2 text-sm font-semibold uppercase tracking-[0.16em] text-blue-600">Thành tích học tập</p>
           <h1 className="text-3xl font-bold tracking-tight text-slate-900" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
             Lịch sử Star

@@ -1,3 +1,4 @@
+import { enqueueAssignmentSync } from '@/lib/learning-periods'
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -55,7 +56,28 @@ function chunks<T>(items: T[], size = 1000) {
   for (let index = 0; index < items.length; index += size) result.push(items.slice(index, index + size))
   return result
 }
+async function targetCatalog() {
+  const configured = await prisma.learningTarget.findMany({ orderBy: { sort_order: 'asc' } })
+  return configured.length ? configured.map((row) => ({ key: row.code, label: row.label })) : [...targets]
+}
 async function resolveScopes() {
+  const configured = await prisma.learningTarget.findMany({ orderBy: { sort_order: 'asc' } })
+  if (configured.length) {
+    const [units, positions] = await Promise.all([
+      prisma.organizationUnit.findMany({ where: { status: 'ACTIVE' } }), prisma.position.findMany(),
+    ])
+    const result = new Map<string, Scope[]>()
+    for (const target of configured) {
+      const position = target.position_code && target.position_code !== 'MEMBER' ? positions.find((row) => row.code === target.position_code) : null
+      if (target.position_code && target.position_code !== 'MEMBER' && !position) { result.set(target.code, []); continue }
+      const scopedUnits = units.filter((row) => target.department_code ? row.type === 'DEPARTMENT' && row.code === target.department_code : target.dna_unit_code ? ['DNA', 'DNA_GROUP'].includes(row.type) && row.code === target.dna_unit_code : false)
+      result.set(target.code, target.department_code || target.dna_unit_code
+        ? scopedUnits.map((row) => ({ organizationUnitId: row.id, positionId: position?.id || null }))
+        : position ? [{ organizationUnitId: null, positionId: position.id }] : [])
+    }
+    return result
+  }
+
   const [positions, departments, dna] = await Promise.all([
     prisma.position.findMany({ where: { code: { in: ['MEMBER', 'DEPARTMENT_LEAD'] } } }),
     prisma.organizationUnit.findMany({ where: { type: 'DEPARTMENT' } }),
@@ -81,6 +103,7 @@ async function requireAdmin(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   const guard = await requireAdmin(request); if ('error' in guard) return guard.error
+  const targets = await targetCatalog()
   const [courses, rules, scopes] = await Promise.all([
     prisma.course.findMany({ orderBy: { title: 'asc' }, select: { id: true, title: true, status: true, mandatory_default_due_days: true } }),
     prisma.learningRule.findMany({ where: { effective_until: null }, select: { course_id: true, organization_unit_id: true, position_id: true, due_days: true } }),
@@ -96,7 +119,7 @@ export async function GET(request: NextRequest) {
     cells[course.id] = {}
     for (const target of targets) {
       const matched = (scopes.get(target.key) || []).flatMap((scope) => rulesByScope.get(scopeKey(course.id, scope.organizationUnitId, scope.positionId)) || [])
-      cells[course.id][target.key] = { enabled: matched.length > 0, dueDays: matched.find((rule) => rule.due_days)?.due_days || null }
+      cells[course.id][target.key] = { enabled: matched.length > 0, dueDays: course.mandatory_default_due_days }
     }
   }
   return NextResponse.json({ courses: courses.map((course) => ({ ...course, defaultDueDays: course.mandatory_default_due_days })), targets, cells })
@@ -104,6 +127,7 @@ export async function GET(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   const guard = await requireAdmin(request); if ('error' in guard) return guard.error
+  const targets = await targetCatalog()
   const body = await request.json().catch(() => null)
   const raw = Array.isArray(body?.changes) ? body.changes : body?.courseId ? [body] : []
   const rowDefaults = Array.isArray(body?.rowDefaults) ? body.rowDefaults.map((item: any) => ({ courseId: String(item?.courseId || ''), dueDays: Number(item?.dueDays) })) : []
@@ -111,123 +135,34 @@ export async function PUT(request: NextRequest) {
   if ((!changes.length && !rowDefaults.length) || changes.some((item: any) => !item.courseId || !targets.some((target) => target.key === item.targetKey) || (item.enabled && (!Number.isInteger(item.dueDays) || item.dueDays < 1 || item.dueDays > 3650))) || rowDefaults.some((item: any) => !item.courseId || !Number.isInteger(item.dueDays) || item.dueDays < 1 || item.dueDays > 3650)) return NextResponse.json({ error: { code: 'ValidationError', message: 'Cấu hình không hợp lệ.' } }, { status: 400 })
   const scopes = await resolveScopes()
   if (changes.some((item: any) => !(scopes.get(item.targetKey) || []).length)) return NextResponse.json({ error: { code: 'ScopeNotConfigured', message: 'Chưa có đơn vị hoặc chức vụ tương ứng.' } }, { status: 409 })
-  const now = new Date()
-  const expandedChanges: ExpandedChange[] = changes.flatMap((change: any) =>
-    (scopes.get(change.targetKey) || []).map((scope) => ({ ...scope, courseId: change.courseId, enabled: change.enabled, dueDays: change.dueDays })),
-  )
-  const courseIds = Array.from(new Set(expandedChanges.map((change) => change.courseId)))
-  const rootUnitIds = Array.from(new Set(expandedChanges.flatMap((change) => change.organizationUnitId ? [change.organizationUnitId] : [])))
-  const [existingRules, organizationUnits] = await Promise.all([
-    courseIds.length ? prisma.learningRule.findMany({ where: { course_id: { in: courseIds }, effective_until: null }, orderBy: { created_at: 'asc' } }) : Promise.resolve([]),
-    rootUnitIds.length ? prisma.organizationUnit.findMany({ select: { id: true, parent_id: true } }) : Promise.resolve([]),
-  ])
-  const descendantsByRoot = descendantIdsByRoot(organizationUnits, rootUnitIds)
-  const rulesByScope = new Map<string, typeof existingRules>()
-  for (const rule of existingRules) {
-    const key = scopeKey(rule.course_id, rule.organization_unit_id, rule.position_id)
-    rulesByScope.set(key, [...(rulesByScope.get(key) || []), rule])
-  }
-
   const result = await prisma.$transaction(async (tx) => {
-    const closeRuleIds = new Set<string>()
-    const dueUpdates: Array<{ id: string; dueDays: number }> = []
-    const rulesToCreate: ExpandedChange[] = []
-
-    for (const change of expandedChanges) {
-      const matched = rulesByScope.get(scopeKey(change.courseId, change.organizationUnitId, change.positionId)) || []
-      if (!change.enabled) {
-        matched.forEach((rule) => closeRuleIds.add(rule.id))
-        continue
-      }
-      const [canonical, ...duplicates] = matched
-      duplicates.forEach((rule) => closeRuleIds.add(rule.id))
-      if (!canonical) rulesToCreate.push(change)
-      else if (canonical.due_days !== change.dueDays && change.dueDays !== null) dueUpdates.push({ id: canonical.id, dueDays: change.dueDays })
+    const [clock] = await tx.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`
+    const now = clock.now
+    for (const row of rowDefaults) {
+      await tx.course.update({ where: { id: row.courseId }, data: { mandatory_default_due_days: row.dueDays } })
+      await tx.learningRule.updateMany({ where: { course_id: row.courseId, effective_until: null }, data: { due_days: row.dueDays } })
     }
-
-    for (const [dueDays, rows] of Array.from(groupsByDueDays<{ courseId: string; dueDays: number }>(rowDefaults).entries())) {
-      await tx.course.updateMany({ where: { id: { in: rows.map((row) => row.courseId) } }, data: { mandatory_default_due_days: dueDays } })
-    }
-    for (const [dueDays, rows] of Array.from(groupsByDueDays(dueUpdates).entries())) {
-      const ruleIds = rows.map((row) => row.id)
-      const dueAt = new Date(now.getTime() + dueDays * 86400000)
-      await tx.learningRule.updateMany({ where: { id: { in: ruleIds } }, data: { due_days: dueDays } })
-      await tx.userLearningAssignment.updateMany({ where: { rule_id: { in: ruleIds }, ended_at: null, status: { in: ['ASSIGNED', 'IN_PROGRESS'] } }, data: { due_at: dueAt } })
-      await tx.userLearningAssignment.updateMany({ where: { rule_id: { in: ruleIds }, ended_at: null, status: 'OVERDUE' }, data: { due_at: dueAt, status: 'ASSIGNED' } })
-    }
-
-    const idsToClose = Array.from(closeRuleIds)
-    if (idsToClose.length) {
-      await tx.userLearningAssignment.updateMany({ where: { rule_id: { in: idsToClose }, ended_at: null, status: { in: ['ASSIGNED', 'IN_PROGRESS', 'OVERDUE'] } }, data: { status: 'ENDED' } })
-      await tx.userLearningAssignment.updateMany({ where: { rule_id: { in: idsToClose }, ended_at: null }, data: { mandatory: false, due_at: null, ended_at: now } })
-      await tx.learningRule.updateMany({ where: { id: { in: idsToClose } }, data: { effective_until: now } })
-    }
-
-    const createdRules = rulesToCreate.length ? await tx.learningRule.createManyAndReturn({
-      data: rulesToCreate.map((change) => ({
-        course_id: change.courseId,
-        organization_unit_id: change.organizationUnitId,
-        position_id: change.positionId,
-        mandatory: true,
-        can_view: true,
-        can_assess: true,
-        can_earn_stars: true,
-        due_days: change.dueDays,
-      })),
-      select: { id: true, course_id: true, organization_unit_id: true, position_id: true, due_days: true },
-    }) : []
-
-    if (createdRules.length) {
-      const relevantUnitIds = Array.from(new Set(createdRules.flatMap((rule) => rule.organization_unit_id ? Array.from(descendantsByRoot.get(rule.organization_unit_id) || [rule.organization_unit_id]) : [])))
-      const relevantPositionIds = Array.from(new Set(createdRules.flatMap((rule) => rule.position_id ? [rule.position_id] : [])))
-      const [memberships, positions] = await Promise.all([
-        relevantUnitIds.length ? tx.organizationMembership.findMany({ where: { unit_id: { in: relevantUnitIds }, status: 'ACTIVE', starts_at: { lte: now }, OR: [{ ends_at: null }, { ends_at: { gt: now } }] }, select: { user_id: true, unit_id: true } }) : Promise.resolve([]),
-        relevantPositionIds.length ? tx.positionAssignment.findMany({ where: { position_id: { in: relevantPositionIds }, starts_at: { lte: now }, OR: [{ ends_at: null }, { ends_at: { gt: now } }] }, select: { user_id: true, unit_id: true, position_id: true } }) : Promise.resolve([]),
-      ])
-      const assignmentCandidates: Array<{ userId: string; courseId: string; ruleId: string; dueDays: number | null }> = []
-      const eligibleUsersByScope = new Map<string, string[]>()
-      for (const rule of createdRules) {
-        const key = scopeKey('', rule.organization_unit_id, rule.position_id)
-        let userIds = eligibleUsersByScope.get(key)
-        if (!userIds) {
-          const unitIds = rule.organization_unit_id ? (descendantsByRoot.get(rule.organization_unit_id) || new Set([rule.organization_unit_id])) : null
-          const memberIds = new Set(unitIds ? memberships.filter((row) => unitIds.has(row.unit_id)).map((row) => row.user_id) : [])
-          const positionUserIds = new Set(rule.position_id ? positions.filter((row) => row.position_id === rule.position_id && (!unitIds || unitIds.has(row.unit_id))).map((row) => row.user_id) : [])
-          userIds = unitIds && rule.position_id
-            ? Array.from(memberIds).filter((userId) => positionUserIds.has(userId))
-            : Array.from(unitIds ? memberIds : positionUserIds)
-          eligibleUsersByScope.set(key, userIds)
+    let created = 0, closed = 0
+    for (const change of changes) {
+      const course = await tx.course.findUniqueOrThrow({ where: { id: change.courseId } })
+      for (const scope of scopes.get(change.targetKey) || []) {
+        const existing = await tx.learningRule.findMany({ where: { course_id: change.courseId, organization_unit_id: scope.organizationUnitId, position_id: scope.positionId, effective_until: null }, orderBy: { created_at: 'asc' } })
+        if (!change.enabled) {
+          const result = await tx.learningRule.updateMany({ where: { id: { in: existing.map((row) => row.id) } }, data: { effective_until: now } })
+          closed += result.count
+        } else if (!existing.length) {
+          await tx.learningRule.create({ data: { course_id: change.courseId, organization_unit_id: scope.organizationUnitId, position_id: scope.positionId, due_days: course.mandatory_default_due_days, target_code: change.targetKey } })
+          created++
+        } else {
+          await tx.learningRule.update({ where: { id: existing[0].id }, data: { due_days: course.mandatory_default_due_days, target_code: change.targetKey } })
+          if (existing.length > 1) await tx.learningRule.updateMany({ where: { id: { in: existing.slice(1).map((row) => row.id) } }, data: { effective_until: now } })
         }
-        for (const userId of userIds) assignmentCandidates.push({ userId, courseId: rule.course_id, ruleId: rule.id, dueDays: rule.due_days })
       }
-      const candidateUserIds = Array.from(new Set(assignmentCandidates.map((item) => item.userId)))
-      const candidateCourseIds = Array.from(new Set(assignmentCandidates.map((item) => item.courseId)))
-      const completedRows = assignmentCandidates.length ? await tx.userLearningAssignment.findMany({
-        where: { user_id: { in: candidateUserIds }, course_id: { in: candidateCourseIds }, OR: [{ status: 'COMPLETED' }, { completed_at: { not: null } }] },
-        select: { user_id: true, course_id: true },
-        distinct: ['user_id', 'course_id'],
-      }) : []
-      const completedKeys = new Set(completedRows.map((row) => `${row.user_id}:${row.course_id}`))
-      const assignmentRows = assignmentCandidates.map((item) => {
-        const completed = completedKeys.has(`${item.userId}:${item.courseId}`)
-        return {
-          user_id: item.userId,
-          course_id: item.courseId,
-          rule_id: item.ruleId,
-          mandatory: true,
-          can_view: true,
-          can_assess: true,
-          can_earn_stars: true,
-          status: completed ? 'COMPLETED' as const : 'ASSIGNED' as const,
-          completed_at: completed ? now : null,
-          due_at: completed || !item.dueDays ? null : new Date(now.getTime() + item.dueDays * 86400000),
-        }
-      })
-      for (const batch of chunks(assignmentRows)) await tx.userLearningAssignment.createMany({ data: batch, skipDuplicates: true })
     }
-
-    return { created: rulesToCreate.length, updated: dueUpdates.length, closed: idsToClose.length }
-  }, { timeout: 30000, maxWait: 10000 })
-
+    const users = await tx.user.findMany({ where: { anonymized_at: null }, select: { id: true } })
+    for (const user of users) await enqueueAssignmentSync(tx, user.id, `matrix:${now.toISOString()}:${user.id}`)
+    await tx.auditLog.create({ data: { actor_user_id: guard.auth!.context!.userId, action: 'UPDATE_MANDATORY_MATRIX', entity_type: 'USER', entity_id: guard.auth!.context!.userId, metadata: { changes, rowDefaults } } })
+    return { created, closed }
+  }, { timeout: 30_000 })
   return NextResponse.json({ updated: changes.length, rules: result })
 }

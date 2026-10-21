@@ -53,6 +53,7 @@ const dnaLeadNav: NavItem[] = [
 ];
 
 const adminNav: NavItem[] = [
+  { label: 'Chương trình & mapping', href: '/admin/learning-policy', icon: '📚' },
   { label: 'Tổng quan', href: '/admin/dashboard', icon: '📊', prefetchUrls: ['/api/v1/admin/overview'] },
   { label: 'Khóa học & lộ trình', href: '/admin/courses', icon: '📚', prefetchUrls: ['/api/v1/courses', '/api/v1/admin/learning-rules'] },
   { label: 'Mời & quản lý Lead', href: '/admin/invitations', icon: '✉️', prefetchUrls: ['/api/v1/invitations'] },
@@ -133,6 +134,8 @@ export default function Sidebar({
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  useEffect(() => { setMobileOpen(false); }, [pathname]);
   const [chapterId, setChapterId] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null;
     try {
@@ -205,7 +208,10 @@ export default function Sidebar({
       : 'Học viên';
 
   return (
-    <aside className="fixed left-0 top-0 h-screen max-h-screen w-64 bg-white border-r border-[#e5eeff] flex flex-col z-50 shadow-sm select-none">
+    <>
+    <div className="fixed inset-x-0 top-0 z-40 flex h-14 items-center justify-between border-b bg-white px-4 md:hidden"><span className="font-bold text-[#172554]">BBE E-Learning</span><button type="button" aria-expanded={mobileOpen} aria-controls="bbe-navigation" onClick={() => setMobileOpen((open) => !open)} className="rounded-lg border px-3 py-2 text-sm font-semibold">☰ Menu</button></div>
+    {mobileOpen && <button type="button" aria-label="Đóng menu điều hướng" onClick={() => setMobileOpen(false)} className="fixed inset-0 z-40 bg-slate-950/30 md:hidden" />}
+    <aside id="bbe-navigation" onKeyDown={(event) => { if (event.key === 'Escape') setMobileOpen(false); }} className={`${mobileOpen ? 'flex' : 'hidden'} md:flex fixed left-0 top-0 h-screen max-h-screen w-64 bg-white border-r border-[#e5eeff] flex-col z-50 shadow-sm select-none`}>
       {/* Official BBE Logo */}
       <div className="p-5 border-b border-[#eff4ff]">
         <Link href="/" className="flex items-center gap-3 group">
@@ -285,5 +291,6 @@ export default function Sidebar({
         </button>
       </div>
     </aside>
+    </>
   );
 }

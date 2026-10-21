@@ -43,7 +43,7 @@ export default function OrganizationManagerLayout({ children }: { children: Reac
           canManageMembers: user?.canManageMembers,
         }}
       />
-      <main className="ml-64 w-full min-w-0 px-5 py-8 md:px-8">
+      <main className="md:ml-64 w-full min-w-0 px-4 pb-8 pt-20 md:px-8 md:py-8">
         {checking ? (
           <div className="p-8 text-sm text-[#737686] flex items-center gap-2">
             <div className="animate-spin text-lg">⏳</div>

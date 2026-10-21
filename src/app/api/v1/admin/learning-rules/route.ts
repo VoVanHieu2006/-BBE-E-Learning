@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
   }
   const input = parsed.value
   const [course, organizationUnit, position] = await Promise.all([
-    prisma.course.findUnique({ where: { id: input.courseId }, select: { id: true } }),
+    prisma.course.findUnique({ where: { id: input.courseId }, select: { id: true, mandatory_default_due_days: true } }),
     input.organizationUnitId
       ? prisma.organizationUnit.findUnique({ where: { id: input.organizationUnitId }, select: { id: true } })
       : Promise.resolve(null),
@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
       can_view: input.canView,
       can_assess: input.canAssess,
       can_earn_stars: input.canEarnStars,
-      due_days: input.dueDays,
+      due_days: course.mandatory_default_due_days,
       effective_from: input.effectiveFrom,
       effective_until: input.effectiveUntil,
     },

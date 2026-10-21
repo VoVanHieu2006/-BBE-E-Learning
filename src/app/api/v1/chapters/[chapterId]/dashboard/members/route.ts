@@ -4,7 +4,6 @@ import { prisma } from '@/lib/prisma'
 import { getPublishedSystemData, calculateBatchUsersProgress } from '@/lib/progress/calculator'
 import { canAccessChapterPermission, resolveSingleManagedChapter } from '@/lib/authorization'
 import { listChapterMembers } from '@/lib/chapter-members'
-import { applyDueChapterReorganizations } from '@/lib/chapter-reorganizations'
 import { canViewInactiveChapterMember } from '@/lib/inactive-member-access'
 import { getActiveMetricChapterIds } from '@/lib/active-chapters'
 
@@ -34,7 +33,7 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
   }
 
   // Tự động kiểm tra và áp dụng chuyển giao nhiệm kỳ nếu đã đến hạn
-  await applyDueChapterReorganizations(new Date()).catch(() => {})
+
 
   const url = new URL(request.url)
   const search = url.searchParams.get('search') || ''

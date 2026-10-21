@@ -24,11 +24,11 @@ export async function GET(request: NextRequest) {
     },
     select: { user: { select: { id: true, email: true, display_name: true } }, unit: { select: { name: true, type: true } } },
   })
-  const users = new Map<string, { userId: string; email: string; displayName: string | null; groupName: string | null }>()
+  const users = new Map<string, { userId: string; displayName: string | null; groupName: string | null }>()
   for (const row of memberships) {
     const current = users.get(row.user.id)
     users.set(row.user.id, {
-      userId: row.user.id, email: row.user.email, displayName: row.user.display_name,
+      userId: row.user.id, displayName: row.user.display_name,
       groupName: row.unit.type === 'DNA_GROUP' ? row.unit.name : current?.groupName || null,
     })
   }
@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
     if (row.amount > 0 && (!achievedAt.has(row.user_id) || row.awarded_at > achievedAt.get(row.user_id)!)) achievedAt.set(row.user_id, row.awarded_at)
   }
   const items = Array.from(users.values()).map((user) => ({ ...user, stars: totals.get(user.userId) || 0, starsAchievedAt: achievedAt.get(user.userId)?.toISOString() || null }))
-    .sort((a, b) => b.stars - a.stars || new Date(a.starsAchievedAt || 8640000000000000).getTime() - new Date(b.starsAchievedAt || 8640000000000000).getTime() || a.email.localeCompare(b.email))
+    .sort((a, b) => b.stars - a.stars || new Date(a.starsAchievedAt || 8640000000000000).getTime() - new Date(b.starsAchievedAt || 8640000000000000).getTime() || a.userId.localeCompare(b.userId))
     .map((item, index) => ({ ...item, rank: index + 1 }))
   return NextResponse.json({ items, totalCount: items.length })
 }

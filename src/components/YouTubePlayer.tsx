@@ -33,7 +33,7 @@ interface Props {
   initialPosition?: number;
   initialFurthest?: number;
   durationSeconds?: number;
-  onProgress?: (p: { currentTime: number; duration: number; furthest: number }) => void | Promise<void>;
+  onProgress?: (p: { currentTime: number; duration: number; furthest: number; viewSessionId: string }) => void | Promise<void>;
   onComplete?: () => void;
 }
 
@@ -107,6 +107,7 @@ export default function YouTubePlayer({
   };
 
   const isGuest = !accessToken;
+  const viewSessionRef = useRef('');
 
   // Send heartbeat progress update to server (only for logged-in members)
   // Dùng apiFetch để tự refresh token khi 401 — tránh mất tiến trình khi access token hết hạn (15 phút)
@@ -117,7 +118,8 @@ export default function YouTubePlayer({
         const d = durationRef.current || duration || 1;
         const isDone = forceCompleted || (d > 0 && ft >= d);
 
-        const event = { currentTime: Math.round(ct), duration: Math.round(d), furthest: Math.round(ft) };
+        if (!viewSessionRef.current) viewSessionRef.current = crypto.randomUUID();
+        const event = { currentTime: Math.round(ct), duration: Math.round(d), furthest: Math.round(ft), viewSessionId: viewSessionRef.current };
         // The learning page owns the API request so it can consume server-authoritative
         // completion/reward data. Preview/debug consumers retain this safe fallback.
         if (onProgress) {
@@ -129,6 +131,7 @@ export default function YouTubePlayer({
               positionSeconds: event.currentTime,
               furthestWatchedPositionSeconds: event.furthest,
               completed: isDone,
+              viewSessionId: event.viewSessionId,
             }),
           });
         }

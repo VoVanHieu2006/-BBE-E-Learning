@@ -7,7 +7,7 @@ import Button from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
 import Toast, { ToastMessage } from '@/components/ui/Toast';
 import { apiFetch, clearApiCache } from '@/lib/api/client';
-import { ORDERED_7_BANS } from '@/lib/departments';
+import { ORDERED_CHAPTER_ROSTER as ORDERED_7_BANS } from '@/lib/departments';
 
 const SAMPLE_SHEET_URL =
   'https://docs.google.com/spreadsheets/d/1MA9pJ1E8oHEZe8d1g6j0Ns6JqLoOCdhSVSgOflO0JBI/edit?gid=0#gid=0';
@@ -1672,6 +1672,7 @@ export default function ChapterManagerTermTransitionPage() {
                           {term.status === 'APPLIED' ? 'Đã áp dụng' : 'Đã lên lịch'}
                         </span>
                       </div>
+                      {term.last_error && <p role="alert" className="mt-2 text-xs text-red-700">Chưa áp dụng được (lần {term.apply_attempts}): {term.last_error}. Hệ thống sẽ retry; có thể bấm áp dụng lại.</p>}
                       <div className="text-xs text-[#737686] mt-1 space-y-0.5">
                         <p>
                           <span className="font-medium text-slate-700">Đã áp dụng lúc:</span> {dateStr}

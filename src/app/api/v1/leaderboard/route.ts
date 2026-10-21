@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { getPublishedSystemData, calculateBatchUsersProgress } from '@/lib/progress/calculator'
 import { getActiveMetricChapterIds } from '@/lib/active-chapters'
 import { getCachedMemberLeaderboard, setCachedMemberLeaderboard } from '@/lib/member-leaderboard-cache'
+import { periodLeaderboard } from '@/lib/period-leaderboard'
 
 /**
  * GET /api/v1/leaderboard
@@ -14,6 +15,7 @@ import { getCachedMemberLeaderboard, setCachedMemberLeaderboard } from '@/lib/me
  * (<1ms, 0 DB queries) while correctly handling pagination (page/limit).
  */
 export async function GET(request: NextRequest) {
+  if (request.nextUrl.searchParams.has('group')) return periodLeaderboard(request)
   await authenticate(request).catch(() => null)
 
   const url = new URL(request.url)
@@ -76,7 +78,6 @@ export async function GET(request: NextRequest) {
 
       return {
         userId: m.id,
-        email: m.email,
         displayName: m.display_name,
         chapterName,
         courseCompletionPercent: courseProgress,
@@ -93,7 +94,7 @@ export async function GET(request: NextRequest) {
     })
 
     // Equal Star balances are won by the member who reached that balance first.
-    allResults.sort((a, b) => b.stars - a.stars || new Date(a.starsAchievedAt || 8640000000000000).getTime() - new Date(b.starsAchievedAt || 8640000000000000).getTime() || a.email.localeCompare(b.email))
+    allResults.sort((a, b) => b.stars - a.stars || new Date(a.starsAchievedAt || 8640000000000000).getTime() - new Date(b.starsAchievedAt || 8640000000000000).getTime() || a.userId.localeCompare(b.userId))
     setCachedMemberLeaderboard(allResults, now)
   }
 

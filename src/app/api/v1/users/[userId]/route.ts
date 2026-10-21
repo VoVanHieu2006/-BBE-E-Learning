@@ -33,6 +33,8 @@ export async function PATCH(request: NextRequest, { params }: { params: { userId
   })
   if (!target) return NextResponse.json({ error: { code: 'UserNotFound', message: 'Người dùng không tồn tại' } }, { status: 404 })
 
+  if (target.anonymized_at) return NextResponse.json({ error: { code: 'AccountRetired' } }, { status: 409 })
+
   const actor = auth.context!
   const isAdmin = actor.role === 'ADMIN'
 
@@ -79,6 +81,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { userId
 
     // If attempting to ACTIVATE (status: ACTIVE)
     if (status === 'ACTIVE') {
+      if (target.restrictions.length) return NextResponse.json({ error: { code: 'AdminUnlockRequired', message: 'Tài khoản còn hạn chế hiệu lực; Admin cần xử lý trước khi kích hoạt.' } }, { status: 403 })
       // If user is LOCKED (overdue or password), only Admin can unlock
       if (target.status === 'LOCKED') {
         return NextResponse.json({ error: { code: 'AdminUnlockRequired', message: 'Tài khoản đang bị khóa bởi hệ thống; chỉ Quản trị viên (Admin) mới có quyền mở khóa.' } }, { status: 403 })
@@ -144,7 +147,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { userId
           status: 'INACTIVE',
           deactivated_by_user_id: actor.userId,
           deactivated_by_role: isAdmin ? 'ADMIN' : 'LEAD',
-          deactivated_at: new Date(),
+          deactivated_at: target.status === 'INACTIVE' ? target.deactivated_at : new Date(),
           cascade_lead_id: null,
           auth_version: { increment: 1 },
         },
@@ -152,7 +155,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { userId
 
       // Lift any active restrictions if turning into INACTIVE
       await tx.accessRestriction.updateMany({
-        where: { user_id: userId, lifted_at: null },
+        where: { user_id: userId, lifted_at: null, type: { not: 'DEADLINE' } },
         data: { lifted_at: new Date(), lifted_by_user_id: actor.userId },
       })
     } else {
@@ -160,7 +163,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { userId
       // If activating a Chapter Leader by Admin -> Auto-reactivate members that were cascade-deactivated by this Lead
       if (isAdmin && (target.role === 'CHAPTER_LEADER' || target.cascade_lead_id)) {
         const cascadedMembers = await tx.user.findMany({
-          where: { cascade_lead_id: userId, status: 'INACTIVE' },
+          where: { cascade_lead_id: userId, status: 'INACTIVE', anonymized_at: null },
           select: { id: true },
         })
         const cascadedMemberIds = cascadedMembers.map((m) => m.id)

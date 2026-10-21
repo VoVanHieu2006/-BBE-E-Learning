@@ -5,6 +5,8 @@ import { canAccessChapterPermission } from '@/lib/authorization'
 import { normalizeChapterKpiInput } from '@/lib/chapter-leaderboard-rules'
 import { invalidateChapterLeaderboardCache } from '@/lib/chapter-leaderboard-cache'
 import { getActiveMetricChapterIds } from '@/lib/active-chapters'
+import { lockLearningUser } from '@/lib/learning-periods'
+import { randomUUID } from 'node:crypto'
 
 export async function GET(request: NextRequest, { params }: { params: { chapterId: string } }) {
   const auth = await authenticate(request)
@@ -28,10 +30,19 @@ export async function PUT(request: NextRequest, { params }: { params: { chapterI
   if (!input) return NextResponse.json({ error: { code: 'ValidationError' } }, { status: 400 })
   const chapter = await prisma.chapter.findUnique({ where: { id: params.chapterId }, select: { id: true } })
   if (!chapter) return NextResponse.json({ error: { code: 'NotFound' } }, { status: 404 })
-  const item = await prisma.chapterMonthlyKpi.upsert({
+  const item = await prisma.$transaction(async (tx) => {
+  await lockLearningUser(tx, auth.context!.userId)
+  const monthKey = input.monthStart.toISOString().slice(0, 7)
+  const month = await tx.competitionMonth.findUnique({ where: { key: monthKey } })
+  if (month) await tx.$queryRaw`SELECT id FROM competition_months WHERE id=${month.id}::uuid FOR SHARE`
+  const [clock] = await tx.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`
+  const saved = await tx.chapterMonthlyKpi.upsert({
     where: { chapter_id_month_start: { chapter_id: params.chapterId, month_start: input.monthStart } },
     create: { chapter_id: params.chapterId, month_start: input.monthStart, status: input.status, note: input.note, configured_by_user_id: auth.context.userId },
     update: { status: input.status, note: input.note, configured_by_user_id: auth.context.userId },
+  })
+  await tx.learningSnapshot.create({ data: { key: `kpi:${randomUUID()}`, kind: 'CHAPTER_KPI_HISTORY', captured_at: clock.now, payload: { chapterId: params.chapterId, month: monthKey, status: input.status, provenance: 'NATIVE' } } })
+  return saved
   })
   invalidateChapterLeaderboardCache()
   return NextResponse.json({ month: item.month_start, status: item.status, note: item.note })

@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { checkCourseFinalProgression } from '@/lib/progression'
 import { QUIZ_COOLDOWN_MINUTES, QUIZ_COOLDOWN_MS } from '@/lib/config/quiz'
 import { randomUUID } from 'crypto'
+import { activeLearningPolicy, currentCycleAttemptFilter } from '@/lib/learning-periods'
 import { availableFinalQuestions, finalExamBankError, lessonQuestionWhere, lockCourseExamBank, FinalExamBankTooSmall } from '@/lib/final-exam-bank'
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -72,15 +73,17 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
   })
   const bankReady = Boolean(activeVersion && activeVersion._count.questions >= activeVersion.question_count)
   const gate = await checkCourseFinalProgression(userId, course.id)
+  const cycleFilter = await currentCycleAttemptFilter(prisma, userId)
+  const currentPolicy = await activeLearningPolicy(prisma, new Date())
   const [attempts, passingAttempt] = await Promise.all([
     prisma.attempt.findMany({
-      where: { user_id: userId, assessment_id: course.final_assessment.id },
+      where: { user_id: userId, assessment_id: course.final_assessment.id, ...cycleFilter },
       select: { id: true, attempt_number: true, status: true, score: true, passed: true, submitted_at: true, created_at: true, expires_at: true, final_exam_version: { select: { version_number: true, question_count: true } } },
       orderBy: { created_at: 'desc' },
       take: 20,
     }),
     prisma.attempt.findFirst({
-      where: { user_id: userId, assessment_id: course.final_assessment.id, passed: true, status: { in: ['SUBMITTED', 'AUTO_SUBMITTED'] } },
+      where: { user_id: userId, assessment_id: course.final_assessment.id, ...cycleFilter, passed: true, status: { in: ['SUBMITTED', 'AUTO_SUBMITTED'] } },
       select: { id: true },
     }),
   ])
@@ -104,9 +107,10 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
       questionCount: resumableAttempt?.final_exam_version?.question_count || course.final_assessment.question_count,
       versionNumber: resumableAttempt?.final_exam_version?.version_number || activeVersion?.version_number || null,
     },
-    canStart: (resumableAttempt || (gateReady && bankReady && cooldownRemainingMs === 0)) && !passingAttempt,
+    canStart: Boolean((resumableAttempt || (gateReady && bankReady && cooldownRemainingMs === 0)) && (currentPolicy || !passingAttempt)),
     gateReady,
-    alreadyPassed: Boolean(passingAttempt),
+    alreadyPassed: !currentPolicy && Boolean(passingAttempt),
+    completionPassed: Boolean(passingAttempt),
     cooldownMinutes: QUIZ_COOLDOWN_MINUTES,
     cooldownUntil: cooldownUntil?.toISOString() || null,
     cooldownRemainingMs,

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { invalidateSystemDataCache } from '@/lib/progress/calculator'
+import { publishCourseRequirements } from '@/lib/course-requirements'
 
 export async function POST(request: NextRequest, { params }: { params: { courseId: string } }) {
   const auth = await authenticate(request)
@@ -23,7 +24,12 @@ export async function POST(request: NextRequest, { params }: { params: { courseI
     }
   }
 
-  const updated = await prisma.course.update({ where: { id: courseId }, data: { status: 'PUBLISHED', published_at: new Date() } })
+  let updated
+  try { updated = await publishCourseRequirements(courseId) }
+  catch (error) {
+    if (error instanceof Error && error.message === 'PublishedCourseProgramRequired') return NextResponse.json({ error: { code: error.message, message: 'Hãy phân loại chương trình trước khi publish.' } }, { status: 409 })
+    throw error
+  }
   invalidateSystemDataCache()
 
   return NextResponse.json({ courseId: updated.id, status: updated.status, publishedAt: updated.published_at }, { status: 200 })

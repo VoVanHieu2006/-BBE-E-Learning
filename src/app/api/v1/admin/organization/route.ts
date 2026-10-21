@@ -1,3 +1,4 @@
+import { prepareOrganizationTransition } from '@/lib/organization-transition'
 import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { authenticate, invalidateUserAuthCache } from '@/lib/auth'
@@ -328,7 +329,8 @@ export async function POST(request: NextRequest) {
       if (otherChapter) return NextResponse.json({ error: { code: 'ChapterMembershipConflict', message: `Email này đã thuộc ${otherChapter.chapter.name}; mỗi tài khoản chỉ được thuộc một Chapter.` } }, { status: 409 })
     }
     const membership = await prisma.$transaction(async (tx) => {
-      const created = await tx.organizationMembership.create({ data: { user_id: user.id, unit_id: unit.id, starts_at: startsAt } })
+      const effectiveAt = await prepareOrganizationTransition(tx, user.id, unit.id, auth.context!.userId)
+      const created = await tx.organizationMembership.create({ data: { user_id: user.id, unit_id: unit.id, starts_at: effectiveAt } })
       if (chapterId) {
         await tx.chapterMember.upsert({
           where: { chapter_id_user_id: { chapter_id: chapterId, user_id: user.id } },
@@ -393,8 +395,22 @@ export async function POST(request: NextRequest) {
     if (!positionScopeMatchesUnitType(position.scope, unit.type)) {
       return NextResponse.json({ error: { code: 'PositionScopeMismatch', message: 'Phạm vi chức vụ không khớp loại đơn vị được bổ nhiệm.' } }, { status: 400 })
     }
+    if (unit.type === 'CHAPTER' || unit.type === 'DEPARTMENT') {
+      const targetChapterId = await getChapterIdForUnit(unit.id)
+      const currentChapter = await prisma.chapterMember.findUnique({ where: { user_id: user.id } })
+      if (!targetChapterId || currentChapter?.chapter_id !== targetChapterId) return NextResponse.json({ error: { code: 'OrganizationMembershipRequired', message: 'Hãy chuyển tư cách tổ chức trước khi bổ nhiệm chức vụ Chapter/Ban.' } }, { status: 409 })
+    }
+    if (['DNA', 'DNA_GROUP'].includes(unit.type) && startsAt > new Date()) {
+      const dnaMembership = await prisma.organizationMembership.count({ where: { user_id: user.id, status: 'ACTIVE', starts_at: { lte: new Date() }, ends_at: null, unit: { type: { in: ['DNA', 'DNA_GROUP'] } } } })
+      if (!dnaMembership) return NextResponse.json({ error: { code: 'ImmediateOrganizationTransferRequired', message: 'Hãy chuyển tư cách sang DNA tại thời điểm bổ nhiệm có hiệu lực.' } }, { status: 409 })
+    }
     const isPrimary = Boolean(body.isPrimary)
     const assignment = await prisma.$transaction(async (tx) => {
+      let effectiveAt = startsAt
+      if (['DNA', 'DNA_GROUP'].includes(unit.type) && startsAt <= new Date()) {
+        effectiveAt = await prepareOrganizationTransition(tx, user.id, unit.id, auth.context!.userId)
+        if (!await tx.organizationMembership.count({ where: { user_id: user.id, unit_id: unit.id, status: 'ACTIVE', ends_at: null } })) await tx.organizationMembership.create({ data: { user_id: user.id, unit_id: unit.id, starts_at: effectiveAt } })
+      }
       if (isPrimary) {
         await tx.positionAssignment.updateMany({
           where: { unit_id: unit.id, is_primary: true, starts_at: { lt: startsAt }, OR: [{ ends_at: null }, { ends_at: { gt: startsAt } }] },
@@ -406,7 +422,7 @@ export async function POST(request: NextRequest) {
         position_id: position.id,
         unit_id: unit.id,
         is_primary: isPrimary,
-        starts_at: startsAt,
+        starts_at: effectiveAt,
         ends_at: endsAt,
         appointed_by: auth.context!.userId,
       } })
@@ -419,6 +435,7 @@ export async function POST(request: NextRequest) {
           metadata: { userId: user.id, positionId: position.id, unitId: unit.id, startsAt: startsAt.toISOString(), endsAt: endsAt?.toISOString() || null, isPrimary },
         },
       })
+      await reconcileLearningAssignmentsForUser(user.id, tx)
       return created
     })
     await reconcileLearningAssignmentsForUser(body.userId)

@@ -104,7 +104,6 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
     const progress = progressMap.get(member.id)
     return {
       userId: member.id,
-      email: member.email,
       displayName: member.display_name,
       department: deptByUser.get(member.id) || null,
       stars: starsByUser.get(member.id) || 0,
@@ -117,7 +116,7 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
       avgScore: progress?.avgQuizScore || 0,
       avgQuizScore: progress?.avgQuizScore || 0,
     }
-  }).sort((a, b) => b.stars - a.stars || new Date(a.starsAchievedAt || 8640000000000000).getTime() - new Date(b.starsAchievedAt || 8640000000000000).getTime() || a.email.localeCompare(b.email))
+  }).sort((a, b) => b.stars - a.stars || new Date(a.starsAchievedAt || 8640000000000000).getTime() - new Date(b.starsAchievedAt || 8640000000000000).getTime() || a.userId.localeCompare(b.userId))
 
   return NextResponse.json({ chapterId: chapter.id, items })
 }

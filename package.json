@@ -22,7 +22,14 @@
     "db:reset": "prisma migrate reset --force",
     "db:generate": "prisma generate",
     "db:audit-strict-video": "ts-node -P scripts/tsconfig.json scripts/audit-strict-video-migration.ts",
-    "db:audit-final-exam-versions": "node scripts/audit-final-exam-versions.mjs"
+    "db:audit-final-exam-versions": "node scripts/audit-final-exam-versions.mjs",
+    "test:learning-cycles": "ts-node -P tsconfig.test.json src/test/learning-cycles.test.ts",
+    "test:learning-cycles-integration": "node scripts/test-learning-cycles-integration.cjs",
+    "learning:scheduler": "node scripts/learning-scheduler.mjs",
+    "test:learning-security": "node scripts/test-learning-security.mjs",
+    "test:reward-pause-integration": "node scripts/test-reward-pause-integration.cjs",
+    "db:audit-learning-mapping": "node scripts/audit-learning-mapping.mjs",
+    "test:migration-rehearsal": "node scripts/rehearse-learning-migration.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1121.0",

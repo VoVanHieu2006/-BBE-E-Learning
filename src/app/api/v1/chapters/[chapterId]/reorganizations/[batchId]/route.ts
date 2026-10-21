@@ -15,9 +15,8 @@ export async function POST(
   const auth = await authenticate(request)
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: 401 })
 
-  const isLeader = auth.context!.role === 'CHAPTER_LEADER' || auth.context!.role === 'ADMIN'
   const hasPerm = await canAccessChapterPermission(auth.context!, params.chapterId, 'MANAGE_CHAPTER_MEMBERS')
-  if (!isLeader && !hasPerm) {
+  if (!hasPerm) {
     return NextResponse.json({ error: { code: 'AccessDenied', message: 'Không có quyền quản lý thành viên chapter' } }, { status: 403 })
   }
 
@@ -30,12 +29,11 @@ export async function POST(
   }
 
   // Cập nhật effective_at về thời điểm hiện tại và áp dụng ngay
-  await prisma.chapterReorganization.update({
-    where: { id: batch.id },
-    data: { effective_at: new Date() },
-  })
-
-  await applyDueChapterReorganizations(new Date())
+  const applied = await applyDueChapterReorganizations(new Date(), batch.id, true)
+  if (!applied) {
+    const failed = await prisma.chapterReorganization.findUnique({ where: { id: batch.id } })
+    return NextResponse.json({ error: { code: 'TransferApplyFailed', message: failed?.last_error || 'Đợt chuyển giao đã thay đổi trạng thái. Hãy tải lại.' } }, { status: 409 })
+  }
 
   return NextResponse.json({ success: true, message: 'Đã áp dụng chuyển giao nhiệm kỳ thành công!' })
 }
@@ -51,9 +49,8 @@ export async function DELETE(
   const auth = await authenticate(request)
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: 401 })
 
-  const isLeader = auth.context!.role === 'CHAPTER_LEADER' || auth.context!.role === 'ADMIN'
   const hasPerm = await canAccessChapterPermission(auth.context!, params.chapterId, 'MANAGE_CHAPTER_MEMBERS')
-  if (!isLeader && !hasPerm) {
+  if (!hasPerm) {
     return NextResponse.json({ error: { code: 'AccessDenied', message: 'Không có quyền quản lý thành viên chapter' } }, { status: 403 })
   }
 
@@ -66,13 +63,9 @@ export async function DELETE(
   }
 
   // Xóa batch và các item liên quan
-  await prisma.$transaction(async (tx) => {
-    await tx.chapterReorganizationItem.deleteMany({
-      where: { reorganization_id: batch.id },
-    })
-    await tx.chapterReorganization.delete({
-      where: { id: batch.id },
-    })
+  await prisma.chapterReorganization.updateMany({
+    where: { id: batch.id, chapter_id: params.chapterId, status: 'SCHEDULED' },
+    data: { status: 'CANCELLED', cancelled_at: new Date() },
   })
 
   return NextResponse.json({ success: true, message: 'Đã hủy đợt chuyển giao nhiệm kỳ đã lên lịch!' })

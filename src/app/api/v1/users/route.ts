@@ -91,6 +91,7 @@ export async function GET(request: NextRequest) {
 
   // Exclude ADMIN users from the management table (only manage BĐHU & Members)
   const where: any = {
+    anonymized_at: null,
     role: { not: 'ADMIN' },
   }
 

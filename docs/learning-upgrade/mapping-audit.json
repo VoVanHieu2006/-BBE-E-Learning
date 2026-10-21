@@ -1,0 +1,475 @@
+{
+  "database_timezone": "UTC",
+  "audited_at": "2026-10-21T17:46:29.719Z",
+  "proposals": [
+    {
+      "courseId": "7a65e384-2be8-40e3-956f-1458ef71c532",
+      "title": "An toàn thông tin cơ bản",
+      "status": "PUBLISHED",
+      "proposedProgram": "EXTENDED",
+      "reason": "Tên khóa mô tả kỹ năng bổ sung; cần Admin xác nhận không thuộc khóa cốt lõi.",
+      "confidence": "REVIEW_REQUIRED"
+    },
+    {
+      "courseId": "160beed8-a949-4f65-b375-be95f51fcff7",
+      "title": "Giới thiệu tổng quan về BBE",
+      "status": "PUBLISHED",
+      "proposedProgram": "CORE_MEMBER",
+      "reason": "Nội dung giới thiệu/hành trình BBE có thể là khóa chung Thành viên; cần xem nội dung trước khi duyệt.",
+      "confidence": "REVIEW_REQUIRED"
+    },
+    {
+      "courseId": "15f95a4c-93bb-439a-b012-02221e76e904",
+      "title": "Hành trình BBE nhiều bài học",
+      "status": "PUBLISHED",
+      "proposedProgram": "CORE_MEMBER",
+      "reason": "Nội dung giới thiệu/hành trình BBE có thể là khóa chung Thành viên; cần xem nội dung trước khi duyệt.",
+      "confidence": "REVIEW_REQUIRED"
+    },
+    {
+      "courseId": "98dba279-fc78-4ebb-bd69-1b77e56cab98",
+      "title": "Khóa học dành cho Leader Team ee",
+      "status": "DRAFT",
+      "proposedProgram": "CORE_LEADER",
+      "reason": "Tên khóa hướng đến LT/lãnh đạo; cần xác nhận nội dung và khóa chung/riêng.",
+      "confidence": "REVIEW_REQUIRED"
+    },
+    {
+      "courseId": "25e879f5-dd30-4c45-8059-8eb5921fe3b1",
+      "title": "Khóa học tổng quan dành cho thành viên",
+      "status": "DRAFT",
+      "proposedProgram": "CORE_MEMBER",
+      "reason": "Tên khóa nhắc Thành viên; có thể là tên Ban, cần Admin xác nhận.",
+      "confidence": "REVIEW_REQUIRED"
+    },
+    {
+      "courseId": "3fffeafe-b276-4c4f-a3a0-460f69e983c4",
+      "title": "Kỹ năng thuyết trình hiệu quả",
+      "status": "PUBLISHED",
+      "proposedProgram": "EXTENDED",
+      "reason": "Tên khóa mô tả kỹ năng bổ sung; cần Admin xác nhận không thuộc khóa cốt lõi.",
+      "confidence": "REVIEW_REQUIRED"
+    },
+    {
+      "courseId": "64589a0b-f762-46a5-80ac-ca0e3c3859b8",
+      "title": "Làm việc nhóm và phản hồi",
+      "status": "PUBLISHED",
+      "proposedProgram": "EXTENDED",
+      "reason": "Tên khóa mô tả kỹ năng bổ sung; cần Admin xác nhận không thuộc khóa cốt lõi.",
+      "confidence": "REVIEW_REQUIRED"
+    },
+    {
+      "courseId": "0187a4b7-17be-485b-8d51-327236b55d24",
+      "title": "Nền tảng lãnh đạo đội nhóm",
+      "status": "PUBLISHED",
+      "proposedProgram": "CORE_LEADER",
+      "reason": "Tên khóa hướng đến LT/lãnh đạo; cần xác nhận nội dung và khóa chung/riêng.",
+      "confidence": "REVIEW_REQUIRED"
+    },
+    {
+      "courseId": "1c0e8721-c357-4542-85dc-67b37ed58bc9",
+      "title": "Quản lý dự án dành cho thành viên",
+      "status": "PUBLISHED",
+      "proposedProgram": "CORE_MEMBER",
+      "reason": "Tên khóa nhắc Thành viên; có thể là tên Ban, cần Admin xác nhận.",
+      "confidence": "REVIEW_REQUIRED"
+    },
+    {
+      "courseId": "bb511eaf-f521-4411-93ec-bafc355dd841",
+      "title": "Quản lý tài chính cá nhân",
+      "status": "PUBLISHED",
+      "proposedProgram": "EXTENDED",
+      "reason": "Tên khóa mô tả kỹ năng bổ sung; cần Admin xác nhận không thuộc khóa cốt lõi.",
+      "confidence": "REVIEW_REQUIRED"
+    },
+    {
+      "courseId": "d1220e31-4a05-4b53-80ee-25f57fec32ca",
+      "title": "Tiếng Anh giao tiếp trong công việc",
+      "status": "PUBLISHED",
+      "proposedProgram": "EXTENDED",
+      "reason": "Tên khóa mô tả kỹ năng bổ sung; cần Admin xác nhận không thuộc khóa cốt lõi.",
+      "confidence": "REVIEW_REQUIRED"
+    },
+    {
+      "courseId": "d924270c-2f59-4628-8d7a-0d0479d6d623",
+      "title": "Tin học văn phòng thực chiến",
+      "status": "PUBLISHED",
+      "proposedProgram": "EXTENDED",
+      "reason": "Tên khóa mô tả kỹ năng bổ sung; cần Admin xác nhận không thuộc khóa cốt lõi.",
+      "confidence": "REVIEW_REQUIRED"
+    },
+    {
+      "courseId": "58009069-9f25-4eae-a69d-e02632e77c91",
+      "title": "Tư duy phản biện",
+      "status": "PUBLISHED",
+      "proposedProgram": "EXTENDED",
+      "reason": "Tên khóa mô tả kỹ năng bổ sung; cần Admin xác nhận không thuộc khóa cốt lõi.",
+      "confidence": "REVIEW_REQUIRED"
+    },
+    {
+      "courseId": "2b4786d5-086e-4020-9ebf-3e30dd25ad88",
+      "title": "Văn hóa tổ chức và hành trình BBE",
+      "status": "PUBLISHED",
+      "proposedProgram": "CORE_MEMBER",
+      "reason": "Nội dung giới thiệu/hành trình BBE có thể là khóa chung Thành viên; cần xem nội dung trước khi duyệt.",
+      "confidence": "REVIEW_REQUIRED"
+    }
+  ],
+  "units": [
+    {
+      "id": "7b79deff-798f-479b-b36f-4601ae603f45",
+      "name": "BBE Việt Nam",
+      "type": "ROOT",
+      "parent_id": null
+    },
+    {
+      "id": "905fec49-91ca-4c4e-8f28-86ada01e4bd3",
+      "name": "DNA Điều hành",
+      "type": "DNA",
+      "parent_id": "7b79deff-798f-479b-b36f-4601ae603f45"
+    },
+    {
+      "id": "99e76b6a-f402-41c9-b25d-aadbd8dbb903",
+      "name": "BBE Seed Cân bằng Chapter",
+      "type": "CHAPTER",
+      "parent_id": "7b79deff-798f-479b-b36f-4601ae603f45"
+    },
+    {
+      "id": "5f15fab7-3b98-4e94-9a59-3c2f278e91b5",
+      "name": "BBE Seed Đang học Chapter",
+      "type": "CHAPTER",
+      "parent_id": "7b79deff-798f-479b-b36f-4601ae603f45"
+    },
+    {
+      "id": "3be0df0b-b8a9-426f-920f-897d8faba3f5",
+      "name": "BBE Seed KPI Đỏ Chapter",
+      "type": "CHAPTER",
+      "parent_id": "7b79deff-798f-479b-b36f-4601ae603f45"
+    },
+    {
+      "id": "6b3342b9-1cc4-4109-b16e-3c6535fb1e73",
+      "name": "BBE Seed Nhỏ Chapter",
+      "type": "CHAPTER",
+      "parent_id": "7b79deff-798f-479b-b36f-4601ae603f45"
+    },
+    {
+      "id": "7971995b-6739-4399-9bd1-bacc141babba",
+      "name": "BBE Seed Xuất sắc Chapter",
+      "type": "CHAPTER",
+      "parent_id": "7b79deff-798f-479b-b36f-4601ae603f45"
+    },
+    {
+      "id": "36571212-ca97-4397-a5a7-568f59f82728",
+      "name": "Chapter Demo",
+      "type": "CHAPTER",
+      "parent_id": "7b79deff-798f-479b-b36f-4601ae603f45"
+    },
+    {
+      "id": "2e5a8240-3d12-49cb-b4ab-7aa7091554c3",
+      "name": "Ban Chất Lượng",
+      "type": "DEPARTMENT",
+      "parent_id": "5f15fab7-3b98-4e94-9a59-3c2f278e91b5"
+    },
+    {
+      "id": "4927cc6a-3ae8-4a8c-8b13-f03b075db69c",
+      "name": "Ban Chất Lượng",
+      "type": "DEPARTMENT",
+      "parent_id": "99e76b6a-f402-41c9-b25d-aadbd8dbb903"
+    },
+    {
+      "id": "4e52207a-9d1e-42a0-b4d6-3ff1cfb8eeca",
+      "name": "Ban Chất Lượng",
+      "type": "DEPARTMENT",
+      "parent_id": "7971995b-6739-4399-9bd1-bacc141babba"
+    },
+    {
+      "id": "6e501319-a283-40d2-9ec1-1fd7f92bce46",
+      "name": "Ban Chất Lượng",
+      "type": "DEPARTMENT",
+      "parent_id": "6b3342b9-1cc4-4109-b16e-3c6535fb1e73"
+    },
+    {
+      "id": "876faae8-8567-46f8-955a-e6addaa74228",
+      "name": "Ban Chất Lượng",
+      "type": "DEPARTMENT",
+      "parent_id": "36571212-ca97-4397-a5a7-568f59f82728"
+    },
+    {
+      "id": "f932f81a-760d-4abb-859f-2af35c8de461",
+      "name": "Ban Chất Lượng",
+      "type": "DEPARTMENT",
+      "parent_id": "3be0df0b-b8a9-426f-920f-897d8faba3f5"
+    },
+    {
+      "id": "081b52fd-26a1-4f0e-bfbc-3b2b92db9919",
+      "name": "Ban Khách Mời",
+      "type": "DEPARTMENT",
+      "parent_id": "99e76b6a-f402-41c9-b25d-aadbd8dbb903"
+    },
+    {
+      "id": "20574818-adf3-441a-895a-23742163afc5",
+      "name": "Ban Khách Mời",
+      "type": "DEPARTMENT",
+      "parent_id": "7971995b-6739-4399-9bd1-bacc141babba"
+    },
+    {
+      "id": "4ba7e09b-08e6-4e53-8bed-02a6187d590d",
+      "name": "Ban Khách Mời",
+      "type": "DEPARTMENT",
+      "parent_id": "36571212-ca97-4397-a5a7-568f59f82728"
+    },
+    {
+      "id": "5412f688-60b9-4800-8c5b-cc5d644ae01f",
+      "name": "Ban Khách Mời",
+      "type": "DEPARTMENT",
+      "parent_id": "6b3342b9-1cc4-4109-b16e-3c6535fb1e73"
+    },
+    {
+      "id": "5b83bdb2-26c7-427e-aa9f-536fb2c2c17c",
+      "name": "Ban Khách Mời",
+      "type": "DEPARTMENT",
+      "parent_id": "5f15fab7-3b98-4e94-9a59-3c2f278e91b5"
+    },
+    {
+      "id": "a0702dd2-5cf2-4f60-b2a7-031ae5c5dd39",
+      "name": "Ban Khách Mời",
+      "type": "DEPARTMENT",
+      "parent_id": "3be0df0b-b8a9-426f-920f-897d8faba3f5"
+    },
+    {
+      "id": "3602e5f1-7492-485b-8ded-abf09f3b5b0d",
+      "name": "Ban Nội Dung",
+      "type": "DEPARTMENT",
+      "parent_id": "36571212-ca97-4397-a5a7-568f59f82728"
+    },
+    {
+      "id": "49763cc4-4b6c-4a55-8c06-2523de7be991",
+      "name": "Ban Nội Dung",
+      "type": "DEPARTMENT",
+      "parent_id": "3be0df0b-b8a9-426f-920f-897d8faba3f5"
+    },
+    {
+      "id": "870ed235-97cb-4ddb-b7dc-eb37736a347d",
+      "name": "Ban Nội Dung",
+      "type": "DEPARTMENT",
+      "parent_id": "99e76b6a-f402-41c9-b25d-aadbd8dbb903"
+    },
+    {
+      "id": "a80a48da-4722-467a-8b51-3e924831ad98",
+      "name": "Ban Nội Dung",
+      "type": "DEPARTMENT",
+      "parent_id": "6b3342b9-1cc4-4109-b16e-3c6535fb1e73"
+    },
+    {
+      "id": "b95ebd27-75f2-41bf-bfb8-398706704f97",
+      "name": "Ban Nội Dung",
+      "type": "DEPARTMENT",
+      "parent_id": "5f15fab7-3b98-4e94-9a59-3c2f278e91b5"
+    },
+    {
+      "id": "ce54419a-a071-4024-b018-ae478ff1cb85",
+      "name": "Ban Nội Dung",
+      "type": "DEPARTMENT",
+      "parent_id": "7971995b-6739-4399-9bd1-bacc141babba"
+    },
+    {
+      "id": "1b34a275-5c7c-4a47-9b99-5ab4a24876ad",
+      "name": "Ban Thành Viên",
+      "type": "DEPARTMENT",
+      "parent_id": "3be0df0b-b8a9-426f-920f-897d8faba3f5"
+    },
+    {
+      "id": "354c4b1e-2979-4e3e-b4f6-ffce78cc37ff",
+      "name": "Ban Thành Viên",
+      "type": "DEPARTMENT",
+      "parent_id": "6b3342b9-1cc4-4109-b16e-3c6535fb1e73"
+    },
+    {
+      "id": "4eb4cda9-a9ce-4613-b3c5-0c7484e4fa8b",
+      "name": "Ban Thành Viên",
+      "type": "DEPARTMENT",
+      "parent_id": "99e76b6a-f402-41c9-b25d-aadbd8dbb903"
+    },
+    {
+      "id": "999eb1ea-32f1-4420-8b98-1b980bc8647b",
+      "name": "Ban Thành Viên",
+      "type": "DEPARTMENT",
+      "parent_id": "36571212-ca97-4397-a5a7-568f59f82728"
+    },
+    {
+      "id": "e7b14e3c-f0ba-4a11-bbe2-48565bad00a7",
+      "name": "Ban Thành Viên",
+      "type": "DEPARTMENT",
+      "parent_id": "5f15fab7-3b98-4e94-9a59-3c2f278e91b5"
+    },
+    {
+      "id": "ef540089-8087-4cac-84b8-69c171e53905",
+      "name": "Ban Thành Viên",
+      "type": "DEPARTMENT",
+      "parent_id": "7971995b-6739-4399-9bd1-bacc141babba"
+    },
+    {
+      "id": "2a4a78bc-1098-4b34-834b-951b175a84ce",
+      "name": "Ban Thư Ký",
+      "type": "DEPARTMENT",
+      "parent_id": "99e76b6a-f402-41c9-b25d-aadbd8dbb903"
+    },
+    {
+      "id": "2ff06190-91b0-4555-9230-bae3339c3a0b",
+      "name": "Ban Thư Ký",
+      "type": "DEPARTMENT",
+      "parent_id": "5f15fab7-3b98-4e94-9a59-3c2f278e91b5"
+    },
+    {
+      "id": "360b5eed-c0a1-41f5-a8f4-1d9cc8821e4d",
+      "name": "Ban Thư Ký",
+      "type": "DEPARTMENT",
+      "parent_id": "6b3342b9-1cc4-4109-b16e-3c6535fb1e73"
+    },
+    {
+      "id": "36fa33b7-da15-4dc0-893a-b7fcc263ca76",
+      "name": "Ban Thư Ký",
+      "type": "DEPARTMENT",
+      "parent_id": "36571212-ca97-4397-a5a7-568f59f82728"
+    },
+    {
+      "id": "6110dbd8-40d5-4cca-ad7c-04f445531559",
+      "name": "Ban Thư Ký",
+      "type": "DEPARTMENT",
+      "parent_id": "3be0df0b-b8a9-426f-920f-897d8faba3f5"
+    },
+    {
+      "id": "b0138100-a3a6-46c6-8aa9-b26221053c25",
+      "name": "Ban Thư Ký",
+      "type": "DEPARTMENT",
+      "parent_id": "7971995b-6739-4399-9bd1-bacc141babba"
+    },
+    {
+      "id": "1fa14fab-861a-42c1-9d04-9d1268a6d35a",
+      "name": "Ban TT&SK",
+      "type": "DEPARTMENT",
+      "parent_id": "5f15fab7-3b98-4e94-9a59-3c2f278e91b5"
+    },
+    {
+      "id": "5b510e55-aa97-46b7-8138-cc68e12a8685",
+      "name": "Ban TT&SK",
+      "type": "DEPARTMENT",
+      "parent_id": "6b3342b9-1cc4-4109-b16e-3c6535fb1e73"
+    },
+    {
+      "id": "71faab67-b1f7-4192-b6b6-7b0dd07aad62",
+      "name": "Ban TT&SK",
+      "type": "DEPARTMENT",
+      "parent_id": "99e76b6a-f402-41c9-b25d-aadbd8dbb903"
+    },
+    {
+      "id": "c1bee1f1-188e-4355-878d-0e25d767c67e",
+      "name": "Ban TT&SK",
+      "type": "DEPARTMENT",
+      "parent_id": "3be0df0b-b8a9-426f-920f-897d8faba3f5"
+    },
+    {
+      "id": "e2b7b4ac-5f8b-463a-9f38-11a0c14b0878",
+      "name": "Ban TT&SK",
+      "type": "DEPARTMENT",
+      "parent_id": "7971995b-6739-4399-9bd1-bacc141babba"
+    },
+    {
+      "id": "f2d56260-c2c7-4338-aec1-c37e1329cccb",
+      "name": "Ban TT&SK",
+      "type": "DEPARTMENT",
+      "parent_id": "36571212-ca97-4397-a5a7-568f59f82728"
+    },
+    {
+      "id": "3aded055-0566-49f4-92c0-523ec9516da8",
+      "name": "Chủ Tịch",
+      "type": "DEPARTMENT",
+      "parent_id": "5f15fab7-3b98-4e94-9a59-3c2f278e91b5"
+    },
+    {
+      "id": "3e3974e9-84ff-4ee4-8c7a-7db2b115318b",
+      "name": "Chủ Tịch",
+      "type": "DEPARTMENT",
+      "parent_id": "99e76b6a-f402-41c9-b25d-aadbd8dbb903"
+    },
+    {
+      "id": "46e28a17-faa7-45ee-923d-f763b7e6a5a3",
+      "name": "Chủ Tịch",
+      "type": "DEPARTMENT",
+      "parent_id": "36571212-ca97-4397-a5a7-568f59f82728"
+    },
+    {
+      "id": "51e74ec0-2ed7-4637-987d-93e11c1b6df8",
+      "name": "Chủ Tịch",
+      "type": "DEPARTMENT",
+      "parent_id": "6b3342b9-1cc4-4109-b16e-3c6535fb1e73"
+    },
+    {
+      "id": "dac38b42-9c95-4c58-8aee-c585e9446bbd",
+      "name": "Chủ Tịch",
+      "type": "DEPARTMENT",
+      "parent_id": "7971995b-6739-4399-9bd1-bacc141babba"
+    },
+    {
+      "id": "f65ba469-35e3-4d3e-95d3-acc4563c60be",
+      "name": "Chủ Tịch",
+      "type": "DEPARTMENT",
+      "parent_id": "3be0df0b-b8a9-426f-920f-897d8faba3f5"
+    },
+    {
+      "id": "17c7d29d-65a1-433b-8bf3-9151c9c95eb6",
+      "name": "LDC",
+      "type": "DNA_GROUP",
+      "parent_id": "905fec49-91ca-4c4e-8f28-86ada01e4bd3"
+    },
+    {
+      "id": "16a4e865-d1e2-4fa0-b8b9-ef1b428f75e2",
+      "name": "SGDC",
+      "type": "DNA_GROUP",
+      "parent_id": "905fec49-91ca-4c4e-8f28-86ada01e4bd3"
+    },
+    {
+      "id": "c7065d35-3caf-4d6c-9680-cf9ec87c1716",
+      "name": "TT",
+      "type": "DNA_GROUP",
+      "parent_id": "905fec49-91ca-4c4e-8f28-86ada01e4bd3"
+    }
+  ],
+  "positions": [
+    {
+      "code": "CHAPTER_LEAD",
+      "name": "Lead Chapter",
+      "scope": "CHAPTER"
+    },
+    {
+      "code": "CHAPTER_MANAGER",
+      "name": "Lead Chapter / Chủ tịch",
+      "scope": "CHAPTER"
+    },
+    {
+      "code": "DEPARTMENT_LEAD",
+      "name": "LT Ban",
+      "scope": "DEPARTMENT"
+    },
+    {
+      "code": "DEPARTMENT_LEADER",
+      "name": "LT / Department Leader",
+      "scope": "DEPARTMENT"
+    },
+    {
+      "code": "DNA_LEAD",
+      "name": "Lead DNA",
+      "scope": "DNA"
+    },
+    {
+      "code": "DNA_MANAGER",
+      "name": "DNA Manager",
+      "scope": "DNA"
+    },
+    {
+      "code": "MEMBER",
+      "name": "Thành viên",
+      "scope": "DEPARTMENT"
+    }
+  ]
+}

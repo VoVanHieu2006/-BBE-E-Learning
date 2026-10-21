@@ -1,4 +1,5 @@
 'use client';
+import PeriodLeaderboard from '@/components/learning/PeriodLeaderboard'
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
@@ -58,6 +59,7 @@ export default function ChapterManagerLeaderboardPage() {
 
   return (
     <div className="space-y-8 max-w-6xl pb-12">
+      <PeriodLeaderboard />
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>

@@ -1,3 +1,4 @@
+import { prepareOrganizationTransition } from '@/lib/organization-transition'
 import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { authenticate, invalidateUserAuthCache } from '@/lib/auth'
@@ -190,7 +191,8 @@ export async function POST(request: NextRequest, { params }: { params: { unitId:
     }
     try {
       const membership = await prisma.$transaction(async (tx) => {
-        const created = await tx.organizationMembership.create({ data: { user_id: user.id, unit_id: unit.id } })
+        const effectiveAt = await prepareOrganizationTransition(tx, user.id, unit.id, auth.context!.userId)
+        const created = await tx.organizationMembership.create({ data: { user_id: user.id, unit_id: unit.id, starts_at: effectiveAt } })
         if (parentChapter) {
           await tx.chapterMember.upsert({
             where: { chapter_id_user_id: { chapter_id: parentChapter.id, user_id: user.id } },

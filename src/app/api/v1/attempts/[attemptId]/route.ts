@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { QUIZ_PASS_PERCENT } from '@/lib/config/quiz'
-import { gradeQuizAttempt } from '@/lib/quiz-attempt-rules'
+import { gradeQuizAttempt, GradingQuestion } from '@/lib/quiz-attempt-rules'
 
 export async function GET(request: NextRequest, { params }: { params: { attemptId: string } }) {
   const auth = await authenticate(request)
@@ -25,8 +25,8 @@ export async function GET(request: NextRequest, { params }: { params: { attemptI
     prisma.attemptAnswer.findMany({ where: { attempt_id: params.attemptId } }),
   ])
 
-  const grading = gradeQuizAttempt(
-    allAttemptQuestions.map((attemptQuestion) => ({
+  const grading = attempt.grading_snapshot ? attempt.grading_snapshot as unknown as ReturnType<typeof gradeQuizAttempt> : gradeQuizAttempt(
+    allAttemptQuestions.map((attemptQuestion) => attemptQuestion.question_snapshot ? attemptQuestion.question_snapshot as unknown as GradingQuestion : ({
       id: attemptQuestion.question_id,
       points: Number(attemptQuestion.question.points || 1),
       explanation: attemptQuestion.question.explanation,

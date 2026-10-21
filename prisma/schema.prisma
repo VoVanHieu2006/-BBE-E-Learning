@@ -183,6 +183,7 @@ enum StarReason {
 // ============================================================
 
 model User {
+  anonymized_at DateTime? @db.Timestamptz(3)
   id               String     @id @default(uuid()) @db.Uuid
   email            String     @unique @db.VarChar(255)
   display_name     String?    @db.VarChar(120)
@@ -293,6 +294,9 @@ model Invitation {
 }
 
 model Course {
+  program_id String? @db.Uuid
+  content_version Int @default(1)
+  program LearningProgram? @relation(fields: [program_id], references: [id], onDelete: Restrict)
   id            String             @id @default(uuid()) @db.Uuid
   title         String             @db.VarChar(255)
   description   String?            @db.Text
@@ -397,7 +401,7 @@ model LessonProgress {
   created_at                  DateTime  @default(now()) @db.Timestamp
   updated_at                  DateTime  @updatedAt @db.Timestamp
 
-  user                        User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user                        User      @relation(fields: [user_id], references: [id], onDelete: Restrict)
   lesson                      Lesson    @relation(fields: [lesson_id], references: [id], onDelete: Cascade)
 
   @@map("lesson_progress")
@@ -495,6 +499,10 @@ model QuestionOption {
 }
 
 model Attempt {
+  grading_snapshot Json?
+  learning_cycle LearningCycle? @relation(fields: [learning_cycle_id], references: [id], onDelete: Restrict, map: "attempt_cycle_fk")
+  learning_cycle_id String? @db.Uuid
+  cancellation_reason String? @db.VarChar(120)
   id                String           @id @default(uuid()) @db.Uuid
   assessment_id     String           @db.Uuid
   final_exam_version_id String?      @db.Uuid
@@ -510,7 +518,7 @@ model Attempt {
 
   assessment        Assessment       @relation(fields: [assessment_id], references: [id], onDelete: Cascade)
   final_exam_version FinalExamVersion? @relation(fields: [final_exam_version_id], references: [id], onDelete: Restrict)
-  user              User             @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user              User             @relation(fields: [user_id], references: [id], onDelete: Restrict)
   attempt_questions AttemptQuestion[]
   attempt_answers   AttemptAnswer[]
 
@@ -523,6 +531,7 @@ model Attempt {
 }
 
 model AttemptQuestion {
+  question_snapshot Json?
   id             String    @id @default(uuid()) @db.Uuid
   attempt_id     String    @db.Uuid
   question_id    String    @db.Uuid
@@ -631,6 +640,7 @@ model LessonComment {
 // ---------------------------------------------------------------------------
 
 model OrganizationUnit {
+  code String? @db.VarChar(100)
   id          String               @id @default(uuid()) @db.Uuid
   name        String               @db.VarChar(255)
   type        OrganizationUnitType
@@ -731,6 +741,7 @@ model PositionAssignment {
 }
 
 model LearningRule {
+  target_code String? @db.VarChar(100)
   id                String            @id @default(uuid()) @db.Uuid
   course_id         String            @db.Uuid
   organization_unit_id String?        @db.Uuid
@@ -756,6 +767,10 @@ model LearningRule {
 }
 
 model UserLearningAssignment {
+  learning_cycle LearningCycle? @relation(fields: [learning_cycle_id], references: [id], onDelete: Restrict, map: "assignment_cycle_fk")
+  learning_cycle_id String? @db.Uuid
+  requirement_version Int @default(1)
+  source_rule_ids String[] @default([]) @db.Uuid
   id                String                   @id @default(uuid()) @db.Uuid
   user_id           String                   @db.Uuid
   course_id         String                   @db.Uuid
@@ -770,7 +785,7 @@ model UserLearningAssignment {
   ended_at          DateTime?                @db.Timestamp
   completed_at      DateTime?                @db.Timestamp
 
-  user              User                     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user              User                     @relation(fields: [user_id], references: [id], onDelete: Restrict)
   course            Course                   @relation(fields: [course_id], references: [id], onDelete: Cascade)
   rule              LearningRule?            @relation(fields: [rule_id], references: [id], onDelete: SetNull)
 
@@ -779,6 +794,7 @@ model UserLearningAssignment {
   @@index([rule_id])
   @@index([rule_id, status])
   @@map("user_learning_assignments")
+  @@unique([user_id, course_id, learning_cycle_id])
 }
 
 model AccessRestriction {
@@ -805,6 +821,12 @@ model AccessRestriction {
 }
 
 model StarLedger {
+  competition_month CompetitionMonth? @relation(fields: [competition_month_id], references: [id], onDelete: Restrict, map: "star_month_fk")
+  learning_cycle LearningCycle? @relation(fields: [learning_cycle_id], references: [id], onDelete: Restrict, map: "star_cycle_fk")
+  competition_month_id String? @db.Uuid
+  learning_cycle_id String? @db.Uuid
+  chapter_at_award_id String? @db.Uuid
+  provenance String @default("LEGACY") @db.VarChar(30)
   id          String     @id @default(uuid()) @db.Uuid
   user_id     String     @db.Uuid
   amount      Int
@@ -815,11 +837,13 @@ model StarLedger {
   metadata    Json?
   awarded_at  DateTime   @default(now()) @db.Timestamp
 
-  user        User       @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user        User       @relation(fields: [user_id], references: [id], onDelete: Restrict)
 
   @@index([user_id, awarded_at])
   @@index([source_type, source_id])
   @@map("star_ledger")
+  @@index([competition_month_id, chapter_at_award_id])
+  @@index([learning_cycle_id, user_id])
 }
 
 model QuestionPool {
@@ -858,6 +882,9 @@ model ChapterMonthlyKpi {
 
 /** A confirmed future change of department/LT assignments inside one Chapter. */
 model ChapterReorganization {
+  last_error String? @db.Text
+  apply_attempts Int @default(0)
+  transfer_season_id String? @db.Uuid
   id                String                      @id @default(uuid()) @db.Uuid
   chapter_id        String                      @db.Uuid
   effective_at      DateTime                    @db.Timestamp
@@ -882,7 +909,7 @@ model ChapterReorganizationItem {
   reorganization_id     String                  @db.Uuid
   user_id               String                  @db.Uuid
   display_name          String?                 @db.VarChar(120)
-  department_unit_id    String                  @db.Uuid
+  department_unit_id    String?                 @db.Uuid
   position_id           String?                 @db.Uuid
   is_primary            Boolean                 @default(true)
   validation_error      String?                 @db.Text
@@ -893,4 +920,252 @@ model ChapterReorganizationItem {
   @@unique([reorganization_id, user_id])
   @@index([reorganization_id])
   @@map("chapter_reorganization_items")
+}
+
+// New records use timestamptz. Existing timestamp columns are deliberately untouched.
+model LearningPolicy {
+  id String @id @default("default")
+  cutover_at DateTime? @db.Timestamptz(3)
+  mapping_approved_at DateTime? @db.Timestamptz(3)
+  updated_at DateTime @updatedAt @db.Timestamptz(3)
+  @@map("learning_policy")
+}
+
+model CompetitionMonth {
+  stars StarLedger[]
+  replays MonthlyVideoReplay[]
+  marks QuizRewardHighWaterMark[]
+  id String @id @default(uuid()) @db.Uuid
+  key String @unique @db.VarChar(7)
+  starts_at DateTime @db.Timestamptz(3)
+  ends_at DateTime @db.Timestamptz(3)
+  state String @default("OPEN") @db.VarChar(30)
+  closed_at DateTime? @db.Timestamptz(3)
+  @@map("competition_months")
+}
+
+model TransferSeason {
+  id String @id @default(uuid()) @db.Uuid
+  code String @unique @db.VarChar(100)
+  starts_at DateTime @db.Timestamptz(3)
+  ends_at DateTime @db.Timestamptz(3)
+  reward_boundary_at DateTime? @unique @db.Timestamptz(3)
+  @@map("transfer_seasons")
+}
+
+model ChapterCompetitionTerm {
+  id String @id @default(uuid()) @db.Uuid
+  chapter_id String @db.Uuid
+  season_id String? @db.Uuid
+  starts_at DateTime @db.Timestamptz(3)
+  ends_at DateTime? @db.Timestamptz(3)
+  @@unique([chapter_id, season_id])
+  @@index([chapter_id, starts_at, ends_at])
+  @@map("chapter_competition_terms")
+}
+
+// Scalar historical identity IDs intentionally survive removal of login credentials.
+model LearningCycle {
+  stars StarLedger[]
+  attempts Attempt[]
+  assignments UserLearningAssignment[]
+  progress CycleLessonProgress[]
+  replays MonthlyVideoReplay[]
+  marks QuizRewardHighWaterMark[]
+  path LearningPath?
+  id String @id @default(uuid()) @db.Uuid
+  user_id String @db.Uuid
+  chapter_id String? @db.Uuid
+  trigger_key String @unique @db.VarChar(255)
+  starts_at DateTime @db.Timestamptz(3)
+  ends_at DateTime? @db.Timestamptz(3)
+  provenance String @default("NATIVE") @db.VarChar(30)
+  @@index([user_id, ends_at])
+  @@map("learning_cycles")
+}
+
+model CycleLessonProgress {
+  learning_cycle LearningCycle @relation(fields: [learning_cycle_id], references: [id], onDelete: Restrict, map: "progress_cycle_fk")
+  id String @id @default(uuid()) @db.Uuid
+  user_id String @db.Uuid
+  lesson_id String @db.Uuid
+  learning_cycle_id String @db.Uuid
+  furthest_seconds Float @default(0)
+  completed_at DateTime? @db.Timestamptz(3)
+  unlocked_at DateTime? @db.Timestamptz(3)
+  provenance String @default("NATIVE") @db.VarChar(30)
+  @@unique([user_id, lesson_id, learning_cycle_id])
+  @@map("cycle_lesson_progress")
+}
+
+model MonthlyVideoReplay {
+  reward_suppressed_at DateTime? @db.Timestamptz(3)
+  view_session_id String? @db.VarChar(80)
+  learning_cycle LearningCycle @relation(fields: [learning_cycle_id], references: [id], onDelete: Restrict, map: "replay_cycle_fk")
+  competition_month CompetitionMonth @relation(fields: [competition_month_id], references: [id], onDelete: Restrict, map: "replay_month_fk")
+  id String @id @default(uuid()) @db.Uuid
+  user_id String @db.Uuid
+  video_id String @db.Uuid
+  competition_month_id String @db.Uuid
+  learning_cycle_id String @db.Uuid
+  furthest_seconds Float @default(0)
+  last_heartbeat_at DateTime? @db.Timestamptz(3)
+  completed_at DateTime? @db.Timestamptz(3)
+  @@unique([user_id, video_id, competition_month_id, learning_cycle_id])
+  @@map("monthly_video_replays")
+}
+
+model QuizRewardHighWaterMark {
+  learning_cycle LearningCycle @relation(fields: [learning_cycle_id], references: [id], onDelete: Restrict, map: "mark_cycle_fk")
+  competition_month CompetitionMonth @relation(fields: [competition_month_id], references: [id], onDelete: Restrict, map: "mark_month_fk")
+  id String @id @default(uuid()) @db.Uuid
+  user_id String @db.Uuid
+  assessment_id String @db.Uuid
+  competition_month_id String @db.Uuid
+  learning_cycle_id String @db.Uuid
+  reward_question_count Int
+  reward_config Json
+  maximum_stars Int @default(0)
+  @@unique([user_id, assessment_id, competition_month_id, learning_cycle_id])
+  @@map("quiz_reward_high_water_marks")
+}
+
+model LearningPath {
+  learning_cycle LearningCycle @relation(fields: [learning_cycle_id], references: [id], onDelete: Restrict, map: "path_cycle_fk")
+  id String @id @default(uuid()) @db.Uuid
+  user_id String @db.Uuid
+  learning_cycle_id String @unique @db.Uuid
+  starts_at DateTime @db.Timestamptz(3)
+  due_at DateTime? @db.Timestamptz(3)
+  imported_due_at DateTime? @db.Timestamptz(3)
+  budget_fingerprint String @default("") @db.Text
+  budget Json @default("[]")
+  @@map("learning_paths")
+}
+
+model LearningPathChange {
+  id String @id @default(uuid()) @db.Uuid
+  path_id String @db.Uuid
+  changed_at DateTime @db.Timestamptz(3)
+  previous_budget Json
+  next_budget Json
+  due_at DateTime? @db.Timestamptz(3)
+  reason String @db.VarChar(120)
+  @@index([path_id, changed_at])
+  @@map("learning_path_changes")
+}
+
+model LearningOutbox {
+  id String @id @default(uuid()) @db.Uuid
+  event_key String @unique @db.VarChar(255)
+  kind String @db.VarChar(60)
+  user_id String? @db.Uuid
+  payload Json
+  attempts Int @default(0)
+  available_at DateTime @default(now()) @db.Timestamptz(3)
+  processed_at DateTime? @db.Timestamptz(3)
+  last_error String? @db.Text
+  @@index([processed_at, available_at])
+  @@map("learning_outbox")
+}
+
+model LearningSnapshot {
+  id String @id @default(uuid()) @db.Uuid
+  key String @unique @db.VarChar(255)
+  kind String @db.VarChar(60)
+  captured_at DateTime @db.Timestamptz(3)
+  payload Json
+  @@map("learning_snapshots")
+}
+
+model LearningProgram {
+  id String @id @default(uuid()) @db.Uuid
+  code String @unique @db.VarChar(60)
+  name String @db.VarChar(255)
+  is_core Boolean @default(false)
+  sort_order Int
+  courses Course[]
+  @@map("learning_programs")
+}
+
+model LearningTarget {
+  code String @id @db.VarChar(100)
+  label String @db.VarChar(255)
+  department_code String? @db.VarChar(100)
+  position_code String? @db.VarChar(100)
+  dna_unit_code String? @db.VarChar(100)
+  sort_order Int
+  @@map("learning_targets")
+}
+
+model CourseRequirementVersion {
+  id String @id @default(uuid()) @db.Uuid
+  course_id String @db.Uuid
+  version Int
+  lesson_ids String[] @db.Uuid
+  assessment_ids String[] @db.Uuid
+  final_version_id String? @db.Uuid
+  published_at DateTime @db.Timestamptz(3)
+  fingerprint String @db.Text
+  @@unique([course_id, version])
+  @@map("course_requirement_versions")
+}
+
+model SupplementalLearningRequirement {
+  id String @id @default(uuid()) @db.Uuid
+  user_id String @db.Uuid
+  course_id String @db.Uuid
+  learning_cycle_id String @db.Uuid
+  requirement_version_id String @db.Uuid
+  lesson_ids String[] @db.Uuid
+  added_days Int
+  due_at DateTime @db.Timestamptz(3)
+  completed_at DateTime? @db.Timestamptz(3)
+  violated_at DateTime? @db.Timestamptz(3)
+  ended_at DateTime? @db.Timestamptz(3)
+  @@unique([user_id, learning_cycle_id, requirement_version_id])
+  @@index([completed_at, due_at])
+  @@map("supplemental_learning_requirements")
+}
+
+model LearningNotice {
+  id String @id @default(uuid()) @db.Uuid
+  user_id String @db.Uuid
+  event_key String @unique @db.VarChar(255)
+  title String @db.VarChar(255)
+  body String @db.Text
+  created_at DateTime @default(now()) @db.Timestamptz(3)
+  read_at DateTime? @db.Timestamptz(3)
+  @@index([user_id, read_at])
+  @@map("learning_notices")
+}
+
+model AccountStateInterval {
+  id String @id @default(uuid()) @db.Uuid
+  user_id String @db.Uuid
+  role String @db.VarChar(40)
+  status String @db.VarChar(40)
+  starts_at DateTime @db.Timestamptz(3)
+  ends_at DateTime? @db.Timestamptz(3)
+  @@index([user_id, starts_at, ends_at])
+  @@map("account_state_intervals")
+}
+
+model ChapterAffiliationInterval {
+  id String @id @default(uuid()) @db.Uuid
+  user_id String @db.Uuid
+  chapter_id String @db.Uuid
+  starts_at DateTime @db.Timestamptz(3)
+  ends_at DateTime? @db.Timestamptz(3)
+  @@index([chapter_id, starts_at, ends_at])
+  @@map("chapter_affiliation_intervals")
+}
+
+model CoursePublicationEvent {
+  id String @id @default(uuid()) @db.Uuid
+  course_id String @db.Uuid
+  status String @db.VarChar(40)
+  effective_at DateTime @db.Timestamptz(3)
+  @@index([course_id, effective_at])
+  @@map("course_publication_events")
 }

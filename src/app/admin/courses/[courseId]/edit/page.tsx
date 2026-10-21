@@ -1437,6 +1437,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
               {isPublished ? '✓ Đang công khai (Published)' : 'Bản nháp (Draft)'}
             </span>
 
+            {isPublished && <Button loading={publishLoading} onClick={handlePublish}>Công bố cập nhật nội dung</Button>}
             {isPublished ? (
               <Button variant="secondary" loading={publishLoading} onClick={() => setShowUnpublishConfirm(true)}>
                 Hạ về bản nháp

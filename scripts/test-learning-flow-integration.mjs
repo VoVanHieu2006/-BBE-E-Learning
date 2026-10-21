@@ -73,19 +73,21 @@ async function readJson(response) {
 }
 
 async function markVideoAsPreviouslyWatched(lessonId, userId) {
-  const lastWatchedAt = new Date(Date.now() - 120_000)
+  const video = await prisma.video.findUniqueOrThrow({ where: { lesson_id: lessonId } })
+  const watched = video.duration_seconds - 2
+  const lastWatchedAt = new Date(Date.now() - 2_000)
   await prisma.lessonProgress.upsert({
     where: { user_id_lesson_id: { user_id: userId, lesson_id: lessonId } },
     create: {
       user_id: userId,
       lesson_id: lessonId,
-      last_position_seconds: 0,
-      furthest_watched_position_seconds: 0,
+      last_position_seconds: watched,
+      furthest_watched_position_seconds: watched,
       last_watched_at: lastWatchedAt,
     },
     update: {
-      last_position_seconds: 0,
-      furthest_watched_position_seconds: 0,
+      last_position_seconds: watched,
+      furthest_watched_position_seconds: watched,
       last_watched_at: lastWatchedAt,
       completed: false,
       completed_at: null,
@@ -101,12 +103,12 @@ async function finishVideoViaApi(lesson, userId, token) {
   })
   assert.equal(ninetyNinePercent.status, 200)
   const partial = await readJson(ninetyNinePercent)
-  assert.equal(partial.progressPercentage, 99.44, 'progress below the full duration must not round up to completion')
+  assert.ok(Math.abs(partial.progressPercentage - 100 * (lesson.video.duration_seconds - 1) / lesson.video.duration_seconds) < 1e-6, 'partial progress retains its fractional value below 100%')
   assert.equal(partial.completed, false, '99% video progress is not complete')
   assert.equal(await prisma.starLedger.count({ where: { user_id: userId, source_type: 'VIDEO', source_id: lesson.video.id } }), 0, 'partial video progress earns no Stars')
   await prisma.lessonProgress.update({
     where: { user_id_lesson_id: { user_id: userId, lesson_id: lesson.id } },
-    data: { last_watched_at: new Date(Date.now() - 120_000) },
+    data: { last_watched_at: new Date(Date.now() - 2_000) },
   })
   const response = await callApi(`/api/v1/lessons/${lesson.id}/progress`, {
     method: 'PATCH', token,
@@ -116,7 +118,7 @@ async function finishVideoViaApi(lesson, userId, token) {
   const result = await readJson(response)
   assert.equal(result.completed, false, 'a lesson with a quiz is not complete until its quiz is passed')
   assert.equal(result.starReward.awarded, true, 'exactly 100% video progress awards the one-time video Star')
-  assert.equal(result.starReward.amount, 1)
+  assert.equal(result.starReward.amount, 3, 'the 180-second fixture receives the duration-based video reward')
   return result
 }
 
@@ -144,6 +146,7 @@ async function cleanupFixtures() {
   if (chapters.length) await prisma.chapter.deleteMany({ where: { id: { in: chapters } } })
   if (courseIds.length) await prisma.course.deleteMany({ where: { id: { in: courseIds } } })
   if (users.length) {
+    await prisma.starLedger.deleteMany({ where: { user_id: { in: users } } })
     await prisma.positionAssignment.deleteMany({ where: { user_id: { in: users } } })
     await prisma.organizationMembership.deleteMany({ where: { user_id: { in: users } } })
     await prisma.chapterMember.deleteMany({ where: { user_id: { in: users } } })
@@ -195,6 +198,7 @@ try {
   await prisma.chapterMember.createMany({ data: [
     { chapter_id: chapterA.id, user_id: chapterLeaderId },
     { chapter_id: chapterA.id, user_id: learnerId },
+    { chapter_id: chapterA.id, user_id: viewerId },
     { chapter_id: chapterB.id, user_id: chapterOutsiderId },
   ] })
 
@@ -265,9 +269,9 @@ try {
   assert.equal(memberFinalAuthoring.status, 403, 'non-Admin must not author the course-final assessment')
   const finalAuthoring = await callApi(`/api/v1/courses/${course.id}/final-assessment`, {
     method: 'POST', token: adminToken,
-    body: { title: `${prefix}-final-exam`, description: 'Integration final', pools: ['A', 'B', 'C', 'D', 'E'], questions: finalQuestions },
+    body: { title: `${prefix}-final-exam`, description: 'Integration final', questionCount: 2 },
   })
-  assert.equal(finalAuthoring.status, 201, 'Admin can author a pooled course-final assessment through the API')
+  assert.equal(finalAuthoring.status, 200, 'Admin can capture a final-exam version from the lesson question bank')
   const finalAssessment = await readJson(finalAuthoring)
 
   const draftCoverCourse = await prisma.course.create({
@@ -285,7 +289,7 @@ try {
 
   const firstLessonEarlyQuiz = await startAttempt(lessonAssessmentIds[0], learnerToken)
   assert.equal(firstLessonEarlyQuiz.response.status, 403, 'quiz remains locked until every video in the module is complete')
-  assert.equal(firstLessonEarlyQuiz.data.error.code, 'ModuleVideosIncomplete')
+  assert.equal(firstLessonEarlyQuiz.data.error.code, 'LessonVideoIncomplete')
 
   const immediateSeek = await callApi(`/api/v1/lessons/${lessons[0].id}/progress`, {
     method: 'PATCH', token: learnerToken,
@@ -301,7 +305,7 @@ try {
     body: { positionSeconds: 180, furthestWatchedPositionSeconds: 180 },
   })
   assert.equal(lockedSecondVideo.status, 403, 'the next video remains locked until the preceding video is fully watched')
-  assert.equal((await readJson(lockedSecondVideo)).error.code, 'PreviousModuleIncomplete')
+  assert.equal((await readJson(lockedSecondVideo)).error.code, 'PreviousLessonIncomplete')
 
   const firstVideoFinish = await finishVideoViaApi(lessons[0], learnerId, learnerToken)
   assert.equal(firstVideoFinish.progressPercentage, 100)
@@ -310,10 +314,9 @@ try {
     body: { positionSeconds: 180, furthestWatchedPositionSeconds: 180 },
   })
   const duplicateHeartbeatData = await readJson(duplicateHeartbeat)
-  assert.equal(duplicateHeartbeatData.starReward?.awarded, undefined, 'repeated completed heartbeat cannot re-award video Stars')
+  assert.equal(duplicateHeartbeatData.starReward?.awarded, false, 'repeated completed heartbeat cannot re-award video Stars')
   assert.equal(await prisma.starLedger.count({ where: { user_id: learnerId, source_type: 'VIDEO', source_id: lessons[0].video.id } }), 1)
 
-  await finishVideoViaApi(lessons[1], learnerId, learnerToken)
   const quizAfterVideos = await startAttempt(lessonAssessmentIds[0], learnerToken)
   assert.equal(quizAfterVideos.response.status, 201)
   assert.ok(quizAfterVideos.data.questions.every((question) => question.options.every((option) => !('isCorrect' in option))), 'attempt payload must not expose the answer key')
@@ -354,7 +357,8 @@ try {
   })
   assert.equal(savedAfterSubmit.status, 400, 'submitted attempts are immutable')
   const repeatedSubmit = await callApi(`/api/v1/attempts/${quizAfterVideos.data.attemptId}/submit`, { method: 'POST', token: learnerToken, body: {} })
-  assert.equal(repeatedSubmit.status, 400, 'an attempt cannot be submitted a second time')
+  assert.equal(repeatedSubmit.status, 200, 'a repeated submission returns the immutable result idempotently')
+  assert.equal((await readJson(repeatedSubmit)).starReward.amount, 0)
 
   const cooldown = await startAttempt(lessonAssessmentIds[0], learnerToken)
   assert.equal(cooldown.response.status, 429, 'the configured cooldown prevents immediate retries')
@@ -369,7 +373,7 @@ try {
   assert.equal(correctRetry.status, 200)
   const passedRetry = await readJson(correctRetry)
   assert.equal(passedRetry.passed, true)
-  assert.equal(passedRetry.starReward.amount, 5, 'a passed 100% lesson quiz gets base Stars plus the capped score bonus')
+  assert.equal(passedRetry.starReward.amount, 1, 'one correct answer earns one Star')
   const passedResultView = await callApi(`/api/v1/attempts/${retry.data.attemptId}`, { token: learnerToken })
   assert.equal(passedResultView.status, 200)
   assert.equal((await readJson(passedResultView)).score, 100, 'the result endpoint returns the persisted weighted score')
@@ -379,15 +383,17 @@ try {
   assert.equal(ownAttemptHistoryData.items.length, 2)
   assert.equal(ownAttemptHistoryData.items.find((item) => item.attemptId === retry.data.attemptId)?.passed, true)
   const retrySubmitAgain = await callApi(`/api/v1/attempts/${retry.data.attemptId}/submit`, { method: 'POST', token: learnerToken, body: {} })
-  assert.equal(retrySubmitAgain.status, 400)
-  assert.equal(await prisma.starLedger.aggregate({ where: { user_id: learnerId, source_type: 'ASSESSMENT', source_id: lessonAssessmentIds[0] }, _sum: { amount: true } }).then((row) => row._sum.amount), 5, 'duplicate submits cannot award the quiz twice')
+  assert.equal(retrySubmitAgain.status, 200)
+  assert.equal(await prisma.starLedger.aggregate({ where: { user_id: learnerId, source_type: 'ASSESSMENT', source_id: lessonAssessmentIds[0] }, _sum: { amount: true } }).then((row) => row._sum.amount), 1, 'duplicate submits cannot award the quiz twice')
+
+  await finishVideoViaApi(lessons[1], learnerId, learnerToken)
 
   const blockedFinal = await callApi(`/api/v1/courses/${course.id}/final-assessment`, { token: learnerToken })
   assert.equal(blockedFinal.status, 200)
   const blockedFinalData = await readJson(blockedFinal)
   assert.equal(blockedFinalData.canStart, false, 'course final is locked until all lesson quizzes pass')
   assert.equal(blockedFinalData.gateCode, 'LessonAssessmentsIncomplete')
-  assert.ok(blockedFinalData.assessment.questionCount === 15)
+  assert.ok(blockedFinalData.assessment.questionCount === 2)
   assert.equal(JSON.stringify(blockedFinalData).includes('isCorrect'), false, 'learner final-assessment metadata never exposes answer keys')
 
   const lessonTwoAttempt = await startAttempt(lessonAssessmentIds[1], learnerToken)
@@ -402,17 +408,20 @@ try {
   const finalAttempt = await startAttempt(finalAssessment.assessmentId, learnerToken)
   assert.equal(finalAttempt.response.status, 201)
   assert.equal(finalAttempt.data.attemptNumber, 1)
-  assert.ok(finalAttempt.data.questions.length >= 5, 'final exam draws questions from the five required pools')
+  assert.equal(finalAttempt.data.questions.length, 2, 'final exam draws the configured question count from its immutable version')
   assert.ok(finalAttempt.data.questions.every((question) => question.options.every((option) => !('isCorrect' in option))))
   const finalSubmit = await submitWithCorrectAnswers(finalAttempt.data, learnerToken)
   assert.equal(finalSubmit.status, 200)
   const finalResult = await readJson(finalSubmit)
   assert.equal(finalResult.passed, true)
-  assert.equal(finalResult.starReward.amount, 5, 'final exam Stars are capped at five for a perfect result')
+  assert.equal(finalResult.starReward.amount, 2, 'the two correct final answers earn two Stars')
   const finalRetry = await startAttempt(finalAssessment.assessmentId, learnerToken)
-  assert.equal(finalRetry.response.status, 409, 'passing the course final prevents repeated attempts and duplicate rewards')
-  assert.equal(finalRetry.data.error.code, 'AssessmentAlreadyPassed')
-  assert.equal(await prisma.starLedger.aggregate({ where: { user_id: learnerId, source_type: 'ASSESSMENT', source_id: finalAssessment.assessmentId }, _sum: { amount: true } }).then((row) => row._sum.amount), 5)
+  assert.equal(finalRetry.response.status, 429, 'the final exam also enforces its retry cooldown')
+  await prisma.attempt.update({ where: { id: finalAttempt.data.attemptId }, data: { submitted_at: new Date(Date.now() - 25 * 60 * 60 * 1000) } })
+  const passedFinalRetry = await startAttempt(finalAssessment.assessmentId, learnerToken)
+  assert.equal(passedFinalRetry.response.status, 409, 'before cutover a passed final remains closed after cooldown')
+  assert.equal(passedFinalRetry.data.error.code, 'FinalExamAlreadyPassed')
+  assert.equal(await prisma.starLedger.aggregate({ where: { user_id: learnerId, source_type: 'ASSESSMENT', source_id: finalAssessment.assessmentId }, _sum: { amount: true } }).then((row) => row._sum.amount), 2)
   const assignment = await prisma.userLearningAssignment.findFirst({ where: { user_id: learnerId, course_id: course.id, ended_at: null } })
   assert.equal(assignment.status, 'COMPLETED', 'passing the final exam materializes course assignment completion')
 
@@ -433,8 +442,8 @@ try {
   })
 
   const viewerAttempt = await startAttempt(lessonAssessmentIds[0], viewerToken)
-  assert.equal(viewerAttempt.response.status, 403, 'viewer-only assignment may read but cannot start a quiz')
-  assert.equal(viewerAttempt.data.error.code, 'AssessmentNotAllowed')
+  assert.equal(viewerAttempt.response.status, 403, 'every learner must complete the videos before starting a quiz')
+  assert.equal(viewerAttempt.data.error.code, 'LessonVideoIncomplete')
   await prisma.lessonProgress.upsert({
     where: { user_id_lesson_id: { user_id: viewerId, lesson_id: lessons[0].id } },
     create: { user_id: viewerId, lesson_id: lessons[0].id, last_position_seconds: 0, furthest_watched_position_seconds: 0, last_watched_at: new Date(Date.now() - 120_000) },
@@ -446,7 +455,12 @@ try {
   })
   assert.equal(viewerVideo.status, 200, 'viewer-only assignment allows video consumption')
   assert.equal((await readJson(viewerVideo)).completed, false, 'video completion still requires its quiz')
-  assert.equal(await prisma.starLedger.count({ where: { user_id: viewerId } }), 0, 'viewer-only assignments cannot earn Stars')
+  assert.equal(await prisma.starLedger.count({ where: { user_id: viewerId } }), 0, 'a disconnected heartbeat earns no Stars')
+  await finishVideoViaApi(lessons[0], viewerId, viewerToken)
+  const voluntaryQuiz = await startAttempt(lessonAssessmentIds[0], viewerToken)
+  assert.equal(voluntaryQuiz.response.status, 201, 'published courses allow assessment even when a legacy assignment flag is view-only')
+  const voluntaryResult = await readJson(await submitWithCorrectAnswers(voluntaryQuiz.data, viewerToken))
+  assert.equal(voluntaryResult.starReward.amount, 1, 'the matrix does not remove reward eligibility on published courses')
 
   const chapterOwnScope = await callApi(`/api/v1/chapters/${chapterA.id}/members/${learnerId}/course-progress`, { token: chapterLeaderToken })
   assert.equal(chapterOwnScope.status, 200, 'Chapter manager can inspect a member inside the managed Chapter')
@@ -467,7 +481,7 @@ try {
   })
   assert.equal(chapterLeaderLock.status, 201, 'Admin can lock a Chapter manager with an audit reason')
   const chapterLeaderLockData = await readJson(chapterLeaderLock)
-  assert.equal(chapterLeaderLockData.lockedUsers, 2, 'disabling a Chapter manager cascades to all accounts in that Chapter')
+  assert.equal(chapterLeaderLockData.lockedUsers, 3, 'disabling a Chapter manager cascades to all accounts in that Chapter')
   assert.deepEqual(chapterLeaderLockData.cascadedChapterIds, [chapterA.id])
   assert.equal((await prisma.user.findUnique({ where: { id: learnerId }, select: { status: true } })).status, 'LOCKED')
   assert.equal((await prisma.user.findUnique({ where: { id: chapterLeaderId }, select: { status: true } })).status, 'LOCKED')

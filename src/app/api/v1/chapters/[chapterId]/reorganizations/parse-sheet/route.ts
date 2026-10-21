@@ -4,7 +4,7 @@ import { canAccessChapterPermission } from '@/lib/authorization'
 import { parseCsv, extractGoogleDocRef, buildGoogleExportUrl } from '@/lib/quiz/import'
 import { listChapterMembers } from '@/lib/chapter-members'
 import { prisma } from '@/lib/prisma'
-import { ORDERED_7_BANS } from '@/lib/departments'
+import { ORDERED_CHAPTER_ROSTER as ORDERED_7_BANS } from '@/lib/departments'
 
 const MEMBER_PATTERN = /^\s*(.*?)\s*\(([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})\)\s*$/i
 const EMAIL_ONLY_PATTERN = /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i
@@ -13,6 +13,7 @@ const normalized = (value: string) =>
   value
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[đĐ]/g, 'd')
     .trim()
     .toLowerCase()
     .replace(/\s+/g, ' ')
@@ -20,6 +21,7 @@ const normalized = (value: string) =>
 function matchStandardDepartmentName(header: string, depts: Array<{ id: string; name: string }>) {
   const norm = normalized(header)
   // Direct match
+  if (norm.includes('chu tich')) return depts.find((d) => d.name === 'Chủ Tịch')
   const direct = depts.find((d) => normalized(d.name) === norm)
   if (direct) return direct
 
@@ -30,6 +32,7 @@ function matchStandardDepartmentName(header: string, depts: Array<{ id: string; 
   if (norm.includes('khach moi')) return depts.find((d) => normalized(d.name).includes('khach moi'))
   if (norm.includes('tt&sk') || norm.includes('tt & sk') || norm.includes('truyen thong')) return depts.find((d) => normalized(d.name).includes('tt') || normalized(d.name).includes('truyen thong'))
   if (norm.includes('thanh vien')) return depts.find((d) => normalized(d.name).includes('thanh vien'))
+  if (norm.includes('dinh huong')) return depts.find((d) => normalized(d.name).includes('dinh huong'))
   if (norm.includes('thu ky')) return depts.find((d) => normalized(d.name).includes('thu ky'))
   return null
 }
@@ -67,7 +70,7 @@ export async function POST(request: NextRequest, { params }: { params: { chapter
     return NextResponse.json({ error: { code: 'ChapterOrganizationMissing' } }, { status: 409 })
   }
 
-  const [departments, leadPosition, currentMembers] = await Promise.all([
+  const [storedDepartments, leadPosition, currentMembers] = await Promise.all([
     prisma.organizationUnit.findMany({
       where: { parent_id: chapter.organization_unit_id, type: 'DEPARTMENT', status: 'ACTIVE' },
       select: { id: true, name: true },
@@ -76,6 +79,7 @@ export async function POST(request: NextRequest, { params }: { params: { chapter
     listChapterMembers(params.chapterId, { roles: ['MEMBER'], status: 'ACTIVE' }),
   ])
 
+  const departments = [{ id: chapter.organization_unit_id, name: 'Chủ Tịch' }, ...storedDepartments.filter((department) => normalized(department.name) !== 'chu tich')]
   const rows = parseCsv(text)
   if (rows.length < 2) {
     return NextResponse.json({ error: { code: 'SheetEmpty', message: 'Sheet chưa có dữ liệu thành viên.' } }, { status: 400 })

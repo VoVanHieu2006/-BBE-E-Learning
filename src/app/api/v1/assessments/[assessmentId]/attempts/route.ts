@@ -8,6 +8,7 @@ import { randomInt } from 'crypto'
 import { isLearningManager } from '@/lib/manager-learning-access'
 import { selectBalancedFinalExamQuestions } from '@/lib/final-exam-selection'
 import { lockCourseExamBank } from '@/lib/final-exam-bank'
+import { learningContext, lockLearningUser, activeLearningPolicy } from '@/lib/learning-periods'
 
 function shuffleSecurely<T>(items: readonly T[]): T[] {
   const shuffled = [...items]
@@ -32,6 +33,7 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
   }
   const assessmentId = params.assessmentId
 
+  const newPolicy = await activeLearningPolicy(prisma, new Date())
   const user = await prisma.user.findUnique({ where: { id: userId } })
   if (!user || user.status !== 'ACTIVE') {
     return NextResponse.json({ error: { code: 'AccountInactive', message: 'Tài khoản phải Active' } }, { status: 403 })
@@ -121,18 +123,7 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
   }
 
   // 2. Tự động chuyển các bài IN_PROGRESS đã hết hạn sang CANCELLED
-  await prisma.attempt.updateMany({
-    where: {
-      assessment_id: assessmentId,
-      user_id: userId,
-      status: 'IN_PROGRESS',
-      expires_at: { lt: new Date() },
-    },
-    data: {
-      status: 'CANCELLED',
-      submitted_at: new Date(),
-    },
-  })
+
 
   // 3. Kiểm tra xem có bài thi nào ĐANG còn trong thời hạn hay không (nếu không forceNew)
   if (!forceNew) {
@@ -190,7 +181,7 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
   if (assessment.type === 'COURSE_FINAL') {
     if (!finalVersion) return NextResponse.json({ error: { code: 'FinalExamVersionUnavailable', message: 'Bài thi cuối khóa chưa có phiên bản đề hợp lệ.' } }, { status: 422 })
     const passed = await prisma.attempt.count({ where: { assessment_id: assessmentId, user_id: userId, passed: true, status: { in: ['SUBMITTED', 'AUTO_SUBMITTED'] } } })
-    if (passed) return NextResponse.json({ error: { code: 'FinalExamAlreadyPassed', message: 'Bạn đã đạt bài thi cuối khóa.' } }, { status: 409 })
+    if (passed && !newPolicy) return NextResponse.json({ error: { code: 'FinalExamAlreadyPassed', message: 'Bạn đã đạt bài thi cuối khóa.' } }, { status: 409 })
   }
 
   const questions = await prisma.question.findMany({
@@ -237,11 +228,18 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
   let attempt: { id: string; attempt_number: number; expires_at: Date }
   try {
     attempt = await prisma.$transaction(async (tx) => {
+    let now = await lockLearningUser(tx, userId)
+    const lockedGate = assessment.type === 'COURSE_FINAL' && assessment.course_id
+      ? await checkCourseFinalProgression(userId, assessment.course_id, isAdmin)
+      : assessment.lesson_id ? await checkLessonProgression(userId, assessment.lesson_id, 'ASSESS', isAdmin) : null
+    if (!lockedGate || lockedGate.ok === false) throw new Error('ProgressionChanged')
+    const learning = await learningContext(tx, userId, now)
+    now = learning?.now || now
     await lockCourseExamBank(tx, gate.courseId)
     if (assessment.type === 'COURSE_FINAL' && assessment.course_id) {
       const current = await tx.finalExamVersion.findFirst({ where: { assessment_id: assessmentId, is_active: true }, select: { id: true } })
       if (current?.id !== finalVersion?.id) throw new Error('FinalExamVersionChanged')
-      if (await tx.attempt.count({ where: { assessment_id: assessmentId, user_id: userId, passed: true, status: { in: ['SUBMITTED', 'AUTO_SUBMITTED'] } } })) throw new Error('FinalExamAlreadyPassed')
+      if (!learning && await tx.attempt.count({ where: { assessment_id: assessmentId, user_id: userId, passed: true, status: { in: ['SUBMITTED', 'AUTO_SUBMITTED'] } } })) throw new Error('FinalExamAlreadyPassed')
     }
     if (!forceNew && await tx.attempt.count({ where: { assessment_id: assessmentId, user_id: userId, status: 'IN_PROGRESS', expires_at: { gt: new Date() } } })) throw new Error('AttemptAlreadyInProgress')
     // Do not discard a resumable attempt until every prerequisite and the full
@@ -268,8 +266,9 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
         final_exam_version_id: finalVersion?.id || null,
         user_id: userId,
         status: 'IN_PROGRESS',
-        started_at: new Date(),
-        expires_at: expiresAt,
+        learning_cycle_id: learning?.cycle.id,
+        started_at: now,
+        expires_at: new Date(now.getTime() + (finalVersion?.duration_minutes || assessment.duration_minutes) * 60_000),
         attempt_number: submittedCount + 1,
       },
     })
@@ -279,12 +278,18 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
         attempt_id: a.id,
         question_id: q.id,
         display_order: idx,
+        question_snapshot: { id: q.id, points: q.points, explanation: q.explanation, options: q.options.map((option) => ({ id: option.id, text: option.option_text, correct: option.is_correct })) },
       })),
     })
 
+    if (learning) await tx.quizRewardHighWaterMark.upsert({
+      where: { user_id_assessment_id_competition_month_id_learning_cycle_id: { user_id: userId, assessment_id: assessmentId, competition_month_id: learning.month.id, learning_cycle_id: learning.cycle.id } },
+      update: {}, create: { user_id: userId, assessment_id: assessmentId, competition_month_id: learning.month.id, learning_cycle_id: learning.cycle.id, reward_question_count: selectedQuestions.length, reward_config: { questions: selectedQuestions.map((q) => ({ id: q.id, points: q.points })) } },
+    })
     return a
     })
   } catch (error) {
+    if (error instanceof Error && error.message === 'ProgressionChanged') return NextResponse.json({ error: { code: 'ProgressionChanged', message: 'Chu kỳ hoặc quyền mở bài đã thay đổi. Hãy tải lại.' } }, { status: 409 })
     if (error instanceof Error && error.message === 'FinalExamVersionChanged') {
       return NextResponse.json({ error: { code: 'FinalExamVersionChanged', message: 'Đề thi vừa được cập nhật. Hãy tải lại trang để bắt đầu phiên bản mới.' } }, { status: 409 })
     }
