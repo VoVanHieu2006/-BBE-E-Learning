@@ -17,7 +17,7 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
   }
 
   // Tự động kiểm tra và áp dụng chuyển giao nhiệm kỳ nếu đã đến thời gian hiệu lực
-
+  await applyDueChapterReorganizations(new Date()).catch(() => {})
 
   const batches = await prisma.chapterReorganization.findMany({
     where: { chapter_id: params.chapterId },

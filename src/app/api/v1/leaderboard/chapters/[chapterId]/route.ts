@@ -58,15 +58,26 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
   }
 
   const members = await prisma.user.findMany({
-    where: { status: 'ACTIVE', role: 'MEMBER', OR: memberScope, position_assignments: { none: { position: { code: 'DNA_LEAD' }, starts_at: { lte: now }, OR: [{ ends_at: null }, { ends_at: { gt: now } }] } } },
-    select: { id: true, email: true, display_name: true },
+    where: {
+      status: 'ACTIVE',
+      role: { in: ['MEMBER', 'CHAPTER_LEADER'] },
+      OR: memberScope,
+      position_assignments: {
+        none: {
+          position: { code: 'DNA_LEAD' },
+          starts_at: { lte: now },
+          OR: [{ ends_at: null }, { ends_at: { gt: now } }],
+        },
+      },
+    },
+    select: { id: true, email: true, display_name: true, role: true },
     take: 500,
   })
 
   const memberIds = members.map((member) => member.id)
   if (!memberIds.length) return NextResponse.json({ chapterId: chapter.id, items: [] })
 
-  const [system, starRows, deptRows] = await Promise.all([
+  const [system, starRows, deptRows, posRows] = await Promise.all([
     getPublishedSystemData(),
     prisma.starLedger.findMany({ where: { user_id: { in: memberIds } }, select: { user_id: true, amount: true, awarded_at: true } }),
     unitIds.length
@@ -84,6 +95,16 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
           },
         })
       : Promise.resolve([]),
+    prisma.positionAssignment.findMany({
+      where: {
+        user_id: { in: memberIds },
+        starts_at: { lte: now },
+        OR: [{ ends_at: null }, { ends_at: { gt: now } }],
+      },
+      include: {
+        position: { select: { code: true, name: true, is_manager: true } },
+      },
+    }),
   ])
   const progressMap = await calculateBatchUsersProgress(memberIds, system)
   const starsByUser = new Map<string, number>()
@@ -100,12 +121,32 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
     }
   }
 
+  const positionByUser = new Map<string, { code: string; name: string; isLead: boolean }>()
+  for (const row of posRows) {
+    const isLead =
+      row.position.is_manager ||
+      ['CHAPTER_LEAD', 'CHAPTER_MANAGER', 'DEPARTMENT_LEAD', 'DEPARTMENT_LEADER', 'CHAPTER_PRESIDENT'].includes(row.position.code)
+    if (!positionByUser.has(row.user_id) || isLead) {
+      positionByUser.set(row.user_id, {
+        code: row.position.code,
+        name: row.position.name,
+        isLead,
+      })
+    }
+  }
+
   const items = members.map((member) => {
     const progress = progressMap.get(member.id)
+    const posInfo = positionByUser.get(member.id)
+    const isLead = Boolean(posInfo?.isLead || member.role === 'CHAPTER_LEADER')
+    const positionTitle = posInfo?.name || (member.role === 'CHAPTER_LEADER' ? 'Chủ tịch Chapter' : null)
     return {
       userId: member.id,
       displayName: member.display_name,
       department: deptByUser.get(member.id) || null,
+      isLead,
+      position: posInfo?.code || (isLead ? 'CHAPTER_LEAD' : null),
+      positionTitle,
       stars: starsByUser.get(member.id) || 0,
       starsAchievedAt: achievedAtByUser.get(member.id)?.toISOString() || null,
       completedLessons: progress?.completedLessons || 0,

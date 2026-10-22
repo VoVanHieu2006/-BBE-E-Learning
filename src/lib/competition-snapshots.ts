@@ -42,10 +42,27 @@ async function coreLessonIdsAt(tx: Tx, at: Date) {
     tx.courseRequirementVersion.findMany({ where: { published_at: { lt: at } }, orderBy: { version: 'desc' } }),
   ])
   const ids = new Set<string>()
-  for (const course of courses) if (events.find((event) => event.course_id === course.id)?.status === 'PUBLISHED') {
-    const version = versions.find((row) => row.course_id === course.id)
-    if (!version) throw new Error(`MissingCourseRequirementBaseline:${course.id}`)
-    for (const id of version.lesson_ids) ids.add(id)
+  const publishedCourseIds: string[] = []
+  for (const course of courses) {
+    if (events.find((event) => event.course_id === course.id)?.status === 'PUBLISHED') {
+      publishedCourseIds.push(course.id)
+    }
+  }
+  const fallbackCourseIds: string[] = []
+  for (const courseId of publishedCourseIds) {
+    const version = versions.find((row) => row.course_id === courseId)
+    if (!version) {
+      fallbackCourseIds.push(courseId)
+    } else {
+      for (const id of version.lesson_ids) ids.add(id)
+    }
+  }
+  if (fallbackCourseIds.length) {
+    const fallbackLessons = await tx.lesson.findMany({
+      where: { session: { course_id: { in: fallbackCourseIds } } },
+      select: { id: true },
+    })
+    for (const l of fallbackLessons) ids.add(l.id)
   }
   return ids
 }
@@ -87,6 +104,29 @@ export async function individualPeriodRows(tx: Tx, startsAt: Date, endsAt: Date,
 export async function historicalChapterMonthRows(tx: Tx, month: { id: string; key: string; starts_at: Date; ends_at: Date }, end: Date) {
   const chapters = await tx.chapter.findMany({ select: { id: true, name: true } })
   const items = []
+  const cohortCache = new Map<number, any[]>()
+  const coreIdsCache = new Map<number, Set<string>>()
+  const cyclesCache = new Map<number, any[]>()
+
+  const getSnapshotData = async (at: Date) => {
+    const timeKey = at.getTime()
+    if (!cohortCache.has(timeKey)) {
+      const [cohort, coreIds, cycles] = await Promise.all([
+        competitionCohortAt(tx, at),
+        coreLessonIdsAt(tx, at),
+        tx.learningCycle.findMany({ where: leftBoundary(at) }),
+      ])
+      cohortCache.set(timeKey, cohort)
+      coreIdsCache.set(timeKey, coreIds)
+      cyclesCache.set(timeKey, cycles)
+    }
+    return {
+      cohort: cohortCache.get(timeKey)!,
+      coreIds: coreIdsCache.get(timeKey)!,
+      cycles: cyclesCache.get(timeKey)!,
+    }
+  }
+
   for (const chapter of chapters) {
     const transferredDnaIntervals = await tx.chapterAffiliationInterval.findMany({
       where: {
@@ -110,20 +150,19 @@ export async function historicalChapterMonthRows(tx: Tx, month: { id: string; ke
     const excludedDnaUserIds = new Set(dnaMemberships.map((m) => m.user_id))
 
     const transfers = await tx.chapterReorganization.findMany({ where: { chapter_id: chapter.id, status: 'APPLIED', applied_at: { gt: month.starts_at, lt: end } }, orderBy: { applied_at: 'asc' } })
-    const endpoints = [...transfers.map((row) => row.applied_at!), end]
+    const uniqueTimestamps = Array.from(new Set([...transfers.map((row) => row.applied_at!.getTime()), end.getTime()])).sort((a, b) => a - b)
+    const endpoints = uniqueTimestamps.map((t) => new Date(t))
     const stages: ChapterStage[] = []
     let startsAt = month.starts_at
     let latestCoreLessonCount = 0
 
     for (const at of endpoints) {
-      const [cohort, coreIds, cycles] = await Promise.all([
-        competitionCohortAt(tx, at), coreLessonIdsAt(tx, at), tx.learningCycle.findMany({ where: leftBoundary(at) }),
-      ])
+      const { cohort, coreIds, cycles } = await getSnapshotData(at)
       latestCoreLessonCount = coreIds.size
       const members = cohort.filter((row) => row.chapterId === chapter.id && row.group !== 'DNA' && !excludedDnaUserIds.has(row.userId))
-      const progress = await tx.cycleLessonProgress.findMany({ where: {
+      const progress = members.length && cycles.length ? await tx.cycleLessonProgress.findMany({ where: {
         user_id: { in: members.map((row) => row.userId) }, learning_cycle_id: { in: cycles.map((row) => row.id) }, completed_at: { lt: at },
-      }, select: { user_id: true, lesson_id: true } })
+      }, select: { user_id: true, lesson_id: true } }) : []
       const qualifiedCount = coreIds.size ? members.filter((member) => new Set(progress.filter((row) => row.user_id === member.userId && coreIds.has(row.lesson_id)).map((row) => row.lesson_id)).size / coreIds.size >= 0.7).length : 0
       const ledger = await tx.starLedger.aggregate({
         where: {

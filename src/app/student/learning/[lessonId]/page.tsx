@@ -801,7 +801,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
 
                               <div className="min-w-0 flex-1">
                                 <p className={`font-semibold line-clamp-2 ${isCurrent ? 'text-[#2563EB]' : 'text-[#172554]'}`}>
-                                  {sIdx + 1}.{lIdx + 1} {l.title}
+                                  Bài {lIdx + 1}: {l.title}
                                 </p>
                               <div className="flex items-center gap-2 text-[10px] text-[#737686] mt-1 font-normal flex-wrap">
                                   <span>📹 {l.video?.durationSeconds ? `${Math.floor(l.video.durationSeconds / 60)}:${(l.video.durationSeconds % 60).toString().padStart(2, '0')}` : 'Video'}</span>

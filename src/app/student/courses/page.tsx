@@ -20,6 +20,7 @@ export default function StudentCoursesPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [mainTab, setMainTab] = useState<'PROGRAM_TREE' | 'MY_COURSES'>('PROGRAM_TREE');
   const [filter, setFilter] = useState<'ALL' | 'IN_PROGRESS' | 'NOT_STARTED' | 'COMPLETED'>('ALL');
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [currentTime, setCurrentTime] = useState(Date.now());
@@ -54,6 +55,11 @@ export default function StudentCoursesPage() {
       if (cachedStars?.balance !== undefined) {
         setStarBalance(cachedStars.balance);
       }
+
+      const sp = new URLSearchParams(window.location.search);
+      const tabParam = sp.get('tab');
+      if (tabParam === 'my_courses' || tabParam === 'courses') setMainTab('MY_COURSES');
+      else if (tabParam === 'program' || tabParam === 'tree') setMainTab('PROGRAM_TREE');
     }
     loadData();
   }, []);
@@ -228,11 +234,7 @@ export default function StudentCoursesPage() {
             <div className="absolute right-0 bottom-0 opacity-10 pointer-events-none text-9xl">📚</div>
           </div>
 
-          {/* Lộ trình chương trình đào tạo BBE đặt trực tiếp dưới Banner */}
-          <LearningPeriodSummary />
-          <ProgramCourseTree />
-
-          {/* 3 KPI Summary Cards */}
+          {/* 3 KPI Summary Cards - Fixed at top */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             <Card className="p-6 border border-[#eff4ff] shadow-sm hover:shadow-md transition">
               <div className="flex items-center justify-between mb-2">
@@ -270,6 +272,48 @@ export default function StudentCoursesPage() {
               <p className="text-xs text-[#737686]">Tích lũy từ video và quiz bài học</p>
             </Card>
           </div>
+
+          {/* Main Tab Switcher */}
+          <div className="flex items-center gap-2 p-1.5 bg-slate-100 rounded-2xl border border-slate-200/80 w-fit">
+            <button
+              type="button"
+              onClick={() => setMainTab('PROGRAM_TREE')}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+                mainTab === 'PROGRAM_TREE'
+                  ? 'bg-white text-[#2563EB] shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <span>🗺️</span>
+              <span>Lộ trình theo Chương trình</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setMainTab('MY_COURSES')}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+                mainTab === 'MY_COURSES'
+                  ? 'bg-white text-[#2563EB] shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <span>📌</span>
+              <span>Khóa học của bạn</span>
+              {mandatoryCourses.length > 0 && (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-100 text-rose-700">
+                  {mandatoryCourses.length}
+                </span>
+              )}
+            </button>
+          </div>
+
+          {/* Tab Content */}
+          {mainTab === 'PROGRAM_TREE' ? (
+            <div className="space-y-6">
+              <LearningPeriodSummary />
+              <ProgramCourseTree />
+            </div>
+          ) : (
+            <div className="space-y-8">
 
           {/* Countdown & Mandatory Deadline Banner (Item 7) */}
           {mandatoryCourses.length > 0 && msRemaining !== null && (
@@ -537,6 +581,8 @@ export default function StudentCoursesPage() {
               </div>
             )}
           </div>
+        </div>
+      )}
 
           {/* Modal: Department Term History */}
           <Modal

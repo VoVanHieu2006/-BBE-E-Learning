@@ -36,10 +36,10 @@ export async function checkCourseFinalProgression(
               video: { select: { duration_seconds: true } },
               assessment: { select: { id: true } },
             },
-            orderBy: { sort_order: 'asc' },
+            orderBy: [{ sort_order: 'asc' }, { id: 'asc' }],
           },
         },
-        orderBy: { sort_order: 'asc' },
+        orderBy: [{ sort_order: 'asc' }, { id: 'asc' }],
       },
     },
   })
@@ -151,7 +151,7 @@ export async function checkLessonProgression(
       video: { select: { duration_seconds: true } },
       assessment: { select: { id: true } },
     },
-    orderBy: [{ session: { sort_order: 'asc' } }, { sort_order: 'asc' }],
+    orderBy: [{ session: { sort_order: 'asc' } }, { sort_order: 'asc' }, { id: 'asc' }],
   })
   const currentIndex = lessons.findIndex((item) => item.id === lessonId)
   if (currentIndex < 0) return { ok: false, code: 'NotAssigned', message: 'Bài học không tồn tại trong khóa học' }

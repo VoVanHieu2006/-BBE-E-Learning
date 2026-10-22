@@ -94,6 +94,22 @@ export default function YouTubePlayer({
     setIsBuffering(false);
   }, [lessonId, youtubeVideoId]);
 
+  // Update furthest and currentTime when props arrive asynchronously after mount (fixes F5 loss)
+  useEffect(() => {
+    if (initialFurthest > 0 && initialFurthest > furthestRef.current) {
+      furthestRef.current = initialFurthest;
+      setFurthest(initialFurthest);
+    }
+    if (initialPosition > 0 && currentTime === 0) {
+      setCurrentTime(initialPosition);
+      if (playerRef.current?.seekTo) {
+        try {
+          playerRef.current.seekTo(initialPosition, true);
+        } catch {}
+      }
+    }
+  }, [initialPosition, initialFurthest]);
+
   // Hẹn giờ tự ẩn thanh điều khiển (thanh tua) sau 3s khi đang phát.
   // Được gọi từ handleMouseMove VÀ từ onStateChange(YT_PLAYING) —
   // tránh việc thanh tua kẹt hiện mãi khi user bấm play mà không rê chuột sau đó.
@@ -116,13 +132,14 @@ export default function YouTubePlayer({
   // Dùng apiFetch để tự refresh token khi 401 — tránh mất tiến trình khi access token hết hạn (15 phút)
   const sendProgress = useCallback(
     async (ct: number, ft: number, forceCompleted: boolean = false) => {
-      if (!accessToken) return;
+      if (!accessToken || isGuest) return;
       try {
         const d = durationRef.current || duration || 1;
-        const isDone = forceCompleted || (d > 0 && ft >= d);
+        const safeFurthest = ft === 0 && furthestRef.current > 0 ? furthestRef.current : ft;
+        const isDone = forceCompleted || (d > 0 && safeFurthest >= d);
 
         if (!viewSessionRef.current) viewSessionRef.current = crypto.randomUUID();
-        const event = { currentTime: Math.round(ct), duration: Math.round(d), furthest: Math.round(ft), viewSessionId: viewSessionRef.current };
+        const event = { currentTime: Math.round(ct), duration: Math.round(d), furthest: Math.round(safeFurthest), viewSessionId: viewSessionRef.current };
         // The learning page owns the API request so it can consume server-authoritative
         // completion/reward data. Preview/debug consumers retain this safe fallback.
         if (onProgress) {
@@ -140,7 +157,7 @@ export default function YouTubePlayer({
         }
       } catch {}
     },
-    [lessonId, accessToken, duration, onProgress]
+    [lessonId, accessToken, isGuest, duration, onProgress]
   );
 
   // Fullscreen change listener
@@ -159,6 +176,7 @@ export default function YouTubePlayer({
   useEffect(() => {
     let unmounted = false;
     let poller: ReturnType<typeof setInterval> | null = null;
+    let readyTimeout: ReturnType<typeof setTimeout> | null = null;
 
     const initPlayer = () => {
       if (unmounted || !containerRef.current || !window.YT?.Player) return;
@@ -177,6 +195,13 @@ export default function YouTubePlayer({
         mountDiv.style.height = '100%';
         containerRef.current.appendChild(mountDiv);
 
+        if (readyTimeout) clearTimeout(readyTimeout);
+        readyTimeout = setTimeout(() => {
+          if (!unmounted) {
+            setIsReady(true);
+          }
+        }, 3500);
+
         playerRef.current = new window.YT.Player(mountDiv, {
           videoId: youtubeVideoId,
           playerVars: {
@@ -194,6 +219,7 @@ export default function YouTubePlayer({
           events: {
             onReady: (e: any) => {
               if (unmounted) return;
+              if (readyTimeout) clearTimeout(readyTimeout);
               setIsReady(true);
               // Tắt phụ đề mặc định (cc_load_policy=0 không đủ với một số video)
               try {
@@ -323,6 +349,7 @@ export default function YouTubePlayer({
     return () => {
       unmounted = true;
       if (poller) clearInterval(poller);
+      if (readyTimeout) clearTimeout(readyTimeout);
       stopHeartbeat();
       stopUiTimer();
       clearHideControls();

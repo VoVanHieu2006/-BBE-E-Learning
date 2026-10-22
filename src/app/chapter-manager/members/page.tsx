@@ -433,11 +433,15 @@ export default function ChapterManagerMembersPage() {
                           <button
                             type="button"
                             onClick={() => handleOpenProfile(mId)}
-                            className="font-semibold text-[#172554] hover:text-[#2563EB] transition text-left cursor-pointer"
+                            className="text-left group cursor-pointer block"
                           >
-                            {m.displayName || 'Chưa cập nhật tên'}
+                            <span className="font-semibold text-[#172554] group-hover:text-[#2563EB] transition-colors block">
+                              {m.displayName || 'Chưa cập nhật tên'}
+                            </span>
+                            <span className="mt-0.5 text-xs text-[#737686] group-hover:text-[#2563EB] transition-colors block">
+                              {m.email}
+                            </span>
                           </button>
-                          <p className="mt-0.5 text-xs text-[#737686]">{m.email}</p>
                           <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
                             {m.department?.name === 'Chủ Tịch' ? (
                               <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-amber-200/80 text-amber-900 shadow-2xs">
@@ -500,14 +504,6 @@ export default function ChapterManagerMembersPage() {
                         </td>
                         <td className="px-6 py-4 text-right">
                           <div className="flex items-center justify-end gap-2">
-                            <button
-                              type="button"
-                              onClick={() => handleOpenProfile(mId)}
-                              className="px-2.5 py-1 text-xs font-semibold text-[#2563EB] hover:bg-blue-50 rounded-lg transition cursor-pointer"
-                            >
-                              Chi tiết
-                            </button>
-
                             {/* Active or Locked accounts can be deactivated */}
                             {canManageMembers && (isActive || isLocked) && (
                               <button

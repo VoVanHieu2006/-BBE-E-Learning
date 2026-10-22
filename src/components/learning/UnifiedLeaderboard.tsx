@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
 import Card from '@/components/ui/Card'
 import Modal from '@/components/ui/Modal'
+import LearnerProfileView from '@/components/learner/LearnerProfileView'
 import { apiFetch, clearApiCache, getCachedApiData } from '@/lib/api/client'
 
 export interface UnifiedLeaderboardProps {
@@ -63,6 +64,27 @@ export default function UnifiedLeaderboard({
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [showRulesModal, setShowRulesModal] = useState(false)
+
+  // Profile Modal State
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
+  const [selectedUserData, setSelectedUserData] = useState<any>(null)
+  const [loadingProfile, setLoadingProfile] = useState(false)
+
+  const handleOpenProfile = async (memberId: string, chapId?: string) => {
+    setSelectedUserId(memberId)
+    setLoadingProfile(true)
+    const targetChapter = chapId || selectedChapterId || currentUser?.chapterId || propChapterId || 'me'
+    try {
+      const res = await apiFetch<any>(`/api/v1/chapters/${targetChapter}/members/${memberId}/course-progress`, { noCache: true })
+      if (res.data) {
+        setSelectedUserData(res.data)
+      }
+    } catch (err) {
+      console.error('Failed to load profile:', err)
+    } finally {
+      setLoadingProfile(false)
+    }
+  }
 
   // Đọc currentUser từ localStorage & API
   const refreshCurrentUser = useCallback(() => {
@@ -165,13 +187,21 @@ export default function UnifiedLeaderboard({
             const list: LeaderboardItem[] = (res.data.items || [])
               .filter((m: any) => {
                 const dept = typeof m.department === 'string' ? m.department : m.department?.name
-                return m.isLead || dept === 'Chủ Tịch' || dept?.toLowerCase().includes('trưởng')
+                const pos = m.positionTitle || m.position || ''
+                return Boolean(
+                  m.isLead ||
+                  pos.toLowerCase().includes('lead') ||
+                  pos.toLowerCase().includes('chủ tịch') ||
+                  pos.toLowerCase().includes('trưởng') ||
+                  dept === 'Chủ Tịch' ||
+                  dept?.toLowerCase().includes('trưởng')
+                )
               })
               .map((m: any, idx: number) => ({
                 ...m,
                 rank: idx + 1,
                 displayName: m.displayName || m.email?.split('@')[0],
-                departmentName: typeof m.department === 'string' ? m.department : (m.department?.name || 'Ban LT'),
+                departmentName: m.positionTitle || (typeof m.department === 'string' ? m.department : (m.department?.name || 'LT')),
               }))
             setItems(list)
           } else {
@@ -318,7 +348,7 @@ export default function UnifiedLeaderboard({
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              👑 Ban LT
+              👑 LT
             </button>
             <button
               onClick={() => setGroup('DNA')}
@@ -414,7 +444,17 @@ export default function UnifiedLeaderboard({
                     Hạng 2 • Á quân
                   </div>
                   <div className="font-extrabold text-[#172554] text-base truncate mb-0.5">
-                    {topThree[1].displayName}
+                    {group !== 'CHAPTER' && (topThree[1].userId || topThree[1].id) ? (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenProfile((topThree[1].userId || topThree[1].id)!, topThree[1].chapterId)}
+                        className="hover:text-[#2563EB] hover:underline cursor-pointer transition-colors"
+                      >
+                        {topThree[1].displayName}
+                      </button>
+                    ) : (
+                      topThree[1].displayName
+                    )}
                     {isCurrentUserItem(topThree[1]) && (
                       <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black bg-[#2563EB] text-white">
                         Bạn
@@ -443,7 +483,17 @@ export default function UnifiedLeaderboard({
                   </div>
                   <div className="text-5xl mb-1">🥇</div>
                   <div className="font-black text-lg text-[#172554] truncate mb-0.5">
-                    {topThree[0].displayName}
+                    {group !== 'CHAPTER' && (topThree[0].userId || topThree[0].id) ? (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenProfile((topThree[0].userId || topThree[0].id)!, topThree[0].chapterId)}
+                        className="hover:text-[#2563EB] hover:underline cursor-pointer transition-colors"
+                      >
+                        {topThree[0].displayName}
+                      </button>
+                    ) : (
+                      topThree[0].displayName
+                    )}
                     {isCurrentUserItem(topThree[0]) && (
                       <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-black bg-[#2563EB] text-white">
                         Bạn
@@ -470,7 +520,17 @@ export default function UnifiedLeaderboard({
                     Hạng 3 • Quý quân
                   </div>
                   <div className="font-extrabold text-[#172554] text-base truncate mb-0.5">
-                    {topThree[2].displayName}
+                    {group !== 'CHAPTER' && (topThree[2].userId || topThree[2].id) ? (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenProfile((topThree[2].userId || topThree[2].id)!, topThree[2].chapterId)}
+                        className="hover:text-[#2563EB] hover:underline cursor-pointer transition-colors"
+                      >
+                        {topThree[2].displayName}
+                      </button>
+                    ) : (
+                      topThree[2].displayName
+                    )}
                     {isCurrentUserItem(topThree[2]) && (
                       <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black bg-[#2563EB] text-white">
                         Bạn
@@ -553,16 +613,38 @@ export default function UnifiedLeaderboard({
                               {(item.displayName || item.name || 'U').charAt(0).toUpperCase()}
                             </div>
                             <div className="min-w-0">
-                              <p className="font-bold text-[#172554] truncate flex items-center gap-2">
-                                <span>{item.displayName || item.name || item.email}</span>
-                                {isYou && (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black bg-[#2563EB] text-white shadow-2xs">
-                                    Bạn
-                                  </span>
-                                )}
-                              </p>
-                              {item.email && group !== 'CHAPTER' && (
-                                <p className="text-[11px] text-[#737686] truncate">{item.email}</p>
+                              {group !== 'CHAPTER' && (item.userId || item.id) ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenProfile((item.userId || item.id)!, item.chapterId)}
+                                  className="text-left group cursor-pointer block"
+                                >
+                                  <p className="font-bold text-[#172554] group-hover:text-[#2563EB] transition-colors truncate flex items-center gap-2">
+                                    <span>{item.displayName || item.name || item.email}</span>
+                                    {isYou && (
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black bg-[#2563EB] text-white shadow-2xs">
+                                        Bạn
+                                      </span>
+                                    )}
+                                  </p>
+                                  {item.email && (
+                                    <p className="text-[11px] text-[#737686] group-hover:text-[#2563EB] transition-colors truncate">{item.email}</p>
+                                  )}
+                                </button>
+                              ) : (
+                                <>
+                                  <p className="font-bold text-[#172554] truncate flex items-center gap-2">
+                                    <span>{item.displayName || item.name || item.email}</span>
+                                    {isYou && (
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black bg-[#2563EB] text-white shadow-2xs">
+                                        Bạn
+                                      </span>
+                                    )}
+                                  </p>
+                                  {item.email && group !== 'CHAPTER' && (
+                                    <p className="text-[11px] text-[#737686] truncate">{item.email}</p>
+                                  )}
+                                </>
                               )}
                             </div>
                           </div>
@@ -723,6 +805,44 @@ export default function UnifiedLeaderboard({
             </button>
           </div>
         </div>
+      </Modal>
+
+      {/* Modal Profile Học viên */}
+      <Modal
+        isOpen={Boolean(selectedUserId)}
+        onClose={() => { setSelectedUserId(null); setSelectedUserData(null); }}
+        maxWidth="max-w-5xl"
+      >
+        {loadingProfile && !selectedUserData ? (
+          <div className="py-12 flex flex-col items-center justify-center">
+            <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+            <p className="mt-2 text-xs text-slate-500 font-medium">Đang tải hồ sơ thành viên...</p>
+          </div>
+        ) : selectedUserData ? (
+          <div className="p-4 max-h-[80vh] overflow-y-auto">
+            <LearnerProfileView
+              user={{
+                userId: selectedUserData.user?.userId || selectedUserId || '',
+                displayName: selectedUserData.user?.displayName,
+                email: selectedUserData.user?.email,
+                status: selectedUserData.user?.status,
+                accountState: selectedUserData.user?.accountState,
+                role: selectedUserData.user?.role,
+                chapterName: selectedUserData.user?.chapterName || selectedUserData.user?.chapter?.name,
+                departmentName: selectedUserData.user?.departmentName || selectedUserData.user?.department?.name,
+                createdAt: selectedUserData.user?.joinedAt || selectedUserData.user?.createdAt,
+                deactivatedByRole: selectedUserData.user?.deactivatedByRole,
+              }}
+              progressData={{
+                summary: selectedUserData.summary,
+                courses: selectedUserData.courses,
+                learningDetail: selectedUserData.learningDetail,
+              }}
+              loading={loadingProfile}
+              onRefresh={() => selectedUserId && handleOpenProfile(selectedUserId)}
+            />
+          </div>
+        ) : null}
       </Modal>
     </div>
   )

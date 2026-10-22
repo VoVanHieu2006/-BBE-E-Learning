@@ -134,12 +134,26 @@ export default function AdminChaptersProgressPage() {
       </div>
 
       <Card className="mb-6 border border-blue-200 bg-blue-50/60 p-5">
-        <h2 className="font-bold text-[#172554]">Nhập KPI và cách tính điểm</h2>
-        <p className="mt-2 text-sm text-[#434655]">Bấm “KPI & lịch sử” tại bất kỳ Chapter nào, kể cả Chapter chưa đủ điều kiện, để nhập KPI Đen, Đỏ, Vàng hoặc Xanh và xem các tháng trước.</p>
-        <div className="mt-4 grid gap-2 rounded-2xl border border-blue-200 bg-white p-4 text-sm md:grid-cols-2">
-          <strong className="text-blue-700">📘 Hoàn thành TB × 0,3</strong><strong className="text-amber-600">⭐ Star TB/người × 0,3</strong>
-          <strong className="text-violet-700">👥 Quy mô × 0,2</strong><strong className="text-green-700">🟢 KPI Xanh +20 điểm</strong>
-          <p className="md:col-span-2 text-xs text-[#737686]">Quy mô = min(100, số thành viên / 51 × 100). KPI Vàng +0. Điểm tích lũy có thể vượt 100.</p>
+        <h2 className="font-bold text-[#172554]">Công thức xếp hạng & Đánh giá KPI Chapter (Quy chế v4)</h2>
+        <p className="mt-2 text-sm text-[#434655]">
+          Bấm <strong>“KPI & lịch sử”</strong> tại bất kỳ Chapter nào để nhập trạng thái KPI (Xanh, Vàng, Đỏ, Đen) cho tháng hiện tại hoặc các tháng trước.
+        </p>
+        <div className="mt-4 grid gap-3 rounded-2xl border border-blue-200 bg-white p-4 text-sm md:grid-cols-2">
+          <div>
+            <div className="font-bold text-[#2563EB]">⭐ Điểm xếp hạng = Star bình quân / thành viên</div>
+            <p className="text-xs text-[#737686] mt-1">
+              Giai đoạn chuẩn: <strong>S_m = A_m / N_m</strong> (Tổng Star chia số thành viên).
+              Tháng có chuyển giao: tính theo từng chặng <strong>S = S_1/N_1 + S_2/N_2 + ...</strong>
+            </p>
+          </div>
+          <div>
+            <div className="font-bold text-emerald-700">🟢 Điều kiện tham gia xếp hạng</div>
+            <ul className="text-xs text-[#737686] mt-1 list-disc list-inside space-y-0.5">
+              <li>Số thành viên bình quân <strong>&gt; 20 người</strong></li>
+              <li>Tối thiểu <strong>50%</strong> thành viên đạt <strong>&ge; 70%</strong> bài học bắt buộc</li>
+              <li>KPI tháng đạt <strong>Xanh</strong> hoặc <strong>Vàng</strong> (KPI Đỏ hoặc Đen bị loại)</li>
+            </ul>
+          </div>
         </div>
       </Card>
 
@@ -278,7 +292,7 @@ export default function AdminChaptersProgressPage() {
                       </td>
                       <td className="px-3 py-4 text-center whitespace-nowrap">
                         <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${ch.kpi?.status === 'GREEN' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-800'}`}>
-                          {ch.kpi?.status === 'GREEN' ? 'Xanh +20' : 'Vàng +0'}
+                          {ch.kpi?.status === 'GREEN' ? '🟢 Xanh (Đạt)' : '🟡 Vàng (Đạt)'}
                         </span>
                       </td>
                       <td className="px-6 py-4 text-center font-extrabold text-[#172554] text-base">
@@ -310,7 +324,7 @@ export default function AdminChaptersProgressPage() {
             <div className="mt-3 flex flex-wrap gap-2">
               {excludedChapters.map((chapter) => <button key={chapter.chapterId} onClick={() => !loading && handleOpenChapterDrillDown(chapter)} className="min-w-[260px] rounded-xl border border-amber-200 bg-white px-4 py-3 text-left text-xs text-[#434655] hover:border-blue-300 hover:shadow-sm">
                 <strong>{chapter.name}</strong>
-                <span className="mt-2 flex flex-col gap-1">{(chapter.reasons || []).map((reason: string) => <span key={reason} className={`rounded-lg px-2 py-1 font-semibold ${reason === 'KPI_MISSING' ? 'bg-slate-100 text-slate-700' : reason.startsWith('KPI_') ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-800'}`}>{reason === 'KPI_MISSING' ? `📅 Chưa nhập KPI tháng ${leaderboardMonth.split('-')[1]}/${leaderboardMonth.split('-')[0]}` : reason === 'MINIMUM_MEMBERS' ? `👥 Chưa đủ 20 thành viên (${chapter.memberCount})` : reason === 'COMPLETION_THRESHOLD' ? `📘 Chưa đạt 50% thành viên ≥70% (${chapter.atLeast70Percent}% đã đạt)` : reason === 'KPI_RED' ? '🔴 KPI Đỏ' : '⚫ KPI Đen'}</span>)}</span>
+                <span className="mt-2 flex flex-col gap-1">{(chapter.reasons || []).map((reason: string) => <span key={reason} className={`rounded-lg px-2 py-1 font-semibold ${reason === 'WAITING_KPI' || reason === 'KPI_MISSING' ? 'bg-slate-100 text-slate-700' : reason === 'KPI_NOT_ELIGIBLE' || reason.startsWith('KPI_') ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-800'}`}>{reason === 'WAITING_KPI' || reason === 'KPI_MISSING' ? `📅 Chưa nhập KPI tháng ${leaderboardMonth.split('-')[1]}/${leaderboardMonth.split('-')[0]}` : reason === 'MEMBER_COUNT_NOT_ABOVE_20' || reason === 'MINIMUM_MEMBERS' ? `👥 Chưa đủ 20 thành viên (${chapter.memberCount || 0} học viên)` : reason === 'CORE_COMPLETION_BELOW_50_PERCENT' || reason === 'COMPLETION_THRESHOLD' ? `📘 Chưa đạt 50% thành viên ≥70% (${chapter.atLeast70Percent || 0}% đã đạt)` : reason === 'KPI_NOT_ELIGIBLE' || reason === 'KPI_RED' ? '🔴 KPI Đỏ hoặc Đen' : reason === 'ROSTER_ZERO' ? '👥 Không có thành viên' : reason === 'CORE_LESSONS_ZERO' ? '📚 Chưa có bài học cốt lõi' : reason}</span>)}</span>
                 <span className="mt-1 block font-semibold text-blue-700">KPI & lịch sử →</span>
               </button>)}
             </div>

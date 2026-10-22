@@ -354,7 +354,7 @@ export default function MandatoryCourseMatrixPage() {
       </div>
 
       {/* GIAO DIỆN DESKTOP (TABLE VỚI HEADER 2 DÒNG THẲNG TẮP) */}
-      <Card className="hidden overflow-x-auto p-0 md:block rounded-3xl border border-slate-200 shadow-sm">
+      <div className="hidden overflow-x-auto md:block rounded-3xl border border-slate-200 bg-white shadow-sm">
         <table className="w-full text-xs text-left border-separate border-spacing-0">
           {/* HEADER 2 DÒNG THẲNG TẮP */}
           <thead className="sticky top-0 z-20 bg-[#172554] text-white select-none">
@@ -362,7 +362,7 @@ export default function MandatoryCourseMatrixPage() {
             <tr className="border-b border-blue-900/60">
               <th
                 rowSpan={2}
-                className="sticky left-0 z-30 min-w-[280px] max-w-[320px] bg-[#172554] px-4 py-3.5 text-left border-r border-b border-blue-900/80 shadow-[2px_0_5px_rgba(0,0,0,0.15)]"
+                className="sticky left-0 z-30 min-w-[340px] max-w-[360px] w-[350px] bg-[#172554] px-4 py-3.5 text-left border-r-2 border-b border-blue-900 shadow-[4px_0_8px_-2px_rgba(0,0,0,0.2)]"
               >
                 <div className="font-extrabold text-sm text-white">Khóa học & Thời hạn</div>
                 <div className="text-[11px] font-normal text-blue-200/80 mt-0.5">
@@ -433,7 +433,7 @@ export default function MandatoryCourseMatrixPage() {
                   className={`hover:bg-blue-50/30 transition ${idx % 2 === 1 ? 'bg-slate-50' : 'bg-white'}`}
                 >
                   {/* CỘT CỐ ĐỊNH: TÊN KHÓA HỌC & SỐ NGÀY (KHÔNG CẦN NÚT "ĐỒNG BỘ CẢ DÒNG") */}
-                  <td className={`sticky left-0 z-10 px-4 py-3 border-r border-b border-slate-200 shadow-[2px_0_5px_rgba(0,0,0,0.05)] ${idx % 2 === 1 ? 'bg-slate-50' : 'bg-white'}`}>
+                  <td className={`sticky left-0 z-10 min-w-[340px] max-w-[360px] w-[350px] px-4 py-3 border-r-2 border-b border-slate-200 shadow-[4px_0_8px_-2px_rgba(0,0,0,0.06)] ${idx % 2 === 1 ? 'bg-slate-50' : 'bg-white'}`}>
                     <p className="font-bold text-xs text-[#172554] line-clamp-2 leading-snug" title={course.title}>
                       {course.title}
                     </p>
@@ -505,7 +505,7 @@ export default function MandatoryCourseMatrixPage() {
             Đang tải dữ liệu ma trận 18 đối tượng...
           </div>
         )}
-      </Card>
+      </div>
     </>
   )
 }

@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { EXACT_7_BANS, ORDERED_CHAPTER_ROSTER, CHAPTER_ROSTER_COLUMNS } from '@/lib/departments'
 import { listChapterMembers } from '@/lib/chapter-members'
 import { getActiveMetricChapterIds } from '@/lib/active-chapters'
+import { applyDueChapterReorganizations } from '@/lib/chapter-reorganizations'
 
 export async function GET(
   request: NextRequest,
@@ -23,6 +24,7 @@ export async function GET(
   }
 
   // Tự động kiểm tra và áp dụng chuyển giao nhiệm kỳ nếu đã đến thời gian hiệu lực
+  await applyDueChapterReorganizations(new Date()).catch(() => {})
 
 
   const chapter = await prisma.chapter.findUnique({

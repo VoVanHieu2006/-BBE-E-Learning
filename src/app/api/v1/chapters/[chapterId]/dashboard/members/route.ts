@@ -6,6 +6,7 @@ import { canAccessChapterPermission, resolveSingleManagedChapter } from '@/lib/a
 import { listChapterMembers } from '@/lib/chapter-members'
 import { canViewInactiveChapterMember } from '@/lib/inactive-member-access'
 import { getActiveMetricChapterIds } from '@/lib/active-chapters'
+import { applyDueChapterReorganizations } from '@/lib/chapter-reorganizations'
 
 /**
  * GET /api/v1/chapters/[chapterId]/dashboard/members
@@ -33,6 +34,7 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
   }
 
   // Tự động kiểm tra và áp dụng chuyển giao nhiệm kỳ nếu đã đến hạn
+  await applyDueChapterReorganizations(new Date()).catch(() => {})
 
 
   const url = new URL(request.url)

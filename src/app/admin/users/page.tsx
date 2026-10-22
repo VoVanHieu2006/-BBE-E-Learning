@@ -172,9 +172,12 @@ export default function AdminUsersPage() {
     clearApiCache('/api/v1/users');
     clearApiCache('/api/v1/admin/overview');
 
-    const res = await apiFetch(`/api/v1/users/${userId}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ status: 'ACTIVE', extensionDays }),
+    const res = await apiFetch(`/api/v1/admin/users/${userId}/extend-deadline`, {
+      method: 'POST',
+      body: JSON.stringify({
+        extensionDays: Number(extensionDays) || 7,
+        reason: 'Admin mở khóa gia hạn',
+      }),
     });
 
     if (res.ok) {
@@ -536,9 +539,21 @@ export default function AdminUsersPage() {
                     return (
                       <tr key={uId} className="hover:bg-[#f8f9ff] transition">
                         <td className="px-6 py-4">
-                          <div className="font-semibold text-[#172554]">{u.displayName || u.email}</div>
-                          {u.displayName && <div className="text-xs text-[#737686]">{u.email}</div>}
-                          <div className="text-[11px] text-[#737686]" suppressHydrationWarning>
+                          <button
+                            type="button"
+                            onClick={() => void handleOpenUserDetail(u)}
+                            className="text-left group cursor-pointer block"
+                          >
+                            <span className="font-semibold text-[#172554] group-hover:text-[#2563EB] transition-colors block">
+                              {u.displayName || u.email}
+                            </span>
+                            {u.displayName && (
+                              <span className="text-xs text-[#737686] group-hover:text-[#2563EB] transition-colors block">
+                                {u.email}
+                              </span>
+                            )}
+                          </button>
+                          <div className="text-[11px] text-[#737686] mt-1" suppressHydrationWarning>
                             Tham gia: {u.createdAt ? new Date(u.createdAt).toLocaleDateString('vi-VN') : '—'}
                           </div>
                         </td>
@@ -664,13 +679,6 @@ export default function AdminUsersPage() {
                         </td>
                         <td className="px-6 py-4 text-right">
                           <div className="flex items-center justify-end gap-1.5 flex-wrap">
-                            <button
-                              onClick={() => void handleOpenUserDetail(u)}
-                              className="px-2.5 py-1 text-xs font-semibold text-[#2563EB] hover:bg-blue-50 rounded-lg transition"
-                            >
-                              Xem chi tiết
-                            </button>
-
                             {/* Password reset button */}
                             {u.accountState === 'PASSWORD_LOCK' ? (
                               <button
