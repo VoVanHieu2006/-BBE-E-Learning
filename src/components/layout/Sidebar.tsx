@@ -53,7 +53,6 @@ const dnaLeadNav: NavItem[] = [
 ];
 
 const adminNav: NavItem[] = [
-  { label: 'Chương trình & mapping', href: '/admin/learning-policy', icon: '📚' },
   { label: 'Tổng quan', href: '/admin/dashboard', icon: '📊', prefetchUrls: ['/api/v1/admin/overview'] },
   { label: 'Khóa học & lộ trình', href: '/admin/courses', icon: '📚', prefetchUrls: ['/api/v1/courses', '/api/v1/admin/learning-rules'] },
   { label: 'Mời & quản lý Lead', href: '/admin/invitations', icon: '✉️', prefetchUrls: ['/api/v1/invitations'] },

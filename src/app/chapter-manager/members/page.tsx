@@ -5,6 +5,7 @@ import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Toast, { ToastMessage } from '@/components/ui/Toast';
 import Modal from '@/components/ui/Modal';
+import LearnerProfileView from '@/components/learner/LearnerProfileView';
 import { apiFetch, getCachedApiData, clearApiCache } from '@/lib/api/client';
 
 export default function ChapterManagerMembersPage() {
@@ -32,10 +33,29 @@ export default function ChapterManagerMembersPage() {
   } | null>(null);
   const [deactivateInputText, setDeactivateInputText] = useState('');
   const [toast, setToast] = useState<ToastMessage | null>(null);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [selectedUserData, setSelectedUserData] = useState<any>(null);
+  const [loadingProfile, setLoadingProfile] = useState(false);
   const canManageMembers = user?.role === 'CHAPTER_LEADER' || user?.canManageMembers === true;
 
   const showToast = (type: 'success' | 'error' | 'info', message: string, title?: string) => {
     setToast({ type, message, title });
+  };
+
+  const handleOpenProfile = async (memberId: string) => {
+    setSelectedUserId(memberId);
+    setLoadingProfile(true);
+    const currentChapter = user?.chapterId || 'me';
+    try {
+      const res = await apiFetch<any>(`/api/v1/chapters/${currentChapter}/members/${memberId}/course-progress`, { noCache: true });
+      if (res.data) {
+        setSelectedUserData(res.data);
+      }
+    } catch (err) {
+      console.error('Failed to load profile:', err);
+    } finally {
+      setLoadingProfile(false);
+    }
   };
 
   useEffect(() => {
@@ -410,12 +430,13 @@ export default function ChapterManagerMembersPage() {
                     return (
                       <tr key={mId} className="hover:bg-[#f8f9ff] transition">
                         <td className="px-6 py-4">
-                          <Link
-                            href={`/chapter-manager/members/${mId}`}
-                            className="font-semibold text-[#172554] hover:text-[#2563EB] transition"
+                          <button
+                            type="button"
+                            onClick={() => handleOpenProfile(mId)}
+                            className="font-semibold text-[#172554] hover:text-[#2563EB] transition text-left cursor-pointer"
                           >
                             {m.displayName || 'Chưa cập nhật tên'}
-                          </Link>
+                          </button>
                           <p className="mt-0.5 text-xs text-[#737686]">{m.email}</p>
                           <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
                             {m.department?.name === 'Chủ Tịch' ? (
@@ -479,12 +500,13 @@ export default function ChapterManagerMembersPage() {
                         </td>
                         <td className="px-6 py-4 text-right">
                           <div className="flex items-center justify-end gap-2">
-                            <Link
-                              href={`/chapter-manager/members/${mId}`}
-                              className="px-2.5 py-1 text-xs font-semibold text-[#2563EB] hover:bg-blue-50 rounded-lg transition"
+                            <button
+                              type="button"
+                              onClick={() => handleOpenProfile(mId)}
+                              className="px-2.5 py-1 text-xs font-semibold text-[#2563EB] hover:bg-blue-50 rounded-lg transition cursor-pointer"
                             >
                               Chi tiết
-                            </Link>
+                            </button>
 
                             {/* Active or Locked accounts can be deactivated */}
                             {canManageMembers && (isActive || isLocked) && (
@@ -676,6 +698,44 @@ export default function ChapterManagerMembersPage() {
               </Button>
             </div>
           </div>
+        </Modal>
+
+        {/* Modal Xem Hồ Sơ Thành Viên Không Bị Mất Filter */}
+        <Modal
+          isOpen={Boolean(selectedUserId)}
+          onClose={() => { setSelectedUserId(null); setSelectedUserData(null); }}
+          maxWidth="max-w-5xl"
+        >
+          {loadingProfile && !selectedUserData ? (
+            <div className="py-12 flex flex-col items-center justify-center">
+              <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+              <p className="mt-2 text-xs text-slate-500 font-medium">Đang tải hồ sơ thành viên...</p>
+            </div>
+          ) : selectedUserData ? (
+            <div className="p-4 max-h-[80vh] overflow-y-auto">
+              <LearnerProfileView
+                user={{
+                  userId: selectedUserData.user?.userId || selectedUserId || '',
+                  displayName: selectedUserData.user?.displayName,
+                  email: selectedUserData.user?.email,
+                  status: selectedUserData.user?.status,
+                  accountState: selectedUserData.user?.accountState,
+                  role: selectedUserData.user?.role,
+                  chapterName: selectedUserData.user?.chapterName || selectedUserData.user?.chapter?.name,
+                  departmentName: selectedUserData.user?.departmentName || selectedUserData.user?.department?.name,
+                  createdAt: selectedUserData.user?.joinedAt || selectedUserData.user?.createdAt,
+                  deactivatedByRole: selectedUserData.user?.deactivatedByRole,
+                }}
+                progressData={{
+                  summary: selectedUserData.summary,
+                  courses: selectedUserData.courses,
+                  learningDetail: selectedUserData.learningDetail,
+                }}
+                loading={loadingProfile}
+                onRefresh={() => selectedUserId && handleOpenProfile(selectedUserId)}
+              />
+            </div>
+          ) : null}
         </Modal>
     </div>
   );

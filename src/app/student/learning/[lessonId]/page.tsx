@@ -21,6 +21,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
   const [courseData, setCourseData] = useState<any>(null);
   const [courseProgress, setCourseProgress] = useState<any>(null);
   const [loadingLesson, setLoadingLesson] = useState(true);
+  const [isSwitchingLesson, setIsSwitchingLesson] = useState(false);
   const [loadingCourse, setLoadingCourse] = useState(true);
   const [token, setToken] = useState<string>('');
   const [downloadLoading, setDownloadLoading] = useState<string | null>(null);
@@ -48,6 +49,18 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
     setToken(t);
     loadInitialData(params.lessonId, t);
   }, [params.lessonId]);
+
+  // Lắng nghe sự kiện popstate cho các nút Back / Forward trên trình duyệt
+  useEffect(() => {
+    const handlePopState = () => {
+      const match = window.location.pathname.match(/\/student\/learning\/([^/]+)/);
+      if (match && match[1] && match[1] !== currentLessonId) {
+        switchLesson(match[1], { skipPushHistory: true });
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [currentLessonId]);
 
   // Initial load: Fetch lesson details + full course outline + course progress
   async function loadInitialData(lessonId: string, authToken?: string) {
@@ -110,20 +123,15 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
   }
 
   // Fast In-Place Lesson Switch with Zero Stale Data and Race Condition Protection
-  async function switchLesson(newLessonId: string) {
+  async function switchLesson(newLessonId: string, options?: { skipPushHistory?: boolean }) {
     if (newLessonId === currentLessonId) return;
 
     const reqId = ++switchReqIdRef.current;
-    setCurrentLessonId(newLessonId);
-    // CRITICAL: Immediately clear lesson and progress to eliminate stale UI & completion infection
-    setLesson(null);
-    setLessonError(null);
-    setProgress(null);
-    setLoadingLesson(true);
+    setIsSwitchingLesson(true);
     setActiveTab('desc'); // Reset tab to description when switching lessons
 
-    // Update browser URL without triggering full-page router remount
-    if (typeof window !== 'undefined') {
+    // Update browser URL without adding redundant history entries on popstate
+    if (!options?.skipPushHistory && typeof window !== 'undefined') {
       window.history.pushState(null, '', `/student/learning/${newLessonId}`);
     }
 
@@ -135,6 +143,8 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
 
     // Ignore if a newer lesson switch request has already fired
     if (reqId !== switchReqIdRef.current) return;
+
+    setCurrentLessonId(newLessonId);
 
     if (lessonRes.ok && lessonRes.data) {
       setLesson(lessonRes.data);
@@ -160,12 +170,14 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
       setProgress({ lessonId: newLessonId, completed: false, progressPercentage: 0 });
     }
 
-    setLoadingLesson(false);
+    setIsSwitchingLesson(false);
   }
 
   async function handleProgress(currentTime: number, furthest: number, viewSessionId: string) {
     if (!token) return; // Guests don't track progress
-    const res = await apiFetch(`/api/v1/lessons/${currentLessonId}/progress`, {
+    const activeLessonId = currentLessonId;
+    const reqId = switchReqIdRef.current;
+    const res = await apiFetch(`/api/v1/lessons/${activeLessonId}/progress`, {
       method: 'PATCH',
       body: JSON.stringify({
         positionSeconds: currentTime,
@@ -173,6 +185,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
         viewSessionId,
       }),
     });
+    if (reqId !== switchReqIdRef.current) return; // Discard stale progress response
 
     if (res.ok && res.data) {
       setProgress((prev: any) => ({
@@ -356,12 +369,6 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
             </div>
           )}
 
-          {isGuest && (
-            <span className="px-3 py-1.5 bg-blue-50 border border-blue-200 text-[#2563EB] text-xs font-bold rounded-xl shadow-xs">
-              🌐 Khóa học công khai
-            </span>
-          )}
-
           {/* Toggle Playlist Sidebar Button */}
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -380,7 +387,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
         <div className="flex-1 flex flex-col overflow-y-auto bg-[#f8f9ff] p-4 md:p-6 lg:p-8 space-y-6">
           {/* Main Video Cinema Container with Crisp Rounded Corners & Shadow */}
           <div className="w-full bg-black rounded-3xl overflow-hidden shadow-xl border border-slate-900 aspect-video relative max-w-5xl mx-auto">
-            {loadingLesson ? (
+            {loadingLesson && !lesson ? (
               <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 gap-3 bg-slate-950">
                 <div className="w-10 h-10 border-4 border-[#2563EB] border-t-transparent rounded-full animate-spin"></div>
                 <p className="text-xs text-slate-300 font-medium">Đang nạp bài giảng...</p>
@@ -428,7 +435,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
               </div>
             ) : lesson.video ? (
               <YouTubePlayer
-                key={`${currentLessonId}:${replayEpoch}`}
+                key={`${lesson.video.youtubeVideoId}:${replayEpoch}`}
                 lessonId={currentLessonId}
                 youtubeVideoId={lesson.video.youtubeVideoId}
                 accessToken={token}
@@ -446,6 +453,14 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
             ) : (
               <div className="w-full h-full flex items-center justify-center text-slate-400 text-sm bg-slate-950">
                 Bài học này chưa có video đính kèm.
+              </div>
+            )}
+
+            {/* True Floating Non-Destructive Loading Overlay */}
+            {isSwitchingLesson && (
+              <div className="absolute inset-0 bg-slate-950/75 backdrop-blur-xs flex flex-col items-center justify-center z-30 transition-opacity">
+                <div className="w-10 h-10 border-4 border-[#2563EB] border-t-transparent rounded-full animate-spin"></div>
+                <p className="text-xs text-slate-200 mt-2.5 font-medium">Đang chuyển bài giảng...</p>
               </div>
             )}
           </div>

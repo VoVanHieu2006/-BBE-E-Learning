@@ -355,14 +355,14 @@ export default function MandatoryCourseMatrixPage() {
 
       {/* GIAO DIỆN DESKTOP (TABLE VỚI HEADER 2 DÒNG THẲNG TẮP) */}
       <Card className="hidden overflow-x-auto p-0 md:block rounded-3xl border border-slate-200 shadow-sm">
-        <table className="w-full text-xs text-left border-collapse">
+        <table className="w-full text-xs text-left border-separate border-spacing-0">
           {/* HEADER 2 DÒNG THẲNG TẮP */}
           <thead className="sticky top-0 z-20 bg-[#172554] text-white select-none">
             {/* DÒNG 1: KHỐI CHỨC VỤ / ĐƠN VỊ */}
             <tr className="border-b border-blue-900/60">
               <th
                 rowSpan={2}
-                className="sticky left-0 z-30 min-w-[280px] max-w-[320px] bg-[#172554] px-4 py-3.5 text-left border-r border-blue-900/80 shadow-[2px_0_5px_rgba(0,0,0,0.15)]"
+                className="sticky left-0 z-30 min-w-[280px] max-w-[320px] bg-[#172554] px-4 py-3.5 text-left border-r border-b border-blue-900/80 shadow-[2px_0_5px_rgba(0,0,0,0.15)]"
               >
                 <div className="font-extrabold text-sm text-white">Khóa học & Thời hạn</div>
                 <div className="text-[11px] font-normal text-blue-200/80 mt-0.5">
@@ -397,7 +397,7 @@ export default function MandatoryCourseMatrixPage() {
                 return (
                   <th
                     key={target.key}
-                    className="min-w-[105px] px-2 py-2.5 text-center border-r border-slate-700/80 align-top"
+                    className="min-w-[105px] px-2 py-2.5 text-center border-r border-b border-slate-700/80 align-top bg-[#1e293b]"
                   >
                     <div className="font-bold text-xs text-white truncate" title={target.label}>
                       {shortLabel}
@@ -421,7 +421,7 @@ export default function MandatoryCourseMatrixPage() {
           </thead>
 
           {/* DỮ LIỆU CÁC KHÓA HỌC */}
-          <tbody className="divide-y divide-slate-100 bg-white">
+          <tbody className="bg-white">
             {data?.courses?.map((course: any, idx: number) => {
               const allEnabled =
                 data.targets.length > 0 &&
@@ -430,10 +430,10 @@ export default function MandatoryCourseMatrixPage() {
               return (
                 <tr
                   key={course.id}
-                  className={`hover:bg-blue-50/30 transition ${idx % 2 === 1 ? 'bg-slate-50/40' : ''}`}
+                  className={`hover:bg-blue-50/30 transition ${idx % 2 === 1 ? 'bg-slate-50' : 'bg-white'}`}
                 >
                   {/* CỘT CỐ ĐỊNH: TÊN KHÓA HỌC & SỐ NGÀY (KHÔNG CẦN NÚT "ĐỒNG BỘ CẢ DÒNG") */}
-                  <td className="sticky left-0 z-10 bg-white px-4 py-3 border-r border-slate-200 shadow-[2px_0_5px_rgba(0,0,0,0.05)]">
+                  <td className={`sticky left-0 z-10 px-4 py-3 border-r border-b border-slate-200 shadow-[2px_0_5px_rgba(0,0,0,0.05)] ${idx % 2 === 1 ? 'bg-slate-50' : 'bg-white'}`}>
                     <p className="font-bold text-xs text-[#172554] line-clamp-2 leading-snug" title={course.title}>
                       {course.title}
                     </p>

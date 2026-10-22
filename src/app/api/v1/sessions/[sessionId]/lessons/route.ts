@@ -37,16 +37,36 @@ export async function POST(request: NextRequest, { params }: { params: { session
     }, { status: 400 })
   }
 
-  const session = await prisma.session.findUnique({ where: { id: sessionId } })
+  const session = await prisma.session.findUnique({
+    where: { id: sessionId },
+    include: { course: { select: { id: true, status: true } } },
+  })
   if (!session) return NextResponse.json({ error: { code: 'SessionNotFound', message: 'Session không tồn tại' } }, { status: 404 })
 
+  if (session.course?.status === 'PUBLISHED') {
+    return NextResponse.json({
+      error: { code: 'CoursePublished', message: 'Khóa học đã xuất bản. Vui lòng sử dụng luồng Bản thảo (Draft) để chỉnh sửa.' },
+    }, { status: 409 })
+  }
+
   const result = await prisma.$transaction(async (tx) => {
+    // Row lock trên session cha để chống race condition khi 2 request tạo bài đồng thời
+    await tx.$queryRaw`SELECT id FROM sessions WHERE id = ${sessionId}::uuid FOR UPDATE`
+    let finalOrder = sortOrder
+    if (finalOrder === undefined || finalOrder === null) {
+      const maxAgg = await tx.lesson.aggregate({
+        where: { session_id: sessionId },
+        _max: { sort_order: true },
+      })
+      finalOrder = (maxAgg._max.sort_order ?? 0) + 1
+    }
+
     const lesson = await tx.lesson.create({
       data: {
         session_id: sessionId,
         title: title.trim(),
         description: description?.trim() || null,
-        sort_order: sortOrder ?? 0,
+        sort_order: finalOrder,
       },
     })
 

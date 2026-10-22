@@ -50,45 +50,125 @@ async function coreLessonIdsAt(tx: Tx, at: Date) {
   return ids
 }
 
+export function rankIndividuals<T extends { stars: number; elapsedMs: number; userId: string }>(items: T[]) {
+  const sorted = [...items].sort((a, b) => {
+    if (b.stars !== a.stars) return b.stars - a.stars
+    const aSec = Math.floor(a.elapsedMs / 1000)
+    const bSec = Math.floor(b.elapsedMs / 1000)
+    if (aSec !== bSec) return aSec - bSec
+    return a.userId.localeCompare(b.userId)
+  })
+
+  let currentRank = 1
+  return sorted.map((row, index) => {
+    if (index > 0) {
+      const prev = sorted[index - 1]
+      const prevSec = Math.floor(prev.elapsedMs / 1000)
+      const currSec = Math.floor(row.elapsedMs / 1000)
+      if (row.stars === prev.stars && currSec === prevSec) {
+        return { ...row, rank: currentRank }
+      }
+    }
+    currentRank = index + 1
+    return { ...row, rank: currentRank }
+  })
+}
+
 export async function individualPeriodRows(tx: Tx, startsAt: Date, endsAt: Date, group: string, chapterId?: string) {
   const cohort = (await competitionCohortAt(tx, endsAt)).filter((row) => row.group === group && (!chapterId || row.chapterId === chapterId))
   const ledger = await tx.starLedger.findMany({ where: { user_id: { in: cohort.map((row) => row.userId) }, provenance: 'NATIVE', awarded_at: { gte: startsAt, lt: endsAt } }, select: { user_id: true, amount: true, awarded_at: true } })
-  return cohort.map((user) => {
+  const scored = cohort.map((user) => {
     const balance = firstReachedFinalBalance(ledger.filter((row) => row.user_id === user.userId), startsAt)
     return { ...user, stars: balance.total, starsAchievedAt: balance.achievedAt, elapsedMs: balance.elapsedMs }
-  }).sort((a, b) => b.stars - a.stars || a.elapsedMs - b.elapsedMs || a.userId.localeCompare(b.userId)).map((row, index) => ({ ...row, rank: index + 1 }))
+  })
+  return rankIndividuals(scored)
 }
 
 export async function historicalChapterMonthRows(tx: Tx, month: { id: string; key: string; starts_at: Date; ends_at: Date }, end: Date) {
   const chapters = await tx.chapter.findMany({ select: { id: true, name: true } })
   const items = []
   for (const chapter of chapters) {
+    const transferredDnaIntervals = await tx.chapterAffiliationInterval.findMany({
+      where: {
+        chapter_id: chapter.id,
+        ends_at: { gte: month.starts_at, lt: month.ends_at },
+      },
+      select: { user_id: true, ends_at: true },
+    })
+
+    const candidateUserIds = transferredDnaIntervals.map((i) => i.user_id)
+    const dnaMemberships = candidateUserIds.length ? await tx.organizationMembership.findMany({
+      where: {
+        user_id: { in: candidateUserIds },
+        unit: { type: { in: ['DNA', 'DNA_GROUP'] } },
+        starts_at: { lte: month.ends_at },
+        OR: [{ ends_at: null }, { ends_at: { gt: month.starts_at } }],
+      },
+      select: { user_id: true },
+    }) : []
+
+    const excludedDnaUserIds = new Set(dnaMemberships.map((m) => m.user_id))
+
     const transfers = await tx.chapterReorganization.findMany({ where: { chapter_id: chapter.id, status: 'APPLIED', applied_at: { gt: month.starts_at, lt: end } }, orderBy: { applied_at: 'asc' } })
     const endpoints = [...transfers.map((row) => row.applied_at!), end]
     const stages: ChapterStage[] = []
     let startsAt = month.starts_at
+    let latestCoreLessonCount = 0
+
     for (const at of endpoints) {
       const [cohort, coreIds, cycles] = await Promise.all([
         competitionCohortAt(tx, at), coreLessonIdsAt(tx, at), tx.learningCycle.findMany({ where: leftBoundary(at) }),
       ])
-      const members = cohort.filter((row) => row.chapterId === chapter.id && row.group !== 'DNA')
+      latestCoreLessonCount = coreIds.size
+      const members = cohort.filter((row) => row.chapterId === chapter.id && row.group !== 'DNA' && !excludedDnaUserIds.has(row.userId))
       const progress = await tx.cycleLessonProgress.findMany({ where: {
         user_id: { in: members.map((row) => row.userId) }, learning_cycle_id: { in: cycles.map((row) => row.id) }, completed_at: { lt: at },
       }, select: { user_id: true, lesson_id: true } })
       const qualifiedCount = coreIds.size ? members.filter((member) => new Set(progress.filter((row) => row.user_id === member.userId && coreIds.has(row.lesson_id)).map((row) => row.lesson_id)).size / coreIds.size >= 0.7).length : 0
-      const ledger = await tx.starLedger.aggregate({ where: { competition_month_id: month.id, chapter_at_award_id: chapter.id, awarded_at: { gte: startsAt, lt: at } }, _sum: { amount: true } })
+      const ledger = await tx.starLedger.aggregate({
+        where: {
+          competition_month_id: month.id,
+          chapter_at_award_id: chapter.id,
+          awarded_at: { gte: startsAt, lt: at },
+          ...(excludedDnaUserIds.size ? { user_id: { notIn: Array.from(excludedDnaUserIds) } } : {}),
+        },
+        _sum: { amount: true },
+      })
       if (at > startsAt) stages.push({ startsAt, endsAt: at, memberCount: members.length, qualifiedCount, stars: ledger._sum.amount || 0 })
       startsAt = at
     }
     const kpi = await competitionKpiAt(tx, chapter.id, month.key, end)
-    items.push({ chapterId: chapter.id, chapterName: chapter.name, stages, kpiStatus: kpi, ...chapterCompetitionScore(stages, kpi) })
+    items.push({
+      chapterId: chapter.id,
+      chapterName: chapter.name,
+      stages,
+      kpiStatus: kpi,
+      ...chapterCompetitionScore(stages, kpi, { coreLessonCount: latestCoreLessonCount }),
+    })
   }
   return rankChapters(items)
 }
 
-function rankChapters<T extends { chapterId: string; eligible: boolean; score: number }>(items: T[]) {
-  let rank = 0
-  return items.sort((a, b) => Number(b.eligible) - Number(a.eligible) || b.score - a.score || a.chapterId.localeCompare(b.chapterId)).map((row) => ({ ...row, rank: row.eligible ? ++rank : null }))
+export function rankChapters<T extends { chapterId: string; eligible: boolean; score: number | null }>(items: T[]) {
+  const sorted = [...items].sort((a, b) => {
+    if (Number(b.eligible) !== Number(a.eligible)) return Number(b.eligible) - Number(a.eligible)
+    const scoreA = a.score ?? -Infinity
+    const scoreB = b.score ?? -Infinity
+    if (scoreB !== scoreA) return scoreB - scoreA
+    return a.chapterId.localeCompare(b.chapterId)
+  })
+
+  let currentRank = 1
+  return sorted.map((row, index) => {
+    if (!row.eligible) {
+      return { ...row, rank: null }
+    }
+    if (index > 0 && sorted[index - 1].eligible && sorted[index - 1].score === row.score) {
+      return { ...row, rank: currentRank }
+    }
+    currentRank = index + 1
+    return { ...row, rank: currentRank }
+  })
 }
 
 export async function chapterSeasonRows(tx: Tx, seasonId: string, at: Date) {

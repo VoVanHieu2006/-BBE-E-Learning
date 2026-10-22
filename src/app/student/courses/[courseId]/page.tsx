@@ -168,10 +168,11 @@ export default function CourseDetailPage({ params }: { params: { courseId: strin
                     <div className="space-y-3">
                       {session.lessons?.map((lesson: any, lIdx: number) => {
                         const lessonProg = progSession?.lessons?.find((pl: any) => pl.lessonId === (lesson.lessonId || lesson.id));
-                        const isCompleted = Boolean(isLeaderOrAdmin || lessonProg?.completed);
-                        const isLocked = !isLeaderOrAdmin && hasEncounteredIncomplete;
+                        const isPublicGuest = !user && course?.visibility === 'PUBLIC';
+                        const isCompleted = Boolean(!isPublicGuest && (isLeaderOrAdmin || lessonProg?.completed));
+                        const isLocked = !isLeaderOrAdmin && !isPublicGuest && hasEncounteredIncomplete;
 
-                        if (!isCompleted) {
+                        if (!isCompleted && !isPublicGuest) {
                           hasEncounteredIncomplete = true;
                         }
 

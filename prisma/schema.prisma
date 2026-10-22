@@ -221,6 +221,7 @@ model User {
   restrictions_created   AccessRestriction[] @relation("RestrictionCreatedBy")
   restrictions_lifted    AccessRestriction[] @relation("RestrictionLiftedBy")
   kpi_configurations     ChapterMonthlyKpi[] @relation("KpiConfiguredBy")
+  course_drafts          CourseDraft[] @relation("UserToCourseDrafts")
 
   @@map("users")
   @@index([email])
@@ -315,6 +316,7 @@ model Course {
   final_assessment Assessment? @relation("CourseFinalAssessment")
   learning_rules LearningRule[]
   learning_assignments UserLearningAssignment[]
+  draft         CourseDraft? @relation("CourseToDraft")
 
   @@map("courses")
   @@index([status, visibility])
@@ -1168,4 +1170,20 @@ model CoursePublicationEvent {
   effective_at DateTime @db.Timestamptz(3)
   @@index([course_id, effective_at])
   @@map("course_publication_events")
+}
+
+model CourseDraft {
+  id                   String   @id @default(uuid()) @db.Uuid
+  course_id            String   @unique @db.Uuid
+  base_content_version Int
+  draft_version        Int      @default(1)
+  content              Json
+  created_by_user_id   String   @db.Uuid
+  created_at           DateTime @default(now()) @db.Timestamp
+  updated_at           DateTime @updatedAt @db.Timestamp
+
+  course               Course   @relation("CourseToDraft", fields: [course_id], references: [id], onDelete: Cascade)
+  created_by_user      User     @relation("UserToCourseDrafts", fields: [created_by_user_id], references: [id], onDelete: Cascade)
+
+  @@map("course_drafts")
 }

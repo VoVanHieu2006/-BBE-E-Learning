@@ -3,7 +3,6 @@ import { applyDueChapterReorganizations } from '@/lib/chapter-reorganizations'
 import { processLearningOutbox } from '@/lib/learning-outbox'
 import { retireInactiveAccounts } from '@/lib/account-retirement'
 import { initializeLearningCutover } from '@/lib/learning-cutover'
-import { enforceSupplementalDeadlines } from '@/lib/course-requirements'
 import { closeCompetitionMonths, completePendingCompetitionKpis, closeCompetitionTerms } from '@/lib/competition-snapshots'
 import { applyDueDnaCycleResets } from '@/lib/dna-cycle-resets'
 
@@ -16,7 +15,7 @@ export async function GET(request: NextRequest) {
   const dnaResets = await applyDueDnaCycleResets()
   const synchronization = await processLearningOutbox()
   const retired = await retireInactiveAccounts()
-  const supplementalViolations = await enforceSupplementalDeadlines()
+  const supplementalViolations = 0
   const closedMonths = await closeCompetitionMonths()
   const completedKpis = await completePendingCompetitionKpis()
   const closedTerms = await closeCompetitionTerms()

@@ -11,11 +11,30 @@ export async function reconcileSharedPath(tx: Prisma.TransactionClient, userId: 
     user_id: userId, learning_cycle_id: cycleId, starts_at: now,
   } })
   const fingerprint = budgetFingerprint(next)
-  const previous = path.budget as unknown as CourseBudget[]
+  const previous = (path.budget as unknown as CourseBudget[]) || []
   let due = path.due_at
   if (path.budget_fingerprint !== fingerprint) {
     const reduced = next.some((course) => previous.some((old) => old.courseId === course.courseId && old.days > course.days))
-    due = calculateSharedDeadline({ startsAt: path.starts_at, changedAt: now, previous, next, budgetReduction: reduced })
+    let reason: 'CYCLE_INITIALIZED' | 'ADMIN_BUDGET_SHORTENED' | 'MANDATORY_COURSE_ADDED' | 'MANDATORY_COURSE_REMOVED' = 'MANDATORY_COURSE_ADDED'
+    if (!previous.length) {
+      reason = 'CYCLE_INITIALIZED'
+    } else if (reduced) {
+      reason = 'ADMIN_BUDGET_SHORTENED'
+    } else if (next.some((c) => !previous.some((p) => p.courseId === c.courseId))) {
+      reason = 'MANDATORY_COURSE_ADDED'
+    } else if (previous.some((p) => !next.some((c) => c.courseId === p.courseId))) {
+      reason = 'MANDATORY_COURSE_REMOVED'
+    }
+
+    due = calculateSharedDeadline({
+      startsAt: path.starts_at,
+      changedAt: now,
+      currentDueAt: path.due_at,
+      previous,
+      next,
+      reason,
+      budgetReduction: reduced,
+    })
     // Imported deadlines are a floor for the transition import only.
     const priorChanges = await tx.learningPathChange.count({ where: { path_id: path.id } })
     if (priorChanges === 0 && path.imported_due_at && due) due = new Date(Math.max(due.getTime(), path.imported_due_at.getTime()))

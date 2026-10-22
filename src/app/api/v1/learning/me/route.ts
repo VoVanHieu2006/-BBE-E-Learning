@@ -2,12 +2,17 @@ import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { chapterRewardState } from '@/lib/chapter-reward-gate'
+import { reconcileLearnerReadThrough } from '@/lib/learning-outbox'
 
 /** One read model keeps monthly rewards separate from training completion. */
 export async function GET(request: NextRequest) {
   const auth = await authenticate(request)
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: 401 })
   const userId = auth.context!.userId
+
+  // Đồng bộ read-through tức thì nếu người học có sự kiện outbox đang chờ
+  await reconcileLearnerReadThrough(userId)
+
   const now = new Date()
   const rewardState = await chapterRewardState(prisma, userId, now)
   const [cycle, month, allStars, user, policy] = await Promise.all([
@@ -22,7 +27,7 @@ export async function GET(request: NextRequest) {
     month ? prisma.starLedger.aggregate({ where: { user_id: userId, competition_month_id: month.id }, _sum: { amount: true } }) : null,
     cycle ? prisma.starLedger.aggregate({ where: { user_id: userId, learning_cycle_id: cycle.id }, _sum: { amount: true } }) : null,
     month && cycle ? prisma.monthlyVideoReplay.findMany({ where: { user_id: userId, competition_month_id: month.id, learning_cycle_id: cycle.id }, select: { video_id: true, furthest_seconds: true, completed_at: true } }) : [],
-    prisma.learningProgram.findMany({ orderBy: { sort_order: 'asc' }, include: { courses: { where: { status: 'PUBLISHED' }, select: { id: true, title: true, sessions: { orderBy: { sort_order: 'asc' }, select: { id: true, title: true, lessons: { orderBy: { sort_order: 'asc' }, select: { id: true, title: true } } } } } } } }),
+    prisma.learningProgram.findMany({ orderBy: { sort_order: 'asc' }, include: { courses: { where: { status: 'PUBLISHED' }, select: { id: true, title: true, visibility: true, sessions: { orderBy: [{ sort_order: 'asc' }, { id: 'asc' }], select: { id: true, title: true, sort_order: true, lessons: { orderBy: [{ sort_order: 'asc' }, { id: 'asc' }], select: { id: true, title: true, sort_order: true } } } } } } } }),
     prisma.learningNotice.findMany({ where: { user_id: userId }, orderBy: { created_at: 'desc' }, take: 20 }),
     prisma.supplementalLearningRequirement.findMany({ where: { user_id: userId, completed_at: null, ended_at: null } }),
     prisma.userLearningAssignment.count({ where: { user_id: userId, mandatory: true, completed_at: null, ended_at: null } }),

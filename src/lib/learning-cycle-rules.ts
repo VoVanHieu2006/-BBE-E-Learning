@@ -11,23 +11,92 @@ export function competitionMonthBounds(at: Date, cutover: Date) {
   }
 }
 
+export type SharedDeadlineReason =
+  | 'CYCLE_INITIALIZED'          // Khởi tạo chu kỳ học mới
+  | 'MANDATORY_COURSE_ADDED'     // Admin bổ sung khóa bắt buộc mới
+  | 'MANDATORY_COURSE_REMOVED'   // Admin bỏ bớt khóa bắt buộc
+  | 'ROLE_CHANGED'               // Học viên thay đổi chức vụ / ban
+  | 'ADMIN_BUDGET_SHORTENED'     // Admin rút ngắn default due days của khóa
+  | 'ADMIN_MANUAL_EXTENSION'     // Admin mở khóa / gia hạn thời gian
+  | 'LESSONS_ADDED_TO_COURSE'    // Admin bổ sung bài học mới vào khóa đã xuất bản
+
 export interface CourseBudget { courseId: string; days: number; completed: boolean }
+
+export interface CalculateSharedDeadlineInput {
+  startsAt: Date;
+  changedAt: Date;
+  currentDueAt?: Date | null;
+  previous: CourseBudget[];
+  next: CourseBudget[];
+  reason?: SharedDeadlineReason;
+  budgetReduction?: boolean;
+  manualExtensionDays?: number;
+  extraDays?: number;
+}
+
 /** Only a changed set/budget may invoke this calculation. Persist its fingerprint. */
-export function calculateSharedDeadline(input: {
-  startsAt: Date; changedAt: Date; previous: CourseBudget[]; next: CourseBudget[]; budgetReduction?: boolean
-}): Date | null {
-  const { startsAt, changedAt, previous, next } = input
+export function calculateSharedDeadline(input: CalculateSharedDeadlineInput): Date | null {
+  const { startsAt, changedAt, currentDueAt, previous, next, reason, budgetReduction, manualExtensionDays, extraDays } = input
   for (const course of [...previous, ...next]) {
     if (!Number.isInteger(course.days) || course.days < 1) throw new Error('InvalidCourseBudget')
   }
-  if (!next.length || next.every((course) => course.completed)) return null
+  if (reason !== 'LESSONS_ADDED_TO_COURSE' && (!next.length || next.every((course) => course.completed))) return null
+
   const previousIds = new Set(previous.map((course) => course.courseId))
   const added = next.filter((course) => !previousIds.has(course.courseId))
-  const total = next.reduce((sum, course) => sum + course.days, 0)
-  const newDays = added.filter((course) => !course.completed).reduce((sum, course) => sum + course.days, 0)
-  let due = Math.max(startsAt.getTime() + total * DAY_MS, changedAt.getTime() + newDays * DAY_MS)
+  const addedDays = added.filter((course) => !course.completed).reduce((sum, course) => sum + course.days, 0)
+  const totalNewDays = next.reduce((sum, course) => sum + course.days, 0)
+
+  if (reason) {
+    switch (reason) {
+      case 'CYCLE_INITIALIZED':
+        return new Date(startsAt.getTime() + totalNewDays * DAY_MS)
+
+      case 'MANDATORY_COURSE_ADDED':
+        if (!currentDueAt) {
+          return new Date(changedAt.getTime() + addedDays * DAY_MS)
+        }
+        return new Date(currentDueAt.getTime() + addedDays * DAY_MS)
+
+      case 'LESSONS_ADDED_TO_COURSE': {
+        const days = extraDays && extraDays > 0 ? extraDays : 0
+        const baseTime = currentDueAt ? currentDueAt.getTime() : changedAt.getTime()
+        return new Date(baseTime + days * DAY_MS)
+      }
+
+      case 'ADMIN_BUDGET_SHORTENED': {
+        const assignedTargetDue = startsAt.getTime() + totalNewDays * DAY_MS
+        const safe3DayFloor = changedAt.getTime() + 3 * DAY_MS
+        return new Date(Math.max(assignedTargetDue, safe3DayFloor))
+      }
+
+      case 'ROLE_CHANGED': {
+        const calculatedDue = Math.max(
+          startsAt.getTime() + totalNewDays * DAY_MS,
+          changedAt.getTime() + addedDays * DAY_MS
+        )
+        return new Date(Math.max(calculatedDue, currentDueAt ? currentDueAt.getTime() : 0))
+      }
+
+      case 'ADMIN_MANUAL_EXTENSION': {
+        if (!manualExtensionDays || manualExtensionDays < 1) throw new Error('InvalidExtensionDays')
+        const baseTime = currentDueAt && currentDueAt.getTime() > changedAt.getTime()
+          ? currentDueAt.getTime()
+          : changedAt.getTime()
+        return new Date(baseTime + manualExtensionDays * DAY_MS)
+      }
+
+      case 'MANDATORY_COURSE_REMOVED':
+        return currentDueAt || new Date(changedAt.getTime() + totalNewDays * DAY_MS)
+
+      default:
+        return currentDueAt || new Date(startsAt.getTime() + totalNewDays * DAY_MS)
+    }
+  }
+
+  let due = Math.max(startsAt.getTime() + totalNewDays * DAY_MS, changedAt.getTime() + addedDays * DAY_MS)
   const removed = previous.some((course) => !next.some((item) => item.courseId === course.courseId))
-  if ((removed && !added.length) || input.budgetReduction) due = Math.max(due, changedAt.getTime() + 3 * DAY_MS)
+  if ((removed && !added.length) || budgetReduction) due = Math.max(due, changedAt.getTime() + 3 * DAY_MS)
   return new Date(due)
 }
 

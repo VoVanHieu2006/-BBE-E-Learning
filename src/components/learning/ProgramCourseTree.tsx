@@ -181,9 +181,10 @@ export default function ProgramCourseTree() {
                                     const isDone = completedLessonIds.has(lesson.id)
                                     const isInProgress = inProgressLessonIds.has(lesson.id)
 
-                                    // Bài học bị khóa nếu có bài học đứng trước nó chưa hoàn thành
+                                    const isPublicCourse = course.visibility === 'PUBLIC'
+                                    // Bài học bị khóa nếu có bài học đứng trước nó chưa hoàn thành (trừ khóa PUBLIC)
                                     let isLocked = false
-                                    if (!isDone && lessonIndex > 0) {
+                                    if (!isDone && !isPublicCourse && lessonIndex > 0) {
                                       const prevLesson = flatLessons[lessonIndex - 1]
                                       if (prevLesson && !completedLessonIds.has(prevLesson.id)) {
                                         isLocked = true

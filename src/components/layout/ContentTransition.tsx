@@ -3,5 +3,7 @@ import { usePathname } from 'next/navigation'
 
 export default function ContentTransition({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
-  return <div key={pathname} className="page-transition min-w-0">{children}</div>
+  // Không unmount cây DOM khi chuyển bài học trong phòng học /student/learning/[lessonId]
+  const transitionKey = pathname?.startsWith('/student/learning') ? '/student/learning' : pathname
+  return <div key={transitionKey} className="page-transition min-w-0">{children}</div>
 }

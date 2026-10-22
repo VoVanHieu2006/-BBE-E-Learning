@@ -51,7 +51,7 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
       lesson: {
         select: {
           id: true,
-          video: { select: { duration_seconds: true } },
+          video: { select: { id: true, duration_seconds: true } },
         },
       },
     },
@@ -59,21 +59,59 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
   if (!assessment) return NextResponse.json({ error: { code: 'AssessmentNotFound' } }, { status: 404 })
   const body = await request.json().catch(() => ({}))
   const forceNew = body?.forceNew === true
-  const resumableFinalAttempt = assessment.type === 'COURSE_FINAL' && !forceNew
+  const resumableAttempt = !forceNew
     ? await prisma.attempt.findFirst({ where: { assessment_id: assessmentId, user_id: userId, status: 'IN_PROGRESS', expires_at: { gt: new Date() } }, select: { id: true } })
     : null
 
   const isAdmin = (auth as any).context!.role === 'ADMIN'
   const gate = assessment.type === 'COURSE_FINAL' && assessment.course_id
-    ? resumableFinalAttempt ? { ok: true as const, courseId: assessment.course_id, canEarnStars: false } : await checkCourseFinalProgression(userId, assessment.course_id, isAdmin)
+    ? resumableAttempt ? { ok: true as const, courseId: assessment.course_id, canEarnStars: false } : await checkCourseFinalProgression(userId, assessment.course_id, isAdmin)
     : assessment.lesson_id
       ? await checkLessonProgression(userId, assessment.lesson_id, 'ASSESS', isAdmin)
       : { ok: false as const, code: 'InvalidAssessmentOwner', message: 'Assessment owner is missing.' }
   if (gate.ok === false) return NextResponse.json({ error: { code: gate.code, message: gate.message } }, { status: 403 })
 
-  // No staff bypass: everyone must complete the prerequisite video in the current cycle.
-  if (assessment.lesson_id && assessment.lesson) {
+  // If resuming an active in-progress attempt, bypass video and monthly replay checks
+  if (!resumableAttempt && assessment.lesson_id && assessment.lesson) {
+    const now = new Date()
     const cycle = await prisma.learningCycle.findFirst({ where: { user_id: userId, ends_at: null }, select: { id: true } })
+    const currentMonth = await prisma.competitionMonth.findFirst({ where: { starts_at: { lte: now }, ends_at: { gt: now } } })
+
+    if (cycle && currentMonth && assessment.lesson.video) {
+      const priorAttemptInEarlierMonth = await prisma.attempt.findFirst({
+        where: {
+          assessment_id: assessmentId,
+          user_id: userId,
+          learning_cycle_id: cycle.id,
+          status: { in: ['SUBMITTED', 'AUTO_SUBMITTED'] },
+          submitted_at: { lt: currentMonth.starts_at },
+        },
+        select: { id: true },
+      })
+
+      if (priorAttemptInEarlierMonth) {
+        const replay = await prisma.monthlyVideoReplay.findUnique({
+          where: {
+            user_id_video_id_competition_month_id_learning_cycle_id: {
+              user_id: userId,
+              video_id: assessment.lesson.video.id,
+              competition_month_id: currentMonth.id,
+              learning_cycle_id: cycle.id,
+            },
+          },
+        })
+
+        if (!replay || !replay.completed_at) {
+          return NextResponse.json({
+            error: {
+              code: 'MonthlyVideoReplayRequired',
+              message: 'Bạn cần xem lại toàn bộ video bài học trong tháng này trước khi làm bài kiểm tra.',
+            },
+          }, { status: 403 })
+        }
+      }
+    }
+
     const cycleProg = cycle ? await prisma.cycleLessonProgress.findUnique({
       where: {
         user_id_lesson_id_learning_cycle_id: {
@@ -105,7 +143,7 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
 
   // 1. Kiểm tra Cooldown: Mỗi lần làm (dù nộp hay hủy) cần đợi khoảng thời gian quy định
   const { QUIZ_COOLDOWN_MS, QUIZ_COOLDOWN_MINUTES } = await import('@/lib/config/quiz')
-  if (QUIZ_COOLDOWN_MS > 0 && !resumableFinalAttempt) {
+  if (QUIZ_COOLDOWN_MS > 0 && !resumableAttempt) {
     const lastAttempt = await prisma.attempt.findFirst({
       where: {
         assessment_id: assessmentId,

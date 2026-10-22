@@ -18,13 +18,30 @@ export async function POST(request: NextRequest, { params }: { params: { courseI
   const course = await prisma.course.findUnique({ where: { id: courseId } })
   if (!course) return NextResponse.json({ error: { code: 'CourseNotFound', message: 'Khóa học không tồn tại' } }, { status: 404 })
 
-  const session = await prisma.session.create({
-    data: {
-      course_id: courseId,
-      title: title.trim(),
-      description: description?.trim() || null,
-      sort_order: sortOrder ?? 0,
-    },
+  if (course.status === 'PUBLISHED') {
+    return NextResponse.json({
+      error: { code: 'CoursePublished', message: 'Khóa học đã xuất bản. Vui lòng sử dụng luồng Bản thảo (Draft) để chỉnh sửa.' },
+    }, { status: 409 })
+  }
+
+  const session = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM courses WHERE id = ${courseId}::uuid FOR UPDATE`
+    let finalOrder = sortOrder
+    if (finalOrder === undefined || finalOrder === null) {
+      const maxAgg = await tx.session.aggregate({
+        where: { course_id: courseId },
+        _max: { sort_order: true },
+      })
+      finalOrder = (maxAgg._max.sort_order ?? 0) + 1
+    }
+    return tx.session.create({
+      data: {
+        course_id: courseId,
+        title: title.trim(),
+        description: description?.trim() || null,
+        sort_order: finalOrder,
+      },
+    })
   })
 
   return NextResponse.json({
