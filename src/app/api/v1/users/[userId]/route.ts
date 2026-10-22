@@ -8,6 +8,8 @@ import { createChapterCascadeRestrictions, getChapterAccountUserIds, getUserMana
 import { invalidateChapterLeaderboardCache } from '@/lib/chapter-leaderboard-cache'
 import { invalidateMemberLeaderboardCache } from '@/lib/member-leaderboard-cache'
 
+import { assertCanChangeUserStatus } from '@/lib/user-status-rules'
+
 export async function PATCH(request: NextRequest, { params }: { params: { userId: string } }) {
   const auth = await authenticate(request)
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: 401 })
@@ -38,18 +40,14 @@ export async function PATCH(request: NextRequest, { params }: { params: { userId
   const actor = auth.context!
   const isAdmin = actor.role === 'ADMIN'
 
-  // Admin cannot deactivate another Admin
-  if (isAdmin && target.role === 'ADMIN' && status === 'INACTIVE') {
-    return NextResponse.json({ error: { code: 'InvalidTransition', message: 'Không thể vô hiệu hóa Admin khác qua API' } }, { status: 403 })
+  // Centralized status change guard
+  const guard = assertCanChangeUserStatus(actor, target, status as 'ACTIVE' | 'INACTIVE')
+  if (!guard.allowed) {
+    return NextResponse.json({ error: { code: guard.code, message: guard.message } }, { status: 403 })
   }
 
   // If actor is not Admin (i.e. Chapter Leader or Unit Manager)
   if (!isAdmin) {
-    // Non-Admin cannot alter status of Admin or Chapter Leader
-    if (target.role === 'ADMIN' || target.role === 'CHAPTER_LEADER' || target.id === actor.userId) {
-      return NextResponse.json({ error: { code: 'AccessDenied', message: 'Không có quyền thay đổi trạng thái tài khoản Admin hoặc Lead Chapter' } }, { status: 403 })
-    }
-
     // Verify target belongs to the managed Chapter
     const managedChapterId = (typeof chapterId === 'string' && chapterId) ? chapterId : actor.chapterId
     if (!managedChapterId) {
@@ -77,26 +75,6 @@ export async function PATCH(request: NextRequest, { params }: { params: { userId
 
     if (!legacyMembership && !orgMembership) {
       return NextResponse.json({ error: { code: 'AccessDenied', message: 'Người dùng không phải thành viên của Chapter được quản lý.' } }, { status: 403 })
-    }
-
-    // If attempting to ACTIVATE (status: ACTIVE)
-    if (status === 'ACTIVE') {
-      if (target.restrictions.length) return NextResponse.json({ error: { code: 'AdminUnlockRequired', message: 'Tài khoản còn hạn chế hiệu lực; Admin cần xử lý trước khi kích hoạt.' } }, { status: 403 })
-      // If user is LOCKED (overdue or password), only Admin can unlock
-      if (target.status === 'LOCKED') {
-        return NextResponse.json({ error: { code: 'AdminUnlockRequired', message: 'Tài khoản đang bị khóa bởi hệ thống; chỉ Quản trị viên (Admin) mới có quyền mở khóa.' } }, { status: 403 })
-      }
-
-      // Check who deactivated the account:
-      // a) Deactivated by Admin -> Lead CANNOT activate
-      if (target.deactivated_by_role === 'ADMIN') {
-        return NextResponse.json({ error: { code: 'AdminUnlockRequired', message: 'Tài khoản này bị vô hiệu hóa bởi Admin; chỉ Admin mới có quyền kích hoạt lại.' } }, { status: 403 })
-      }
-
-      // b & c) Deactivated by another Lead -> Only the Lead who deactivated or Admin can activate
-      if (target.deactivated_by_user_id && target.deactivated_by_user_id !== actor.userId) {
-        return NextResponse.json({ error: { code: 'AccessDenied', message: 'Tài khoản này bị vô hiệu hóa bởi Lead khác; chỉ chính Lead đã vô hiệu hóa hoặc Admin mới có quyền kích hoạt lại.' } }, { status: 403 })
-      }
     }
   }
 

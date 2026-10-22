@@ -71,22 +71,34 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
       : { ok: false as const, code: 'InvalidAssessmentOwner', message: 'Assessment owner is missing.' }
   if (gate.ok === false) return NextResponse.json({ error: { code: gate.code, message: gate.message } }, { status: 403 })
 
-  // No staff bypass: everyone must complete the prerequisite video.
+  // No staff bypass: everyone must complete the prerequisite video in the current cycle.
   if (assessment.lesson_id && assessment.lesson) {
-    const prog = await prisma.lessonProgress.findUnique({
+    const cycle = await prisma.learningCycle.findFirst({ where: { user_id: userId, ends_at: null }, select: { id: true } })
+    const cycleProg = cycle ? await prisma.cycleLessonProgress.findUnique({
+      where: {
+        user_id_lesson_id_learning_cycle_id: {
+          user_id: userId,
+          lesson_id: assessment.lesson_id,
+          learning_cycle_id: cycle.id,
+        },
+      },
+      select: { furthest_seconds: true },
+    }) : null
+    const prog = cycleProg ? null : await prisma.lessonProgress.findUnique({
       where: {
         user_id_lesson_id: {
           user_id: userId,
           lesson_id: assessment.lesson_id,
         },
       },
+      select: { furthest_watched_position_seconds: true },
     })
     const video = assessment.lesson.video
-    const furthest = prog?.furthest_watched_position_seconds || 0
+    const furthest = cycleProg ? cycleProg.furthest_seconds : (prog?.furthest_watched_position_seconds || 0)
     const watchedEnough = !video || hasWatchedFullVideo(furthest, video.duration_seconds)
     if (!watchedEnough) {
       return NextResponse.json({
-      error: { code: 'VideoNotCompleted', message: 'Bạn cần xem hoàn tất 100% video bài giảng trước khi làm bài kiểm tra' },
+        error: { code: 'VideoNotCompleted', message: 'Bạn cần xem hoàn tất 100% video bài giảng trước khi làm bài kiểm tra' },
       }, { status: 403 })
     }
   }

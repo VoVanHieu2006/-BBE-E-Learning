@@ -341,6 +341,14 @@ export default function AdminChaptersProgressPage() {
                 <p className="text-xs text-[#737686] mt-1">
                   Theo dõi tiến độ học tập và bài học hoàn thành của từng học viên trong Chapter
                 </p>
+                <div className="mt-2">
+                  <Link
+                    href={`/leaderboard?group=MEMBER&chapterId=${selectedChapter.chapterId || selectedChapter.id}`}
+                    className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50 hover:bg-blue-100 text-[#2563EB] text-xs font-bold rounded-xl transition border border-blue-200"
+                  >
+                    🏆 Xem Bảng Xếp Hạng Chapter này →
+                  </Link>
+                </div>
               </div>
               <button
                 onClick={() => setSelectedChapter(null)}

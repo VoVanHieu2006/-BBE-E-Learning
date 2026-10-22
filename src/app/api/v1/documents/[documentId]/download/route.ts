@@ -16,10 +16,7 @@ const s3 = new S3Client({
 
 export async function GET(request: NextRequest, { params }: { params: { documentId: string } }) {
   const auth = await authenticate(request).catch(() => ({ ok: false, error: { code: 'UNAUTHORIZED', message: 'Auth error' } }))
-  if (!auth.ok || !(auth as any).context) {
-    return NextResponse.json({ error: { code: 'AccessDenied', message: 'Vui lòng đăng nhập để tải tài liệu.' } }, { status: 401 })
-  }
-  const context = (auth as any).context!
+  const context = auth.ok && (auth as any).context ? (auth as any).context : null
 
   const doc = await prisma.document.findUnique({
     where: { id: params.documentId },
@@ -47,10 +44,17 @@ export async function GET(request: NextRequest, { params }: { params: { document
   if (!course || !doc.lesson) {
     return NextResponse.json({ error: { code: 'DocumentNotFound' } }, { status: 404 })
   }
-  if (course.status !== 'PUBLISHED' && context.role !== 'ADMIN') {
+
+  const isPublicCourse = course.status === 'PUBLISHED' && course.visibility === 'PUBLIC'
+
+  if (!context && !isPublicCourse) {
+    return NextResponse.json({ error: { code: 'AccessDenied', message: 'Vui lòng đăng nhập để tải tài liệu.' } }, { status: 401 })
+  }
+
+  if (course.status !== 'PUBLISHED' && context?.role !== 'ADMIN') {
     return NextResponse.json({ error: { code: 'AccessDenied', message: 'Khóa học chưa được xuất bản.' } }, { status: 403 })
   }
-  if (context.role !== 'ADMIN') {
+  if (context && context.role !== 'ADMIN') {
     const gate = await checkLessonProgression(context.userId, doc.lesson_id, 'VIEW')
     if (gate.ok === false) {
       return NextResponse.json({ error: { code: gate.code, message: gate.message } }, { status: 403 })

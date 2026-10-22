@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { currentCycleAttemptFilter } from '@/lib/learning-periods'
 
 export async function GET(request: NextRequest, { params }: { params: { courseId: string } }) {
   const auth = await authenticate(request)
@@ -9,6 +10,12 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
   const courseId = params.courseId
   const userId = (auth as any).context!.userId
   const role = (auth as any).context!.role
+
+  const cycle = await prisma.learningCycle.findFirst({
+    where: { user_id: userId, ends_at: null },
+    select: { id: true },
+  })
+  const cycleFilter = await currentCycleAttemptFilter(prisma, userId)
 
   // Single streamlined query: fetch course status, sessions, lessons and user progress in 1 round-trip chain
   const course = await prisma.course.findUnique({
@@ -20,7 +27,7 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
         select: {
           id: true,
           attempts: {
-            where: { user_id: userId, status: { in: ['SUBMITTED', 'AUTO_SUBMITTED'] } },
+            where: { user_id: userId, ...cycleFilter, status: { in: ['SUBMITTED', 'AUTO_SUBMITTED'] } },
             orderBy: { created_at: 'desc' },
             take: 1,
             select: { id: true, passed: true, score: true },
@@ -61,6 +68,26 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
     return NextResponse.json({ error: { code: 'AccessDenied', message: 'Khóa học chưa publish' } }, { status: 403 })
   }
 
+  const allLessonIds = course.sessions.flatMap((s) => s.lessons.map((l) => l.id))
+  let cycleProgressMap = new Map<string, { completed: boolean; furthest: number }>()
+  if (cycle && allLessonIds.length) {
+    const cycleRows = await prisma.cycleLessonProgress.findMany({
+      where: {
+        user_id: userId,
+        learning_cycle_id: cycle.id,
+        lesson_id: { in: allLessonIds },
+      },
+      select: {
+        lesson_id: true,
+        completed_at: true,
+        furthest_seconds: true,
+      },
+    })
+    cycleProgressMap = new Map(
+      cycleRows.map((r) => [r.lesson_id, { completed: Boolean(r.completed_at), furthest: r.furthest_seconds || 0 }])
+    )
+  }
+
   let totalLessons = 0
   let completedLessons = 0
   const sessions = course.sessions.map((s) => {
@@ -72,13 +99,14 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
       lessons: s.lessons.map((l) => {
         totalLessons++
         const prog = l.progress && l.progress.length > 0 ? l.progress[0] : null
-        if (prog?.completed) completedLessons++
+        const isCycleCompleted = cycle ? Boolean(cycleProgressMap.get(l.id)?.completed) : Boolean(prog?.completed)
+        if (isCycleCompleted) completedLessons++
         return {
           lessonId: l.id,
           id: l.id,
           title: l.title,
-          completed: prog?.completed || false,
-          furthestWatchedPositionSeconds: prog?.furthest_watched_position_seconds || null,
+          completed: isCycleCompleted,
+          furthestWatchedPositionSeconds: cycle ? (cycleProgressMap.get(l.id)?.furthest ?? null) : (prog?.furthest_watched_position_seconds || null),
           lastPositionSeconds: prog?.last_position_seconds || null,
         }
       }),

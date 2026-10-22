@@ -1,9 +1,9 @@
 import { StarReason } from '@prisma/client'
-import { prisma } from '@/lib/prisma'
-import { hasActiveDnaAffiliation } from '@/lib/affiliation-access'
-import { isLearningManager } from '@/lib/manager-learning-access'
+import { prisma } from './prisma'
+import { hasActiveDnaAffiliation } from './affiliation-access'
+import { isLearningManager } from './manager-learning-access'
 import { rewardEligibility } from './learning-periods'
-export { starsForVideoDuration, starsForQuizScore } from '@/lib/reward-rules'
+export { starsForVideoDuration, starsForQuizScore } from './reward-rules'
 
 export async function canEarnStarsForCourse(userId: string, courseId: string): Promise<boolean> {
   return rewardEligibility(prisma, userId, courseId, new Date())

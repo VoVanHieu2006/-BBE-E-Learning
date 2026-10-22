@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { canAccessChapterPermission } from '@/lib/authorization'
 import { prisma } from '@/lib/prisma'
-import { EXACT_7_BANS, ORDERED_CHAPTER_ROSTER as ORDERED_7_BANS } from '@/lib/departments'
+import { EXACT_7_BANS, ORDERED_CHAPTER_ROSTER, CHAPTER_ROSTER_COLUMNS } from '@/lib/departments'
 import { listChapterMembers } from '@/lib/chapter-members'
 import { getActiveMetricChapterIds } from '@/lib/active-chapters'
 
@@ -80,7 +80,7 @@ export async function GET(
   const deptMap = new Map(departments.map((d) => [d.name, d]))
   const assignedUserIds = new Set<string>()
 
-  const roster = ORDERED_7_BANS.map((banName) => {
+  const roster = ORDERED_CHAPTER_ROSTER.map((banName) => {
     if (banName === 'Chủ Tịch' && (presidentAssignments.length || !departments.some((department) => department.name === 'Chủ Tịch' && department.memberships.length))) {
       const members = presidentAssignments.map((assignment) => {
         assignedUserIds.add(assignment.user_id)
@@ -167,7 +167,7 @@ export async function GET(
     const userMap = new Map(itemUsers.map((u) => [u.id, u]))
     const deptIdToName = new Map(departments.map((d) => [d.id, d.name]))
 
-    const newTerm = ORDERED_7_BANS.map((banName) => {
+    const newTerm = ORDERED_CHAPTER_ROSTER.map((banName) => {
       const dept = departments.find((d) => d.name.toLowerCase() === banName.toLowerCase())
       const deptItems = scheduledBatchRecord.items
         .filter((i) => userMap.has(i.user_id) && (i.department_unit_id ? deptIdToName.get(i.department_unit_id)?.toLowerCase() === banName.toLowerCase() : banName === 'Chủ Tịch'))

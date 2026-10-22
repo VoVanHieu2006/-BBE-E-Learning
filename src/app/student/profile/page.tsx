@@ -3,7 +3,7 @@ import { FormEvent, useEffect, useState } from 'react'
 import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Toast, { ToastMessage } from '@/components/ui/Toast'
-import { apiFetch } from '@/lib/api/client'
+import { apiFetch, clearApiCache } from '@/lib/api/client'
 
 export default function ProfilePage() {
   const [profile, setProfile] = useState<any>(null)
@@ -31,7 +31,23 @@ export default function ProfilePage() {
     setSaving(false)
     if (!res.ok) return setToast({ type: 'error', message: res.error?.message || 'Không thể lưu hồ sơ.' })
     setProfile({ ...profile, displayName: res.data.displayName })
-    setToast({ type: 'success', message: 'Đã cập nhật tên hiển thị.' })
+
+    // Cập nhật localStorage ngay lập tức
+    try {
+      const u = localStorage.getItem('user')
+      if (u) {
+        const parsed = JSON.parse(u)
+        parsed.displayName = res.data.displayName
+        localStorage.setItem('user', JSON.stringify(parsed))
+      }
+    } catch {}
+
+    // Xóa cache API phía client để bảng xếp hạng và các trang khác nạp tên mới ngay
+    clearApiCache('/api/v1/leaderboard')
+    clearApiCache('/api/v1/users/me')
+    clearApiCache('/api/v1/users')
+
+    setToast({ type: 'success', message: 'Đã cập nhật tên hiển thị thành công.' })
   }
 
   return (

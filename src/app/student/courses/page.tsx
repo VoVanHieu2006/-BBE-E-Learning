@@ -6,7 +6,7 @@ import Link from 'next/link';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
-import { apiFetch, getCachedApiData } from '@/lib/api/client';
+import { apiFetch, clearApiCache, getCachedApiData } from '@/lib/api/client';
 import { getUrgencyLevel } from '@/lib/deadline-urgency';
 
 export default function StudentCoursesPage() {
@@ -18,6 +18,7 @@ export default function StudentCoursesPage() {
   const [deadlinesSummary, setDeadlinesSummary] = useState<any>(null);
   const [starBalance, setStarBalance] = useState<number>(0);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [filter, setFilter] = useState<'ALL' | 'IN_PROGRESS' | 'NOT_STARTED' | 'COMPLETED'>('ALL');
   const [showHistoryModal, setShowHistoryModal] = useState(false);
@@ -57,14 +58,25 @@ export default function StudentCoursesPage() {
     loadData();
   }, []);
 
-  async function loadData() {
-    setLoading(true);
+  async function loadData(forceRefresh = false) {
+    if (forceRefresh) {
+      setRefreshing(true);
+      clearApiCache('/api/v1/courses');
+      clearApiCache('/api/v1/members/me/courses');
+      clearApiCache('/api/v1/members/me/deadlines');
+      clearApiCache('/api/v1/users/me');
+      clearApiCache('/api/v1/stars/me?page=1&limit=20');
+      clearApiCache('/api/v1/learning/me');
+    } else {
+      setLoading(true);
+    }
+
     const [coursesRes, progressRes, deadlinesRes, userRes, starsRes] = await Promise.all([
-      apiFetch<any>('/api/v1/courses'),
-      apiFetch<any>('/api/v1/members/me/courses'),
-      apiFetch<any>('/api/v1/members/me/deadlines', { noCache: true }),
-      apiFetch<any>('/api/v1/users/me'),
-      apiFetch<any>('/api/v1/stars/me?page=1&limit=20'),
+      apiFetch<any>('/api/v1/courses', { noCache: forceRefresh }),
+      apiFetch<any>('/api/v1/members/me/courses', { noCache: forceRefresh }),
+      apiFetch<any>('/api/v1/members/me/deadlines', { noCache: forceRefresh }),
+      apiFetch<any>('/api/v1/users/me', { noCache: forceRefresh }),
+      apiFetch<any>('/api/v1/stars/me?page=1&limit=20', { noCache: forceRefresh }),
     ]);
 
     if (coursesRes.ok && coursesRes.data) {
@@ -85,6 +97,7 @@ export default function StudentCoursesPage() {
       setStarBalance(starsRes.data.balance ?? 0);
     }
     setLoading(false);
+    setRefreshing(false);
   }
 
   // Map progress to courses
@@ -160,8 +173,6 @@ export default function StudentCoursesPage() {
 
   return (
     <div className="w-full">
-      <LearningPeriodSummary />
-      <ProgramCourseTree />
       {mounted && user ? (
         <div className="w-full space-y-8">
           {/* Welcome & Affiliation Banner */}
@@ -187,18 +198,28 @@ export default function StudentCoursesPage() {
                 </p>
               </div>
 
-              <div className="flex flex-col sm:flex-row items-start md:items-center gap-3 shrink-0">
+              <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => loadData(true)}
+                  disabled={refreshing}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white/20 hover:bg-white/30 text-white text-xs font-bold backdrop-blur-md border border-white/25 transition shadow-xs disabled:opacity-50"
+                  title="Làm mới tiến độ và hạn hoàn thành mới nhất"
+                >
+                  <span className={refreshing ? 'animate-spin' : ''}>🔄</span>
+                  <span>{refreshing ? 'Đang cập nhật...' : 'Làm mới'}</span>
+                </button>
                 {user.departmentHistory && user.departmentHistory.length > 0 && (
                   <button
                     onClick={() => setShowHistoryModal(true)}
-                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/20 hover:bg-white/30 text-white text-xs font-bold backdrop-blur-md border border-white/25 transition shadow-xs"
+                    className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white/20 hover:bg-white/30 text-white text-xs font-bold backdrop-blur-md border border-white/25 transition shadow-xs"
                   >
                     <span>📜</span> Xem lịch sử phân ban
                   </button>
                 )}
                 <Link
                   href="/student/stars"
-                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-amber-950 text-xs font-extrabold transition shadow-md"
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-amber-950 text-xs font-extrabold transition shadow-md"
                 >
                   <span>⭐</span> {starBalance.toLocaleString('vi-VN')} Star
                 </Link>
@@ -206,6 +227,10 @@ export default function StudentCoursesPage() {
             </div>
             <div className="absolute right-0 bottom-0 opacity-10 pointer-events-none text-9xl">📚</div>
           </div>
+
+          {/* Lộ trình chương trình đào tạo BBE đặt trực tiếp dưới Banner */}
+          <LearningPeriodSummary />
+          <ProgramCourseTree />
 
           {/* 3 KPI Summary Cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">

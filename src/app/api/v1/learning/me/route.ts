@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
     prisma.user.findUnique({ where: { id: userId }, select: { role: true, status: true } }),
     prisma.learningPolicy.findUnique({ where: { id: 'default' } }),
   ])
-  const [path, monthStars, cycleStars, replay, programs, notices, supplements, unfinished] = await Promise.all([
+  const [path, monthStars, cycleStars, replay, programs, notices, supplements, unfinished, cycleProgressData, rawProgressData] = await Promise.all([
     cycle ? prisma.learningPath.findUnique({ where: { learning_cycle_id: cycle.id } }) : null,
     month ? prisma.starLedger.aggregate({ where: { user_id: userId, competition_month_id: month.id }, _sum: { amount: true } }) : null,
     cycle ? prisma.starLedger.aggregate({ where: { user_id: userId, learning_cycle_id: cycle.id }, _sum: { amount: true } }) : null,
@@ -26,7 +26,22 @@ export async function GET(request: NextRequest) {
     prisma.learningNotice.findMany({ where: { user_id: userId }, orderBy: { created_at: 'desc' }, take: 20 }),
     prisma.supplementalLearningRequirement.findMany({ where: { user_id: userId, completed_at: null, ended_at: null } }),
     prisma.userLearningAssignment.count({ where: { user_id: userId, mandatory: true, completed_at: null, ended_at: null } }),
+    cycle ? prisma.cycleLessonProgress.findMany({ where: { user_id: userId, learning_cycle_id: cycle.id }, select: { lesson_id: true, completed_at: true } }) : Promise.resolve([]),
+    prisma.lessonProgress.findMany({ where: { user_id: userId }, select: { lesson_id: true, completed: true, furthest_watched_position_seconds: true } }),
   ])
+
+  const cycleProgressList = (cycleProgressData as any[]) || []
+  const rawProgressList = (rawProgressData as any[]) || []
+
+  const completedLessonIds = Array.from(new Set([
+    ...cycleProgressList.filter((p) => p.completed_at != null).map((p) => p.lesson_id),
+    ...(!cycle ? rawProgressList.filter((p) => p.completed).map((p) => p.lesson_id) : []),
+  ]))
+
+  const inProgressLessonIds = rawProgressList
+    .filter((p) => !completedLessonIds.includes(p.lesson_id) && ((p.furthest_watched_position_seconds || 0) > 0))
+    .map((p) => p.lesson_id)
+
   return NextResponse.json({
     cutoverAt: policy?.cutover_at || null, active: Boolean(cycle), cycle, month,
     stars: { history: allStars._sum.amount || 0, month: monthStars?._sum.amount || 0, cycle: cycleStars?._sum.amount || 0 },
@@ -34,5 +49,7 @@ export async function GET(request: NextRequest) {
     rewardState,
     path: path ? { startsAt: path.starts_at, dueAt: unfinished ? path.due_at : null, importedDueAt: path.imported_due_at } : null,
     replay, programs, notices, supplements,
+    completedLessonIds,
+    inProgressLessonIds,
   }, { headers: { 'Cache-Control': 'no-store' } })
 }

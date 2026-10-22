@@ -78,7 +78,7 @@ export async function GET(request: NextRequest, { params }: { params: { lessonId
       description: lesson.assessment.description,
       questionCount: lesson.assessment._count.questions,
     } : null,
-    documents: context ? lesson.documents.map((d) => ({
+    documents: (context || (course.status === 'PUBLISHED' && course.visibility === 'PUBLIC')) ? lesson.documents.map((d) => ({
       documentId: d.id,
       id: d.id,
       fileName: d.file_name,

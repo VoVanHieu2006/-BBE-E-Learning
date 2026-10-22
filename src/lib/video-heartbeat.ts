@@ -22,25 +22,39 @@ export async function recordVideoHeartbeat(userId: string, lessonId: string, pos
     const existing = await tx.lessonProgress.findUnique({ where: { user_id_lesson_id: key } })
     const replayKey = context ? { user_id: userId, video_id: lesson.video.id, competition_month_id: context.month.id, learning_cycle_id: context.cycle.id } : null
     const replay = replayKey ? await tx.monthlyVideoReplay.findUnique({ where: { user_id_video_id_competition_month_id_learning_cycle_id: replayKey } }) : null
+    const cycleProgressKey = context ? { user_id: userId, lesson_id: lessonId, learning_cycle_id: context.cycle.id } : null
+    const existingCycleProgress = cycleProgressKey ? await tx.cycleLessonProgress.findUnique({ where: { user_id_lesson_id_learning_cycle_id: cycleProgressKey } }) : null
+
     const lastAt = context ? replay?.view_session_id === viewSessionId ? replay.last_heartbeat_at : null : existing?.last_watched_at || null
     const elapsed = heartbeatElapsed(lastAt, now)
-    const oldTraining = existing?.furthest_watched_position_seconds || 0
-    const training = capVideoProgress(oldTraining, position, furthest, elapsed)
-    const trainingFurthest = Math.min(duration, training.furthestWatchedPositionSeconds)
-    const videoComplete = hasWatchedFullVideo(trainingFurthest, duration)
-    const passed = !lesson.assessment || Boolean(await tx.attempt.count({ where: {
+
+    // Calculate watch progress for current cycle strictly
+    const oldCycleFurthest = existingCycleProgress?.furthest_seconds || 0
+    const cycleTraining = capVideoProgress(oldCycleFurthest, position, furthest, elapsed)
+    const cycleFurthest = Math.min(duration, cycleTraining.furthestWatchedPositionSeconds)
+    const cycleVideoComplete = hasWatchedFullVideo(cycleFurthest, duration)
+    const cyclePassed = !lesson.assessment || Boolean(await tx.attempt.count({ where: {
       user_id: userId, assessment_id: lesson.assessment.id, passed: true,
       ...(context ? { OR: [{ learning_cycle_id: context.cycle.id }, ...(context.cycle.provenance === 'LEGACY' ? [{ learning_cycle_id: null }] : [])] } : {}),
       status: { in: ['SUBMITTED', 'AUTO_SUBMITTED'] },
     } }))
-    const completed = Boolean(existing?.completed || (videoComplete && passed))
-    const completedAt = completed ? existing?.completed_at || now : null
+    const cycleCompleted = Boolean(existingCycleProgress?.completed_at || (cycleVideoComplete && cyclePassed))
+    const cycleCompletedAt = cycleCompleted ? (existingCycleProgress?.completed_at || now) : null
+
+    // Lifetime compatibility projection
+    const oldTraining = existing?.furthest_watched_position_seconds || 0
+    const training = capVideoProgress(oldTraining, position, furthest, elapsed)
+    const trainingFurthest = Math.min(duration, Math.max(training.furthestWatchedPositionSeconds, cycleFurthest))
+    const lifetimeCompleted = Boolean(existing?.completed || cycleCompleted)
+    const lifetimeCompletedAt = lifetimeCompleted ? (existing?.completed_at || cycleCompletedAt || now) : null
+
     const updated = await tx.lessonProgress.upsert({ where: { user_id_lesson_id: key },
-      create: { ...key, completed, completed_at: completedAt, furthest_watched_position_seconds: Math.floor(trainingFurthest), last_position_seconds: Math.floor(training.lastPositionSeconds), last_watched_at: now },
-      update: { completed, completed_at: completedAt, furthest_watched_position_seconds: Math.floor(trainingFurthest), last_position_seconds: Math.floor(training.lastPositionSeconds), last_watched_at: now },
+      create: { ...key, completed: lifetimeCompleted, completed_at: lifetimeCompletedAt, furthest_watched_position_seconds: Math.floor(trainingFurthest), last_position_seconds: Math.floor(training.lastPositionSeconds), last_watched_at: now },
+      update: { completed: lifetimeCompleted, completed_at: lifetimeCompletedAt, furthest_watched_position_seconds: Math.floor(trainingFurthest), last_position_seconds: Math.floor(training.lastPositionSeconds), last_watched_at: now },
     })
-    let rewardComplete = videoComplete, rewardKey = `video:${userId}:${lesson.video.id}`
-    let replayFurthest = trainingFurthest
+
+    let rewardComplete = cycleVideoComplete, rewardKey = `video:${userId}:${lesson.video.id}`
+    let replayFurthest = cycleFurthest
     if (context && replayKey) {
       // Replay never inherits old training completion or unobserved time.
       replayFurthest = Math.min(duration, capVideoProgress(replay?.furthest_seconds || 0, position, furthest, elapsed).furthestWatchedPositionSeconds)
@@ -49,9 +63,9 @@ export async function recordVideoHeartbeat(userId: string, lessonId: string, pos
         create: { ...replayKey, view_session_id: viewSessionId, furthest_seconds: replayFurthest, last_heartbeat_at: now, completed_at: rewardComplete ? now : null },
         update: { view_session_id: viewSessionId, furthest_seconds: replayFurthest, last_heartbeat_at: now, completed_at: replay?.completed_at || (rewardComplete ? now : null) },
       })
-      await tx.cycleLessonProgress.upsert({ where: { user_id_lesson_id_learning_cycle_id: { ...key, learning_cycle_id: context.cycle.id } },
-        create: { ...key, learning_cycle_id: context.cycle.id, furthest_seconds: trainingFurthest, completed_at: completedAt },
-        update: { furthest_seconds: trainingFurthest, completed_at: completedAt },
+      await tx.cycleLessonProgress.upsert({ where: { user_id_lesson_id_learning_cycle_id: cycleProgressKey! },
+        create: { ...cycleProgressKey!, furthest_seconds: cycleFurthest, completed_at: cycleCompletedAt },
+        update: { furthest_seconds: cycleFurthest, completed_at: cycleCompletedAt },
       })
       rewardKey = `video:${userId}:${lesson.video.id}:${context.month.id}:${context.cycle.id}`
     }
@@ -71,15 +85,19 @@ export async function recordVideoHeartbeat(userId: string, lessonId: string, pos
       }], skipDuplicates: true })
       amount = entry.count ? stars : 0
     }
-    if (completed) {
+    const effectivelyCompleted = context ? cycleCompleted : updated.completed
+    if (effectivelyCompleted) {
       await syncCourseAssignmentCompletion(userId, lesson.session.course_id, tx)
       await enqueueAssignmentSync(tx, userId, `video-complete:${context?.cycle.id || 'legacy'}:${userId}:${lessonId}`)
     }
     if (context) await persistLearningUnlocks(tx, userId, lesson.session.course_id, context.cycle.id, now)
     return {
-      lessonId, id: lessonId, completed: updated.completed, completedAt: updated.completed_at,
-      lastPositionSeconds: updated.last_position_seconds, furthestWatchedPositionSeconds: updated.furthest_watched_position_seconds,
-      progressPercentage: duration > 0 ? Math.min(100, trainingFurthest / duration * 100) : 0,
+      lessonId, id: lessonId,
+      completed: context ? cycleCompleted : updated.completed,
+      completedAt: context ? cycleCompletedAt : updated.completed_at,
+      lastPositionSeconds: updated.last_position_seconds,
+      furthestWatchedPositionSeconds: context ? Math.floor(cycleFurthest) : updated.furthest_watched_position_seconds,
+      progressPercentage: duration > 0 ? Math.min(100, (context ? cycleFurthest : trainingFurthest) / duration * 100) : 0,
       replay: context ? { competitionMonth: context.month.key, watchedSeconds: replayFurthest, completed: rewardComplete } : null,
       starReward: { awarded: amount > 0, amount },
     }

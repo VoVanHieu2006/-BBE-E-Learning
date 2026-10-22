@@ -7,7 +7,7 @@ import Button from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
 import Toast, { ToastMessage } from '@/components/ui/Toast';
 import { apiFetch, clearApiCache } from '@/lib/api/client';
-import { ORDERED_CHAPTER_ROSTER as ORDERED_7_BANS } from '@/lib/departments';
+import { ORDERED_CHAPTER_ROSTER, CHAPTER_ROSTER_COLUMNS } from '@/lib/departments';
 
 const SAMPLE_SHEET_URL =
   'https://docs.google.com/spreadsheets/d/1MA9pJ1E8oHEZe8d1g6j0Ns6JqLoOCdhSVSgOflO0JBI/edit?gid=0#gid=0';
@@ -782,7 +782,7 @@ export default function ChapterManagerTermTransitionPage() {
         </div>
       </div>
 
-      {/* VIEW MODE: Nhiệm kỳ hiện tại (7 Cột rộng rãi + Cuộn ngang) */}
+      {/* VIEW MODE: Nhiệm kỳ hiện tại (8 Cột rộng rãi + Cuộn ngang) */}
       {viewMode === 'current' && (
         <div className="space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -790,17 +790,17 @@ export default function ChapterManagerTermTransitionPage() {
               <h2 className="text-base font-bold text-[#172554] flex items-center gap-2 flex-wrap">
                 {displayTermNumber ? (
                   <>
-                    <span>🏛️ Sơ đồ 7 Ban</span>
+                    <span>🏛️ Sơ đồ Phân ban Chapter</span>
                     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-blue-100 text-[#2563EB] text-xs font-bold border border-blue-200">
                       {formatTermBadge(displayTermNumber)}
                     </span>
                   </>
                 ) : (
-                  <span>🏛️ Sơ đồ 7 Ban nhiệm kỳ hiện tại</span>
+                  <span>🏛️ Sơ đồ Phân ban nhiệm kỳ hiện tại</span>
                 )}
               </h2>
               <p className="text-xs text-[#737686] mt-0.5">
-                Người đứng đầu mỗi Ban là Trưởng ban. Bấm vào thành viên để xem chi tiết hoặc đổi Ban. Bảng cuộn ngang ↔ để xem đủ 7 cột.
+                Người đứng đầu mỗi Ban là Trưởng ban. Bấm vào thành viên để xem chi tiết hoặc đổi Ban. Bảng cuộn ngang ↔ để xem đủ 8 cột.
               </p>
             </div>
             <Button
@@ -844,7 +844,7 @@ export default function ChapterManagerTermTransitionPage() {
               )}
 
               <div className={`overflow-x-auto pb-4 ${actionLoading ? 'pointer-events-none opacity-50' : ''}`}>
-                <div className="grid grid-cols-7 gap-4 min-w-[1650px]">
+                <div className="grid grid-cols-8 gap-3.5 min-w-[1900px]">
                 {rosterData.map((ban, idx) => {
                   const isPresidentBan = ban.name === 'Chủ Tịch';
                   return (
@@ -1120,9 +1120,9 @@ export default function ChapterManagerTermTransitionPage() {
                 </div>
               </div>
 
-              {/* Sơ đồ 7 cột dự kiến */}
+              {/* Sơ đồ 8 cột dự kiến */}
               <div className="overflow-x-auto pb-2">
-                <div className="grid grid-cols-7 gap-3 min-w-[1650px]">
+                <div className="grid grid-cols-8 gap-3 min-w-[1900px]">
                   {scheduledBatch.newTerm?.map((col: any, cIdx: number) => {
                     const isPresidentBan = col.departmentName === 'Chủ Tịch';
                     return (
@@ -1236,7 +1236,7 @@ export default function ChapterManagerTermTransitionPage() {
                   📥 Nhập Dữ Liệu Nhiệm Kỳ Mới từ Google Sheet
                 </h2>
                 <p className="text-xs text-[#737686] mt-0.5">
-                  Đọc danh sách phân ban từ Google Sheet, xem trước 7 cột nhiệm kỳ mới và đối soát nhân sự trước khi áp dụng.
+                  Đọc danh sách phân ban từ Google Sheet, xem trước 8 cột nhiệm kỳ mới và đối soát nhân sự trước khi áp dụng.
                 </p>
               </div>
 
@@ -1253,7 +1253,7 @@ export default function ChapterManagerTermTransitionPage() {
             {/* Hướng dẫn & Nhắc nhở làm mới */}
             <div className="p-4 bg-blue-50/70 rounded-2xl border border-blue-200/80 space-y-2">
               <p className="text-xs text-blue-950 font-semibold">
-                Google Sheet gồm đúng 7 cột: <strong>Chủ Tịch, Ban Thành Viên, Ban Thư Ký, Ban Khách Mời, Ban TT&SK, Ban Nội Dung, Ban Chất Lượng</strong>.
+                Google Sheet gồm đúng 8 cột: <strong>Chủ Tịch, Ban Định Hướng, Ban Thành Viên, Ban Thư Ký, Ban Khách Mời, Ban TT&SK, Ban Nội Dung, Ban Chất Lượng</strong>.
                 Người đứng đầu mỗi cột là <strong>LT của ban đó</strong> (Chủ Tịch có 1 người duy nhất). Định dạng mỗi ô: <strong>Họ tên (email@gmail.com)</strong>.
               </p>
               <p className="text-xs text-blue-800 bg-blue-100/70 px-3 py-1.5 rounded-lg border border-blue-200 inline-block">
@@ -1383,11 +1383,11 @@ export default function ChapterManagerTermTransitionPage() {
                   </div>
                 </div>
 
-                {/* 1. SƠ ĐỒ DỰ KIẾN: 7 Cột Nhiệm kỳ mới */}
+                {/* 1. SƠ ĐỒ DỰ KIẾN: 8 Cột Nhiệm kỳ mới */}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <h3 className="text-base font-bold text-[#172554] flex items-center gap-1.5">
-                      <span>🏛️ 7 Cột Nhiệm kỳ mới dự kiến</span>
+                      <span>🏛️ 8 Cột Nhiệm kỳ mới dự kiến</span>
                       <span className="text-xs font-normal text-[#737686]">
                         (Phân bổ theo sheet, người đầu in nổi bật là LT / Chủ tịch)
                       </span>
@@ -1395,7 +1395,7 @@ export default function ChapterManagerTermTransitionPage() {
                   </div>
 
                   <div className="overflow-x-auto pb-4">
-                    <div className="grid grid-cols-7 gap-3 min-w-[1650px]">
+                    <div className="grid grid-cols-8 gap-3 min-w-[1900px]">
                       {parsedResult.matchedNewTerm?.map((col: any, cIdx: number) => {
                         const isPresidentBan = col.departmentName === 'Chủ Tịch';
                         return (
@@ -1739,8 +1739,8 @@ export default function ChapterManagerTermTransitionPage() {
             </div>
 
             <div className="overflow-x-auto pb-4 max-h-[500px]">
-              <div className="grid grid-cols-7 gap-3 min-w-[1650px]">
-                {ORDERED_7_BANS.map((banName) => {
+              <div className="grid grid-cols-8 gap-3 min-w-[1900px]">
+                {ORDERED_CHAPTER_ROSTER.map((banName) => {
                   const banItems = (selectedHistoryTerm.items || []).filter(
                     (it: any) => it.departmentName === banName
                   );

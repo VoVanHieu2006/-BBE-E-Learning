@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { invalidateCoursesServerCache } from '@/lib/server-cache'
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -15,6 +16,9 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
   const courseDetail = await prisma.course.findUnique({
     where: { id: courseId },
     include: {
+      program: {
+        select: { id: true, code: true, name: true, is_core: true, sort_order: true },
+      },
       final_assessment: {
         select: { id: true, title: true, description: true, question_count: true },
       },
@@ -60,6 +64,15 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
     visibility: courseDetail.visibility,
     publishedAt: courseDetail.published_at,
     coverUrl: courseDetail.cover_url,
+    programId: courseDetail.program_id,
+    programCode: courseDetail.program?.code || null,
+    program: courseDetail.program ? {
+      id: courseDetail.program.id,
+      code: courseDetail.program.code,
+      name: courseDetail.program.name,
+      isCore: courseDetail.program.is_core,
+      sortOrder: courseDetail.program.sort_order,
+    } : null,
     assessment: courseDetail.final_assessment ? {
       assessmentId: courseDetail.final_assessment.id,
       id: courseDetail.final_assessment.id,
@@ -135,15 +148,16 @@ export async function PATCH(request: NextRequest, { params }: { params: { course
   const course = await prisma.course.findUnique({ where: { id: courseId }, select: { status: true } })
   if (!course) return NextResponse.json({ error: { code: 'CourseNotFound', message: 'Khóa học không tồn tại' } }, { status: 404 })
 
-  if (course.status === 'PUBLISHED') {
+  const body = await request.json()
+  const { title, description, visibility, coverUrl, programCode, programId } = body
+
+  // If course is published, prevent editing content title/description, but allow categorizing program and visibility
+  if (course.status === 'PUBLISHED' && (title !== undefined || description !== undefined)) {
     return NextResponse.json(
-      { error: { code: 'CoursePublished', message: 'Khóa học đang được công khai. Hãy Bỏ công khai trước rồi mới chỉnh sửa.' } },
+      { error: { code: 'CoursePublished', message: 'Khóa học đang được công khai. Hãy Bỏ công khai trước rồi mới chỉnh sửa tiêu đề/mô tả.' } },
       { status: 409 }
     )
   }
-
-  const body = await request.json()
-  const { title, description, visibility, coverUrl } = body
 
   if (title !== undefined && (typeof title !== 'string' || title.trim().length < 3 || title.trim().length > 255)) {
     return NextResponse.json({ error: { code: 'ValidationError', message: 'title phải từ 3-255 ký tự' } }, { status: 400 })
@@ -155,6 +169,21 @@ export async function PATCH(request: NextRequest, { params }: { params: { course
     return NextResponse.json({ error: { code: 'ValidationError', message: 'coverUrl must be an HTTPS URL.' } }, { status: 400 })
   }
 
+  let targetProgramId: string | null | undefined = undefined
+  if (programCode !== undefined) {
+    if (programCode === null || programCode === '') {
+      targetProgramId = null
+    } else {
+      const prog = await prisma.learningProgram.findUnique({ where: { code: programCode } })
+      if (!prog) {
+        return NextResponse.json({ error: { code: 'ProgramNotFound', message: 'Chương trình học không tồn tại' } }, { status: 400 })
+      }
+      targetProgramId = prog.id
+    }
+  } else if (programId !== undefined) {
+    targetProgramId = programId === '' ? null : programId
+  }
+
   const updated = await prisma.course.update({
     where: { id: courseId },
     data: {
@@ -162,8 +191,16 @@ export async function PATCH(request: NextRequest, { params }: { params: { course
       ...(description !== undefined ? { description: description?.trim() || null } : {}),
       ...(visibility !== undefined ? { visibility } : {}),
       ...(coverUrl !== undefined ? { cover_url: coverUrl || null } : {}),
+      ...(targetProgramId !== undefined ? { program_id: targetProgramId } : {}),
+    },
+    include: {
+      program: {
+        select: { id: true, code: true, name: true, is_core: true, sort_order: true },
+      },
     },
   })
+
+  invalidateCoursesServerCache()
 
   return NextResponse.json({
     courseId: updated.id,
@@ -174,6 +211,15 @@ export async function PATCH(request: NextRequest, { params }: { params: { course
     visibility: updated.visibility,
     publishedAt: updated.published_at,
     coverUrl: updated.cover_url,
+    programId: updated.program_id,
+    programCode: updated.program?.code || null,
+    program: updated.program ? {
+      id: updated.program.id,
+      code: updated.program.code,
+      name: updated.program.name,
+      isCore: updated.program.is_core,
+      sortOrder: updated.program.sort_order,
+    } : null,
   }, { status: 200 })
 }
 

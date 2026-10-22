@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getLearningManagerKind } from '@/lib/manager-learning-access'
+import { invalidateMemberLeaderboardCache } from '@/lib/member-leaderboard-cache'
+import { invalidateChapterLeaderboardCache } from '@/lib/chapter-leaderboard-cache'
+import { invalidateServerUsersCache } from '@/lib/server-cache'
 
 function toRoman(num: number): string {
   if (!num || num <= 0) return ''
@@ -141,5 +144,11 @@ export async function PATCH(request: NextRequest) {
     data: { display_name: displayName },
     select: { id: true, email: true, display_name: true },
   })
+
+  // Invalidate leaderboard and server caches so changes reflect immediately
+  invalidateMemberLeaderboardCache()
+  invalidateChapterLeaderboardCache()
+  invalidateServerUsersCache()
+
   return NextResponse.json({ id: user.id, email: user.email, displayName: user.display_name })
 }

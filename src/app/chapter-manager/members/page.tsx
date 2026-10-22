@@ -406,11 +406,6 @@ export default function ChapterManagerMembersPage() {
                     const isLocked = m.status === 'LOCKED';
                     const isInactive = m.status === 'INACTIVE';
                     const isBusy = actionUserId === mId;
-                    const currentLeadUserId = user?.id || user?.userId;
-                    const canLeadReactivate =
-                      isInactive &&
-                      m.deactivatedByRole === 'LEAD' &&
-                      Boolean(m.deactivatedByUserId && m.deactivatedByUserId === currentLeadUserId);
 
                     return (
                       <tr key={mId} className="hover:bg-[#f8f9ff] transition">
@@ -473,13 +468,9 @@ export default function ChapterManagerMembersPage() {
                               </span>
                               {m.cascadeLeadId ? (
                                 <div className="text-[10px] text-red-500 mt-0.5">Theo Lead Chapter</div>
-                              ) : m.deactivatedByRole === 'ADMIN' ? (
-                                <div className="text-[10px] text-red-500 mt-0.5">Bởi Admin</div>
-                              ) : m.deactivatedByRole === 'LEAD' ? (
-                                <div className="text-[10px] text-red-500 mt-0.5">
-                                  {canLeadReactivate ? 'Bởi bạn' : 'Bởi Lead khác'}
-                                </div>
-                              ) : null}
+                              ) : (
+                                <div className="text-[10px] text-slate-500 mt-0.5">Chỉ Admin mở lại</div>
+                              )}
                             </div>
                           )}
                         </td>
@@ -514,31 +505,11 @@ export default function ChapterManagerMembersPage() {
                               </button>
                             )}
 
-                            {/* Inactive accounts: only the deactivating lead or admin can reactivate */}
+                            {/* Inactive accounts: only Admin can reactivate */}
                             {canManageMembers && isInactive && (
-                              canLeadReactivate ? (
-                                <button
-                                  disabled={isBusy}
-                                  onClick={() => {
-                                    setDeactivateInputText('');
-                                    setConfirmToggle({
-                                      userId: mId,
-                                      email: m.email,
-                                      currentStatus: m.status,
-                                      nextStatus: 'ACTIVE',
-                                    });
-                                  }}
-                                  className="whitespace-nowrap px-2.5 py-1 text-xs font-semibold rounded-lg text-green-700 hover:bg-green-50 transition"
-                                >
-                                  Kích hoạt
-                                </button>
-                              ) : (
-                                <span className="text-[11px] text-slate-500">
-                                  {m.deactivatedByRole === 'ADMIN'
-                                    ? 'Chỉ Admin mới mở lại'
-                                    : 'Chỉ Lead vô hiệu hóa mới mở lại'}
-                                </span>
-                              )
+                              <span className="text-[11px] font-medium text-slate-500 italic">
+                                Chỉ Admin mới có quyền mở lại
+                              </span>
                             )}
                           </div>
                         </td>

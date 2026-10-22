@@ -46,54 +46,57 @@ export async function GET(request: NextRequest, { params }: { params: { lessonId
 
   const userId = (auth as any).context!.userId
 
-  const progress = await prisma.lessonProgress.findUnique({
-    where: { user_id_lesson_id: { user_id: userId, lesson_id: params.lessonId } },
-    select: {
-      lesson_id: true,
-      completed: true,
-      completed_at: true,
-      furthest_watched_position_seconds: true,
-      last_position_seconds: true,
-      updated_at: true,
-      lesson: {
-        select: {
-          video: { select: { duration_seconds: true } },
+  const [cycle, progress, replay] = await Promise.all([
+    prisma.learningCycle.findFirst({ where: { user_id: userId, ends_at: null }, select: { id: true } }),
+    prisma.lessonProgress.findUnique({
+      where: { user_id_lesson_id: { user_id: userId, lesson_id: params.lessonId } },
+      select: {
+        lesson_id: true,
+        completed: true,
+        completed_at: true,
+        furthest_watched_position_seconds: true,
+        last_position_seconds: true,
+        updated_at: true,
+        lesson: {
+          select: {
+            video: { select: { duration_seconds: true } },
+          },
         },
       },
-    },
-  })
-  const replay = await getVideoReplayState(userId, params.lessonId)
+    }),
+    getVideoReplayState(userId, params.lessonId),
+  ])
 
-  if (!progress) {
-    return NextResponse.json({
-      lessonId: params.lessonId,
-      replay,
-      id: params.lessonId,
-      completed: false,
-      watchedUntil: 0,
-      lastPosition: 0,
-      lastPositionSeconds: 0,
-      furthestWatchedPositionSeconds: 0,
-      progressPercentage: 0,
-      updatedAt: null,
-    }, { status: 200 })
-  }
+  const cycleProgress = cycle
+    ? await prisma.cycleLessonProgress.findUnique({
+        where: {
+          user_id_lesson_id_learning_cycle_id: {
+            user_id: userId,
+            lesson_id: params.lessonId,
+            learning_cycle_id: cycle.id,
+          },
+        },
+        select: { completed_at: true, furthest_seconds: true },
+      })
+    : null
 
-  const duration = progress.lesson.video?.duration_seconds || 1
-  const furthest = progress.furthest_watched_position_seconds || 0
+  const duration = progress?.lesson.video?.duration_seconds || 1
+  const isCompleted = cycle ? Boolean(cycleProgress?.completed_at) : Boolean(progress?.completed)
+  const completedAt = cycle ? (cycleProgress?.completed_at || null) : (progress?.completed_at || null)
+  const furthest = cycle ? (cycleProgress?.furthest_seconds || 0) : (progress?.furthest_watched_position_seconds || 0)
   const progressPercentage = duration > 0 ? Math.min(100, Math.round((furthest / duration) * 100)) : 0
 
   return NextResponse.json({
-    lessonId: progress.lesson_id,
+    lessonId: params.lessonId,
     replay,
-    id: progress.lesson_id,
-    completed: progress.completed,
-    watchedUntil: progress.furthest_watched_position_seconds || 0,
-    lastPosition: progress.last_position_seconds || 0,
-    lastPositionSeconds: progress.last_position_seconds || 0,
-    furthestWatchedPositionSeconds: progress.furthest_watched_position_seconds || 0,
+    id: params.lessonId,
+    completed: isCompleted,
+    watchedUntil: furthest,
+    lastPosition: progress?.last_position_seconds || 0,
+    lastPositionSeconds: progress?.last_position_seconds || 0,
+    furthestWatchedPositionSeconds: furthest,
     progressPercentage,
-    completedAt: progress.completed_at,
-    updatedAt: progress.updated_at,
+    completedAt,
+    updatedAt: progress?.updated_at || null,
   }, { status: 200 })
 }

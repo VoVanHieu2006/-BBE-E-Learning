@@ -10,7 +10,8 @@ export async function GET(request: NextRequest) {
 
   const url = new URL(request.url)
   const page = parseInt(url.searchParams.get('page') || '1', 10)
-  const limit = Math.min(Math.max(parseInt(url.searchParams.get('limit') || '20', 10), 1), 100)
+  const requestedLimit = parseInt(url.searchParams.get('limit') || '100', 10)
+  const limit = Math.min(Math.max(requestedLimit, 1), 200)
   const skip = (page - 1) * limit
 
   const role = auth.ok ? (auth as any).context!.role : 'GUEST'
@@ -42,7 +43,10 @@ export async function GET(request: NextRequest) {
   const [items, totalItems] = await Promise.all([
     prisma.course.findMany({
       where,
-      include: { _count: { select: { sessions: true } } },
+      include: {
+        _count: { select: { sessions: true } },
+        program: { select: { id: true, code: true, name: true, is_core: true, sort_order: true } },
+      },
       orderBy: { created_at: 'desc' },
       skip, take: limit,
     }),
@@ -60,6 +64,15 @@ export async function GET(request: NextRequest) {
       sessionCount: c._count.sessions,
       publishedAt: c.published_at,
       coverUrl: c.cover_url,
+      programId: c.program_id,
+      programCode: c.program?.code || null,
+      program: c.program ? {
+        id: c.program.id,
+        code: c.program.code,
+        name: c.program.name,
+        isCore: c.program.is_core,
+        sortOrder: c.program.sort_order,
+      } : null,
     })),
     totalItems,
     totalPages: Math.ceil(totalItems / limit),

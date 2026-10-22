@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import LearningPeriodSummary from '@/components/learning/LearningPeriodSummary'
-import { apiFetch } from '@/lib/api/client'
+import { apiFetch, clearApiCache, getCachedApiData } from '@/lib/api/client'
 
 type StarEntry = {
   id: string
@@ -47,34 +47,44 @@ function formatAwardedAt(value: string) {
 
 export default function StudentStarsPage() {
   const [page, setPage] = useState(1)
-  const [reload, setReload] = useState(0)
   const [history, setHistory] = useState<StarHistoryResponse | null>(null)
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState('')
 
+  const fetchHistory = useCallback(async (force = false) => {
+    const cacheKey = `/api/v1/stars/me?page=${page}&limit=${PAGE_SIZE}`
+    if (force) {
+      setRefreshing(true)
+      clearApiCache(cacheKey)
+    }
+
+    try {
+      const result = await apiFetch<StarHistoryResponse>(cacheKey, { noCache: force })
+      if (!result.ok || !result.data) {
+        setError(result.error?.message || 'Không thể tải lịch sử Star lúc này.')
+        return
+      }
+      setHistory(result.data)
+      setError('')
+    } catch {
+      setError('Không thể kết nối để tải lịch sử Star.')
+    } finally {
+      setLoading(false)
+      setRefreshing(false)
+    }
+  }, [page])
+
   useEffect(() => {
-    let current = true
-    setLoading(true)
-    setError('')
-
-    apiFetch<StarHistoryResponse>(`/api/v1/stars/me?page=${page}&limit=${PAGE_SIZE}`, { noCache: true })
-      .then((result) => {
-        if (!current) return
-        if (!result.ok || !result.data) {
-          setError(result.error?.message || 'Không thể tải lịch sử Star lúc này.')
-          return
-        }
-        setHistory(result.data)
-      })
-      .catch(() => {
-        if (current) setError('Không thể kết nối để tải lịch sử Star.')
-      })
-      .finally(() => {
-        if (current) setLoading(false)
-      })
-
-    return () => { current = false }
-  }, [page, reload])
+    // Check cached data immediately to prevent flicker when switching tabs
+    const cacheKey = `/api/v1/stars/me?page=${page}&limit=${PAGE_SIZE}`
+    const cached = getCachedApiData<StarHistoryResponse>(cacheKey)
+    if (cached) {
+      setHistory(cached)
+      setLoading(false)
+    }
+    fetchHistory(false)
+  }, [page, fetchHistory])
 
   const totalPages = Math.max(history?.totalPages || 1, 1)
 
@@ -82,7 +92,7 @@ export default function StudentStarsPage() {
     <main className="mx-auto w-full max-w-5xl">
       <header className="mb-7 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
-      <LearningPeriodSummary />
+          <LearningPeriodSummary />
           <p className="mb-2 text-sm font-semibold uppercase tracking-[0.16em] text-blue-600">Thành tích học tập</p>
           <h1 className="text-3xl font-bold tracking-tight text-slate-900" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
             Lịch sử Star
@@ -100,6 +110,17 @@ export default function StudentStarsPage() {
               {loading && !history ? '—' : (history?.balance ?? 0).toLocaleString('vi-VN')} <span className="text-base font-bold text-amber-700">Star</span>
             </p>
           </div>
+
+          <button
+            type="button"
+            onClick={() => fetchHistory(true)}
+            disabled={refreshing}
+            className="ml-2 px-3 py-2 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-900 text-xs font-bold transition border border-amber-300 flex items-center gap-1.5 shadow-2xs disabled:opacity-50"
+            title="Tải lại lịch sử Star mới nhất"
+          >
+            <span className={refreshing ? 'animate-spin' : ''}>🔄</span>
+            <span>{refreshing ? 'Đang tải...' : 'Tải lại'}</span>
+          </button>
         </section>
       </header>
 
@@ -119,7 +140,7 @@ export default function StudentStarsPage() {
         ) : error ? (
           <div role="alert" className="p-8 text-center">
             <p className="font-semibold text-rose-700">{error}</p>
-            <button type="button" onClick={() => setReload((current) => current + 1)} className="mt-3 rounded-lg px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50">
+            <button type="button" onClick={() => fetchHistory(true)} className="mt-3 rounded-lg px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50">
               Thử tải lại
             </button>
           </div>

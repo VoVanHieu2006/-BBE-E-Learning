@@ -6,6 +6,7 @@ import Button from '@/components/ui/Button';
 import Toast, { ToastMessage } from '@/components/ui/Toast';
 import Modal from '@/components/ui/Modal';
 import { apiFetch, clearApiCache, getCachedApiData } from '@/lib/api/client';
+import LearnerProfileView from '@/components/learner/LearnerProfileView';
 import { useAdmin } from '../AdminContext';
 
 export default function AdminUsersPage() {
@@ -1015,16 +1016,16 @@ export default function AdminUsersPage() {
         <Modal
           isOpen={Boolean(selectedUserDetail)}
           onClose={handleCloseUserDetail}
-          maxWidth="max-w-4xl"
+          maxWidth="max-w-5xl"
         >
           {selectedUserDetail && (
-            <div className="p-6 space-y-5 max-h-[90vh] overflow-y-auto">
-              <div className="flex justify-between items-center border-b border-[#eff4ff] pb-3">
+            <div className="p-6 space-y-6 max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-between items-center pb-2 border-b border-slate-100">
                 <div>
                   <h3 className="text-xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
-                    Chi tiết tài khoản
+                    Hồ sơ học viên & Quản trị tài khoản
                   </h3>
-                  <p className="text-xs text-[#737686]">{selectedUserDetail.email}</p>
+                  <p className="text-xs text-[#737686]">Chi tiết tiến độ học tập, video, bài kiểm tra và các thao tác nghiệp vụ.</p>
                 </div>
                 <button
                   onClick={handleCloseUserDetail}
@@ -1034,214 +1035,44 @@ export default function AdminUsersPage() {
                 </button>
               </div>
 
-              <div className="space-y-4">
-                <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[#eff4ff] p-3 text-xs">
-                  <span className="font-semibold text-[#172554]">Phạm vi hiện tại:</span>
-                  <span>{selectedUserDetail.chapter?.name ? formatChapterName(selectedUserDetail.chapter.name) : isSelectedLeadDna ? 'DNA' : 'Chưa gán Chapter'}</span>
-                  <span>·</span>
-                  <span className={isSelectedLeadDna ? 'text-emerald-700 font-semibold' : selectedUserDetail.department ? 'text-blue-700 font-semibold' : 'text-amber-800 font-semibold'}>
-                    {isSelectedLeadDna ? 'Lead DNA (Không dùng Ban)' : selectedUserDetail.department ? `Ban ${formatDepartmentName(selectedUserDetail.department.name)}` : '⚠️ Chưa có ban'}
-                  </span>
-                  <span>·</span>
-                  <span className={selectedUserDetail.dna?.active ? 'text-emerald-700 font-semibold' : 'text-slate-500'}>
-                    {selectedUserDetail.dna?.active ? `DNA ${selectedUserDetail.dna.group ? `(${selectedUserDetail.dna.group})` : ''}` : 'Không thuộc DNA'}
-                  </span>
-                </div>
+              <LearnerProfileView
+                user={{
+                  userId: selectedUserDetail.userId || selectedUserDetail.id,
+                  displayName: selectedUserDetail.displayName || selectedUserDetail.name,
+                  email: selectedUserDetail.email,
+                  status: selectedUserDetail.status,
+                  accountState: selectedUserDetail.accountState,
+                  role: selectedUserDetail.role,
+                  chapterName: selectedUserDetail.chapter?.name ? formatChapterName(selectedUserDetail.chapter.name) : isSelectedLeadDna ? 'DNA' : 'Chưa gán Chapter',
+                  departmentName: isSelectedLeadDna ? 'Lead DNA (Không dùng Ban)' : selectedUserDetail.department ? formatDepartmentName(selectedUserDetail.department.name) : undefined,
+                  createdAt: selectedUserDetail.createdAt,
+                  effectivePositions: selectedUserDetail.effectivePositions,
+                  dna: selectedUserDetail.dna,
+                  deactivatedByRole: selectedUserDetail.deactivatedByRole,
+                }}
+                progressData={{
+                  summary: learningDetail?.summary || {
+                    completedCourses: selectedUserDetail.completedCourses,
+                    totalCourses: selectedUserDetail.totalCourses,
+                    completedLessons: selectedUserDetail.completedLessons,
+                    totalLessons: selectedUserDetail.totalLessons,
+                    avgProgress: selectedUserDetail.avgProgress,
+                    avgQuizScore: selectedUserDetail.avgQuizScore,
+                    stars: learningDetail?.summary?.stars,
+                  },
+                  courses: learningDetail?.courses || [],
+                  learningDetail: learningDetail?.learningDetail || [],
+                }}
+                loading={learningDetailLoading}
+                error={learningDetailError}
+                onRefresh={() => handleOpenUserDetail(selectedUserDetail)}
+              />
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="p-3 bg-[#f8f9ff] rounded-xl">
-                    <span className="text-xs text-[#737686] block">Chức vụ</span>
-                    <div className="mt-1">
-                      {selectedUserDetail.role === 'CHAPTER_LEADER' ? (
-                        <span className="inline-flex whitespace-nowrap rounded-full bg-purple-50 border border-purple-200 px-2.5 py-0.5 text-xs font-bold text-purple-700">
-                          🏅 Lead Chapter
-                        </span>
-                      ) : isSelectedLeadDna ? (
-                        <span className="inline-flex whitespace-nowrap rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
-                          ⭐ Lead DNA{selectedUserDetail.dna?.group ? ` · ${selectedUserDetail.dna.group}` : ''}
-                        </span>
-                      ) : selectedUserDetail.department ? (
-                        <span className="inline-flex whitespace-nowrap rounded-full bg-blue-50 border border-blue-200 px-2.5 py-0.5 text-xs font-semibold text-blue-700">
-                          👤 Thành viên · {formatDepartmentName(selectedUserDetail.department.name)}
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-amber-50 border border-amber-200 px-2.5 py-0.5 text-xs font-semibold text-amber-800">
-                          <span>⚠️</span> Chưa có ban
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="p-3 bg-[#f8f9ff] rounded-xl">
-                    <span className="text-xs text-[#737686] block">Trạng thái</span>
-                    <div className="mt-1">
-                      {selectedUserDetail.accountState === 'OVERDUE_LOCK' ? (
-                        <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-rose-100 text-rose-800 border border-rose-300 inline-flex items-center gap-1">
-                          ⏰ Khóa: Quá hạn bài học
-                        </span>
-                      ) : selectedUserDetail.accountState === 'PASSWORD_LOCK' ? (
-                        <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-900 border border-amber-300 inline-flex items-center gap-1">
-                          🔒 Khóa: Quên/Sai mật khẩu
-                        </span>
-                      ) : selectedUserDetail.status === 'ACTIVE' ? (
-                        <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-green-100 text-green-700 inline-block">
-                          ✓ Đang hoạt động
-                        </span>
-                      ) : (
-                        <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-red-100 text-red-700 inline-flex items-center gap-1">
-                          ⛔ Đã vô hiệu hóa
-                        </span>
-                      )}
-                      {selectedUserDetail.status === 'INACTIVE' && (
-                        <div className="text-[10px] text-[#737686] mt-1">
-                          {selectedUserDetail.cascadeLeadId ? (
-                            <span className="text-red-500 font-medium">Vô hiệu hóa theo Lead Chapter</span>
-                          ) : selectedUserDetail.deactivatedByRole === 'LEAD' ? (
-                            <span className="text-red-500 font-medium">Vô hiệu hóa bởi Lead Chapter</span>
-                          ) : selectedUserDetail.deactivatedByRole === 'ADMIN' ? (
-                            <span className="text-red-500 font-medium">Vô hiệu hóa bởi Admin</span>
-                          ) : null}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="p-4 bg-white border border-[#eff4ff] rounded-2xl space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-[#737686]">Chapter:</span>
-                    <span className="font-semibold text-[#172554]">
-                      {selectedUserDetail.chapter?.name ? formatChapterName(selectedUserDetail.chapter.name) : 'Chưa thuộc Chapter'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-[#737686]">Ngày tạo tài khoản:</span>
-                    <span className="font-semibold text-[#172554]" suppressHydrationWarning>
-                      {selectedUserDetail.createdAt
-                        ? new Date(selectedUserDetail.createdAt).toLocaleString('vi-VN')
-                        : '—'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-[#737686]">Khóa học hoàn thành:</span>
-                    <span className="font-semibold text-[#2563EB]">
-                      {selectedUserDetail.role === 'CHAPTER_LEADER'
-                        ? `${selectedUserDetail.totalCourses || 0} / ${selectedUserDetail.totalCourses || 0} khóa`
-                        : `${selectedUserDetail.completedCourses || 0} / ${selectedUserDetail.totalCourses || 0} khóa`}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-[#737686]">Bài học đã hoàn thành:</span>
-                    <span className="font-semibold text-[#172554]">
-                      {selectedUserDetail.role === 'CHAPTER_LEADER'
-                        ? `${selectedUserDetail.totalLessons || 0} / ${selectedUserDetail.totalLessons || 0} bài`
-                        : `${selectedUserDetail.completedLessons || 0} / ${selectedUserDetail.totalLessons || 0} bài`}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-[#737686]">Tiến độ học tập TB:</span>
-                    <span className="font-bold text-[#172554]">
-                      {selectedUserDetail.role === 'CHAPTER_LEADER'
-                        ? '100% (Lead Chapter)'
-                        : selectedUserDetail.effectivePositions?.some((position: any) => position.code === 'DNA_LEAD') || selectedUserDetail.dna?.role === 'Lead DNA'
-                        ? 'Lead DNA / Miễn học'
-                        : `${selectedUserDetail.avgProgress || 0}%`}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-[#737686]">Điểm Quiz trung bình:</span>
-                    <span className="font-bold text-amber-600">
-                      {selectedUserDetail.role === 'CHAPTER_LEADER' ||
-                      selectedUserDetail.effectivePositions?.some((position: any) => position.code === 'DNA_LEAD') ||
-                      selectedUserDetail.dna?.role === 'Lead DNA'
-                        ? '—'
-                        : `${selectedUserDetail.avgQuizScore || 0}%`}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {selectedUserDetail.role === 'MEMBER' &&
-                !selectedUserDetail.effectivePositions?.some((position: any) => position.code === 'DNA_LEAD') &&
-                selectedUserDetail.dna?.role !== 'Lead DNA' && (
-                <section className="space-y-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <h4 className="font-bold text-[#172554]">Tiến độ học chi tiết</h4>
-                      <p className="text-xs text-[#737686]">Trạng thái video, điểm/lần làm quiz và sao đã nhận.</p>
-                    </div>
-                    {learningDetail?.summary && (
-                      <span className="rounded-full bg-amber-50 px-3 py-1 text-sm font-bold text-amber-700">
-                        ⭐ {learningDetail.summary.stars} sao
-                      </span>
-                    )}
-                  </div>
-
-                  {learningDetailLoading ? (
-                    <div className="rounded-xl bg-[#f8f9ff] p-5 text-sm text-[#737686] animate-pulse">Đang tải tiến độ học tập…</div>
-                  ) : learningDetailError ? (
-                    <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{learningDetailError}</div>
-                  ) : learningDetail ? (
-                    <div className="max-h-[42vh] space-y-3 overflow-y-auto pr-1">
-                      {(learningDetail.learningDetail || []).map((course: any) => (
-                        <details key={course.courseId} className="rounded-2xl border border-[#eff4ff] bg-white" open>
-                          <summary className="cursor-pointer px-4 py-3 font-bold text-[#172554]">{course.title}</summary>
-                          <div className="space-y-3 px-4 pb-4">
-                            {course.finalAssessment && (
-                              <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-3 text-sm">
-                                <div className="font-semibold text-[#172554]">Bài thi cuối khóa: {course.finalAssessment.title}</div>
-                                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#596174]">
-                                  <span>{course.finalAssessment.latestAttempt
-                                    ? `Lần ${course.finalAssessment.latestAttempt.number}/${course.finalAssessment.attemptCount} · ${course.finalAssessment.latestAttempt.scorePercent ?? '—'}% · ${course.finalAssessment.latestAttempt.passed ? 'Đạt' : 'Chưa đạt'}`
-                                    : `Chưa nộp bài (${course.finalAssessment.attemptCount} lần)`}</span>
-                                  <span>⭐ {course.finalAssessment.stars || 0} sao</span>
-                                  {course.finalAssessment.latestAttempt?.submittedAt && <span>Nộp lúc {new Date(course.finalAssessment.latestAttempt.submittedAt).toLocaleString('vi-VN')}</span>}
-                                </div>
-                              </div>
-                            )}
-                            {(course.modules || []).map((module: any) => (
-                              <div key={module.moduleId} className="rounded-xl bg-[#f8f9ff] p-3">
-                                <h5 className="mb-2 text-sm font-semibold text-[#172554]">{module.title}</h5>
-                                <div className="space-y-2">
-                                  {(module.lessons || []).map((lesson: any) => (
-                                    <div key={lesson.lessonId} className="rounded-lg border border-[#eff4ff] bg-white p-3 text-sm">
-                                      <div className="font-semibold text-[#172554]">{lesson.title}</div>
-                                      {lesson.video && (
-                                        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#596174]">
-                                          <span>{lesson.video.title}: {lesson.video.completed ? 'Hoàn thành 100%' : `Đã xem ${lesson.video.watchedPercent}%`}</span>
-                                          <span>{lesson.video.watchedSeconds}s / {lesson.video.durationSeconds}s</span>
-                                          <span>⭐ {lesson.video.stars} sao</span>
-                                          {lesson.video.completedAt && <span>Hoàn thành lúc {new Date(lesson.video.completedAt).toLocaleString('vi-VN')}</span>}
-                                        </div>
-                                      )}
-                                      {lesson.quiz && (
-                                        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-slate-100 pt-2 text-xs text-[#596174]">
-                                          <span>{lesson.quiz.title}: {lesson.quiz.latestAttempt ? `${lesson.quiz.latestAttempt.scorePercent ?? '—'}% · ${lesson.quiz.latestAttempt.passed ? 'Đạt' : 'Chưa đạt'}` : 'Chưa nộp bài'}</span>
-                                          <span>{lesson.quiz.attemptCount} lần nộp</span>
-                                          <span>⭐ {lesson.quiz.stars} sao</span>
-                                          {lesson.quiz.latestAttempt?.submittedAt && <span>Nộp lúc {new Date(lesson.quiz.latestAttempt.submittedAt).toLocaleString('vi-VN')}</span>}
-                                        </div>
-                                      )}
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </details>
-                      ))}
-                      {learningDetail.learningDetail?.length === 0 && <p className="rounded-xl bg-[#f8f9ff] p-4 text-sm text-[#737686]">Chưa có khóa học đã xuất bản.</p>}
-                    </div>
-                  ) : (
-                    <div className="rounded-xl bg-[#f8f9ff] p-4 text-sm text-[#737686]">Tài khoản này chưa được gán Chapter hoặc không có dữ liệu tiến độ thành viên.</div>
-                  )}
-                </section>
-              )}
-
-              <div className="flex flex-wrap items-center justify-end gap-3 pt-3 border-t border-[#eff4ff]">
+              <div className="flex flex-wrap items-center justify-end gap-3 pt-4 border-t border-slate-200">
                 <button
                   disabled={Boolean(actionUserId)}
                   onClick={() => void handleSendPasswordReset(selectedUserDetail)}
-                  className="px-3 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-50 border border-indigo-200 rounded-xl transition"
+                  className="px-3 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-50 border border-indigo-200 rounded-xl transition shadow-2xs"
                 >
                   ✉️ Gửi link đặt lại mật khẩu
                 </button>

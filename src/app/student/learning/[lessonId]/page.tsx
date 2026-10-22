@@ -13,6 +13,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
   const [currentLessonId, setCurrentLessonId] = useState(params.lessonId);
   const [user, setUser] = useState<any>(null);
   const [lesson, setLesson] = useState<any>(null);
+  const [lessonError, setLessonError] = useState<{ code: string; message: string; status: number } | null>(null);
   const [progress, setProgress] = useState<any>(null);
   const [replayEpoch, setReplayEpoch] = useState(0);
   useEffect(() => { setReplayEpoch(0) }, [currentLessonId]);
@@ -52,12 +53,14 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
   async function loadInitialData(lessonId: string, authToken?: string) {
     setLoadingLesson(true);
     setLoadingCourse(true);
+    setLessonError(null);
     const activeToken = authToken || (typeof window !== 'undefined' ? localStorage.getItem('accessToken') : '') || '';
 
     const lessonRes = await apiFetch(`/api/v1/lessons/${lessonId}`);
     if (lessonRes.ok && lessonRes.data) {
       const lData = lessonRes.data;
       setLesson(lData);
+      setLessonError(null);
 
       const courseId = lData.session?.courseId;
       if (courseId) {
@@ -87,11 +90,19 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
           setProgress({ lessonId, completed: false, progressPercentage: 0 });
         }
       }
-    } else if (!activeToken && (lessonRes.status === 401 || lessonRes.status === 403)) {
-      if (typeof window !== 'undefined') {
-        window.location.href = '/login?callbackUrl=' + encodeURIComponent(window.location.pathname);
-        return;
+    } else {
+      setLesson(null);
+      if (!activeToken && (lessonRes.status === 401 || lessonRes.status === 403)) {
+        if (typeof window !== 'undefined') {
+          window.location.href = '/login?callbackUrl=' + encodeURIComponent(window.location.pathname);
+          return;
+        }
       }
+      setLessonError({
+        code: lessonRes.error?.code || (lessonRes.status === 404 ? 'LessonNotFound' : 'AccessDenied'),
+        message: lessonRes.error?.message || (lessonRes.status === 404 ? 'Bài học không tồn tại' : 'Bạn chưa có quyền truy cập bài học này.'),
+        status: lessonRes.status || 403,
+      });
     }
 
     setLoadingLesson(false);
@@ -106,6 +117,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
     setCurrentLessonId(newLessonId);
     // CRITICAL: Immediately clear lesson and progress to eliminate stale UI & completion infection
     setLesson(null);
+    setLessonError(null);
     setProgress(null);
     setLoadingLesson(true);
     setActiveTab('desc'); // Reset tab to description when switching lessons
@@ -126,11 +138,20 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
 
     if (lessonRes.ok && lessonRes.data) {
       setLesson(lessonRes.data);
-    } else if (!activeToken && (lessonRes.status === 401 || lessonRes.status === 403)) {
-      if (typeof window !== 'undefined') {
-        window.location.href = '/login?callbackUrl=' + encodeURIComponent(window.location.pathname);
-        return;
+      setLessonError(null);
+    } else {
+      setLesson(null);
+      if (!activeToken && (lessonRes.status === 401 || lessonRes.status === 403)) {
+        if (typeof window !== 'undefined') {
+          window.location.href = '/login?callbackUrl=' + encodeURIComponent(window.location.pathname);
+          return;
+        }
       }
+      setLessonError({
+        code: lessonRes.error?.code || (lessonRes.status === 404 ? 'LessonNotFound' : 'AccessDenied'),
+        message: lessonRes.error?.message || (lessonRes.status === 404 ? 'Bài học không tồn tại' : 'Bạn chưa thể truy cập bài học này.'),
+        status: lessonRes.status || 403,
+      });
     }
 
     if (lessonProgRes && lessonProgRes.ok && lessonProgRes.data) {
@@ -365,11 +386,45 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                 <p className="text-xs text-slate-300 font-medium">Đang nạp bài giảng...</p>
               </div>
             ) : !lesson ? (
-              <div className="w-full h-full flex flex-col items-center justify-center p-8 text-center text-slate-400 bg-slate-950">
-                <p className="text-base font-semibold text-white mb-2">Không tìm thấy bài học</p>
-                <Link href="/student/courses" className="text-xs text-[#2563EB] hover:underline font-bold">
-                  Quay lại danh mục khóa học
-                </Link>
+              <div className="w-full h-full flex flex-col items-center justify-center p-8 text-center text-slate-300 bg-slate-950">
+                {lessonError?.status === 403 ? (
+                  <div className="max-w-md mx-auto space-y-4">
+                    <div className="w-16 h-16 mx-auto rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-3xl">
+                      🔒
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-bold text-white mb-1.5">Bài học đang bị khóa</h3>
+                      <p className="text-xs text-amber-200/90 leading-relaxed font-medium">
+                        {lessonError.message || 'Bạn cần hoàn thành video và bài kiểm tra của bài trước để mở khóa bài học này.'}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+                      {previousLesson && (
+                        <button
+                          onClick={() => switchLesson(previousLesson.lessonId || previousLesson.id)}
+                          className="px-4 py-2 rounded-xl bg-[#2563EB] hover:bg-blue-600 text-white text-xs font-bold transition shadow-md"
+                        >
+                          ← Quay lại học bài trước
+                        </button>
+                      )}
+                      <Link
+                        href={courseId ? `/student/courses/${courseId}` : '/student/courses'}
+                        className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition border border-slate-700"
+                      >
+                        Về lộ trình khóa học
+                      </Link>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <p className="text-base font-semibold text-white">
+                      {lessonError?.message || 'Không tìm thấy bài học'}
+                    </p>
+                    <Link href="/student/courses" className="text-xs text-[#2563EB] hover:underline font-bold inline-block">
+                      Quay lại danh mục khóa học
+                    </Link>
+                  </div>
+                )}
               </div>
             ) : lesson.video ? (
               <YouTubePlayer

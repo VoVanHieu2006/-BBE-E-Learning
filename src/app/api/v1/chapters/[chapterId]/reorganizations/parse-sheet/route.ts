@@ -4,7 +4,7 @@ import { canAccessChapterPermission } from '@/lib/authorization'
 import { parseCsv, extractGoogleDocRef, buildGoogleExportUrl } from '@/lib/quiz/import'
 import { listChapterMembers } from '@/lib/chapter-members'
 import { prisma } from '@/lib/prisma'
-import { ORDERED_CHAPTER_ROSTER as ORDERED_7_BANS } from '@/lib/departments'
+import { ORDERED_CHAPTER_ROSTER, CHAPTER_ROSTER_COLUMNS } from '@/lib/departments'
 
 const MEMBER_PATTERN = /^\s*(.*?)\s*\(([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})\)\s*$/i
 const EMAIL_ONLY_PATTERN = /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i
@@ -154,6 +154,21 @@ export async function POST(request: NextRequest, { params }: { params: { chapter
   const currentMemberByEmail = new Map(currentMembers.map((m) => [m.email.toLowerCase(), m]))
   const candidateEmails = new Set(candidates.map((c) => c.email))
 
+  // Kiểm tra thành viên thuộc khối DNA: không được phép gán vào ban Chapter
+  const dnaUsers = await prisma.user.findMany({
+    where: {
+      email: { in: Array.from(candidateEmails) },
+      organization_memberships: {
+        some: {
+          status: 'ACTIVE',
+          unit: { type: { in: ['DNA', 'DNA_GROUP'] } },
+        },
+      },
+    },
+    select: { email: true, display_name: true },
+  })
+  const dnaEmailSet = new Set(dnaUsers.map((u) => u.email.toLowerCase()))
+
   // 1. Phân bổ người trong sheet khớp với thành viên Chapter
   const matchedCandidateItems: any[] = []
   // 2. Edge Case 1: Người trong sheet nhưng chưa có trong Chapter
@@ -167,6 +182,16 @@ export async function POST(request: NextRequest, { params }: { params: { chapter
   }> = []
 
   for (const c of candidates) {
+    if (dnaEmailSet.has(c.email.toLowerCase())) {
+      errors.push({
+        row: c.row,
+        column: c.departmentName,
+        value: `${c.displayName} (${c.email})`,
+        message: `Tài khoản ${c.email} là thành viên Khối DNA, không được xếp vào Ban của Chapter.`,
+      })
+      continue
+    }
+
     const matched = currentMemberByEmail.get(c.email)
     if (matched) {
       matchedCandidateItems.push({
@@ -206,8 +231,8 @@ export async function POST(request: NextRequest, { params }: { params: { chapter
     }
   }
 
-  // Tổ chức 7 cột Nhiệm kỳ mới cho các thành viên khớp
-  const matchedNewTerm = ORDERED_7_BANS.map((banName) => {
+  // Tổ chức 8 cột Nhiệm kỳ mới cho các thành viên khớp
+  const matchedNewTerm = ORDERED_CHAPTER_ROSTER.map((banName) => {
     const dept = departments.find((d) => normalized(d.name) === normalized(banName))
     const deptItems = matchedCandidateItems.filter((item) => normalized(item.departmentName) === normalized(banName))
     const lead = deptItems.find((item) => item.isLead) || deptItems[0] || null

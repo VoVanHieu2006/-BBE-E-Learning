@@ -24,6 +24,7 @@ declare global {
 const YT_PLAYING = 1;
 const YT_PAUSED = 2;
 const YT_ENDED = 0;
+const YT_BUFFERING = 3;
 
 interface Props {
   youtubeVideoId: string;
@@ -62,6 +63,7 @@ export default function YouTubePlayer({
 
   const [isReady, setIsReady] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isBuffering, setIsBuffering] = useState(false);
   const [currentTime, setCurrentTime] = useState(initialPosition);
   const [duration, setDuration] = useState(durationSeconds || 0);
   const [furthest, setFurthest] = useState(initialFurthest);
@@ -89,6 +91,7 @@ export default function YouTubePlayer({
     setDuration(durationSeconds || 0);
     setVideoError('');
     setIsPlaying(false);
+    setIsBuffering(false);
   }, [lessonId, youtubeVideoId]);
 
   // Hẹn giờ tự ẩn thanh điều khiển (thanh tua) sau 3s khi đang phát.
@@ -214,7 +217,10 @@ export default function YouTubePlayer({
             },
             onStateChange: (e: any) => {
               if (unmounted) return;
-              if (e.data === YT_PLAYING) {
+              if (e.data === YT_BUFFERING) {
+                setIsBuffering(true);
+              } else if (e.data === YT_PLAYING) {
+                setIsBuffering(false);
                 setIsPlaying(true);
                 setShowControls(true);
                 scheduleHideControls();
@@ -229,6 +235,7 @@ export default function YouTubePlayer({
                 const ct = playerRef.current?.getCurrentTime?.() || 0;
                 sendProgress(ct, Math.max(furthestRef.current, ct));
               } else if (e.data === YT_PAUSED) {
+                setIsBuffering(false);
                 setIsPlaying(false);
                 stopUiTimer();
                 stopHeartbeat();
@@ -241,6 +248,7 @@ export default function YouTubePlayer({
                 const ct = playerRef.current?.getCurrentTime?.() || 0;
                 sendProgress(ct, furthestRef.current);
               } else if (e.data === YT_ENDED) {
+                setIsBuffering(false);
                 setIsPlaying(false);
                 stopUiTimer();
                 stopHeartbeat();
@@ -556,6 +564,14 @@ export default function YouTubePlayer({
             ▶
           </span>
           <span className="text-white text-xs font-semibold opacity-90">Bấm để phát</span>
+        </div>
+      )}
+
+      {/* Video Buffering Spinner (khi YouTube đang nạp dữ liệu / buffer) */}
+      {!videoError && isReady && isBuffering && isPlaying && (
+        <div className="absolute inset-0 z-20 pointer-events-none bg-black/40 backdrop-blur-[2px] flex flex-col items-center justify-center gap-3">
+          <div className="w-12 h-12 border-4 border-white/20 border-t-[#2563EB] rounded-full animate-spin"></div>
+          <span className="text-white text-xs font-semibold bg-black/60 px-3 py-1 rounded-full shadow">Đang tải video...</span>
         </div>
       )}
 
