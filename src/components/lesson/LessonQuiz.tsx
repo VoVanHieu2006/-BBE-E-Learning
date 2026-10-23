@@ -102,10 +102,11 @@ export default function LessonQuiz({
         setSelectedAnswers({});
       }
 
-      // Calculate timer
-      const questionCount = data.questions?.length || 1;
-      const totalMinutes = questionCount * 2;
-      let initialSecs = totalMinutes * 60;
+      // The backend's expiresAt is authoritative. It is derived from the
+      // assessment's configured duration, never from the number of bank
+      // questions or a hard-coded frontend value.
+      const configuredMinutes = Number(data.durationMinutes || 0);
+      let initialSecs = configuredMinutes > 0 ? configuredMinutes * 60 : 0;
       const expiresAtMs = data.expiresAt ? new Date(data.expiresAt).getTime() : Number.NaN;
       if (Number.isFinite(expiresAtMs)) {
         initialSecs = Math.max(0, Math.ceil((expiresAtMs - Date.now()) / 1000));
@@ -289,14 +290,14 @@ export default function LessonQuiz({
             <span>📝</span> {assessmentLabel}
           </h3>
           <p className="text-xs text-[#737686] mt-0.5">
-            Cần đạt tối thiểu <strong>85%</strong> điểm để vượt qua bài học.
+            {attempt ? `${questions.length} câu hỏi trong lượt này` : 'Đang tải cấu hình đề'} · Cần đạt tối thiểu <strong>85%</strong> điểm để vượt qua bài học.
           </p>
         </div>
 
         {attempt && !result && (
           <div className="flex items-center gap-2 bg-red-50 text-red-700 px-3 py-1.5 rounded-xl text-xs font-bold border border-red-200 self-start sm:self-auto">
             <span>⏱️</span>
-            <span>Thời gian còn lại: {formatTimer(timeLeft)}</span>
+            <span>Còn lại: {formatTimer(timeLeft)}</span>
           </div>
         )}
       </div>

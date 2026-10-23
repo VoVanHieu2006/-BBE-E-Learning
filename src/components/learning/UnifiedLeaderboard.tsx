@@ -61,6 +61,10 @@ export default function UnifiedLeaderboard({
 
   const [items, setItems] = useState<LeaderboardItem[]>([])
   const [excludedChapters, setExcludedChapters] = useState<any[]>([])
+  const [leaderboardState, setLeaderboardState] = useState<string>('')
+  const [accessError, setAccessError] = useState<string>('')
+  const [periodId, setPeriodId] = useState('')
+  const [periodCatalog, setPeriodCatalog] = useState<{ months: any[]; terms: any[]; seasons: any[] }>({ months: [], terms: [], seasons: [] })
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [showRulesModal, setShowRulesModal] = useState(false)
@@ -115,17 +119,37 @@ export default function UnifiedLeaderboard({
       if (c) setSelectedChapterId(c)
     }
     // Lấy danh sách Chapter cho bộ lọc
+    const storedUser = (() => {
+      try { return JSON.parse(localStorage.getItem('user') || 'null') } catch { return null }
+    })()
+    if (storedUser?.role === 'CHAPTER_LEADER' && storedUser.chapterId) {
+      setChapterList([{ id: storedUser.chapterId, name: storedUser.chapterName || 'Chapter của tôi' }])
+      setSelectedChapterId((current) => current || storedUser.chapterId)
+    }
     apiFetch<any>('/api/v1/learning/periods').then((res) => {
       if (res.ok && res.data?.terms) {
+        setPeriodCatalog({
+          months: res.data.months || [],
+          terms: res.data.terms || [],
+          seasons: res.data.seasons || [],
+        })
         const uniqueChapters = new Map<string, string>()
         res.data.terms.forEach((t: any) => {
           if (t.chapter_id && t.chapterName) uniqueChapters.set(t.chapter_id, t.chapterName)
         })
         const list = Array.from(uniqueChapters.entries()).map(([id, name]) => ({ id, name }))
-        setChapterList(list)
+        if (storedUser?.role === 'CHAPTER_LEADER' && storedUser.chapterId) {
+          setChapterList(list.filter((chapter) => chapter.id === storedUser.chapterId))
+        } else {
+          setChapterList(list)
+        }
       }
     }).catch(() => {})
   }, [refreshCurrentUser])
+
+  useEffect(() => {
+    setPeriodId('')
+  }, [group, periodType])
 
   // Tải dữ liệu bảng xếp hạng
   const loadLeaderboardData = useCallback(async (forceRefresh = false) => {
@@ -139,113 +163,41 @@ export default function UnifiedLeaderboard({
     }
 
     try {
+      setAccessError('')
+      setExcludedChapters([])
       const activeChapId = selectedChapterId || currentUser?.chapterId || propChapterId
-
-      if (group === 'CHAPTER') {
-        // Bảng toàn bộ Chapter
-        const url = `/api/v1/leaderboard/chapters`
-        const res = await apiFetch<any>(url, { noCache: forceRefresh })
-        if (res.ok && res.data) {
-          const list: LeaderboardItem[] = (res.data.items || []).map((ch: any, idx: number) => ({
-            ...ch,
-            rank: ch.rank ?? idx + 1,
-            chapterId: ch.chapterId || ch.id,
-            displayName: ch.name,
-            score: ch.score ?? 0,
-            stars: ch.stars?.averagePerMember ?? 0,
-            memberCount: ch.memberCount ?? 0,
-            atLeast70Percent: ch.completion?.atLeast70Percent ?? 0,
-            kpiStatus: ch.kpi?.status || 'N/A',
-          }))
-          setItems(list)
-          setExcludedChapters(res.data.excluded || [])
-        } else {
-          setItems([])
-        }
-      } else if (group === 'DNA') {
-        // Bảng nội bộ khối DNA
-        const url = '/api/v1/organization/dna-leaderboard'
-        const res = await apiFetch<any>(url, { noCache: forceRefresh })
-        if (res.ok && res.data) {
-          const list: LeaderboardItem[] = (res.data.items || []).map((item: any, idx: number) => ({
-            ...item,
-            rank: item.rank ?? idx + 1,
-            displayName: item.displayName || item.email?.split('@')[0],
-            groupName: item.groupName || 'DNA chung',
-            stars: item.stars ?? 0,
-          }))
-          setItems(list)
-        } else {
-          setItems([])
-        }
-      } else if (group === 'LT') {
-        // Bảng Ban Lãnh Đạo (LT) của Chapter
-        if (activeChapId) {
-          const url = `/api/v1/leaderboard/chapters/${activeChapId}`
-          const res = await apiFetch<any>(url, { noCache: forceRefresh })
-          if (res.ok && res.data) {
-            const list: LeaderboardItem[] = (res.data.items || [])
-              .filter((m: any) => {
-                const dept = typeof m.department === 'string' ? m.department : m.department?.name
-                const pos = m.positionTitle || m.position || ''
-                return Boolean(
-                  m.isLead ||
-                  pos.toLowerCase().includes('lead') ||
-                  pos.toLowerCase().includes('chủ tịch') ||
-                  pos.toLowerCase().includes('trưởng') ||
-                  dept === 'Chủ Tịch' ||
-                  dept?.toLowerCase().includes('trưởng')
-                )
-              })
-              .map((m: any, idx: number) => ({
-                ...m,
-                rank: idx + 1,
-                displayName: m.displayName || m.email?.split('@')[0],
-                departmentName: m.positionTitle || (typeof m.department === 'string' ? m.department : (m.department?.name || 'LT')),
-              }))
-            setItems(list)
-          } else {
-            setItems([])
-          }
-        } else {
-          setItems([])
-        }
-      } else {
-        // Bảng Thành viên (MEMBER)
-        if (activeChapId) {
-          const url = `/api/v1/leaderboard/chapters/${activeChapId}`
-          const res = await apiFetch<any>(url, { noCache: forceRefresh })
-          if (res.ok && res.data) {
-            const list: LeaderboardItem[] = (res.data.items || []).map((m: any, idx: number) => ({
-              ...m,
-              rank: idx + 1,
-              displayName: m.displayName || m.email?.split('@')[0],
-              departmentName: typeof m.department === 'string' ? m.department : (m.department?.name || 'Chưa phân ban'),
-            }))
-            setItems(list)
-          } else {
-            setItems([])
-          }
-        } else {
-          // Global members
-          const res = await apiFetch<any>('/api/v1/leaderboard', { noCache: forceRefresh })
-          if (res.ok && res.data) {
-            const list: LeaderboardItem[] = (res.data.items || []).map((m: any, idx: number) => ({
-              ...m,
-              rank: idx + 1,
-              displayName: m.displayName || m.email?.split('@')[0],
-            }))
-            setItems(list)
-          } else {
-            setItems([])
-          }
-        }
+      const params = new URLSearchParams({ group, periodType })
+      if ((group === 'MEMBER' || group === 'LT') && activeChapId) params.set('chapterId', activeChapId)
+      if (periodId) params.set('periodId', periodId)
+      const res = await apiFetch<any>(`/api/v1/leaderboard?${params.toString()}`, { noCache: forceRefresh })
+      if (!res.ok) {
+        setItems([])
+        setLeaderboardState('ERROR')
+        setAccessError(res.error?.message || 'Không tải được bảng xếp hạng trong phạm vi của bạn.')
+        return
       }
+      const data = res.data || {}
+      setLeaderboardState(data.state || '')
+      setExcludedChapters(data.excluded || [])
+      const list: LeaderboardItem[] = (data.items || []).map((item: any, idx: number) => ({
+        ...item,
+        rank: item.rank ?? idx + 1,
+        chapterId: item.chapterId || item.id,
+        displayName: item.displayName || item.name || item.email?.split('@')[0],
+        name: item.name || item.displayName,
+        score: item.score ?? 0,
+        stars: item.stars ?? item.totalStars ?? 0,
+        memberCount: item.memberCount ?? 0,
+        atLeast70Percent: item.atLeast70Percent ?? 0,
+        kpiStatus: item.kpiStatus || item.kpi?.status || 'N/A',
+        departmentName: item.groupName || item.departmentName || (group === 'DNA' ? 'DNA chung' : '—'),
+      }))
+      setItems(list)
     } finally {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [group, periodType, selectedChapterId, currentUser, propChapterId, refreshCurrentUser])
+  }, [group, periodType, periodId, selectedChapterId, currentUser, propChapterId, refreshCurrentUser])
 
   useEffect(() => {
     loadLeaderboardData()
@@ -397,6 +349,29 @@ export default function UnifiedLeaderboard({
           </div>
         </div>
 
+        <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-slate-100 text-xs">
+          <span className="font-semibold text-slate-600 shrink-0">Kỳ xếp hạng:</span>
+          <select
+            value={periodId}
+            onChange={(event) => setPeriodId(event.target.value)}
+            className="max-w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 font-semibold text-slate-800 outline-none focus:border-blue-500 sm:max-w-xs"
+          >
+            <option value="">Kỳ hiện tại</option>
+            {periodType === 'MONTH'
+              ? periodCatalog.months.map((month) => (
+                  <option key={month.id} value={month.key}>{month.key}</option>
+                ))
+              : (group === 'CHAPTER' || group === 'DNA' || !selectedChapterId
+                  ? periodCatalog.seasons
+                  : periodCatalog.terms.filter((term) => !selectedChapterId || term.chapter_id === selectedChapterId)
+                ).map((term: any) => (
+                  <option key={term.id} value={term.id}>
+                    {term.code || `${term.chapterName || 'Chapter'} · ${new Date(term.starts_at).toLocaleDateString('vi-VN')}`}
+                  </option>
+                ))}
+          </select>
+        </div>
+
         {/* Lọc theo Chapter nếu xem Thành viên hoặc LT */}
         {(group === 'MEMBER' || group === 'LT') && showChapterSelector && chapterList.length > 0 && (
           <div className="flex items-center gap-3 pt-2 border-t border-slate-100 text-xs">
@@ -418,7 +393,18 @@ export default function UnifiedLeaderboard({
       </div>
 
       {/* Main Content Area */}
-      {loading ? (
+      {accessError ? (
+        <Card className="space-y-3 border border-rose-200 bg-rose-50 p-8 text-center text-rose-800">
+          <div className="text-3xl">🔒</div>
+          <h3 className="text-base font-bold">Không thể xem bảng xếp hạng</h3>
+          <p className="text-sm">{accessError}</p>
+          <button type="button" onClick={() => loadLeaderboardData(true)} className="rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white">
+            Thử lại
+          </button>
+        </Card>
+      ) : leaderboardState === 'AWAITING_CUTOVER' ? (
+        <Card className="p-12 text-center text-sm text-slate-600">Bảng xếp hạng đang chờ Admin kích hoạt chu kỳ học.</Card>
+      ) : loading ? (
         <Card className="p-16 text-center text-[#737686]">
           <div className="w-10 h-10 border-4 border-[#2563EB] border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
           <p className="text-xs font-medium">Đang tải bảng xếp hạng…</p>
@@ -682,7 +668,7 @@ export default function UnifiedLeaderboard({
                                   : 'bg-red-100 text-red-700'
                               }`}
                             >
-                              {item.kpiStatus === 'GREEN' ? 'Xanh +20' : item.kpiStatus === 'YELLOW' ? 'Vàng +0' : item.kpiStatus || 'N/A'}
+                              {item.kpiStatus === 'GREEN' ? 'Xanh' : item.kpiStatus === 'YELLOW' ? 'Vàng' : item.kpiStatus || 'N/A'}
                             </span>
                           ) : item.completedLessons !== undefined && item.totalLessons !== undefined ? (
                             <span className="font-semibold text-slate-700">
@@ -711,7 +697,7 @@ export default function UnifiedLeaderboard({
                 🏛️ Chapter chưa đủ điều kiện tham gia xếp hạng ({excludedChapters.length})
               </h3>
               <p className="text-xs text-[#737686]">
-                Theo thể lệ BBE, Chapter cần tối thiểu 20 thành viên, tỷ lệ đạt ≥70% bài học tối thiểu 50% và không có KPI Đỏ/Đen.
+                Theo thể lệ BBE, Chapter cần <strong>trên 20</strong> thành viên, tỷ lệ đạt ≥70% bài lõi tối thiểu 50% và KPI Vàng hoặc Xanh.
               </p>
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 pt-1">
                 {excludedChapters.map((ch: any) => (
@@ -720,7 +706,7 @@ export default function UnifiedLeaderboard({
                     <div className="flex flex-col gap-0.5 text-slate-600">
                       {(ch.reasons || []).map((r: string, rIdx: number) => (
                         <span key={rIdx} className="text-amber-800 font-medium">
-                          • {r === 'MINIMUM_MEMBERS' ? `Chưa đủ 20 thành viên (${ch.memberCount})` : r === 'COMPLETION_THRESHOLD' ? `Chưa đạt 50% thành viên ≥70%` : r}
+                          • {r === 'MEMBER_COUNT_NOT_ABOVE_20' || r === 'MINIMUM_MEMBERS' ? `Chưa có trên 20 thành viên (${ch.memberCount ?? ch.averageMemberCount ?? 0})` : r === 'CORE_COMPLETION_BELOW_50_PERCENT' || r === 'COMPLETION_THRESHOLD' ? `Chưa đạt 50% thành viên ≥70% bài lõi` : r === 'KPI_NOT_ELIGIBLE' ? 'KPI không phải Vàng/Xanh' : r}
                         </span>
                       ))}
                     </div>
@@ -759,7 +745,7 @@ export default function UnifiedLeaderboard({
             <div className="bg-blue-50/50 p-4 rounded-2xl border border-blue-100 space-y-1.5">
               <h4 className="font-bold text-sm text-[#2563EB]">1. Xếp Hạng Thành Viên & Ban LT</h4>
               <ul className="list-disc pl-4 space-y-1">
-                <li><strong>Video bài giảng:</strong> Nhận 1 Star cho mỗi phút thời lượng chuẩn của video (làm tròn lên).</li>
+                <li><strong>Video bài giảng:</strong> Nhận 1 Star cho mỗi phút thời lượng chuẩn (tối thiểu 1 Star), chỉ khi backend xác nhận đã xem đủ nội dung.</li>
                 <li><strong>Quiz bài học:</strong> Đạt điểm từ <strong>≥ 85%</strong> trở lên mới nhận sao. Áp dụng cơ chế <em>High-Water Mark</em>: làm lại đạt điểm cao hơn kỷ lục cũ sẽ nhận phần sao chênh lệch.</li>
                 <li><strong>Bài thi cuối khóa:</strong> Đạt từ <strong>≥ 85%</strong> trở lên nhận thưởng sao cuối khóa.</li>
                 <li><strong>Tiêu chí hòa sao:</strong> Nếu hai người có cùng số Star, hệ thống ưu tiên người đạt mốc sao đó sớm hơn theo thời gian thực tế.</li>
@@ -782,16 +768,18 @@ export default function UnifiedLeaderboard({
                 <li>
                   <strong>Công thức tính điểm:</strong>
                   <div className="my-1.5 p-2 bg-white rounded-xl border border-amber-200 font-mono text-center font-bold text-amber-900">
-                    Điểm BXH = (Tổng Star hợp lệ ÷ Quân số Chapter) + Thưởng KPI
+                    S_m = A_m / N_m
                   </div>
+                  <p className="text-[11px] text-amber-900/90">A_m = tổng Star trong kỳ; N_m = quân số active bình quân (có trọng số thời gian khi chuyển giao giữa tháng).</p>
                 </li>
-                <li><strong>Điều kiện tối thiểu để được xếp hạng:</strong>
+                <li><strong>Điều kiện để được xếp hạng:</strong>
                   <ul className="list-circle pl-4 mt-0.5 space-y-0.5">
-                    <li>Quân số Chapter phải có tối thiểu từ <strong>20 thành viên</strong> trở lên.</li>
-                    <li>Tối thiểu <strong>50%</strong> thành viên phải đạt tiến độ từ <strong>70%</strong> bài học bắt buộc trở lên.</li>
+                    <li>Quân số Chapter phải <strong>trên 20 thành viên</strong>.</li>
+                    <li>Tối thiểu <strong>50%</strong> thành viên phải đạt tiến độ từ <strong>70%</strong> tổng số bài đã xuất bản của cả ba chương trình lõi Thành viên, LT và DNA.</li>
+                    <li>KPI tháng phải là <strong>Vàng</strong> hoặc <strong>Xanh</strong>.</li>
                   </ul>
                 </li>
-                <li><strong>Điểm thưởng KPI:</strong> KPI Xanh: +20 điểm • KPI Vàng: +0 điểm • KPI Đỏ/Đen: Tạm ngưng xếp hạng kỳ đó.</li>
+                <li>Không cộng điểm KPI và không dùng công thức trọng số cũ.</li>
               </ul>
             </div>
           </div>

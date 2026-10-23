@@ -1780,7 +1780,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
                                           <h4 className="text-sm font-bold text-[#172554]">{lesson.title}</h4>
                                           {lesson.assessment && (
                                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                              📝 Quiz ({lesson.assessment.questionCount || lesson.assessment.questions?.length || 0} câu)
+                                              📝 Quiz ({lesson.assessment.questionCount || 0} câu/lượt · {lesson.assessment.durationMinutes || 0} phút · ngân hàng {lesson.assessment.bankQuestionCount || lesson.assessment.questions?.length || 0})
                                             </span>
                                           )}
                                         </div>
@@ -2169,6 +2169,14 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="text-sm font-semibold text-[#172554]">Số câu mỗi lượt<input type="number" min={1} max={activeAssessmentMode === 'COURSE_FINAL' ? finalAvailableQuestions : assessmentForm.questions.length} value={assessmentForm.questionCount} onChange={(e) => setAssessmentForm({ ...assessmentForm, questionCount: Number(e.target.value) })} className="mt-1 w-full rounded-xl border border-[#cbdbf5] px-3 py-2 font-normal"/></label>
                 <label className="text-sm font-semibold text-[#172554]">Thời gian (phút)<input type="number" min={1} max={240} value={assessmentForm.durationMinutes} onChange={(e) => setAssessmentForm({ ...assessmentForm, durationMinutes: Number(e.target.value) })} className="mt-1 w-full rounded-xl border border-[#cbdbf5] px-3 py-2 font-normal"/></label>
+              </div>
+
+              <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-900">
+                Ngân hàng: {activeAssessmentMode === 'COURSE_FINAL' ? finalAvailableQuestions : assessmentForm.questions.length} câu
+                <span className="mx-2 text-blue-300">|</span>
+                Mỗi lần thi: {assessmentForm.questionCount} câu
+                <span className="mx-2 text-blue-300">|</span>
+                Thời gian: {assessmentForm.durationMinutes} phút
               </div>
 
               {activeAssessmentMode === 'COURSE_FINAL' && <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">Ngân hàng quiz hiện có {finalAvailableQuestions} câu. Bài thi sẽ lưu một phiên bản đề riêng và lấy câu hỏi đều từ các bài học. Nếu số câu giảm xuống dưới mức đã cấu hình, hệ thống sẽ chặn thao tác sửa/xóa quiz và hướng dẫn điều chỉnh.</div>}

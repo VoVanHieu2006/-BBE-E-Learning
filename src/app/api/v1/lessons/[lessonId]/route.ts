@@ -5,13 +5,14 @@ import { assertFinalExamBankCapacity, finalExamBankError, lockCourseExamBank } f
 import { MAX_VIDEO_DURATION_SECONDS, MIN_VIDEO_DURATION_SECONDS, normalizeDurationSeconds } from '@/lib/validation/duration'
 import { checkLessonProgression } from '@/lib/progression'
 
-export async function GET(request: NextRequest, { params }: { params: { lessonId: string } }) {
-  const auth = await authenticate(request).catch(() => ({ ok: false }))
-  const context = auth.ok ? (auth as any).context! : null
-  const lessonId = params.lessonId
+type LessonDetail = Awaited<ReturnType<typeof loadLessonDetail>>
+const lessonDetailCache = new Map<string, { data: LessonDetail; timestamp: number }>()
+const LESSON_DETAIL_TTL_MS = 15_000
 
-  const lesson = await prisma.lesson.findUnique({
+function loadLessonDetail(lessonId: string) {
+  return prisma.lesson.findUnique({
     where: { id: lessonId },
+    relationLoadStrategy: 'join',
     include: {
       session: {
         include: {
@@ -22,7 +23,7 @@ export async function GET(request: NextRequest, { params }: { params: { lessonId
       },
       video: true,
       assessment: {
-        select: { id: true, title: true, description: true, _count: { select: { questions: true } } },
+        select: { id: true, title: true, description: true, question_count: true, duration_minutes: true, _count: { select: { questions: true } } },
       },
       documents: {
         select: { id: true, file_name: true, file_size: true, mime_type: true, created_at: true },
@@ -30,6 +31,19 @@ export async function GET(request: NextRequest, { params }: { params: { lessonId
       },
     },
   })
+}
+
+export async function GET(request: NextRequest, { params }: { params: { lessonId: string } }) {
+  const auth = await authenticate(request).catch(() => ({ ok: false }))
+  const context = auth.ok ? (auth as any).context! : null
+  const lessonId = params.lessonId
+
+  const cached = lessonDetailCache.get(lessonId)
+  let lesson = cached && Date.now() - cached.timestamp < LESSON_DETAIL_TTL_MS ? cached.data : null
+  if (!lesson) {
+    lesson = await loadLessonDetail(lessonId)
+    if (lesson) lessonDetailCache.set(lessonId, { data: lesson, timestamp: Date.now() })
+  }
 
   if (!lesson) {
     return NextResponse.json({ error: { code: 'LessonNotFound', message: 'Bài học không tồn tại' } }, { status: 404 })
@@ -76,7 +90,10 @@ export async function GET(request: NextRequest, { params }: { params: { lessonId
       id: lesson.assessment.id,
       title: lesson.assessment.title,
       description: lesson.assessment.description,
-      questionCount: lesson.assessment._count.questions,
+      questionCount: lesson.assessment.question_count,
+      bankQuestionCount: lesson.assessment._count.questions,
+      durationMinutes: lesson.assessment.duration_minutes,
+      passingPercent: 85,
     } : null,
     documents: (context || (course.status === 'PUBLISHED' && course.visibility === 'PUBLIC')) ? lesson.documents.map((d) => ({
       documentId: d.id,
@@ -155,6 +172,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { lesson
   }
 
   const finalLesson = await prisma.lesson.findUnique({ where: { id: lessonId }, include: { video: true } })
+  lessonDetailCache.delete(lessonId)
 
   return NextResponse.json({
     lessonId: finalLesson!.id,
@@ -195,6 +213,7 @@ export async function DELETE(request: NextRequest, { params }: { params: { lesso
       await assertFinalExamBankCapacity(tx, lesson.session.course_id)
     })
   } catch (error) {
+    lessonDetailCache.delete(lessonId)
     const bankError = finalExamBankError(error)
     if (bankError) return NextResponse.json(bankError, { status: 409 })
     if (error instanceof Error && error.message === 'LessonHasAttempts') return NextResponse.json({ error: { code: 'AssessmentVersionRequired', message: 'Bài học đã có lượt làm quiz; không thể xóa lịch sử.' } }, { status: 409 })

@@ -60,11 +60,13 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
   const members = await prisma.user.findMany({
     where: {
       status: 'ACTIVE',
-      role: { in: ['MEMBER', 'CHAPTER_LEADER'] },
+      // Management accounts are not competition participants. LT and Chapter
+      // President remain MEMBER accounts and are intentionally retained.
+      role: 'MEMBER',
       OR: memberScope,
       position_assignments: {
         none: {
-          position: { code: 'DNA_LEAD' },
+          position: { code: { in: ['DNA_LEAD', 'DNA_MANAGER', 'CHAPTER_LEAD', 'CHAPTER_MANAGER', 'TT', 'TRAINEE'] } },
           starts_at: { lte: now },
           OR: [{ ends_at: null }, { ends_at: { gt: now } }],
         },

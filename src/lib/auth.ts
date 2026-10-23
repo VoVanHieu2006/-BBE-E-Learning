@@ -80,6 +80,7 @@ export async function authenticate(request: NextRequest): Promise<AuthResult> {
           }
           const user = await prisma.user.findUnique({
             where: { id: userId },
+            relationLoadStrategy: 'join',
             select: { id: true, status: true, role: true, chapter_members: { take: 1, orderBy: { joined_at: 'asc' }, select: { chapter_id: true } } },
           })
           if (user && user.status === 'ACTIVE' && await hasActiveAffiliation(user.id, user.role)) {
@@ -111,6 +112,7 @@ export async function authenticate(request: NextRequest): Promise<AuthResult> {
     // Verify user exists and is ACTIVE
     const user = await prisma.user.findUnique({
       where: { id: userId },
+      relationLoadStrategy: 'join',
       select: { id: true, status: true, role: true, chapter_members: { take: 1, orderBy: { joined_at: 'asc' }, select: { chapter_id: true } } },
     })
 
@@ -141,6 +143,7 @@ export async function authenticate(request: NextRequest): Promise<AuthResult> {
           }
           const user = await prisma.user.findUnique({
             where: { id: userId },
+            relationLoadStrategy: 'join',
             select: { id: true, status: true, role: true, chapter_members: { take: 1, orderBy: { joined_at: 'asc' }, select: { chapter_id: true } } },
           })
           if (user && user.status === 'ACTIVE' && await hasActiveAffiliation(user.id, user.role)) {

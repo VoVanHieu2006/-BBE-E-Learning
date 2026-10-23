@@ -18,6 +18,8 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
   const [replayEpoch, setReplayEpoch] = useState(0);
   useEffect(() => { setReplayEpoch(0) }, [currentLessonId]);
   const [starReward, setStarReward] = useState<number | null>(null);
+  const [starBalance, setStarBalance] = useState<number | null>(null);
+  const seenRewardKeysRef = useRef<Set<string>>(new Set());
   const [courseData, setCourseData] = useState<any>(null);
   const [courseProgress, setCourseProgress] = useState<any>(null);
   const [loadingLesson, setLoadingLesson] = useState(true);
@@ -77,11 +79,24 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
 
       const courseId = lData.session?.courseId;
       if (courseId) {
-        const [courseRes, progListRes, lessonProgRes] = await Promise.all([
+        const [courseRes, lessonProgRes] = await Promise.all([
           apiFetch(`/api/v1/courses/${courseId}`),
-          activeToken ? apiFetch(`/api/v1/courses/${courseId}/my-progress`) : Promise.resolve<ApiResponse<any>>({ ok: false, status: 0 }),
           activeToken ? apiFetch(`/api/v1/lessons/${lessonId}/progress`, { noCache: true }) : Promise.resolve<ApiResponse<any>>({ ok: false, status: 0 }),
         ]);
+        // The course-wide progress and Star balance are secondary panels. Load
+        // them after the lesson/video dependencies so they never block playback.
+        if (activeToken) {
+          void apiFetch(`/api/v1/courses/${courseId}/my-progress`)
+            .then((progListRes) => {
+              if (progListRes.ok && progListRes.data) setCourseProgress(progListRes.data)
+            })
+            .catch(() => {})
+          void apiFetch(`/api/v1/stars/me?balanceOnly=1`, { noCache: true })
+            .then((starRes) => {
+              if (starRes.ok && typeof starRes.data?.balance === 'number') setStarBalance(starRes.data.balance)
+            })
+            .catch(() => {})
+        }
 
         if (courseRes.ok && courseRes.data) {
           setCourseData(courseRes.data);
@@ -93,15 +108,12 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
           setOpenSessions(initOpen);
         }
 
-        if (progListRes && progListRes.ok && progListRes.data) {
-          setCourseProgress(progListRes.data);
-        }
-
         if (lessonProgRes && lessonProgRes.ok && lessonProgRes.data) {
           setProgress({ ...lessonProgRes.data, lessonId });
         } else {
           setProgress({ lessonId, completed: false, progressPercentage: 0 });
         }
+
       }
     } else {
       setLesson(null);
@@ -173,58 +185,84 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
     setIsSwitchingLesson(false);
   }
 
-  async function handleProgress(currentTime: number, furthest: number, viewSessionId: string) {
-    if (!token) return; // Guests don't track progress
+  function celebrateStarReward(amount: number, rewardKey: string | null) {
+    if (!(amount > 0)) return;
+    // A retried heartbeat, a re-render or a duplicated response must never
+    // replay the same backend reward.
+    const key = rewardKey || `amount:${amount}:${Math.floor(Date.now() / 2000)}`;
+    if (seenRewardKeysRef.current.has(key)) return;
+    seenRewardKeysRef.current.add(key);
+    setStarReward(amount);
+    window.setTimeout(() => setStarReward(null), 3600);
+  }
+
+  async function handleProgress(event: {
+    currentTime: number;
+    furthest: number;
+    viewSessionId: string;
+    playbackRate: number;
+    event: 'PLAY' | 'HEARTBEAT' | 'PAUSE' | 'ENDED';
+  }) {
+    if (!token) return null; // Guests don't track progress
     const activeLessonId = currentLessonId;
     const reqId = switchReqIdRef.current;
     const res = await apiFetch(`/api/v1/lessons/${activeLessonId}/progress`, {
       method: 'PATCH',
       body: JSON.stringify({
-        positionSeconds: currentTime,
-        furthestWatchedPositionSeconds: furthest,
-        viewSessionId,
+        positionSeconds: event.currentTime,
+        furthestWatchedPositionSeconds: event.furthest,
+        playbackRate: event.playbackRate,
+        event: event.event,
+        viewSessionId: event.viewSessionId,
       }),
     });
-    if (reqId !== switchReqIdRef.current) return; // Discard stale progress response
+    if (reqId !== switchReqIdRef.current) return null; // Discard stale progress response
+    if (!res.ok || !res.data) return null;
 
-    if (res.ok && res.data) {
-      setProgress((prev: any) => ({
-        ...prev,
-        lessonId: currentLessonId,
-        completed: res.data.completed,
-        replay: res.data.replay,
-        progressPercentage: res.data.progressPercentage,
-        watchedUntil: furthest,
-      }));
+    const data = res.data;
+    setProgress((prev: any) => ({
+      ...prev,
+      lessonId: activeLessonId,
+      videoCompleted: Boolean(data.videoCompleted),
+      completed: Boolean(data.completed),
+      replay: data.replay,
+      progressPercentage: data.progressPercentage,
+      watchedUntil: data.furthestWatchedPositionSeconds ?? event.furthest,
+      lastPosition: data.lastPositionSeconds ?? prev?.lastPosition,
+    }));
 
-      if (res.data.starReward?.awarded && Number(res.data.starReward.amount) > 0) {
-        setStarReward(Number(res.data.starReward.amount));
-        window.setTimeout(() => setStarReward(null), 3600);
-      }
-
-      // Đánh dấu bài hiện tại hoàn thành ngay trong courseProgress (chỉ tăng đếm 1 lần duy nhất)
-      if (res.data.completed) {
-        setCourseProgress((prev: any) => {
-          if (!prev) return prev;
-          let wasDone = false;
-          const sessions = (prev.sessions || []).map((ps: any) => ({
-            ...ps,
-            lessons: (ps.lessons || []).map((pl: any) => {
-              if (pl.lessonId !== currentLessonId) return pl;
-              wasDone = Boolean(pl.completed);
-              return { ...pl, completed: true };
-            }),
-          }));
-          return {
-            ...prev,
-            sessions,
-            completedLessons: wasDone
-              ? prev.completedLessons
-              : Math.min((prev.completedLessons || 0) + 1, prev.totalLessons || (prev.completedLessons || 0) + 1),
-          };
-        });
-      }
+    if (data.starReward?.awarded && Number(data.starReward.amount) > 0) {
+      celebrateStarReward(Number(data.starReward.amount), data.starReward.rewardKey || null);
     }
+    if (typeof data.starReward?.balance === 'number') {
+      setStarBalance(data.starReward.balance);
+    }
+
+    // Only the backend-confirmed lesson completion may advance the course
+    // progress counter. Video completion alone is not lesson completion when a
+    // quiz is configured.
+    if (data.completed) {
+      setCourseProgress((prev: any) => {
+        if (!prev) return prev;
+        let wasDone = false;
+        const sessions = (prev.sessions || []).map((ps: any) => ({
+          ...ps,
+          lessons: (ps.lessons || []).map((pl: any) => {
+            if (pl.lessonId !== activeLessonId) return pl;
+            wasDone = Boolean(pl.completed);
+            return { ...pl, completed: true };
+          }),
+        }));
+        return {
+          ...prev,
+          sessions,
+          completedLessons: wasDone
+            ? prev.completedLessons
+            : Math.min((prev.completedLessons || 0) + 1, prev.totalLessons || (prev.completedLessons || 0) + 1),
+        };
+      });
+    }
+    return data;
   }
 
   async function handleDownload(documentId: string, fileName: string) {
@@ -295,7 +333,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
   const isAdmin = user?.role === 'ADMIN';
   const isLeaderOrAdmin = isAdmin;
   const isGuest = !token;
-  const allowFreeSeek = isGuest;
+  const allowFreeSeek = isGuest || isAdmin;
 
   const totalLessonsCount = allCourseLessons.length || 1;
   const completedLessonsCount = courseProgress?.completedLessons ?? (progress?.completed ? 1 : 0);
@@ -305,23 +343,25 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
   const isLessonPassed = Boolean(!loadingLesson && progress?.lessonId === currentLessonId && progress?.completed) || isAdmin;
   const canGoNext = !loadingLesson && (isGuest || isAdmin || Boolean(progress?.lessonId === currentLessonId && progress?.completed));
 
-  const handleLessonComplete = () => {
-    if (!isGuest) {
-      if (hasQuiz && !progress?.completed && !isAdmin) {
-        setActiveTab('quiz');
-        showToast(
-          'info',
-          'Bạn đã xem xong video! Hãy hoàn thành bài kiểm tra bên dưới để vượt qua bài học.',
-          'Làm bài kiểm tra'
-        );
-      } else {
-        setProgress((prev: any) => ({ ...prev, lessonId: currentLessonId, completed: true, progressPercentage: 100 }));
-        if (nextLesson) {
-          showToast('success', `Đã hoàn thành bài học! Bạn có thể bấm "Bài tiếp theo →" để học tiếp.`, 'Hoàn thành bài học');
-        } else {
-          showToast('success', 'Chúc mừng! Bạn đã hoàn thành tất cả bài học trong khóa học này.', 'Hoàn thành khóa học');
-        }
-      }
+  const handleLessonComplete = (result?: any) => {
+    if (isGuest) return;
+    if (hasQuiz && !progress?.completed && !isAdmin) {
+      setActiveTab('quiz');
+      showToast(
+        'info',
+        'Bạn đã xem xong video! Hãy hoàn thành bài kiểm tra bên dưới để vượt qua bài học.',
+        'Làm bài kiểm tra'
+      );
+      return;
+    }
+    if (!result?.completed) {
+      showToast('info', 'Đã ghi nhận video. Hệ thống đang đồng bộ tiến độ bài học.', 'Đồng bộ tiến độ');
+      return;
+    }
+    if (nextLesson) {
+      showToast('success', 'Đã hoàn thành bài học! Bạn có thể bấm "Bài tiếp theo →" để học tiếp.', 'Hoàn thành bài học');
+    } else {
+      showToast('success', 'Chúc mừng! Bạn đã hoàn thành tất cả bài học trong khóa học này.', 'Hoàn thành khóa học');
     }
   };
 
@@ -354,6 +394,13 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
         </div>
 
         <div className="flex items-center gap-3 shrink-0">
+          {!isGuest && starBalance !== null && (
+            <div className="flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-800" title="Tổng Star hiện có">
+              <span aria-hidden="true">⭐</span>
+              <span className="tabular-nums" aria-live="polite">{starBalance.toLocaleString('vi-VN')}</span>
+              <span className="hidden sm:inline">Star</span>
+            </div>
+          )}
           {/* Progress Indicator for Members */}
           {!isGuest && (
             <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-[#eff4ff] border border-[#cbdbf5] rounded-xl text-xs">
@@ -388,9 +435,10 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
           {/* Main Video Cinema Container with Crisp Rounded Corners & Shadow */}
           <div className="w-full bg-black rounded-3xl overflow-hidden shadow-xl border border-slate-900 aspect-video relative max-w-5xl mx-auto">
             {loadingLesson && !lesson ? (
-              <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 gap-3 bg-slate-950">
+              <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 gap-3 bg-slate-950" aria-busy="true" aria-live="polite">
                 <div className="w-10 h-10 border-4 border-[#2563EB] border-t-transparent rounded-full animate-spin"></div>
-                <p className="text-xs text-slate-300 font-medium">Đang nạp bài giảng...</p>
+                <p className="text-sm font-bold text-white">Đang tải thông tin bài học…</p>
+                <p className="text-[11px] text-slate-400">Trình phát video sẽ xuất hiện ngay khi dữ liệu sẵn sàng.</p>
               </div>
             ) : !lesson ? (
               <div className="w-full h-full flex flex-col items-center justify-center p-8 text-center text-slate-300 bg-slate-950">
@@ -406,6 +454,12 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                       </p>
                     </div>
                     <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+                      <button
+                        onClick={() => loadInitialData(currentLessonId, token)}
+                        className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition border border-white/20"
+                      >
+                        ↻ Thử tải lại
+                      </button>
                       {previousLesson && (
                         <button
                           onClick={() => switchLesson(previousLesson.lessonId || previousLesson.id)}
@@ -435,7 +489,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
               </div>
             ) : lesson.video ? (
               <YouTubePlayer
-                key={`${lesson.video.youtubeVideoId}:${replayEpoch}`}
+                key={`${currentLessonId}:${lesson.video.youtubeVideoId}:${replayEpoch}`}
                 lessonId={currentLessonId}
                 youtubeVideoId={lesson.video.youtubeVideoId}
                 accessToken={token}
@@ -447,7 +501,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                 }
                 initialFurthest={replayEpoch > 0 ? 0 : progress?.watchedUntil || progress?.furthestWatchedPositionSeconds || 0}
                 durationSeconds={lesson.video.durationSeconds || 0}
-                onProgress={(p) => handleProgress(p.currentTime, p.furthest, p.viewSessionId)}
+                onProgress={handleProgress}
                 onComplete={handleLessonComplete}
               />
             ) : (

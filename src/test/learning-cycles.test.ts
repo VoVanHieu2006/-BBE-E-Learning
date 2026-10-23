@@ -79,9 +79,10 @@ describe('Reward integrity', () => {
     assert.equal(highWaterIncrement(10, 10), 0)
     assert.equal(highWaterIncrement(10, 13), 3)
   })
-  it('a long disconnect earns no watch time; normal heartbeats do', () => {
+  it('a disconnected player can recover a short gap, but a long absence earns no watch time', () => {
     const now = new Date()
-    assert.equal(heartbeatElapsed(new Date(now.getTime() - 31_000), now), 0)
+    assert.equal(heartbeatElapsed(new Date(now.getTime() - 120_000), now), 120)
+    assert.equal(heartbeatElapsed(new Date(now.getTime() - 301_000), now), 0)
     assert.equal(heartbeatElapsed(new Date(now.getTime() - 10_000), now), 10)
     assert.equal(heartbeatElapsed(null, now), 0)
   })
@@ -99,13 +100,14 @@ describe('Reward integrity', () => {
 })
 
 describe('Competition Chapter stages and role groups', () => {
-  it('keeps all six points from a 30 -> 15 member month', () => {
+  it('uses A_m / N_m with the time-weighted roster, not the old stage sum', () => {
     const result = chapterCompetitionScore([
       { startsAt: new Date(0), endsAt: new Date(15 * DAY_MS), memberCount: 30, qualifiedCount: 15, stars: 100 },
       { startsAt: new Date(15 * DAY_MS), endsAt: new Date(30 * DAY_MS), memberCount: 15, qualifiedCount: 8, stars: 40 },
     ], 'YELLOW')
-    assert.equal(result.score, 6)
+    assert.equal(result.totalStars, 140)
     assert.equal(result.averageMemberCount, 22.5)
+    assert.equal(result.score, 140 / 22.5)
     assert.ok(result.eligible)
   })
   it('requires strictly more than 20 members and waits for KPI', () => {

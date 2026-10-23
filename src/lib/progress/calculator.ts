@@ -69,6 +69,7 @@ export async function getPublishedSystemData(forceFresh = false): Promise<Publis
 
   const courses = await prisma.course.findMany({
     where: { status: 'PUBLISHED' },
+    relationLoadStrategy: 'join',
     select: {
       id: true,
       title: true,
@@ -127,16 +128,27 @@ export async function calculateUserProgress(
 ): Promise<UserProgressSummary> {
   const sys = systemData || (await getPublishedSystemData())
   const cycleFilter = await currentCycleAttemptFilter(prisma, userId)
+  const cycle = await prisma.learningCycle.findFirst({ where: { user_id: userId, ends_at: null }, select: { id: true } })
 
   const [progressRecords, attempts] = await Promise.all([
-    prisma.lessonProgress.findMany({
-      where: {
-        user_id: userId,
-        completed: true,
-        lesson_id: { in: Array.from(sys.allLessonIdSet) },
-      },
-      select: { lesson_id: true },
-    }),
+    cycle
+      ? prisma.cycleLessonProgress.findMany({
+          where: {
+            user_id: userId,
+            learning_cycle_id: cycle.id,
+            completed_at: { not: null },
+            lesson_id: { in: Array.from(sys.allLessonIdSet) },
+          },
+          select: { lesson_id: true },
+        })
+      : prisma.lessonProgress.findMany({
+          where: {
+            user_id: userId,
+            completed: true,
+            lesson_id: { in: Array.from(sys.allLessonIdSet) },
+          },
+          select: { lesson_id: true },
+        }),
     prisma.attempt.findMany({
       where: {
         user_id: userId,
@@ -254,7 +266,31 @@ export async function calculateBatchUsersProgress(
   if (userIds.length === 0) return resultMap
 
   const assessmentIds = sys.courses.flatMap((course) => [...course.lessonAssessmentIds, ...(course.finalAssessmentId ? [course.finalAssessmentId] : [])])
-  const [allProgress, latestAttempts, passedAttempts] = await Promise.all([
+  const cycles = await prisma.learningCycle.findMany({
+    where: { user_id: { in: userIds }, ends_at: null },
+    select: { id: true, user_id: true },
+  })
+  const cycleByUser = new Map(cycles.map((row) => [row.user_id, row.id]))
+  const legacyUserIds = userIds.filter((id) => !cycleByUser.has(id))
+  const cycleAttemptScope = cycles.length || legacyUserIds.length
+    ? {
+        OR: [
+          ...(cycles.length ? [{ learning_cycle_id: { in: cycles.map((row) => row.id) } }] : []),
+          ...(legacyUserIds.length ? [{ user_id: { in: legacyUserIds } }] : []),
+        ],
+      }
+    : {}
+  const [cycleProgress, legacyProgress, latestAttempts, passedAttempts] = await Promise.all([
+    cycles.length
+      ? prisma.cycleLessonProgress.findMany({
+          where: {
+            learning_cycle_id: { in: cycles.map((row) => row.id) },
+            completed_at: { not: null },
+            lesson_id: { in: Array.from(sys.allLessonIdSet) },
+          },
+          select: { user_id: true, lesson_id: true, learning_cycle_id: true },
+        })
+      : Promise.resolve([]),
     prisma.lessonProgress.findMany({
       where: {
         user_id: { in: userIds },
@@ -268,6 +304,7 @@ export async function calculateBatchUsersProgress(
         user_id: { in: userIds },
         assessment_id: { in: assessmentIds },
         status: { in: ['SUBMITTED', 'AUTO_SUBMITTED'] },
+        ...cycleAttemptScope,
       },
       select: {
         user_id: true,
@@ -285,15 +322,27 @@ export async function calculateBatchUsersProgress(
         assessment_id: { in: assessmentIds },
         status: { in: ['SUBMITTED', 'AUTO_SUBMITTED'] },
         passed: true,
+        ...cycleAttemptScope,
       },
       select: { user_id: true, assessment_id: true },
       distinct: ['user_id', 'assessment_id'],
     }) : Promise.resolve([]),
   ])
 
-  // Group progress by user
+  // Group progress by user. The active cycle is authoritative; legacy rows are
+  // only used for a user who has not been migrated to a cycle yet.
   const userProgressMap = new Map<string, Set<string>>()
-  for (const p of allProgress) {
+  for (const p of cycleProgress) {
+    if (cycleByUser.get(p.user_id) !== p.learning_cycle_id) continue
+    let set = userProgressMap.get(p.user_id)
+    if (!set) {
+      set = new Set()
+      userProgressMap.set(p.user_id, set)
+    }
+    set.add(p.lesson_id)
+  }
+  for (const p of legacyProgress) {
+    if (cycleByUser.has(p.user_id)) continue
     let set = userProgressMap.get(p.user_id)
     if (!set) {
       set = new Set()

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
@@ -17,6 +17,7 @@ export default function StudentCourseFinalExamPage({ params }: { params: { cours
   const [started, setStarted] = useState(false);
   const [attemptKey, setAttemptKey] = useState(0);
   const [starReward, setStarReward] = useState<number | null>(null);
+  const seenRewardKeysRef = useRef<Set<string>>(new Set());
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const [clockNow, setClockNow] = useState(0);
 
@@ -105,8 +106,12 @@ export default function StudentCourseFinalExamPage({ params }: { params: { cours
             onQuizPassed={() => setData((previous: any) => previous ? { ...previous, alreadyPassed: true, canStart: false } : previous)}
             onSubmitted={(result) => {
               if (result?.starReward?.awarded && Number(result.starReward.amount) > 0) {
-                setStarReward(Number(result.starReward.amount));
-                window.setTimeout(() => setStarReward(null), 3600);
+                const rewardKey = result.starReward.rewardKey || `final:${result.attemptId}:${result.starReward.amount}`;
+                if (!seenRewardKeysRef.current.has(rewardKey)) {
+                  seenRewardKeysRef.current.add(rewardKey);
+                  setStarReward(Number(result.starReward.amount));
+                  window.setTimeout(() => setStarReward(null), 3600);
+                }
               }
               if (result?.passed) setData((previous: any) => previous ? { ...previous, alreadyPassed: true, canStart: false } : previous);
             }}
@@ -126,6 +131,7 @@ export default function StudentCourseFinalExamPage({ params }: { params: { cours
 
             <div className="flex flex-wrap gap-2 text-xs font-semibold">
               <span className="rounded-xl bg-blue-50 px-3 py-2 text-blue-700">{assessment.questionCount || 0} câu hỏi</span>
+              <span className="rounded-xl bg-blue-50 px-3 py-2 text-blue-700">{assessment.durationMinutes || 0} phút</span>
               <span className="rounded-xl bg-blue-50 px-3 py-2 text-blue-700">Đạt từ 85%</span>
               <span className="rounded-xl bg-amber-50 px-3 py-2 text-amber-800">Thưởng tối đa 5 ⭐, một lần</span>
             </div>

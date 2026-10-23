@@ -208,18 +208,23 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
           attemptNumber: active.attempt_number,
           expiresAt: active.expires_at,
           isResumed: true,
+          questionCount: activeQuestions.length,
+          durationMinutes: assessment.duration_minutes,
+          passingPercent: 85,
           existingAnswers: answersMap,
-          questions: activeQuestions.map((aq) => ({
-            questionId: aq.question.id,
-            id: aq.question.id,
-            questionText: aq.question.question_text,
-            points: aq.question.points,
-            options: aq.question.options.map((o) => ({
-              optionId: o.id,
-              id: o.id,
-              optionText: o.option_text,
-            })),
-          })),
+          questions: activeQuestions.map((aq) => {
+            const snapshot = aq.question_snapshot as any
+            const options = Array.isArray(snapshot?.options) && snapshot.options.length
+              ? snapshot.options.map((o: any) => ({ optionId: o.id, id: o.id, optionText: o.text }))
+              : aq.question.options.map((o) => ({ optionId: o.id, id: o.id, optionText: o.option_text }))
+            return {
+              questionId: aq.question.id,
+              id: aq.question.id,
+              questionText: snapshot?.questionText || aq.question.question_text,
+              points: snapshot?.points ?? aq.question.points,
+              options,
+            }
+          }),
         }, { status: 200 })
       }
     }
@@ -272,7 +277,11 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
     }
     return NextResponse.json({ error: { code: poolSelection.code, message: messages[poolSelection.code] } }, { status: 422 })
   }
-  const selectedQuestions = poolSelection.questions
+  const selectedQuestions = poolSelection.questions.map((question) => ({
+    ...question,
+    // The response and the resume snapshot must use the same option order.
+    responseOptions: shuffleSecurely(question.options),
+  }))
   const expiresAt = new Date(Date.now() + (finalVersion?.duration_minutes || assessment.duration_minutes) * 60 * 1000)
 
   let attempt: { id: string; attempt_number: number; expires_at: Date }
@@ -328,7 +337,7 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
         attempt_id: a.id,
         question_id: q.id,
         display_order: idx,
-        question_snapshot: { id: q.id, points: q.points, explanation: q.explanation, options: q.options.map((option) => ({ id: option.id, text: option.option_text, correct: option.is_correct })) },
+        question_snapshot: { id: q.id, questionText: q.question_text, points: q.points, explanation: q.explanation, options: q.responseOptions.map((option) => ({ id: option.id, text: option.option_text, correct: option.is_correct })) },
       })),
     })
 
@@ -337,7 +346,7 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
       update: {}, create: { user_id: userId, assessment_id: assessmentId, competition_month_id: learning.month.id, learning_cycle_id: learning.cycle.id, reward_question_count: selectedQuestions.length, reward_config: { questions: selectedQuestions.map((q) => ({ id: q.id, points: q.points })) } },
     })
     return a
-    })
+    }, { timeout: 60_000 })
   } catch (error) {
     if (error instanceof Error && error.message === 'ProgressionChanged') return NextResponse.json({ error: { code: 'ProgressionChanged', message: 'Chu kỳ hoặc quyền mở bài đã thay đổi. Hãy tải lại.' } }, { status: 409 })
     if (error instanceof Error && error.message === 'FinalExamVersionChanged') {
@@ -354,7 +363,7 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
     id: q.id,
     questionText: q.question_text,
     points: q.points,
-    options: shuffleSecurely<(typeof questions)[number]['options'][number]>(q.options).map((o) => ({
+    options: q.responseOptions.map((o) => ({
       optionId: o.id,
       id: o.id,
       optionText: o.option_text,
@@ -368,6 +377,9 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
     expiresAt: attempt.expires_at,
     isResumed: false,
     existingAnswers: {},
+    questionCount: shuffledQs.length,
+    durationMinutes: finalVersion?.duration_minutes || assessment.duration_minutes,
+    passingPercent: 85,
     questions: shuffledQs,
   }, { status: 201 })
 }

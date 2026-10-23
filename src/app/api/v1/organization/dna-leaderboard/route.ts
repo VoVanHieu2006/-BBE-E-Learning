@@ -20,12 +20,13 @@ export async function GET(request: NextRequest) {
     where: {
       unit_id: { in: unitIds }, status: 'ACTIVE',
       starts_at: { lte: new Date() }, OR: [{ ends_at: null }, { ends_at: { gt: new Date() } }],
-      user: { status: 'ACTIVE', position_assignments: { none: { position: { code: 'DNA_LEAD' }, starts_at: { lte: new Date() }, OR: [{ ends_at: null }, { ends_at: { gt: new Date() } }] } } },
+      user: { status: 'ACTIVE', role: 'MEMBER', position_assignments: { none: { position: { code: { in: ['DNA_LEAD', 'DNA_MANAGER', 'CHAPTER_LEAD', 'CHAPTER_MANAGER', 'TT', 'TRAINEE'] } }, starts_at: { lte: new Date() }, OR: [{ ends_at: null }, { ends_at: { gt: new Date() } }] } } },
     },
-    select: { user: { select: { id: true, email: true, display_name: true } }, unit: { select: { name: true, type: true } } },
+    select: { user: { select: { id: true, email: true, display_name: true } }, unit: { select: { name: true, type: true, code: true } } },
   })
+  const participants = memberships.filter((row) => row.unit.code !== 'TT')
   const users = new Map<string, { userId: string; displayName: string | null; groupName: string | null }>()
-  for (const row of memberships) {
+  for (const row of participants) {
     const current = users.get(row.user.id)
     users.set(row.user.id, {
       userId: row.user.id, displayName: row.user.display_name,

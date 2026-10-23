@@ -124,8 +124,14 @@ export function firstReachedFinalBalance(rows: { amount: number; awarded_at: Dat
   throw new Error('InvalidLedger')
 }
 
-/** A disconnected player must establish a new heartbeat before accumulating time. */
-export function heartbeatElapsed(lastAt: Date | null, now: Date, maxGapSeconds = 30) {
+/**
+ * Elapsed wall time between two verified heartbeats. A five-minute window keeps
+ * a background tab or a short disconnection from losing legitimate watch time,
+ * while a long absence (or a stale/out-of-order request) never grants progress.
+ */
+export const MAX_HEARTBEAT_GAP_SECONDS = 300
+
+export function heartbeatElapsed(lastAt: Date | null, now: Date, maxGapSeconds = MAX_HEARTBEAT_GAP_SECONDS) {
   if (!lastAt) return 0
   const seconds = (now.getTime() - lastAt.getTime()) / 1000
   return seconds >= 0 && seconds <= maxGapSeconds ? seconds : 0

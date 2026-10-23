@@ -589,10 +589,11 @@ c:\Users\Acer\Desktop\E-learning\
    npm run dev
    ```
 
-2. **Tài khoản Trải nghiệm Mặc định (Seed Data):**
-   - **Admin:** `admin@bbe.com` / Mật khẩu: `admin123`
-   - **Chapter Leader (BĐHU):** `leader@bbe.com` / Mật khẩu: `leader123`
-   - **Thành viên (Member):** `member@bbe.com` / Mật khẩu: `member123`
+2. **Vai trò Hệ thống (Seed Data):**
+   - **Admin:** Quản trị viên cấp cao nhất
+   - **Chapter Leader (BĐHU):** Trưởng ban điều hành Chapter
+   - **Thành viên (Member):** Học viên trực thuộc Chapter
+   *(Thông tin tài khoản kiểm thử được cấu hình qua script `prisma/seed.ts`)*
 
 ---
 *Tài liệu được biên soạn và bảo trì bởi Đội ngũ Phát triển BBE E-Learning.*

@@ -26,7 +26,6 @@
 ## Tài khoản kiểm tra
 
 - Email: `dna.member.demo@bbe.vn`
-- Mật khẩu: `Demo@123456`
 - Chapter: `Chapter Demo`
 - Ban: `Ban Nội dung`
 - DNA: `DNA Điều hành`

@@ -34,7 +34,7 @@ export default function AdminChaptersProgressPage() {
     if (cached?.items) {
       setChapters(cached.items);
       setExcludedChapters(cached.excluded || []);
-      setLeaderboardMonth(String(cached.month || '').slice(0, 7));
+      setLeaderboardMonth(cached.monthKey || String(cached.month || '').slice(0, 7));
       setAvailableMonths(cached.availableMonths || []);
       setLoading(false);
     } else {
@@ -50,7 +50,7 @@ export default function AdminChaptersProgressPage() {
       if (res.ok && res.data) {
         setChapters(res.data.items || []);
         setExcludedChapters(res.data.excluded || []);
-        setLeaderboardMonth(String(res.data.month || '').slice(0, 7));
+        setLeaderboardMonth(res.data.monthKey || String(res.data.month || '').slice(0, 7));
         setAvailableMonths(res.data.availableMonths || []);
       }
     } finally {
@@ -140,10 +140,10 @@ export default function AdminChaptersProgressPage() {
         </p>
         <div className="mt-4 grid gap-3 rounded-2xl border border-blue-200 bg-white p-4 text-sm md:grid-cols-2">
           <div>
-            <div className="font-bold text-[#2563EB]">⭐ Điểm xếp hạng = Star bình quân / thành viên</div>
+            <div className="font-bold text-[#2563EB]">⭐ Điểm xếp hạng = Tổng Star / quân số active</div>
             <p className="text-xs text-[#737686] mt-1">
-              Giai đoạn chuẩn: <strong>S_m = A_m / N_m</strong> (Tổng Star chia số thành viên).
-              Tháng có chuyển giao: tính theo từng chặng <strong>S = S_1/N_1 + S_2/N_2 + ...</strong>
+              Công thức chính thức: <strong>S_m = A_m / N_m</strong> (tổng Star trong kỳ chia quân số active bình quân).
+              Tháng có chuyển giao dùng snapshot theo chặng, quân số được trọng số theo thời lượng chặng; không dùng công thức cộng dồn hay trọng số cũ.
             </p>
           </div>
           <div>
@@ -324,7 +324,7 @@ export default function AdminChaptersProgressPage() {
             <div className="mt-3 flex flex-wrap gap-2">
               {excludedChapters.map((chapter) => <button key={chapter.chapterId} onClick={() => !loading && handleOpenChapterDrillDown(chapter)} className="min-w-[260px] rounded-xl border border-amber-200 bg-white px-4 py-3 text-left text-xs text-[#434655] hover:border-blue-300 hover:shadow-sm">
                 <strong>{chapter.name}</strong>
-                <span className="mt-2 flex flex-col gap-1">{(chapter.reasons || []).map((reason: string) => <span key={reason} className={`rounded-lg px-2 py-1 font-semibold ${reason === 'WAITING_KPI' || reason === 'KPI_MISSING' ? 'bg-slate-100 text-slate-700' : reason === 'KPI_NOT_ELIGIBLE' || reason.startsWith('KPI_') ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-800'}`}>{reason === 'WAITING_KPI' || reason === 'KPI_MISSING' ? `📅 Chưa nhập KPI tháng ${leaderboardMonth.split('-')[1]}/${leaderboardMonth.split('-')[0]}` : reason === 'MEMBER_COUNT_NOT_ABOVE_20' || reason === 'MINIMUM_MEMBERS' ? `👥 Chưa đủ 20 thành viên (${chapter.memberCount || 0} học viên)` : reason === 'CORE_COMPLETION_BELOW_50_PERCENT' || reason === 'COMPLETION_THRESHOLD' ? `📘 Chưa đạt 50% thành viên ≥70% (${chapter.atLeast70Percent || 0}% đã đạt)` : reason === 'KPI_NOT_ELIGIBLE' || reason === 'KPI_RED' ? '🔴 KPI Đỏ hoặc Đen' : reason === 'ROSTER_ZERO' ? '👥 Không có thành viên' : reason === 'CORE_LESSONS_ZERO' ? '📚 Chưa có bài học cốt lõi' : reason}</span>)}</span>
+                <span className="mt-2 flex flex-col gap-1">{(chapter.reasons || []).map((reason: string) => <span key={reason} className={`rounded-lg px-2 py-1 font-semibold ${reason === 'WAITING_KPI' || reason === 'KPI_MISSING' ? 'bg-slate-100 text-slate-700' : reason === 'KPI_NOT_ELIGIBLE' || reason.startsWith('KPI_') ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-800'}`}>{reason === 'WAITING_KPI' || reason === 'KPI_MISSING' ? `📅 Chưa nhập KPI tháng ${leaderboardMonth.split('-')[1]}/${leaderboardMonth.split('-')[0]}` : reason === 'MEMBER_COUNT_NOT_ABOVE_20' || reason === 'MINIMUM_MEMBERS' ? `👥 Chưa có trên 20 thành viên (${chapter.memberCount || 0} học viên)` : reason === 'CORE_COMPLETION_BELOW_50_PERCENT' || reason === 'COMPLETION_THRESHOLD' ? `📘 Chưa đạt 50% thành viên ≥70% (${chapter.atLeast70Percent || 0}% đã đạt)` : reason === 'KPI_NOT_ELIGIBLE' || reason === 'KPI_RED' ? '🔴 KPI Đỏ hoặc Đen' : reason === 'ROSTER_ZERO' ? '👥 Không có thành viên' : reason === 'CORE_LESSONS_ZERO' ? '📚 Chưa có bài học cốt lõi' : reason}</span>)}</span>
                 <span className="mt-1 block font-semibold text-blue-700">KPI & lịch sử →</span>
               </button>)}
             </div>

@@ -37,10 +37,24 @@ export async function lockCompetitionScope(tx: LearningTx, now: Date): Promise<{
 
 /** Caller holds the user's lock. Transition import never infers historical terms. */
 export async function learningContext(tx: LearningTx, userId: string, now: Date): Promise<{ month: CompetitionMonth; cycle: LearningCycle; now: Date } | null> {
-  const scope = await lockCompetitionScope(tx, now)
-  if (!scope) return null
-  const { policy, month } = scope
-  now = scope.now
+  const policy = await activeLearningPolicy(tx, now)
+  if (!policy?.cutover_at) return null
+  const bounds = competitionMonthBounds(now, policy.cutover_at)
+  let month = await tx.competitionMonth.findUnique({ where: { key: bounds.key } })
+  if (!month) {
+    month = await tx.competitionMonth.upsert({
+      where: { key: bounds.key },
+      update: {},
+      create: { key: bounds.key, starts_at: bounds.startsAt, ends_at: bounds.endsAt },
+    })
+  }
+  // The month row is immutable for the purpose of a heartbeat. This avoids an
+  // upsert + FOR SHARE + two clock queries on every video heartbeat.
+  if (month.ends_at <= now) {
+    const next = competitionMonthBounds(month.ends_at, policy.cutover_at)
+    month = await tx.competitionMonth.findUnique({ where: { key: next.key } })
+      || await tx.competitionMonth.upsert({ where: { key: next.key }, update: {}, create: { key: next.key, starts_at: next.startsAt, ends_at: next.endsAt } })
+  }
   let cycle = await tx.learningCycle.findFirst({ where: { user_id: userId, ends_at: null } })
   if (!cycle) {
     const chapter = await tx.chapterMember.findUnique({ where: { user_id: userId } })

@@ -29,13 +29,13 @@ Repository hiện chưa có .vercel/project.json, vì vậy chưa thể cập nh
 
 Seed an toàn npm run db:seed-demo chỉ bổ sung/cập nhật dữ liệu, không xóa database. Database hiện có 13 khóa học và 5 tài khoản kiểm tra:
 
-| Vai trò hiệu lực | Email | Mật khẩu |
-|---|---|---|
-| Admin | admin.demo@bbe.vn | Demo@123456 |
-| Lead DNA | dna.lead.demo@bbe.vn | Demo@123456 |
-| Lead Chapter | chapter.lead.demo@bbe.vn | Demo@123456 |
-| LT Ban | department.lead.demo@bbe.vn | Demo@123456 |
-| Thành viên | member.demo@bbe.vn | Demo@123456 |
+| Vai trò hiệu lực | Email |
+|---|---|
+| Admin | admin.demo@bbe.vn |
+| Lead DNA | dna.lead.demo@bbe.vn |
+| Lead Chapter | chapter.lead.demo@bbe.vn |
+| LT Ban | department.lead.demo@bbe.vn |
+| Thành viên | member.demo@bbe.vn |
 
 Lead DNA và LT Ban có role nền MEMBER; quyền quản lý đến từ chức vụ, đơn vị, permission và nhiệm kỳ đang hiệu lực.
 

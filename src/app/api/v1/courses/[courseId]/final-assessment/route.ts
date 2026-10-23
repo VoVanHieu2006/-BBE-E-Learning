@@ -105,6 +105,8 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
       title: course.final_assessment.title,
       description: course.final_assessment.description,
       questionCount: resumableAttempt?.final_exam_version?.question_count || course.final_assessment.question_count,
+      durationMinutes: course.final_assessment.duration_minutes,
+      totalQuestionCount: activeVersion?._count.questions || 0,
       versionNumber: resumableAttempt?.final_exam_version?.version_number || activeVersion?.version_number || null,
     },
     canStart: Boolean((resumableAttempt || (gateReady && bankReady && cooldownRemainingMs === 0)) && (currentPolicy || !passingAttempt)),

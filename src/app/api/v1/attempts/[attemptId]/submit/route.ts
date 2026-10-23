@@ -14,11 +14,12 @@ export async function POST(request: NextRequest, { params }: { params: { attempt
   if ('error' in result) return NextResponse.json({ error: { code: result.error } }, {
     status: result.error === 'AttemptNotFound' ? 404 : result.error === 'AccessDenied' ? 403 : 409,
   })
-  const { grading, amount } = result
+  const { grading, amount, rewardKey, balance } = result
+  ;(globalThis as any).__bbeLearningMeCache?.delete(auth.context!.userId)
   return NextResponse.json({
     attemptId: params.attemptId, score: Math.round(grading.score), totalPoints: grading.totalPoints,
     scorePercent: Math.round(grading.scoreRatio * 100), passed: grading.passed,
-    starReward: { awarded: amount > 0, amount },
+    starReward: { awarded: amount > 0, amount, rewardKey: rewardKey || null, balance: balance || 0 },
     answers: grading.results.map((row) => ({
       questionId: row.questionId, isCorrect: row.isCorrect, selectedOptionId: row.selectedOptionId,
       ...(grading.passed ? { correctOptionId: row.correctOptionId, explanation: row.explanation } : {}),

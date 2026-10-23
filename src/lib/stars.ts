@@ -43,8 +43,8 @@ export async function awardStars(input: {
   }
 }
 
-export async function getUserStarBalance(userId: string): Promise<number> {
-  if (await isLearningManager(userId)) return 0
+export async function getUserStarBalance(userId: string, role?: string | null): Promise<number> {
+  if (await isLearningManager(userId, role)) return 0
   const result = await prisma.starLedger.aggregate({ where: { user_id: userId }, _sum: { amount: true } })
   return result._sum.amount || 0
 }

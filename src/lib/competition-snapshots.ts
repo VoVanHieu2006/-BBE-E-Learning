@@ -23,7 +23,7 @@ export async function competitionCohortAt(tx: Tx, at: Date) {
     tx.accountStateInterval.findMany({ where: { ...leftBoundary(at), role: 'MEMBER', status: 'ACTIVE' } }),
     tx.chapterAffiliationInterval.findMany({ where: leftBoundary(at) }),
     tx.positionAssignment.findMany({ where: { ...leftBoundary(at), created_at: { lt: at } }, include: { position: { select: { code: true } } } }),
-    tx.organizationMembership.findMany({ where: { ...leftBoundary(at), created_at: { lt: at }, unit: { type: { in: ['DNA', 'DNA_GROUP'] } } }, include: { unit: { select: { type: true, code: true } } } }),
+    tx.organizationMembership.findMany({ where: { ...leftBoundary(at), created_at: { lt: at }, unit: { type: { in: ['DNA', 'DNA_GROUP'] } } }, include: { unit: { select: { id: true, name: true, type: true, code: true } } } }),
   ])
   return states.flatMap((state) => {
     const dna = memberships.filter((row) => row.user_id === state.user_id)
@@ -31,7 +31,15 @@ export async function competitionCohortAt(tx: Tx, at: Date) {
     if (dna.some((row) => row.unit.code === 'TT')) positionCodes.push('TT')
     const group = competitionGroup(state.role, positionCodes, dna.length > 0)
     const chapter = chapters.find((row) => row.user_id === state.user_id)
-    return group && (chapter || dna.length) ? [{ userId: state.user_id, group, chapterId: dna.length ? null : chapter?.chapter_id || null }] : []
+    const dnaUnit = dna.find((row) => row.unit.type === 'DNA_GROUP') || dna[0]
+    if (!group || (!chapter && !dna.length)) return []
+    return [{
+      userId: state.user_id,
+      group,
+      chapterId: dna.length ? null : chapter?.chapter_id || null,
+      dnaUnitId: dnaUnit?.unit.id || null,
+      dnaUnitName: dnaUnit?.unit.name || null,
+    }]
   })
 }
 
@@ -91,8 +99,13 @@ export function rankIndividuals<T extends { stars: number; elapsedMs: number; us
   })
 }
 
-export async function individualPeriodRows(tx: Tx, startsAt: Date, endsAt: Date, group: string, chapterId?: string) {
-  const cohort = (await competitionCohortAt(tx, endsAt)).filter((row) => row.group === group && (!chapterId || row.chapterId === chapterId))
+export async function individualPeriodRows(tx: Tx, startsAt: Date, endsAt: Date, group: string, chapterId?: string, dnaUnitIds?: string[]) {
+  const allowedDna = dnaUnitIds && dnaUnitIds.length ? new Set(dnaUnitIds) : null
+  const cohort = (await competitionCohortAt(tx, endsAt)).filter((row) =>
+    row.group === group
+    && (!chapterId || row.chapterId === chapterId)
+    && (!allowedDna || (row.dnaUnitId ? allowedDna.has(row.dnaUnitId) : false)),
+  )
   const ledger = await tx.starLedger.findMany({ where: { user_id: { in: cohort.map((row) => row.userId) }, provenance: 'NATIVE', awarded_at: { gte: startsAt, lt: endsAt } }, select: { user_id: true, amount: true, awarded_at: true } })
   const scored = cohort.map((user) => {
     const balance = firstReachedFinalBalance(ledger.filter((row) => row.user_id === user.userId), startsAt)
@@ -102,87 +115,93 @@ export async function individualPeriodRows(tx: Tx, startsAt: Date, endsAt: Date,
 }
 
 export async function historicalChapterMonthRows(tx: Tx, month: { id: string; key: string; starts_at: Date; ends_at: Date }, end: Date) {
-  const chapters = await tx.chapter.findMany({ select: { id: true, name: true } })
-  const items = []
-  const cohortCache = new Map<number, any[]>()
-  const coreIdsCache = new Map<number, Set<string>>()
-  const cyclesCache = new Map<number, any[]>()
-
-  const getSnapshotData = async (at: Date) => {
-    const timeKey = at.getTime()
-    if (!cohortCache.has(timeKey)) {
-      const [cohort, coreIds, cycles] = await Promise.all([
-        competitionCohortAt(tx, at),
-        coreLessonIdsAt(tx, at),
-        tx.learningCycle.findMany({ where: leftBoundary(at) }),
-      ])
-      cohortCache.set(timeKey, cohort)
-      coreIdsCache.set(timeKey, coreIds)
-      cyclesCache.set(timeKey, cycles)
-    }
-    return {
-      cohort: cohortCache.get(timeKey)!,
-      coreIds: coreIdsCache.get(timeKey)!,
-      cycles: cyclesCache.get(timeKey)!,
-    }
-  }
-
-  for (const chapter of chapters) {
-    const transferredDnaIntervals = await tx.chapterAffiliationInterval.findMany({
+  const [chapters, cohort, coreIds, cycles, transfers, dnaMemberships, starRows, kpis] = await Promise.all([
+    tx.chapter.findMany({ select: { id: true, name: true } }),
+    competitionCohortAt(tx, end),
+    coreLessonIdsAt(tx, end),
+    tx.learningCycle.findMany({ where: leftBoundary(end), select: { id: true, user_id: true } }),
+    tx.chapterReorganization.findMany({
+      where: { status: 'APPLIED', applied_at: { gt: month.starts_at, lt: end } },
+      select: { chapter_id: true, applied_at: true },
+      orderBy: { applied_at: 'asc' },
+    }),
+    tx.organizationMembership.findMany({
       where: {
-        chapter_id: chapter.id,
-        ends_at: { gte: month.starts_at, lt: month.ends_at },
-      },
-      select: { user_id: true, ends_at: true },
-    })
-
-    const candidateUserIds = transferredDnaIntervals.map((i) => i.user_id)
-    const dnaMemberships = candidateUserIds.length ? await tx.organizationMembership.findMany({
-      where: {
-        user_id: { in: candidateUserIds },
         unit: { type: { in: ['DNA', 'DNA_GROUP'] } },
-        starts_at: { lte: month.ends_at },
+        starts_at: { lte: end },
         OR: [{ ends_at: null }, { ends_at: { gt: month.starts_at } }],
       },
       select: { user_id: true },
-    }) : []
-
-    const excludedDnaUserIds = new Set(dnaMemberships.map((m) => m.user_id))
-
-    const transfers = await tx.chapterReorganization.findMany({ where: { chapter_id: chapter.id, status: 'APPLIED', applied_at: { gt: month.starts_at, lt: end } }, orderBy: { applied_at: 'asc' } })
-    const uniqueTimestamps = Array.from(new Set([...transfers.map((row) => row.applied_at!.getTime()), end.getTime()])).sort((a, b) => a - b)
-    const endpoints = uniqueTimestamps.map((t) => new Date(t))
+    }),
+    tx.starLedger.findMany({
+      where: { competition_month_id: month.id, awarded_at: { gte: month.starts_at, lt: end } },
+      select: { chapter_at_award_id: true, user_id: true, amount: true, awarded_at: true },
+    }),
+    tx.chapterMonthlyKpi.findMany({
+      where: { month_start: new Date(`${month.key}-01T00:00:00.000Z`) },
+      select: { chapter_id: true, status: true, updated_at: true },
+    }),
+  ])
+  const excludedDnaUserIds = new Set(dnaMemberships.map((row) => row.user_id))
+  const cycleIds = cycles.map((cycle) => cycle.id)
+  const progressRows = cycleIds.length
+    ? await tx.cycleLessonProgress.findMany({
+        where: { learning_cycle_id: { in: cycleIds }, completed_at: { lt: end } },
+        select: { user_id: true, lesson_id: true, completed_at: true },
+      })
+    : []
+  const progressByUser = new Map<string, Array<{ lesson_id: string; completed_at: Date | null }>>()
+  for (const row of progressRows) {
+    const list = progressByUser.get(row.user_id) || []
+    list.push(row)
+    progressByUser.set(row.user_id, list)
+  }
+  const cohortCache = new Map<number, typeof cohort>()
+  const cohortAt = async (at: Date) => {
+    if (at.getTime() === end.getTime()) return cohort
+    const key = at.getTime()
+    if (!cohortCache.has(key)) cohortCache.set(key, await competitionCohortAt(tx, at))
+    return cohortCache.get(key)!
+  }
+  const kpiByChapter = new Map(kpis.map((row) => [row.chapter_id, row]))
+  const items = []
+  for (const chapter of chapters) {
+    const chapterTransfers = transfers.filter((row) => row.chapter_id === chapter.id)
+    const endpoints = Array.from(new Set([...chapterTransfers.map((row) => row.applied_at!.getTime()), end.getTime()])).sort((a, b) => a - b)
     const stages: ChapterStage[] = []
     let startsAt = month.starts_at
-    let latestCoreLessonCount = 0
-
-    for (const at of endpoints) {
-      const { cohort, coreIds, cycles } = await getSnapshotData(at)
-      latestCoreLessonCount = coreIds.size
-      const members = cohort.filter((row) => row.chapterId === chapter.id && row.group !== 'DNA' && !excludedDnaUserIds.has(row.userId))
-      const progress = members.length && cycles.length ? await tx.cycleLessonProgress.findMany({ where: {
-        user_id: { in: members.map((row) => row.userId) }, learning_cycle_id: { in: cycles.map((row) => row.id) }, completed_at: { lt: at },
-      }, select: { user_id: true, lesson_id: true } }) : []
-      const qualifiedCount = coreIds.size ? members.filter((member) => new Set(progress.filter((row) => row.user_id === member.userId && coreIds.has(row.lesson_id)).map((row) => row.lesson_id)).size / coreIds.size >= 0.7).length : 0
-      const ledger = await tx.starLedger.aggregate({
-        where: {
-          competition_month_id: month.id,
-          chapter_at_award_id: chapter.id,
-          awarded_at: { gte: startsAt, lt: at },
-          ...(excludedDnaUserIds.size ? { user_id: { notIn: Array.from(excludedDnaUserIds) } } : {}),
-        },
-        _sum: { amount: true },
-      })
-      if (at > startsAt) stages.push({ startsAt, endsAt: at, memberCount: members.length, qualifiedCount, stars: ledger._sum.amount || 0 })
+    for (const timestamp of endpoints) {
+      const at = new Date(timestamp)
+      if (at <= startsAt) continue
+      const stageCohort = await cohortAt(at)
+      const members = stageCohort.filter((row) => row.chapterId === chapter.id && row.group !== 'DNA' && !excludedDnaUserIds.has(row.userId))
+      const qualifiedCount = coreIds.size
+        ? members.filter((member) => {
+            const completed = new Set((progressByUser.get(member.userId) || [])
+              .filter((row) => row.completed_at && row.completed_at < at && coreIds.has(row.lesson_id))
+              .map((row) => row.lesson_id))
+            return completed.size / coreIds.size >= 0.7
+          }).length
+        : 0
+      const stageStars = starRows.reduce((sum, row) => (
+        row.chapter_at_award_id === chapter.id
+        && !excludedDnaUserIds.has(row.user_id)
+        && row.awarded_at >= startsAt
+        && row.awarded_at < at
+          ? sum + row.amount
+          : sum
+      ), 0)
+      stages.push({ startsAt, endsAt: at, memberCount: members.length, qualifiedCount, stars: stageStars })
       startsAt = at
     }
-    const kpi = await competitionKpiAt(tx, chapter.id, month.key, end)
+    const kpiRow = kpiByChapter.get(chapter.id)
+    const kpi = kpiRow && kpiRow.updated_at < end ? kpiRow.status : null
     items.push({
       chapterId: chapter.id,
       chapterName: chapter.name,
       stages,
       kpiStatus: kpi,
-      ...chapterCompetitionScore(stages, kpi, { coreLessonCount: latestCoreLessonCount }),
+      ...chapterCompetitionScore(stages, kpi, { coreLessonCount: coreIds.size }),
     })
   }
   return rankChapters(items)

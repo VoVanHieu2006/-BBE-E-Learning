@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Card from '@/components/ui/Card';
@@ -37,6 +37,7 @@ export default function LessonQuizPage({ params }: { params: { lessonId: string 
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const [cooldownRemainingMs, setCooldownRemainingMs] = useState<number>(0);
   const [starReward, setStarReward] = useState<number | null>(null);
+  const seenRewardKeysRef = useRef<Set<string>>(new Set());
 
   const showToast = (type: 'success' | 'error' | 'info', message: string, title?: string) => {
     setToast({ type, message, title });
@@ -121,7 +122,9 @@ export default function LessonQuizPage({ params }: { params: { lessonId: string 
   const assessment = lesson?.assessment;
   const assessmentId = assessment?.assessmentId || assessment?.id;
   const questionCount = Number(assessment?.questionCount || 0);
-  const durationMinutes = questionCount * 2;
+  const bankQuestionCount = Number(assessment?.bankQuestionCount || 0);
+  const durationMinutes = Number(assessment?.durationMinutes || 0);
+  const passingPercent = Number(assessment?.passingPercent || 85);
 
   // Video watch status check. Backend also verifies this before creating an attempt.
   const videoDuration = lesson?.video?.durationSeconds || lesson?.video?.duration_seconds || 0;
@@ -289,8 +292,12 @@ export default function LessonQuizPage({ params }: { params: { lessonId: string 
                   setQuizCompleted(true);
                 }
                 if (resultData?.starReward?.awarded && Number(resultData.starReward.amount) > 0) {
-                  setStarReward(Number(resultData.starReward.amount));
-                  window.setTimeout(() => setStarReward(null), 3600);
+                  const key = resultData.starReward.rewardKey || `quiz:${resultData.attemptId}:${resultData.starReward.amount}`;
+                  if (!seenRewardKeysRef.current.has(key)) {
+                    seenRewardKeysRef.current.add(key);
+                    setStarReward(Number(resultData.starReward.amount));
+                    window.setTimeout(() => setStarReward(null), 3600);
+                  }
                 }
                 refreshDataSilently(token, role);
               }}
@@ -310,10 +317,14 @@ export default function LessonQuizPage({ params }: { params: { lessonId: string 
                 Sẵn sàng làm bài kiểm tra?
               </h2>
               <div className="flex flex-wrap gap-2 text-xs font-semibold">
-                <span className="px-3 py-1.5 bg-[#eff4ff] text-[#2563EB] rounded-xl">{questionCount} câu hỏi</span>
-                <span className="px-3 py-1.5 bg-[#eff4ff] text-[#2563EB] rounded-xl">Thời gian: {durationMinutes} phút</span>
+                <span className="px-3 py-1.5 bg-[#eff4ff] text-[#2563EB] rounded-xl">
+                  {questionCount > 0 ? `${questionCount} câu hỏi` : 'Theo cấu hình đề'}
+                </span>
+                <span className="px-3 py-1.5 bg-[#eff4ff] text-[#2563EB] rounded-xl">
+                  {durationMinutes > 0 ? `${durationMinutes} phút` : 'Thời gian theo cấu hình'}
+                </span>
                 <span className="px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl">
-                  Đạt từ 85% để vượt qua bài học
+                  Đạt từ {passingPercent}% để vượt qua bài học
                 </span>
               </div>
 

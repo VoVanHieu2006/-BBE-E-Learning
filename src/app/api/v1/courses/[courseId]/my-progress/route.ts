@@ -20,6 +20,7 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
   // Single streamlined query: fetch course status, sessions, lessons and user progress in 1 round-trip chain
   const course = await prisma.course.findUnique({
     where: { id: courseId },
+    relationLoadStrategy: 'join',
     select: {
       id: true,
       status: true,

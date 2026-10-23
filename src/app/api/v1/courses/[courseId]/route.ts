@@ -15,12 +15,13 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
 
   const courseDetail = await prisma.course.findUnique({
     where: { id: courseId },
+    relationLoadStrategy: 'join',
     include: {
       program: {
         select: { id: true, code: true, name: true, is_core: true, sort_order: true },
       },
       final_assessment: {
-        select: { id: true, title: true, description: true, question_count: true },
+        select: { id: true, title: true, description: true, question_count: true, duration_minutes: true, _count: { select: { questions: true } } },
       },
       sessions: {
         include: {
@@ -29,7 +30,7 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
               video: { select: { id: true, youtube_video_id: true, duration_seconds: true } },
               documents: { select: { id: true, file_name: true, file_size: true, mime_type: true } },
               assessment: {
-                select: { id: true, title: true, description: true, _count: { select: { questions: true } } },
+                select: { id: true, title: true, description: true, question_count: true, duration_minutes: true, _count: { select: { questions: true } } },
               },
             },
             orderBy: { sort_order: 'asc' },
@@ -80,6 +81,8 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
       title: courseDetail.final_assessment.title,
       description: courseDetail.final_assessment.description,
       questionCount: courseDetail.final_assessment.question_count,
+      bankQuestionCount: courseDetail.final_assessment._count.questions,
+      durationMinutes: courseDetail.final_assessment.duration_minutes,
     } : null,
     finalAssessment: courseDetail.final_assessment ? {
       assessmentId: courseDetail.final_assessment.id,
@@ -88,6 +91,8 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
       title: courseDetail.final_assessment.title,
       description: courseDetail.final_assessment.description,
       questionCount: courseDetail.final_assessment.question_count,
+      bankQuestionCount: courseDetail.final_assessment._count.questions,
+      durationMinutes: courseDetail.final_assessment.duration_minutes,
     } : null,
     sessions: courseDetail.sessions.map((s) => ({
       sessionId: s.id,
@@ -114,7 +119,9 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
           id: l.assessment.id,
           title: l.assessment.title,
           description: l.assessment.description,
-          questionCount: l.assessment._count.questions,
+          questionCount: l.assessment.question_count,
+          bankQuestionCount: l.assessment._count.questions,
+          durationMinutes: l.assessment.duration_minutes,
         } : null,
         documentCount: l.documents.length,
         documents: l.documents.map((d) => ({

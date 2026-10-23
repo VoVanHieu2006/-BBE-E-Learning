@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
           { unit: { chapter: { id: { in: activeChapterIds } } } },
           { unit: { parent: { chapter: { id: { in: activeChapterIds } } } } },
         ] } } },
-      ], position_assignments: { none: { position: { code: 'DNA_LEAD' }, starts_at: { lte: new Date() }, OR: [{ ends_at: null }, { ends_at: { gt: new Date() } }] } } },
+      ], position_assignments: { none: { position: { code: { in: ['DNA_LEAD', 'DNA_MANAGER', 'CHAPTER_LEAD', 'CHAPTER_MANAGER', 'TT', 'TRAINEE'] } }, starts_at: { lte: new Date() }, OR: [{ ends_at: null }, { ends_at: { gt: new Date() } }] } } },
       select: {
         id: true,
         email: true,

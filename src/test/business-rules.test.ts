@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { capVideoProgress, hasWatchedFullVideo } from '../lib/video-progress-rules'
+import { capVideoProgress, hasWatchedFullVideo, videoHeartbeatGraceSeconds } from '../lib/video-progress-rules'
 import { starsForCourseFinalScore, starsForQuizScore, starsForVideoDuration } from '../lib/reward-rules'
 import { matchesLearningRulePositionScope } from '../lib/learning-rule-scope'
 import { orderOrganizationTree, organizationParentTypeMatches, organizationSubtreeIds, positionScopeMatchesUnitType, validateOrganizationMove } from '../lib/organization-scope'
@@ -363,6 +363,30 @@ describe('strict video progress', () => {
       furthestWatchedPositionSeconds: 10,
       lastPositionSeconds: 0,
     })
+  })
+
+  it('accepts a continuously watched 10-minute video at 1x and at 2x', () => {
+    const duration = 600
+    for (const rate of [1, 1.25, 1.5, 1.75, 2]) {
+      let furthest = 0
+      const wallSeconds = Math.ceil(duration / rate)
+      for (let elapsed = 10; elapsed <= wallSeconds + 10; elapsed += 10) {
+        const contentPosition = Math.min(duration, elapsed * rate)
+        const result = capVideoProgress(furthest, contentPosition, contentPosition, 10, rate)
+        furthest = result.furthestWatchedPositionSeconds
+        if (furthest >= duration) break
+      }
+      assert.equal(hasWatchedFullVideo(furthest, duration), true, `rate ${rate}x should complete`)
+    }
+  })
+
+  it('allows only a small explicit ENDED allowance, never an instant seek', () => {
+    const grace = videoHeartbeatGraceSeconds(2)
+    assert.equal(grace <= 6, true)
+    const ended = capVideoProgress(596, 600, 600, 2, 2, grace)
+    assert.equal(hasWatchedFullVideo(ended.furthestWatchedPositionSeconds, 600), true)
+    const seek = capVideoProgress(0, 600, 600, 0, 2, grace)
+    assert.equal(hasWatchedFullVideo(seek.furthestWatchedPositionSeconds, 600), false)
   })
 })
 

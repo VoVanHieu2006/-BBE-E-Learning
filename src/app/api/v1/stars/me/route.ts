@@ -10,10 +10,13 @@ export async function GET(request: NextRequest) {
   const userId = auth.context!.userId
   const where = { user_id: userId }
 
-  const [balance, totalItems] = await Promise.all([
-    getUserStarBalance(userId),
-    prisma.starLedger.count({ where }),
-  ])
+  const balance = await getUserStarBalance(userId, auth.context!.role)
+  // The video classroom only needs the live total for its header. Avoid the
+  // full paginated history and title-enrichment query on that hot path.
+  if (request.nextUrl.searchParams.get('balanceOnly') === '1') {
+    return NextResponse.json({ balance }, { headers: { 'Cache-Control': 'no-store' } })
+  }
+  const totalItems = await prisma.starLedger.count({ where })
 
   const { page, limit, totalPages } = normalizeStarHistoryPagination(
     request.nextUrl.searchParams.get('page'),

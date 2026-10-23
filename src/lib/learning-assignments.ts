@@ -179,21 +179,28 @@ async function reconcileAssignments(
 /** Materializes course completion onto active assignments for deadline enforcement. */
 export async function syncCourseAssignmentCompletion(userId: string, courseId: string, db: Prisma.TransactionClient = prisma): Promise<boolean> {
   const cycleFilter = await currentCycleAttemptFilter(db, userId)
-  const [lessons, course] = await Promise.all([
+  const [lessons, course, cycle] = await Promise.all([
     db.lesson.findMany({
       where: { session: { course_id: courseId } },
       select: { id: true, assessment: { select: { id: true } } },
     }),
     db.course.findUnique({ where: { id: courseId }, select: { final_assessment: { select: { id: true } } } }),
+    db.learningCycle.findFirst({ where: { user_id: userId, ends_at: null }, select: { id: true } }),
   ])
   if (!lessons.length) return false
-  const completedRows = await db.lessonProgress.findMany({ where: { user_id: userId, completed: true, lesson_id: { in: lessons.map((lesson) => lesson.id) } }, select: { lesson_id: true } })
+  const lessonIds = lessons.map((lesson) => lesson.id)
+  // The active learning cycle is the source of truth for training completion.
+  // Legacy rows are used only when the learner has no cycle yet.
+  const completedRows = cycle
+    ? await db.cycleLessonProgress.findMany({
+        where: { user_id: userId, learning_cycle_id: cycle.id, lesson_id: { in: lessonIds }, completed_at: { not: null } },
+        select: { lesson_id: true },
+      })
+    : await db.lessonProgress.findMany({ where: { user_id: userId, completed: true, lesson_id: { in: lessonIds } }, select: { lesson_id: true } })
   const completedSet = new Set(completedRows.map((row) => row.lesson_id))
   const supplements = await db.supplementalLearningRequirement.findMany({ where: { user_id: userId, course_id: courseId, ended_at: null, completed_at: null } })
   for (const supplement of supplements) if (supplement.lesson_ids.every((id) => completedSet.has(id))) await db.supplementalLearningRequirement.update({ where: { id: supplement.id }, data: { completed_at: new Date() } })
-  const completed = await db.lessonProgress.count({
-    where: { user_id: userId, lesson_id: { in: lessons.map((lesson) => lesson.id) }, completed: true },
-  })
+  const completed = completedSet.size
   if (completed !== lessons.length) return false
   const requiredAssessmentIds = [
     ...lessons.flatMap((lesson) => lesson.assessment ? [lesson.assessment.id] : []),

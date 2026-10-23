@@ -1,22 +1,31 @@
 export interface ChapterStage {
   startsAt: Date; endsAt: Date; memberCount: number; qualifiedCount: number; stars: number
 }
-/** Segment totals belong to the term containing the month's closing boundary. */
+/**
+ * Official Chapter score: S_m = A_m / N_m.
+ *
+ * A_m is the total Stars earned by the Chapter in the period; N_m is the
+ * time-weighted active roster in that period. Stage totals are used when a
+ * transfer splits the month, so a half-month stage cannot count as a full one.
+ */
 export function chapterCompetitionScore(stages: ChapterStage[], kpi: string | null, options?: { coreLessonCount?: number }) {
-  let elapsed = 0, personTime = 0, qualifiedTime = 0, score = 0
+  let elapsed = 0
+  let personTime = 0
+  let qualifiedTime = 0
+  let totalStars = 0
   for (const stage of stages) {
     const duration = stage.endsAt.getTime() - stage.startsAt.getTime()
     if (duration <= 0 || stage.memberCount < 0 || stage.qualifiedCount < 0 || stage.qualifiedCount > stage.memberCount) throw new Error('InvalidChapterStage')
     elapsed += duration
     personTime += duration * stage.memberCount
     qualifiedTime += duration * stage.qualifiedCount
-    if (stage.memberCount > 0) score += stage.stars / stage.memberCount
+    totalStars += Number.isFinite(stage.stars) ? Math.max(0, stage.stars) : 0
   }
   const averageMemberCount = elapsed ? personTime / elapsed : 0
   const at70Rate = personTime ? qualifiedTime / personTime : 0
   const exclusionReasons: string[] = []
   let dataError: string | null = null
-  let finalScore: number | null = score
+  let finalScore: number | null = averageMemberCount > 0 ? totalStars / averageMemberCount : 0
 
   if (averageMemberCount === 0) {
     exclusionReasons.push('ROSTER_ZERO')
@@ -42,6 +51,7 @@ export function chapterCompetitionScore(stages: ChapterStage[], kpi: string | nu
 
   return {
     score: finalScore,
+    totalStars,
     averageMemberCount,
     at70Rate,
     eligible: exclusionReasons.length === 0,

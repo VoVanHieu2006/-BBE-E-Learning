@@ -1,8 +1,7 @@
-import { currentCycleAttemptFilter } from './learning-periods'
+﻿import { currentCycleAttemptFilter } from './learning-periods'
 import { prisma } from './prisma'
 import { hasWatchedFullVideo } from './video-progress-rules'
 import { evaluateCourseFinalRequirements } from './course-final-assessment-rules'
-import { canEarnStarsForCourse } from './stars'
 
 export type ProgressionAction = 'VIEW' | 'WATCH' | 'ASSESS'
 
@@ -104,7 +103,7 @@ export async function checkCourseFinalProgression(
     passedAssessmentIds,
   )
   if (requirements.ok === false) return requirements
-  return { ok: true, courseId, canEarnStars: await canEarnStarsForCourse(userId, courseId) }
+  return { ok: true, courseId, canEarnStars: false }
 }
 
 /**
@@ -121,6 +120,7 @@ export async function checkLessonProgression(
 ): Promise<ProgressionDecision> {
   const lesson = await prisma.lesson.findUnique({
     where: { id: lessonId },
+    relationLoadStrategy: 'join',
     select: { id: true, session_id: true, session: { select: { course_id: true, course: { select: { status: true } } } } },
   })
   if (!lesson) return { ok: false, code: 'NotAssigned', message: 'Bài học không tồn tại' }
@@ -129,21 +129,34 @@ export async function checkLessonProgression(
   if (isAdmin) return { ok: true, courseId, canEarnStars: false }
   if (lesson.session.course.status !== 'PUBLISHED') return { ok: false, code: 'NotAssigned', message: 'Khóa học chưa xuất bản.' }
 
-  const cycleFilter = await currentCycleAttemptFilter(prisma, userId)
-  const assignments = await prisma.userLearningAssignment.findMany({
-    where: { user_id: userId, course_id: courseId, ended_at: null },
-    select: { can_view: true, can_assess: true, can_earn_stars: true },
+  // Most video loads are for the first lesson of a course. Resolve only its id
+  // first, avoiding a full curriculum + progress scan on the hot path.
+  const firstLesson = await prisma.lesson.findFirst({
+    where: { session: { course_id: courseId } },
+    orderBy: [{ session: { sort_order: 'asc' } }, { sort_order: 'asc' }, { id: 'asc' }],
+    select: { id: true },
   })
-  const canAccessPublished = lesson.session.course.status === 'PUBLISHED'
-  if (!canAccessPublished && (assignments.length === 0 || !assignments.every((assignment) => assignment.can_view))) {
-    return { ok: false, code: 'NotAssigned', message: 'Nội dung này chưa được gán vào lộ trình học của bạn' }
-  }
-  if (!canAccessPublished && action === 'ASSESS' && !assignments.every((assignment) => assignment.can_assess)) {
-    return { ok: false, code: 'AssessmentNotAllowed', message: 'Bạn chỉ được xem nội dung này, chưa có quyền làm bài kiểm tra' }
+  if (firstLesson?.id === lessonId) {
+    if (action === 'ASSESS') {
+      const cycle = await prisma.learningCycle.findFirst({ where: { user_id: userId, ends_at: null }, select: { id: true } })
+      const progress = cycle
+        ? await prisma.cycleLessonProgress.findUnique({
+            where: { user_id_lesson_id_learning_cycle_id: { user_id: userId, lesson_id: lessonId, learning_cycle_id: cycle.id } },
+            select: { furthest_seconds: true },
+          })
+        : await prisma.lessonProgress.findUnique({ where: { user_id_lesson_id: { user_id: userId, lesson_id: lessonId } }, select: { furthest_watched_position_seconds: true } })
+      const furthest = cycle ? (progress as any)?.furthest_seconds || 0 : (progress as any)?.furthest_watched_position_seconds || 0
+      const duration = await prisma.video.findUnique({ where: { lesson_id: lessonId }, select: { duration_seconds: true } })
+      if (!hasWatchedFullVideo(furthest, duration?.duration_seconds || 0)) {
+        return { ok: false, code: 'LessonVideoIncomplete', message: 'Hãy hoàn thành video bài giảng trước khi làm quiz' }
+      }
+    }
+    return { ok: true, courseId, canEarnStars: false }
   }
 
   const lessons = await prisma.lesson.findMany({
     where: { session: { course_id: courseId } },
+    relationLoadStrategy: 'join',
     select: {
       id: true,
       session_id: true,
@@ -156,8 +169,28 @@ export async function checkLessonProgression(
   const currentIndex = lessons.findIndex((item) => item.id === lessonId)
   if (currentIndex < 0) return { ok: false, code: 'NotAssigned', message: 'Bài học không tồn tại trong khóa học' }
   const current = lessons[currentIndex]
-  const cycle = await prisma.learningCycle.findFirst({ where: { user_id: userId, ends_at: null }, select: { id: true } })
+  const cycle = await prisma.learningCycle.findFirst({ where: { user_id: userId, ends_at: null }, select: { id: true, provenance: true } })
   const earnedUnlock = cycle ? await prisma.cycleLessonProgress.findUnique({ where: { user_id_lesson_id_learning_cycle_id: { user_id: userId, lesson_id: lessonId, learning_cycle_id: cycle.id } }, select: { unlocked_at: true } }) : null
+
+  // Fast path for the first lesson: there are no previous videos/quizzes to
+  // inspect, so a watch heartbeat needs only the course status already checked
+  // above. An ASSESS action still verifies the current video once.
+  if (currentIndex === 0) {
+    if (action === 'ASSESS' && current.video) {
+      const progress = cycle
+        ? await prisma.cycleLessonProgress.findUnique({
+            where: { user_id_lesson_id_learning_cycle_id: { user_id: userId, lesson_id: lessonId, learning_cycle_id: cycle.id } },
+            select: { furthest_seconds: true },
+          })
+        : await prisma.lessonProgress.findUnique({ where: { user_id_lesson_id: { user_id: userId, lesson_id: lessonId } }, select: { furthest_watched_position_seconds: true } })
+      const furthest = cycle ? (progress as any)?.furthest_seconds || 0 : (progress as any)?.furthest_watched_position_seconds || 0
+      if (!hasWatchedFullVideo(furthest, current.video.duration_seconds || 0)) {
+        return { ok: false, code: 'LessonVideoIncomplete', message: 'Hãy hoàn thành video bài giảng trước khi làm quiz' }
+      }
+    }
+    return { ok: true, courseId, canEarnStars: false }
+  }
+
   const previousLessons = lessons.slice(0, currentIndex)
   const relevantLessons = action === 'ASSESS' ? [...previousLessons, current] : previousLessons
   const relevantLessonIds = relevantLessons.map((item) => item.id)
@@ -191,6 +224,7 @@ export async function checkLessonProgression(
   // Assessment(s) in earlier lessons are the checkpoint that unlocks this one.
   const requiredAssessmentIds = previousLessons.flatMap((item) => item.assessment ? [item.assessment.id] : [])
   if (requiredAssessmentIds.length && !earnedUnlock?.unlocked_at) {
+    const cycleFilter = await currentCycleAttemptFilter(prisma, userId)
     const passedAttempts = await prisma.attempt.findMany({
       where: {
         user_id: userId,
@@ -213,5 +247,5 @@ export async function checkLessonProgression(
     return { ok: false, code: 'LessonVideoIncomplete', message: 'Hãy hoàn thành video bài giảng trước khi làm quiz' }
   }
 
-  return { ok: true, courseId, canEarnStars: await canEarnStarsForCourse(userId, courseId) }
+  return { ok: true, courseId, canEarnStars: false }
 }
