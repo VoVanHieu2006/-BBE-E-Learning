@@ -46,7 +46,7 @@ export function endedReachAllowanceSeconds(playbackRate: number): number {
 export function endedCompletionToleranceSeconds(durationSeconds: number): number {
   const duration = Number.isFinite(durationSeconds) && durationSeconds > 0 ? durationSeconds : 0
   if (duration <= 0) return 0
-  return Math.min(1.5, duration * 0.1, duration / 3, Math.max(0.6, duration * 0.005))
+  return Math.min(3, duration * 0.1, duration / 3, Math.max(0.6, Math.round(duration * 0.02 * 100) / 100))
 }
 
 /**

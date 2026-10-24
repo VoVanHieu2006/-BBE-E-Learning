@@ -8,7 +8,7 @@ import Modal from '@/components/ui/Modal';
 import Toast, { ToastMessage } from '@/components/ui/Toast';
 import LessonQuiz from '@/components/lesson/LessonQuiz';
 import StarRewardCelebration from '@/components/StarRewardCelebration';
-import { apiFetch } from '@/lib/api/client';
+import { apiFetch, clearApiCache } from '@/lib/api/client';
 import { QUIZ_COOLDOWN_MS, QUIZ_COOLDOWN_MINUTES } from '@/lib/config/quiz';
 
 interface AttemptItem {
@@ -267,6 +267,16 @@ export default function LessonQuizPage({ params }: { params: { lessonId: string 
         {(!started || quizCompleted) && (
           <Link
             href={`/student/learning/${params.lessonId}`}
+            onClick={() => {
+              clearApiCache('/api/v1/courses');
+              clearApiCache('/api/v1/lessons');
+              clearApiCache('/api/v1/learning');
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('bbe-progress-updated', {
+                  detail: { lessonId: params.lessonId, assessmentId, passed: quizCompleted }
+                }));
+              }
+            }}
             className="shrink-0 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#eff4ff] hover:bg-[#cbdbf5] text-[#172554] text-xs font-bold transition shadow-xs"
           >
             ← Bài học

@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
@@ -7,7 +7,7 @@ import Toast, { ToastMessage } from '@/components/ui/Toast';
 import YouTubePlayer from '@/components/YouTubePlayer';
 import LessonComments from '@/components/lesson/LessonComments';
 import StarRewardCelebration from '@/components/StarRewardCelebration';
-import { apiFetch, ApiResponse } from '@/lib/api/client';
+import { apiFetch, ApiResponse, clearApiCache } from '@/lib/api/client';
 
 export default function LearningVideoPage({ params }: { params: { lessonId: string } }) {
   const [currentLessonId, setCurrentLessonId] = useState(params.lessonId);
@@ -34,6 +34,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const switchReqIdRef = useRef(0);
+  const switchAbortRef = useRef<AbortController | null>(null);
 
   const showToast = (type: 'success' | 'error' | 'info', message: string, title?: string) => {
     setToast({ type, message, title });
@@ -88,16 +89,16 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
         // The course-wide progress and Star balance are secondary panels. Load
         // them after the lesson/video dependencies so they never block playback.
         if (activeToken) {
-          void apiFetch(`/api/v1/courses/${courseId}/my-progress`)
+          void apiFetch(`/api/v1/courses/${courseId}/my-progress`, { noCache: true })
             .then((progListRes) => {
-              if (progListRes.ok && progListRes.data) setCourseProgress(progListRes.data)
+              if (progListRes.ok && progListRes.data) setCourseProgress(progListRes.data);
             })
-            .catch(() => {})
+            .catch(() => {});
           void apiFetch(`/api/v1/stars/me?balanceOnly=1`, { noCache: true })
             .then((starRes) => {
-              if (starRes.ok && typeof starRes.data?.balance === 'number') setStarBalance(starRes.data.balance)
+              if (starRes.ok && typeof starRes.data?.balance === 'number') setStarBalance(starRes.data.balance);
             })
-            .catch(() => {})
+            .catch(() => {});
         }
 
         if (courseRes.ok && courseRes.data) {
@@ -136,9 +137,68 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
     setLoadingCourse(false);
   }
 
-  // Fast In-Place Lesson Switch with Zero Stale Data and Race Condition Protection
+  // Silent progress revalidation triggered on focus, tab visibility or quiz completion
+  const revalidateProgress = useCallback(async () => {
+    const activeToken = token || (typeof window !== 'undefined' ? localStorage.getItem('accessToken') : '') || '';
+    if (!activeToken) return;
+    const cid = lesson?.session?.courseId || courseData?.courseId || courseData?.id;
+    const [progRes, courseProgRes] = await Promise.all([
+      apiFetch(`/api/v1/lessons/${currentLessonId}/progress`, { noCache: true, token: activeToken }),
+      cid ? apiFetch(`/api/v1/courses/${cid}/my-progress`, { noCache: true, token: activeToken }) : Promise.resolve<any>(null),
+    ]);
+    if (progRes.ok && progRes.data) {
+      setProgress((prev: any) => ({
+        ...prev,
+        ...progRes.data,
+        lessonId: currentLessonId,
+      }));
+    }
+    if (courseProgRes && courseProgRes.ok && courseProgRes.data) {
+      setCourseProgress(courseProgRes.data);
+    }
+  }, [currentLessonId, lesson?.session?.courseId, courseData, token]);
+
+  useEffect(() => {
+    let timer: any = null;
+    const debouncedRevalidate = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        revalidateProgress();
+      }, 300);
+    };
+
+    const handleProgressUpdate = () => {
+      debouncedRevalidate();
+    };
+    const handleVisibilityOrFocus = () => {
+      if (document.visibilityState === 'visible') {
+        debouncedRevalidate();
+      }
+    };
+
+    window.addEventListener('bbe-progress-updated', handleProgressUpdate);
+    window.addEventListener('focus', handleVisibilityOrFocus);
+    window.addEventListener('pageshow', handleVisibilityOrFocus);
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
+
+    return () => {
+      if (timer) clearTimeout(timer);
+      window.removeEventListener('bbe-progress-updated', handleProgressUpdate);
+      window.removeEventListener('focus', handleVisibilityOrFocus);
+      window.removeEventListener('pageshow', handleVisibilityOrFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+    };
+  }, [revalidateProgress]);
+
+  // Fast In-Place Lesson Switch with AbortController and Zero Race Conditions
   async function switchLesson(newLessonId: string, options?: { skipPushHistory?: boolean }) {
     if (newLessonId === currentLessonId) return;
+
+    if (switchAbortRef.current) {
+      switchAbortRef.current.abort();
+    }
+    const abortController = new AbortController();
+    switchAbortRef.current = abortController;
 
     const reqId = ++switchReqIdRef.current;
     if (typeof window !== 'undefined' && (window as any).__bbeProbe) (window as any).__bbePerf?.push({ name: 'lesson_switch', at: performance.now() });
@@ -151,48 +211,57 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
     }
 
     const activeToken = token || (typeof window !== 'undefined' ? localStorage.getItem('accessToken') : '') || '';
-    const [lessonRes, lessonProgRes] = await Promise.all([
-      apiFetch(`/api/v1/lessons/${newLessonId}`),
-      activeToken ? apiFetch(`/api/v1/lessons/${newLessonId}/progress`, { noCache: true }) : Promise.resolve<ApiResponse<any>>({ ok: false, status: 0 }),
-    ]);
 
-    // Ignore if a newer lesson switch request has already fired
-    if (reqId !== switchReqIdRef.current) return;
+    try {
+      const [lessonRes, lessonProgRes] = await Promise.all([
+        apiFetch(`/api/v1/lessons/${newLessonId}`, { signal: abortController.signal }),
+        activeToken
+          ? apiFetch(`/api/v1/lessons/${newLessonId}/progress`, { noCache: true, token: activeToken, signal: abortController.signal })
+          : Promise.resolve<ApiResponse<any>>({ ok: false, status: 0 }),
+      ]);
 
-    setCurrentLessonId(newLessonId);
+      // Ignore if a newer lesson switch request has already fired
+      if (reqId !== switchReqIdRef.current) return;
 
-    if (lessonRes.ok && lessonRes.data) {
-      setLesson(lessonRes.data);
-      setLessonError(null);
-    } else {
-      setLesson(null);
-      if (!activeToken && (lessonRes.status === 401 || lessonRes.status === 403)) {
-        if (typeof window !== 'undefined') {
-          window.location.href = '/login?callbackUrl=' + encodeURIComponent(window.location.pathname);
-          return;
+      setCurrentLessonId(newLessonId);
+
+      if (lessonRes.ok && lessonRes.data) {
+        setLesson(lessonRes.data);
+        setLessonError(null);
+      } else {
+        setLesson(null);
+        if (!activeToken && (lessonRes.status === 401 || lessonRes.status === 403)) {
+          if (typeof window !== 'undefined') {
+            window.location.href = '/login?callbackUrl=' + encodeURIComponent(window.location.pathname);
+            return;
+          }
         }
+        setLessonError({
+          code: lessonRes.error?.code || (lessonRes.status === 404 ? 'LessonNotFound' : 'AccessDenied'),
+          message: lessonRes.error?.message || (lessonRes.status === 404 ? 'Bài học không tồn tại' : 'Bạn chưa thể truy cập bài học này.'),
+          status: lessonRes.status || 403,
+        });
       }
-      setLessonError({
-        code: lessonRes.error?.code || (lessonRes.status === 404 ? 'LessonNotFound' : 'AccessDenied'),
-        message: lessonRes.error?.message || (lessonRes.status === 404 ? 'Bài học không tồn tại' : 'Bạn chưa thể truy cập bài học này.'),
-        status: lessonRes.status || 403,
-      });
-    }
 
-    if (lessonProgRes && lessonProgRes.ok && lessonProgRes.data) {
-      setProgress({ ...lessonProgRes.data, lessonId: newLessonId });
-    } else {
-      setProgress({ lessonId: newLessonId, completed: false, progressPercentage: 0 });
+      if (lessonProgRes && lessonProgRes.ok && lessonProgRes.data) {
+        setProgress({ ...lessonProgRes.data, lessonId: newLessonId });
+      } else {
+        setProgress({ lessonId: newLessonId, completed: false, progressPercentage: 0 });
+      }
+    } catch (err: any) {
+      if (reqId === switchReqIdRef.current && err?.name !== 'AbortError') {
+        showToast('error', 'Không thể tải bài học. Vui lòng thử lại.', 'Lỗi tải bài');
+      }
+    } finally {
+      if (reqId === switchReqIdRef.current) {
+        if (typeof window !== 'undefined' && (window as any).__bbeProbe) (window as any).__bbePerf?.push({ name: 'lesson_switch_done', at: performance.now() });
+        setIsSwitchingLesson(false);
+      }
     }
-
-    if (typeof window !== 'undefined' && (window as any).__bbeProbe) (window as any).__bbePerf?.push({ name: 'lesson_switch_done', at: performance.now() });
-    setIsSwitchingLesson(false);
   }
 
   function celebrateStarReward(amount: number, rewardKey: string | null) {
     if (!(amount > 0)) return;
-    // A retried heartbeat, a re-render or a duplicated response must never
-    // replay the same backend reward.
     const key = rewardKey || `amount:${amount}:${Math.floor(Date.now() / 2000)}`;
     if (seenRewardKeysRef.current.has(key)) return;
     seenRewardKeysRef.current.add(key);
@@ -207,11 +276,13 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
     playbackRate: number;
     event: 'PLAY' | 'HEARTBEAT' | 'PAUSE' | 'ENDED';
     playerDurationSeconds?: number;
+    lessonId?: string;
+    videoId?: string;
   }) {
     if (!token) return null; // Guests don't track progress
-    const activeLessonId = currentLessonId;
+    const targetLessonId = event.lessonId || currentLessonId;
     const reqId = switchReqIdRef.current;
-    const res = await apiFetch(`/api/v1/lessons/${activeLessonId}/progress`, {
+    const res = await apiFetch(`/api/v1/lessons/${targetLessonId}/progress`, {
       method: 'PATCH',
       body: JSON.stringify({
         positionSeconds: event.currentTime,
@@ -222,65 +293,72 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
         viewSessionId: event.viewSessionId,
       }),
     });
-    if (reqId !== switchReqIdRef.current) return null; // Discard stale progress response
     if (!res.ok || !res.data) return null;
 
     const data = res.data;
-    setProgress((prev: any) => ({
-      ...prev,
-      lessonId: activeLessonId,
-      videoCompleted: Boolean(data.videoCompleted),
-      completed: Boolean(data.completed),
-      replay: data.replay,
-      progressPercentage: data.progressPercentage,
-      watchedUntil: data.furthestWatchedPositionSeconds ?? event.furthest,
-      lastPosition: data.lastPositionSeconds ?? prev?.lastPosition,
-    }));
 
-    if (data.videoDurationMismatch?.playerSeconds > 0) {
-      const mismatch = data.videoDurationMismatch;
-      if (!durationMismatchRef.current) {
-        durationMismatchRef.current = true;
-        if (isAdmin) {
-          showToast(
-            'error',
-            `Thời lượng video trong DB (${mismatch.databaseSeconds}s) lệch với YouTube (${Number(mismatch.playerSeconds).toFixed(1)}s). Hãy chạy "npm run db:fix-durations" hoặc sửa số giây của bài học.`,
-            'Lệch thời lượng video'
-          );
+    // Strict isolation: Only update local active state if response is for the currently viewed lesson
+    if (targetLessonId === currentLessonId && reqId === switchReqIdRef.current) {
+      setProgress((prev: any) => ({
+        ...prev,
+        lessonId: targetLessonId,
+        videoCompleted: Boolean(data.videoCompleted),
+        completed: Boolean(data.completed),
+        replay: data.replay,
+        progressPercentage: data.progressPercentage,
+        watchedUntil: data.furthestWatchedPositionSeconds ?? event.furthest,
+        lastPosition: data.lastPositionSeconds ?? prev?.lastPosition,
+        ...(data.videoStarsThisMonth ? { videoStarsThisMonth: data.videoStarsThisMonth } : {}),
+        ...(data.replayHistory ? { replayHistory: data.replayHistory } : {}),
+      }));
+
+      if (data.videoDurationMismatch?.playerSeconds > 0) {
+        const mismatch = data.videoDurationMismatch;
+        if (!durationMismatchRef.current) {
+          durationMismatchRef.current = true;
+          if (isAdmin) {
+            showToast(
+              'error',
+              `Thời lượng video trong DB (${mismatch.databaseSeconds}s) lệch với YouTube (${Number(mismatch.playerSeconds).toFixed(1)}s). Hãy chạy "npm run db:fix-durations" hoặc sửa số giây của bài học.`,
+              'Lệch thời lượng video'
+            );
+          }
         }
       }
-    }
 
-    if (data.starReward?.awarded && Number(data.starReward.amount) > 0) {
-      celebrateStarReward(Number(data.starReward.amount), data.starReward.rewardKey || null);
-    }
-    if (typeof data.starReward?.balance === 'number') {
-      setStarBalance(data.starReward.balance);
-    }
+      if (data.starReward?.awarded && Number(data.starReward.amount) > 0) {
+        celebrateStarReward(Number(data.starReward.amount), data.starReward.rewardKey || null);
+        clearApiCache(`/api/v1/lessons/${targetLessonId}/progress`);
+        void revalidateProgress();
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('bbe-progress-updated', { detail: { lessonId: targetLessonId } }));
+        }
+      }
+      if (typeof data.starReward?.balance === 'number') {
+        setStarBalance(data.starReward.balance);
+      }
 
-    // Only the backend-confirmed lesson completion may advance the course
-    // progress counter. Video completion alone is not lesson completion when a
-    // quiz is configured.
-    if (data.completed) {
-      setCourseProgress((prev: any) => {
-        if (!prev) return prev;
-        let wasDone = false;
-        const sessions = (prev.sessions || []).map((ps: any) => ({
-          ...ps,
-          lessons: (ps.lessons || []).map((pl: any) => {
-            if (pl.lessonId !== activeLessonId) return pl;
-            wasDone = Boolean(pl.completed);
-            return { ...pl, completed: true };
-          }),
-        }));
-        return {
-          ...prev,
-          sessions,
-          completedLessons: wasDone
-            ? prev.completedLessons
-            : Math.min((prev.completedLessons || 0) + 1, prev.totalLessons || (prev.completedLessons || 0) + 1),
-        };
-      });
+      if (data.completed) {
+        setCourseProgress((prev: any) => {
+          if (!prev) return prev;
+          let wasDone = false;
+          const sessions = (prev.sessions || []).map((ps: any) => ({
+            ...ps,
+            lessons: (ps.lessons || []).map((pl: any) => {
+              if (pl.lessonId !== targetLessonId) return pl;
+              wasDone = Boolean(pl.completed);
+              return { ...pl, completed: true };
+            }),
+          }));
+          return {
+            ...prev,
+            sessions,
+            completedLessons: wasDone
+              ? prev.completedLessons
+              : Math.min((prev.completedLessons || 0) + 1, prev.totalLessons || (prev.completedLessons || 0) + 1),
+          };
+        });
+      }
     }
     return data;
   }

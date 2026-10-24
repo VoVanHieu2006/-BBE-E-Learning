@@ -401,8 +401,8 @@ describe('strict video progress', () => {
     assert.equal(endedCompletionToleranceSeconds(-5), 0)
     assert.equal(endedCompletionToleranceSeconds(2), 0.2)
     assert.equal(endedCompletionToleranceSeconds(15), 0.6)
-    assert.equal(endedCompletionToleranceSeconds(168), 0.84)
-    assert.equal(endedCompletionToleranceSeconds(600), 1.5)
+    assert.equal(endedCompletionToleranceSeconds(168), 3)
+    assert.equal(endedCompletionToleranceSeconds(600), 3)
     assert.equal(endedCompletionToleranceSeconds(Number.NaN), 0)
   })
 
@@ -416,7 +416,7 @@ describe('strict video progress', () => {
     assert.equal(hasCompletedVideoAtEnd(168, 168, 'ENDED'), true)
     // Overreach by half a second (client clock jitter) must not regress completion.
     assert.equal(hasCompletedVideoAtEnd(168.6, 168, 'ENDED'), true)
-    assert.equal(hasCompletedVideoAtEnd(167.1, 168, 'ENDED'), false)
+    assert.equal(hasCompletedVideoAtEnd(164.5, 168, 'ENDED'), false)
     assert.equal(hasCompletedVideoAtEnd(66, 168, 'ENDED'), false)
   })
 

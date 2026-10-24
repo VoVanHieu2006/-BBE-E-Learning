@@ -57,11 +57,82 @@ export async function PATCH(request: NextRequest, { params }: { params: { lesson
   if (!result) return NextResponse.json({ error: { code: 'LessonNotFound' } }, { status: 404 })
   if ('error' in result) return NextResponse.json(result, { status: 403 })
   ;(globalThis as any).__bbeLearningMeCache?.delete(userId)
+
+  // Attach live video replay history and monthly stars so frontend syncs immediately
+  if (result && ('starReward' in result || 'videoCompleted' in result || event === 'ENDED')) {
+    const historyData = await getLessonVideoHistory(userId, (result as any).videoId || null, (result as any).replay)
+    Object.assign(result, historyData)
+  }
+
   return NextResponse.json(result)
 }
 
 export async function POST(request: NextRequest, context: { params: { lessonId: string } }) {
   return PATCH(request, context)
+}
+
+async function getLessonVideoHistory(userId: string, videoId: string | null, replay: any) {
+  if (!videoId) {
+    return {
+      videoStarsThisMonth: {
+        competitionMonth: replay?.competitionMonth || null,
+        completed: Boolean(replay?.completed),
+        awardedStars: 0,
+        suppressed: Boolean(replay?.suppressed),
+      },
+      replayHistory: [],
+    }
+  }
+
+  const now = new Date()
+  const recentMonths = await prisma.competitionMonth.findMany({
+    where: { starts_at: { lte: now } },
+    orderBy: { starts_at: 'desc' },
+    take: 6,
+    select: { id: true, key: true, starts_at: true },
+  })
+  const monthIds = recentMonths.map((row) => row.id)
+  const currentMonth = recentMonths.find((row) => row.starts_at.getTime() <= now.getTime())
+  const [replayRows, videoStarRows] = monthIds.length ? await Promise.all([
+    prisma.monthlyVideoReplay.findMany({
+      where: { user_id: userId, video_id: videoId, competition_month_id: { in: monthIds } },
+      select: { competition_month_id: true, learning_cycle_id: true, furthest_seconds: true, completed_at: true, last_heartbeat_at: true },
+    }),
+    prisma.starLedger.findMany({
+      where: { user_id: userId, source_type: 'VIDEO', source_id: videoId, competition_month_id: { in: monthIds } },
+      select: { competition_month_id: true, amount: true, awarded_at: true },
+      orderBy: { awarded_at: 'desc' },
+    }),
+  ]) : [[], []]
+
+  const starsByMonth = new Map<string, number>()
+  for (const star of videoStarRows) {
+    starsByMonth.set(star.competition_month_id, (starsByMonth.get(star.competition_month_id) || 0) + star.amount)
+  }
+  const replayHistory = recentMonths.map((month) => {
+    const replayRecord = replayRows.find((row) => row.competition_month_id === month.id)
+    return {
+      competitionMonth: month.key,
+      competitionMonthId: month.id,
+      learningCycleId: replayRecord?.learning_cycle_id || null,
+      watchedSeconds: replayRecord?.furthest_seconds || 0,
+      completed: Boolean(replayRecord?.completed_at),
+      completedAt: replayRecord?.completed_at || null,
+      lastHeartbeatAt: replayRecord?.last_heartbeat_at || null,
+      awardedStars: starsByMonth.get(month.id) || 0,
+    }
+  }).filter((row) => row.watchedSeconds > 0 || row.awardedStars > 0)
+  const thisMonthReplay = currentMonth ? replayHistory.find((row) => row.competitionMonthId === currentMonth.id) || null : null
+
+  return {
+    videoStarsThisMonth: {
+      competitionMonth: replay?.competitionMonth || null,
+      completed: Boolean(replay?.completed),
+      awardedStars: thisMonthReplay?.awardedStars ?? 0,
+      suppressed: Boolean(replay?.suppressed),
+    },
+    replayHistory,
+  }
 }
 
 export async function GET(request: NextRequest, { params }: { params: { lessonId: string } }) {
@@ -114,56 +185,13 @@ export async function GET(request: NextRequest, { params }: { params: { lessonId
 
   // ---- Per-video learning history (LearningCycle + MonthlyVideoReplay + StarLedger) ----
   const videoId = progress?.lesson.video?.id || null
-  const now = new Date()
-  const recentMonths = await prisma.competitionMonth.findMany({
-    where: { starts_at: { lte: now } },
-    orderBy: { starts_at: 'desc' },
-    take: 6,
-    select: { id: true, key: true, starts_at: true },
-  })
-  const monthIds = recentMonths.map((row) => row.id)
-  const currentMonth = recentMonths.find((row) => row.starts_at.getTime() <= now.getTime())
-  const [replayRows, videoStarRows] = videoId && monthIds.length ? await Promise.all([
-    prisma.monthlyVideoReplay.findMany({
-      where: { user_id: userId, video_id: videoId, competition_month_id: { in: monthIds } },
-      select: { competition_month_id: true, learning_cycle_id: true, furthest_seconds: true, completed_at: true, last_heartbeat_at: true },
-    }),
-    prisma.starLedger.findMany({
-      where: { user_id: userId, source_type: 'VIDEO', source_id: videoId, competition_month_id: { in: monthIds } },
-      select: { competition_month_id: true, amount: true, awarded_at: true },
-      orderBy: { awarded_at: 'desc' },
-    }),
-  ]) : [[], []]
-
-  const starsByMonth = new Map<string, number>()
-  for (const star of videoStarRows) {
-    starsByMonth.set(star.competition_month_id, (starsByMonth.get(star.competition_month_id) || 0) + star.amount)
-  }
-  const replayHistory = recentMonths.map((month) => {
-    const replay = replayRows.find((row) => row.competition_month_id === month.id)
-    return {
-      competitionMonth: month.key,
-      competitionMonthId: month.id,
-      learningCycleId: replay?.learning_cycle_id || null,
-      watchedSeconds: replay?.furthest_seconds || 0,
-      completed: Boolean(replay?.completed_at),
-      completedAt: replay?.completed_at || null,
-      lastHeartbeatAt: replay?.last_heartbeat_at || null,
-      awardedStars: starsByMonth.get(month.id) || 0,
-    }
-  }).filter((row) => row.watchedSeconds > 0 || row.awardedStars > 0)
-  const thisMonthReplay = currentMonth ? replayHistory.find((row) => row.competitionMonthId === currentMonth.id) || null : null
+  const historyData = await getLessonVideoHistory(userId, videoId, replay)
 
   return NextResponse.json({
     lessonId: params.lessonId,
     replay,
-    videoStarsThisMonth: {
-      competitionMonth: replay?.competitionMonth || null,
-      completed: Boolean(replay?.completed),
-      awardedStars: thisMonthReplay?.awardedStars ?? 0,
-      suppressed: Boolean(replay?.suppressed),
-    },
-    replayHistory,
+    videoStarsThisMonth: historyData.videoStarsThisMonth,
+    replayHistory: historyData.replayHistory,
     id: params.lessonId,
     completed: isLessonCompleted,
     lessonCompleted: isLessonCompleted,

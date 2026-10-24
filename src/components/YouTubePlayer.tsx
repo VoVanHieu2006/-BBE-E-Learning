@@ -29,6 +29,8 @@ const YT_BUFFERING = 3;
 type PlaybackEvent = 'PLAY' | 'HEARTBEAT' | 'PAUSE' | 'ENDED'
 
 interface ProgressEvent {
+  lessonId: string;
+  videoId: string;
   currentTime: number;
   duration: number;
   furthest: number;
@@ -100,7 +102,7 @@ export default function YouTubePlayer({
   const [isBuffering, setIsBuffering] = useState(false);
   const [currentTime, setCurrentTime] = useState(initialPosition);
   const [duration, setDuration] = useState(durationSeconds || 0);
-  const [furthest, setFurthest] = useState(initialFurthest);
+  const [serverConfirmedFurthest, setServerConfirmedFurthest] = useState(initialFurthest);
   const [playbackRate, setPlaybackRate] = useState(1);
   const [showControls, setShowControls] = useState(true);
   const [isCompleted, setIsCompleted] = useState(false);
@@ -109,8 +111,11 @@ export default function YouTubePlayer({
   const [isSlowLoading, setIsSlowLoading] = useState(false);
   const [retryNonce, setRetryNonce] = useState(0);
   const [progressNotice, setProgressNotice] = useState('');
+  const [verificationState, setVerificationState] = useState<'IDLE' | 'PLAYING' | 'ENDING' | 'VERIFYING' | 'COMPLETED' | 'RETRYABLE_ERROR'>('IDLE');
 
-  const furthestRef = useRef(initialFurthest);
+  const serverConfirmedFurthestRef = useRef(initialFurthest);
+  const isVerifyingEndedRef = useRef(false);
+  const sessionIdRef = useRef<string>(crypto.randomUUID());
   const durationRef = useRef(durationSeconds || 0);
   const playbackRateRef = useRef(1);
   const isPlayingRef = useRef(false);
@@ -120,8 +125,7 @@ export default function YouTubePlayer({
   const controlsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pauseRetryRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const completedFiredRef = useRef(false);
-  const endedSentRef = useRef(false);
-  const sendProgressRef = useRef<(ct: number, ft: number, event?: PlaybackEvent) => Promise<any>>(async () => null);
+  const sendProgressRef = useRef<(ct: number, ft: number, event?: PlaybackEvent, overrideRate?: number) => Promise<any>>(async () => null);
   // Optimistic play/pause intent so the first click reacts instantly. Cleared
   // the moment YouTube confirms any state change.
   const [optimisticPlay, setOptimisticPlay] = useState<boolean | null>(null);
@@ -157,13 +161,15 @@ export default function YouTubePlayer({
 
   // Reset all video progress and completion flags immediately when lesson or video changes
   useEffect(() => {
+    sessionIdRef.current = crypto.randomUUID();
+    isVerifyingEndedRef.current = false;
     const alreadyFinished = durationSeconds > 0 && initialFurthest >= durationSeconds;
     setIsCompleted(alreadyFinished);
+    setVerificationState(alreadyFinished ? 'COMPLETED' : 'IDLE');
     completedFiredRef.current = false;
-    endedSentRef.current = false;
     setCurrentTime(initialPosition || 0);
-    setFurthest(initialFurthest || 0);
-    furthestRef.current = initialFurthest || 0;
+    setServerConfirmedFurthest(initialFurthest || 0);
+    serverConfirmedFurthestRef.current = initialFurthest || 0;
     durationRef.current = durationSeconds || 0;
     setDuration(durationSeconds || 0);
     setVideoError('');
@@ -179,9 +185,9 @@ export default function YouTubePlayer({
 
   // Update furthest and currentTime when props arrive asynchronously after mount (fixes F5 loss)
   useEffect(() => {
-    if (initialFurthest > 0 && initialFurthest > furthestRef.current) {
-      furthestRef.current = initialFurthest;
-      setFurthest(initialFurthest);
+    if (initialFurthest >= 0) {
+      serverConfirmedFurthestRef.current = initialFurthest;
+      setServerConfirmedFurthest(initialFurthest);
     }
     if (initialPosition > 0 && currentTime === 0) {
       setCurrentTime(initialPosition);
@@ -193,12 +199,11 @@ export default function YouTubePlayer({
     }
     if (durationSeconds > 0 && initialFurthest >= durationSeconds) {
       setIsCompleted(true);
+      setVerificationState('COMPLETED');
     }
   }, [initialPosition, initialFurthest, durationSeconds]);
 
   // Hẹn giờ tự ẩn thanh điều khiển (thanh tua) sau 3s khi đang phát.
-  // Được gọi từ handleMouseMove VÀ từ onStateChange(YT_PLAYING) —
-  // tránh việc thanh tua kẹt hiện mãi khi user bấm play mà không rê chuột sau đó.
   const scheduleHideControls = () => {
     if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current);
     controlsTimerRef.current = setTimeout(() => setShowControls(false), 3000);
@@ -212,28 +217,22 @@ export default function YouTubePlayer({
   };
 
   const isGuest = !accessToken;
-  const viewSessionRef = useRef('');
 
   // Send a server-authoritative heartbeat (only for logged-in learners).
-  // apiFetch handles 401 refresh so a 15-minute access token does not silently
-  // drop watch progress. The learning page owns the request and returns the
-  // backend-confirmed completion/reward payload.
   const sendProgress = useCallback(
-    async (ct: number, ft: number, event: PlaybackEvent = 'HEARTBEAT') => {
+    async (ct: number, ft: number, event: PlaybackEvent = 'HEARTBEAT', overrideRate?: number) => {
       if (!accessToken || isGuest) return null;
       try {
         const d = durationRef.current || duration || 0;
-        const safeFurthest = ft === 0 && furthestRef.current > 0 ? furthestRef.current : ft;
-
-        if (!viewSessionRef.current) viewSessionRef.current = crypto.randomUUID();
+        const actualRate = overrideRate ?? (playerRef.current?.getPlaybackRate?.() || playbackRateRef.current || 1);
         const payload: ProgressEvent = {
-          // Fractions are intentional: the server clamps everything and strict
-          // integer rounding here used to strand viewers at 99.x%.
+          lessonId,
+          videoId: youtubeVideoId,
           currentTime: ct,
           duration: d,
-          furthest: Math.max(ct, safeFurthest),
-          viewSessionId: viewSessionRef.current,
-          playbackRate: playbackRateRef.current,
+          furthest: ft,
+          viewSessionId: sessionIdRef.current,
+          playbackRate: actualRate,
           event,
           playerDurationSeconds: d,
         };
@@ -243,6 +242,7 @@ export default function YouTubePlayer({
           body: JSON.stringify({
             positionSeconds: payload.currentTime,
             furthestWatchedPositionSeconds: payload.furthest,
+            playerDurationSeconds: payload.playerDurationSeconds,
             playbackRate: payload.playbackRate,
             event: payload.event,
             viewSessionId: payload.viewSessionId,
@@ -253,22 +253,66 @@ export default function YouTubePlayer({
         return null;
       }
     },
-    [lessonId, accessToken, isGuest, duration, onProgress]
-  )
+    [lessonId, youtubeVideoId, accessToken, isGuest, duration, onProgress]
+  );
 
   useEffect(() => {
     sendProgressRef.current = sendProgress;
   }, [sendProgress]);;
 
-  // Fullscreen change listener
+  // Helper functions for robust cross-browser Fullscreen API (iOS/WebKit, Chrome, Firefox, Edge)
+  const isDocFullscreen = (): boolean => {
+    if (typeof document === 'undefined') return false;
+    return Boolean(
+      document.fullscreenElement ||
+      (document as any).webkitFullscreenElement ||
+      (document as any).mozFullScreenElement ||
+      (document as any).msFullscreenElement
+    );
+  };
+
+  const requestDocFullscreen = async (element: HTMLElement) => {
+    if (element.requestFullscreen) {
+      return element.requestFullscreen();
+    } else if ((element as any).webkitRequestFullscreen) {
+      return (element as any).webkitRequestFullscreen();
+    } else if ((element as any).mozRequestFullScreen) {
+      return (element as any).mozRequestFullScreen();
+    } else if ((element as any).msRequestFullscreen) {
+      return (element as any).msRequestFullscreen();
+    }
+  };
+
+  const exitDocFullscreen = async () => {
+    if (document.exitFullscreen) {
+      return document.exitFullscreen();
+    } else if ((document as any).webkitExitFullscreen) {
+      return (document as any).webkitExitFullscreen();
+    } else if ((document as any).mozCancelFullScreen) {
+      return (document as any).mozCancelFullScreen();
+    } else if ((document as any).msExitFullscreen) {
+      return (document as any).msExitFullscreen();
+    }
+  };
+
+  // Fullscreen change listener across all browser engines
   useEffect(() => {
     const handleFullscreenChange = () => {
-      setIsFullscreen(Boolean(document.fullscreenElement));
+      setIsFullscreen(isDocFullscreen());
     };
 
     document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+    document.addEventListener('mozfullscreenchange', handleFullscreenChange);
+    document.addEventListener('MSFullscreenChange', handleFullscreenChange);
+    window.addEventListener('orientationchange', handleFullscreenChange);
+
     return () => {
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('mozfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('MSFullscreenChange', handleFullscreenChange);
+      window.removeEventListener('orientationchange', handleFullscreenChange);
     };
   }, []);
 
@@ -316,6 +360,18 @@ export default function YouTubePlayer({
         mountDiv.style.height = '100%';
         containerRef.current.appendChild(mountDiv);
 
+        const applyIframePermissions = () => {
+          if (!containerRef.current) return;
+          const iframe = containerRef.current.querySelector('iframe');
+          if (iframe) {
+            iframe.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen *');
+            iframe.setAttribute('allowfullscreen', 'true');
+            (iframe as any).allowFullScreen = true;
+            iframe.setAttribute('webkitallowfullscreen', 'true');
+            iframe.setAttribute('mozallowfullscreen', 'true');
+          }
+        };
+
         playerRef.current = new window.YT.Player(mountDiv, {
           videoId: youtubeVideoId,
           playerVars: {
@@ -325,7 +381,7 @@ export default function YouTubePlayer({
             rel: 0,
             iv_load_policy: 3,
             cc_load_policy: 0,
-            fs: 0,
+            fs: 1,
             playsinline: 1,
             enablejsapi: 1,
             origin: typeof window !== 'undefined' ? window.location.origin : '',
@@ -333,6 +389,7 @@ export default function YouTubePlayer({
           events: {
             onReady: (e: any) => {
               if (unmounted) return;
+              applyIframePermissions();
               if (slowTimeout) clearTimeout(slowTimeout);
               setIsReady(true);
               isReadyRef.current = true;
@@ -368,22 +425,17 @@ export default function YouTubePlayer({
                 setIsBuffering(false);
                 setIsPlaying(true);
                 isPlayingRef.current = true;
-                // A new explicit play may be the learner's retry after the
-                // server could not confirm the previous ENDED event.
-                endedSentRef.current = false;
+                setVerificationState('PLAYING');
                 setProgressNotice('');
                 setShowControls(true);
                 scheduleHideControls();
-                // Đảm bảo phụ đề không tự bật khi phát
                 try {
                   e.target.unloadModule?.('captions');
                 } catch {}
                 startUiTimer();
                 startHeartbeat();
-                // Establish a server timestamp at playback start. This allows
-                // elapsed-time validation without granting a free first jump.
                 const ct = playerRef.current?.getCurrentTime?.() || 0;
-                void sendProgressRef.current(ct, Math.max(furthestRef.current, ct), 'PLAY');
+                void sendProgressRef.current(ct, serverConfirmedFurthestRef.current, 'PLAY');
               } else if (e.data === YT_PAUSED) {
                 perfMark('pause_applied');
                 setIsBuffering(false);
@@ -393,12 +445,13 @@ export default function YouTubePlayer({
                 stopHeartbeat();
                 clearHideControls();
                 setShowControls(true);
-                // Phòng phụ đề bật lại khi tạm dừng
                 try {
                   e.target.unloadModule?.('captions');
                 } catch {}
-                const ct = playerRef.current?.getCurrentTime?.() || 0;
-                void sendProgressRef.current(ct, furthestRef.current, 'PAUSE');
+                if (!isVerifyingEndedRef.current && verificationState !== 'COMPLETED') {
+                  const ct = playerRef.current?.getCurrentTime?.() || 0;
+                  void sendProgressRef.current(ct, serverConfirmedFurthestRef.current, 'PAUSE').then(applyServerProgress);
+                }
               } else if (e.data === YT_ENDED) {
                 setIsBuffering(false);
                 setIsPlaying(false);
@@ -406,12 +459,6 @@ export default function YouTubePlayer({
                 stopUiTimer();
                 stopHeartbeat();
                 void finishPlayback();
-                // Quay về đầu thay vì hiện màn hình đề xuất video của YouTube
-                try {
-                  playerRef.current?.seekTo?.(0, true);
-                  playerRef.current?.pauseVideo?.();
-                } catch {}
-                setCurrentTime(0);
               }
             },
             onError: (e: any) => {
@@ -483,7 +530,11 @@ export default function YouTubePlayer({
       clearHideControls();
       clearPauseRetry();
       try {
-        playerRef.current?.destroy?.();
+        if (playerRef.current) {
+          playerRef.current.pauseVideo?.();
+          playerRef.current.stopVideo?.();
+          playerRef.current.destroy?.();
+        }
       } catch {}
       playerRef.current = null;
     };
@@ -492,45 +543,68 @@ export default function YouTubePlayer({
   const applyServerProgress = (result: any) => {
     if (!result || typeof result !== 'object') return;
     const serverFurthest = Number(result.furthestWatchedPositionSeconds);
-    if (!Number.isFinite(serverFurthest) || serverFurthest < 0) return;
-    // The client may be a fraction of a second ahead while a heartbeat is in
-    // flight. Keeping a small lead avoids a visible snap-back during 2x playback,
-    // but the local seek lock can never be more than 3s ahead of the server.
-    if (serverFurthest + 3 < furthestRef.current) {
-      furthestRef.current = serverFurthest + 3;
-      setFurthest(furthestRef.current);
+    if (Number.isFinite(serverFurthest) && serverFurthest >= 0) {
+      serverConfirmedFurthestRef.current = serverFurthest;
+      setServerConfirmedFurthest(serverFurthest);
     }
-    if (result.videoCompleted) {
+    if (result.videoCompleted || result.completed || Number(result.progressPercentage) >= 100) {
       setIsCompleted(true);
+      setVerificationState('COMPLETED');
       completedFiredRef.current = true;
     }
   };
 
   const finishPlayback = async () => {
-    if (isGuest || endedSentRef.current) return;
-    endedSentRef.current = true;
+    if (isGuest || isVerifyingEndedRef.current || completedFiredRef.current) return;
+    isVerifyingEndedRef.current = true;
+    setVerificationState('VERIFYING');
+    setProgressNotice('Đang kiểm tra và xác nhận hoàn thành video...');
+
     const d = durationRef.current || duration;
     if (!(d > 0)) {
+      isVerifyingEndedRef.current = false;
+      setVerificationState('RETRYABLE_ERROR');
       setProgressNotice('Chưa xác định được thời lượng video nên chưa thể ghi nhận hoàn thành.');
       return;
     }
-    furthestRef.current = Math.max(furthestRef.current, d);
-    setFurthest(furthestRef.current);
-    const result = await sendProgressRef.current(d, d, 'ENDED');
-    applyServerProgress(result);
-    if (result?.videoCompleted || result?.completed || Number(result?.progressPercentage) >= 100) {
-      setIsCompleted(true);
-      completedFiredRef.current = true;
-      onComplete?.(result);
-    } else {
-      // Keep the guard closed to avoid a 500ms retry loop. Pressing play again
-      // resets it, so the learner has an explicit, throttled retry path.
-      setProgressNotice(
-        result
-          ? 'Hệ thống chưa xác nhận đủ thời lượng video. Hãy phát tiếp vài giây để tiến độ được đồng bộ.'
-          : 'Chưa gửi được xác nhận kết thúc video. Kiểm tra kết nối mạng, phát lại vài giây rồi thử lại.',
-      );
+
+    const actualRate = playerRef.current?.getPlaybackRate?.() || playbackRateRef.current || 1;
+
+    let result: any = null;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        result = await sendProgress(d, d, 'ENDED', actualRate);
+        if (result?.videoCompleted || result?.completed || Number(result?.progressPercentage) >= 100) {
+          applyServerProgress(result);
+          setIsCompleted(true);
+          setVerificationState('COMPLETED');
+          setProgressNotice('');
+          completedFiredRef.current = true;
+          onComplete?.(result);
+          try {
+            playerRef.current?.seekTo?.(0, true);
+            playerRef.current?.pauseVideo?.();
+            setCurrentTime(0);
+          } catch {}
+          isVerifyingEndedRef.current = false;
+          return;
+        }
+      } catch (err) {
+        // Network or transient error, retry
+      }
+      if (attempt < 3) {
+        await new Promise((resolve) => setTimeout(resolve, attempt * 1000));
+      }
     }
+
+    isVerifyingEndedRef.current = false;
+    applyServerProgress(result);
+    setVerificationState('RETRYABLE_ERROR');
+    setProgressNotice(
+      result
+        ? 'Hệ thống chưa ghi nhận đủ thời lượng xem để hoàn thành. Hãy bấm "Thử lại xác nhận" hoặc xem tiếp vài giây.'
+        : 'Không thể kết nối đến máy chủ để xác nhận hoàn thành. Vui lòng bấm "Thử lại xác nhận".'
+    );
   };
 
   const startUiTimer = () => {
@@ -544,15 +618,12 @@ export default function YouTubePlayer({
           durationRef.current = d;
           setDuration(d);
         }
-        const newFurthest = Math.max(furthestRef.current, Math.min(ct, d || ct));
-        furthestRef.current = newFurthest;
+        // ONLY update UI display position! NEVER mutate serverConfirmedFurthest here!
         setCurrentTime(ct);
-        setFurthest(newFurthest);
 
-        // Completion is never granted here. The ENDED heartbeat must be
-        // confirmed by the backend before the completion callback runs.
-        if (!isGuest && !endedSentRef.current && d > 0 && newFurthest >= d - 0.35) {
-          void finishPlayback();
+        // Transition to ENDING state within 2.5 seconds of finish
+        if (d > 0 && ct >= d - 2.5 && !isVerifyingEndedRef.current && !completedFiredRef.current) {
+          setVerificationState((prev) => (prev === 'PLAYING' ? 'ENDING' : prev));
         }
       } catch {}
     }, 500);
@@ -573,8 +644,9 @@ export default function YouTubePlayer({
 
     heartbeatRef.current = setInterval(() => {
       try {
+        if (isVerifyingEndedRef.current || completedFiredRef.current) return;
         const ct = playerRef.current?.getCurrentTime?.() || 0;
-        void sendProgressRef.current(ct, furthestRef.current, 'HEARTBEAT').then(applyServerProgress);
+        void sendProgressRef.current(ct, serverConfirmedFurthestRef.current, 'HEARTBEAT').then(applyServerProgress);
       } catch {}
     }, intervalMs);
   };
@@ -591,38 +663,38 @@ export default function YouTubePlayer({
   useEffect(() => {
     if (isGuest) return;
     const handleVisibility = () => {
+      if (isVerifyingEndedRef.current || completedFiredRef.current) return;
       const ct = playerRef.current?.getCurrentTime?.() || 0;
       const event: PlaybackEvent = document.visibilityState === 'hidden' ? 'PAUSE' : 'PLAY';
       if (document.visibilityState === 'hidden' && !isPlayingRef.current) return;
-      void sendProgressRef.current(ct, furthestRef.current, event).then(applyServerProgress);
+      void sendProgressRef.current(ct, serverConfirmedFurthestRef.current, event).then(applyServerProgress);
     };
     document.addEventListener('visibilitychange', handleVisibility);
     return () => document.removeEventListener('visibilitychange', handleVisibility);
   }, [isGuest]);
 
   // Anti-cheat seek-ahead guard for Member role (BR-03: Members CANNOT seek past furthest watched position)
-  // Skipped for guests and Admin/BĐHU (allowFreeSeek === true)
+  // Skipped for guests and Admin/BĐHU (allowFreeSeek === true) or already completed videos
   useEffect(() => {
-    if (allowFreeSeek || isGuest || !isReady || videoError) return;
+    if (allowFreeSeek || isGuest || isCompleted || !isReady || videoError) return;
     const guard = setInterval(() => {
       try {
         const ct = playerRef.current?.getCurrentTime?.() || 0;
-        // BR-03: Client seek-lock: buffer 5s (tránh kích hoạt YouTube OSD/logo khi xem tốc độ 2x)
-        if (ct > furthestRef.current + 5) {
-          playerRef.current?.seekTo?.(furthestRef.current, true);
-          setCurrentTime(furthestRef.current);
+        const maxAllowed = serverConfirmedFurthestRef.current;
+        if (ct > maxAllowed + 3) {
+          playerRef.current?.seekTo?.(maxAllowed, true);
+          setCurrentTime(maxAllowed);
         }
       } catch {}
     }, 500);
 
     return () => clearInterval(guard);
-  }, [isReady, videoError, allowFreeSeek, isGuest]);
+  }, [isReady, videoError, allowFreeSeek, isGuest, isCompleted]);
 
   const displayPlaying = optimisticPlay ?? isPlaying;
 
   const togglePlay = () => {
     const wantPlay = !displayPlaying;
-    // Instant visual feedback — YouTube's state event only confirms later.
     setOptimisticPlay(wantPlay);
     if (!playerRef.current || !isReady) {
       pendingPlayRef.current = wantPlay;
@@ -644,16 +716,17 @@ export default function YouTubePlayer({
   const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!playerRef.current) return;
     const rect = e.currentTarget.getBoundingClientRect();
-    const pos = (e.clientX - rect.left) / rect.width;
+    const pos = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
     const targetTime = pos * duration;
 
-    // BR-03: Member can only seek backwards or up to furthest watched position, UNLESS allowFreeSeek or isGuest
-    if (allowFreeSeek || isGuest || targetTime <= furthestRef.current) {
-      try {
-        playerRef.current.seekTo(targetTime, true);
-        setCurrentTime(targetTime);
-      } catch {}
-    }
+    // BR-03: Member can only seek backwards or up to serverConfirmedFurthest, UNLESS allowFreeSeek, isGuest or isCompleted
+    const maxAllowed = (allowFreeSeek || isGuest || isCompleted) ? duration : serverConfirmedFurthestRef.current;
+    const clampedTarget = Math.min(targetTime, maxAllowed);
+
+    try {
+      playerRef.current.seekTo(clampedTarget, true);
+      setCurrentTime(clampedTarget);
+    } catch {}
   };
 
   const setSpeed = (rate: number) => {
@@ -662,10 +735,8 @@ export default function YouTubePlayer({
       playerRef.current.setPlaybackRate(rate);
       playbackRateRef.current = rate;
       setPlaybackRate(rate);
-      // Send an immediate heartbeat so short watches at a new rate are not
-      // evaluated with the previous rate.
       const ct = playerRef.current.getCurrentTime?.() || 0;
-      void sendProgressRef.current(ct, furthestRef.current, 'HEARTBEAT').then(applyServerProgress);
+      void sendProgressRef.current(ct, serverConfirmedFurthestRef.current, 'HEARTBEAT', rate).then(applyServerProgress);
     } catch {}
   };
 
@@ -678,10 +749,14 @@ export default function YouTubePlayer({
 
   const toggleFullscreen = () => {
     if (!wrapperRef.current) return;
-    if (!document.fullscreenElement) {
-      wrapperRef.current.requestFullscreen().catch(() => {});
+    if (!isDocFullscreen()) {
+      requestDocFullscreen(wrapperRef.current).catch((err) => {
+        console.warn('requestFullscreen error:', err);
+      });
     } else {
-      document.exitFullscreen().catch(() => {});
+      exitDocFullscreen().catch((err) => {
+        console.warn('exitFullscreen error:', err);
+      });
     }
   };
 
@@ -695,8 +770,8 @@ export default function YouTubePlayer({
   };
 
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
-  const furthestPercent = duration > 0 ? (furthest / duration) * 100 : 0;
-  const canSeekFree = allowFreeSeek || isGuest;
+  const canSeekFree = allowFreeSeek || isGuest || isCompleted;
+  const allowedSeekPercent = duration > 0 ? ((canSeekFree ? duration : serverConfirmedFurthest) / duration) * 100 : 0;
 
   const seekDelta = (deltaSeconds: number) => {
     if (!playerRef.current) return;
@@ -710,10 +785,10 @@ export default function YouTubePlayer({
         setShowControls(true);
         scheduleHideControls();
       } else {
-        const maxAllowed = canSeekFree ? d : furthestRef.current;
+        const maxAllowed = (allowFreeSeek || isGuest || isCompleted) ? d : serverConfirmedFurthestRef.current;
         const targetTime = Math.min(d, ct + deltaSeconds);
         const allowedTarget = Math.min(targetTime, maxAllowed);
-        if (canSeekFree || allowedTarget > ct) {
+        if (allowFreeSeek || isGuest || isCompleted || allowedTarget > ct) {
           playerRef.current.seekTo(allowedTarget, true);
           setCurrentTime(allowedTarget);
           setShowControls(true);
@@ -744,19 +819,26 @@ export default function YouTubePlayer({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [canSeekFree, duration, furthest, displayPlaying, isReady]);
+  }, [canSeekFree, duration, serverConfirmedFurthest, displayPlaying, isReady]);
 
   return (
     <div
       ref={wrapperRef}
       onMouseMove={handleMouseMove}
       onTouchStart={handleMouseMove}
-      className={`relative w-full aspect-video bg-black overflow-hidden select-none group ${
-        isFullscreen ? 'rounded-none max-h-screen' : 'rounded-3xl'
+      className={`relative w-full bg-black overflow-hidden select-none group ${
+        isFullscreen
+          ? 'fixed inset-0 z-[9999] w-screen h-screen !max-h-none !max-w-none rounded-none aspect-auto'
+          : 'aspect-video rounded-3xl'
       }`}
     >
       {/* YouTube Player Native Container (phóng nhẹ 1.05 để đưa dải watermark/logo sát mép ngoài vùng hiển thị) */}
-      <div ref={containerRef} className="w-full h-full pointer-events-none scale-[1.05] origin-center" />
+      <div
+        ref={containerRef}
+        className={`w-full h-full pointer-events-none origin-center ${
+          isFullscreen ? 'scale-100 flex items-center justify-center' : 'scale-[1.05]'
+        }`}
+      />
 
       {/* Loading Skeleton: hiển thị "Đang tải video..." ngay lập tức khi khởi tạo */}
       {!isReady && !videoError && (
@@ -824,15 +906,38 @@ export default function YouTubePlayer({
         </div>
       )}
 
-      {/* Completion Banner (only for logged-in accounts). It refers to the
-          video only; lesson completion additionally requires the quiz. */}
+      {/* Completion Banner (only for logged-in accounts) */}
       {!isGuest && isCompleted && (
         <div className="absolute left-4 top-4 z-20 flex items-center gap-1.5 rounded-xl border border-green-500/40 bg-green-900/90 px-3 py-1.5 text-xs font-bold text-white shadow-lg backdrop-blur-sm animate-fade-in">
           <span>✓</span> Đã xem hết video (100%)
         </div>
       )}
 
-      {progressNotice && !videoError && (
+      {/* Verification State Banner */}
+      {verificationState === 'VERIFYING' && (
+        <div className="absolute top-4 left-4 right-4 z-30 flex items-center gap-2.5 rounded-xl border border-blue-400/50 bg-blue-950/90 px-4 py-2.5 text-xs font-semibold text-white shadow-lg backdrop-blur-sm animate-fadeIn">
+          <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin shrink-0" />
+          <span>Đang kiểm tra và xác nhận hoàn thành video với hệ thống...</span>
+        </div>
+      )}
+
+      {verificationState === 'RETRYABLE_ERROR' && (
+        <div className="absolute top-4 left-4 right-4 z-30 flex items-center justify-between gap-3 rounded-xl border border-amber-400/50 bg-amber-950/90 px-4 py-2.5 text-xs text-amber-100 shadow-lg backdrop-blur-sm animate-fadeIn">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-base shrink-0">⚠️</span>
+            <span className="truncate">{progressNotice || 'Chưa hoàn thành xác nhận video.'}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => void finishPlayback()}
+            className="px-3 py-1 bg-amber-500 hover:bg-amber-400 text-black font-bold rounded-lg shrink-0 transition text-xs shadow-xs"
+          >
+            Thử lại xác nhận
+          </button>
+        </div>
+      )}
+
+      {progressNotice && verificationState !== 'RETRYABLE_ERROR' && !videoError && (
         <div className="absolute inset-x-4 top-4 z-20 rounded-xl border border-amber-400/40 bg-amber-950/90 px-3 py-2 text-center text-[11px] font-semibold text-amber-100 shadow-lg backdrop-blur-sm" role="status">
           {progressNotice}
         </div>
@@ -841,7 +946,7 @@ export default function YouTubePlayer({
       {/* Custom Video Controls Bar */}
       {!videoError && isReady && (
         <div
-          className={`absolute bottom-0 inset-x-0 p-4 z-30 transition-opacity duration-300 [text-shadow:0_1px_3px_rgba(0,0,0,0.85)] ${
+          className={`absolute bottom-0 inset-x-0 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] z-30 transition-opacity duration-300 [text-shadow:0_1px_3px_rgba(0,0,0,0.85)] ${
             showControls || !displayPlaying ? 'opacity-100' : 'opacity-0 pointer-events-none'
           }`}
         >
@@ -854,7 +959,7 @@ export default function YouTubePlayer({
             {/* Furthest Watched Bar (Allowed Seek Range for Members) */}
             <div
               className="absolute top-0 bottom-0 left-0 bg-white/40 rounded-full"
-              style={{ width: `${canSeekFree ? 100 : furthestPercent}%` }}
+              style={{ width: `${canSeekFree ? 100 : allowedSeekPercent}%` }}
             />
             {/* Current Watched Position */}
             <div
@@ -889,10 +994,10 @@ export default function YouTubePlayer({
               {/* Forward 10s */}
               <button
                 type="button"
-                disabled={!canSeekFree && currentTime + 5 >= furthest}
+                disabled={!canSeekFree && currentTime + 3 >= serverConfirmedFurthest}
                 onClick={() => seekDelta(10)}
                 className="px-1.5 sm:px-2 py-1 shrink-0 flex items-center gap-0.5 sm:gap-1 bg-white/10 hover:bg-white/25 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg text-[10px] sm:text-[11px] font-semibold transition text-slate-200 hover:text-white"
-                title={canSeekFree || currentTime + 5 < furthest ? 'Tua tới 10 giây (Phím mũi tên phải →)' : 'Học viên không thể tua tới đoạn chưa học'}
+                title={canSeekFree || currentTime + 3 < serverConfirmedFurthest ? 'Tua tới 10 giây (Phím mũi tên phải →)' : 'Học viên không thể tua tới đoạn chưa học'}
               >
                 <span>10s</span>
                 <span>↻</span>
@@ -947,8 +1052,11 @@ export default function YouTubePlayer({
               {/* Fullscreen Button */}
               <button
                 type="button"
-                onClick={toggleFullscreen}
-                className="w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center bg-white/20 hover:bg-white/30 rounded-lg text-xs sm:text-sm transition ml-0.5 sm:ml-1 shrink-0"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleFullscreen();
+                }}
+                className="w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center bg-white/20 hover:bg-white/30 rounded-lg text-xs sm:text-sm transition ml-0.5 sm:ml-1 shrink-0 cursor-pointer"
                 title={isFullscreen ? 'Thu nhỏ màn hình (Esc)' : 'Toàn màn hình (Fullscreen)'}
               >
                 {isFullscreen ? '🗗' : '⛶'}

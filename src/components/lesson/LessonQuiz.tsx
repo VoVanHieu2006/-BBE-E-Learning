@@ -5,6 +5,7 @@ import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
 import { QUIZ_COOLDOWN_MINUTES } from '@/lib/config/quiz';
+import { clearApiCache } from '@/lib/api/client';
 
 interface LessonQuizProps {
   lessonId: string;
@@ -217,9 +218,16 @@ export default function LessonQuiz({
       if (res.ok) {
         isSuccess = true;
         setResult(data);
+        clearApiCache('/api/v1/courses');
+        clearApiCache('/api/v1/lessons');
+        clearApiCache('/api/v1/learning');
         if (typeof window !== 'undefined') {
           try {
             localStorage.removeItem(`quiz_answers_${attemptId}`);
+            sessionStorage.setItem('bbe_last_progress_update', Date.now().toString());
+            window.dispatchEvent(new CustomEvent('bbe-progress-updated', {
+              detail: { lessonId, assessmentId, passed: Boolean(data.passed) }
+            }));
           } catch {}
         }
 
@@ -478,6 +486,16 @@ export default function LessonQuiz({
             <div className="flex justify-center pt-4 border-t border-[#eff4ff]">
               <Link
                 href={returnHref || `/student/learning/${lessonId}`}
+                onClick={() => {
+                  clearApiCache('/api/v1/courses');
+                  clearApiCache('/api/v1/lessons');
+                  clearApiCache('/api/v1/learning');
+                  if (typeof window !== 'undefined') {
+                    window.dispatchEvent(new CustomEvent('bbe-progress-updated', {
+                      detail: { lessonId, assessmentId, passed: Boolean(result?.passed) }
+                    }));
+                  }
+                }}
                 className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-[#2563EB] hover:bg-[#1d4ed8] text-white text-xs font-bold shadow-md transition hover:scale-[1.02] active:scale-[0.98]"
               >
                 <span>← Trở về lớp học</span>

@@ -6,6 +6,7 @@ import { highWaterIncrement } from './learning-cycle-rules'
 import { syncCourseAssignmentCompletion } from './learning-assignments'
 import { persistLearningUnlocks } from './learning-unlocks'
 import { chapterRewardState } from './chapter-reward-gate'
+import { hasWatchedFullVideo, endedCompletionToleranceSeconds } from './video-progress-rules'
 
 /** Both submission entry points use this transaction, including completion and rewards. */
 export async function submitQuiz(input: { attemptId: string; userId?: string; auto?: boolean; answers?: Record<string, unknown> }) {
@@ -16,7 +17,7 @@ export async function submitQuiz(input: { attemptId: string; userId?: string; au
     let now = await lockLearningUser(tx, owner.user_id)
     await tx.$queryRaw`SELECT id FROM attempts WHERE id = ${input.attemptId}::uuid FOR UPDATE`
     const attempt = await tx.attempt.findUnique({ where: { id: input.attemptId }, include: {
-      assessment: { include: { lesson: { select: { session: { select: { course_id: true } } } } } },
+      assessment: { include: { lesson: { select: { session: { select: { course_id: true } }, video: { select: { duration_seconds: true } } } } } },
       attempt_questions: { include: { question: { include: { options: true } } }, orderBy: { display_order: 'asc' } },
       attempt_answers: true,
     } })
@@ -77,18 +78,42 @@ export async function submitQuiz(input: { attemptId: string; userId?: string; au
     let amount = 0
     let rewardKey: string | null = null
     if (grading.passed && courseId) {
+      let isLessonFullyComplete = true
       if (assessment.lesson_id) {
-        // The video was authorized at start; use the current cycle's projection.
-        await tx.lessonProgress.upsert({
-          where: { user_id_lesson_id: { user_id: userId, lesson_id: assessment.lesson_id } },
-          create: { user_id: userId, lesson_id: assessment.lesson_id, completed: true, completed_at: now },
-          update: { completed: true, completed_at: now },
-        })
-        if (context) await tx.cycleLessonProgress.upsert({
-          where: { user_id_lesson_id_learning_cycle_id: { user_id: userId, lesson_id: assessment.lesson_id, learning_cycle_id: context.cycle.id } },
-          create: { user_id: userId, lesson_id: assessment.lesson_id, learning_cycle_id: context.cycle.id, completed_at: now },
-          update: { completed_at: now },
-        })
+        const videoDuration = assessment.lesson?.video?.duration_seconds || 0
+        let videoDone = true
+        if (videoDuration > 0) {
+          const cycleProg = context
+            ? await tx.cycleLessonProgress.findUnique({
+                where: { user_id_lesson_id_learning_cycle_id: { user_id: userId, lesson_id: assessment.lesson_id, learning_cycle_id: context.cycle.id } },
+                select: { furthest_seconds: true, completed_at: true },
+              })
+            : null
+          const lp = cycleProg
+            ? null
+            : await tx.lessonProgress.findUnique({
+                where: { user_id_lesson_id: { user_id: userId, lesson_id: assessment.lesson_id } },
+                select: { furthest_watched_position_seconds: true, completed: true },
+              })
+          const furthest = cycleProg ? cycleProg.furthest_seconds : (lp?.furthest_watched_position_seconds || 0)
+          const tolerance = endedCompletionToleranceSeconds(videoDuration)
+          videoDone = Boolean(cycleProg?.completed_at || lp?.completed) || hasWatchedFullVideo(furthest, videoDuration) || (videoDuration > 0 && furthest >= videoDuration - tolerance)
+        }
+
+        if (videoDone) {
+          await tx.lessonProgress.upsert({
+            where: { user_id_lesson_id: { user_id: userId, lesson_id: assessment.lesson_id } },
+            create: { user_id: userId, lesson_id: assessment.lesson_id, completed: true, completed_at: now },
+            update: { completed: true, completed_at: now },
+          })
+          if (context) await tx.cycleLessonProgress.upsert({
+            where: { user_id_lesson_id_learning_cycle_id: { user_id: userId, lesson_id: assessment.lesson_id, learning_cycle_id: context.cycle.id } },
+            create: { user_id: userId, lesson_id: assessment.lesson_id, learning_cycle_id: context.cycle.id, completed_at: now },
+            update: { completed_at: now },
+          })
+        } else {
+          isLessonFullyComplete = false
+        }
       }
       const eligible = await rewardEligibility(tx, userId, courseId, now)
       const paused = context && (await chapterRewardState(tx, userId, now)).paused
@@ -130,8 +155,10 @@ export async function submitQuiz(input: { attemptId: string; userId?: string; au
         }
       }
       // Completion reconciliation is durable even if the worker fails after commit.
-      await syncCourseAssignmentCompletion(userId, courseId, tx)
-      if (context) await persistLearningUnlocks(tx, userId, courseId, context.cycle.id, now)
+      if (isLessonFullyComplete) {
+        await syncCourseAssignmentCompletion(userId, courseId, tx)
+        if (context) await persistLearningUnlocks(tx, userId, courseId, context.cycle.id, now)
+      }
       await enqueueAssignmentSync(tx, userId, `submit:${attempt.id}`)
     }
     const balance = await tx.starLedger.aggregate({ where: { user_id: userId }, _sum: { amount: true } })

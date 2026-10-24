@@ -1,11 +1,12 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Toast, { ToastMessage } from '@/components/ui/Toast';
 import Modal from '@/components/ui/Modal';
 import MonthPicker from '@/components/ui/MonthPicker';
+import LearnerProfileView from '@/components/learner/LearnerProfileView';
 import { apiFetch, getCachedApiData } from '@/lib/api/client';
 import { useAdmin } from '../AdminContext';
 
@@ -18,8 +19,28 @@ export default function AdminChaptersProgressPage() {
   const [leaderboardMonth, setLeaderboardMonth] = useState('');
   const [availableMonths, setAvailableMonths] = useState<string[]>([]);
   const [selectedChapter, setSelectedChapter] = useState<any | null>(null);
+
+  // Drill-down Modal state: Level 1 = Chapter detail, Level 2 = Member profile
+  const [modalLevel, setModalLevel] = useState<1 | 2>(1);
   const [chapterMembers, setChapterMembers] = useState<any[]>([]);
   const [membersLoading, setMembersLoading] = useState(false);
+  const [memberPage, setMemberPage] = useState(1);
+  const [memberLimit, setMemberLimit] = useState(20);
+  const [memberTotal, setMemberTotal] = useState(0);
+  const [memberTotalPages, setMemberTotalPages] = useState(1);
+  const [memberSearch, setMemberSearch] = useState('');
+  const [memberRoleFilter, setMemberRoleFilter] = useState('');
+
+  // Level 2 member profile state
+  const [selectedMemberSummary, setSelectedMemberSummary] = useState<any | null>(null);
+  const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
+  const [memberProfileData, setMemberProfileData] = useState<any | null>(null);
+  const [memberProfileLoading, setMemberProfileLoading] = useState(false);
+  const [memberProfileError, setMemberProfileError] = useState<string | null>(null);
+  const profileRequestIdRef = useRef(0);
+  const modalScrollRef = useRef<HTMLDivElement>(null);
+  const savedScrollTopRef = useRef<number>(0);
+
   const [kpiHistory, setKpiHistory] = useState<any[]>([]);
   const [kpiForm, setKpiForm] = useState({ month: new Date().toISOString().slice(0, 7), status: 'YELLOW', note: '' });
   const [kpiSaving, setKpiSaving] = useState(false);
@@ -46,7 +67,7 @@ export default function AdminChaptersProgressPage() {
     if (loading && month !== undefined) return; // Không cho chuyển tháng liên tục
     setLoading(true);
     try {
-      const res = await apiFetch(`/api/v1/leaderboard/chapters${month ? `?month=${month}` : ''}`);
+      const res = await apiFetch(`/api/v1/leaderboard/chapters${month ? `?month=${month}` : ''}`, { noCache: true });
       if (res.ok && res.data) {
         setChapters(res.data.items || []);
         setExcludedChapters(res.data.excluded || []);
@@ -58,26 +79,125 @@ export default function AdminChaptersProgressPage() {
     }
   }
 
+  async function loadChapterMembers(
+    chapterId: string,
+    targetPage = 1,
+    targetLimit = memberLimit,
+    query = memberSearch,
+    roleType = memberRoleFilter
+  ) {
+    setMembersLoading(true);
+    try {
+      const params = new URLSearchParams({
+        page: String(targetPage),
+        limit: String(targetLimit),
+        includeInactive: '1',
+      });
+      if (query.trim()) params.set('search', query.trim());
+      if (roleType) params.set('roleType', roleType);
+
+      const res = await apiFetch(`/api/v1/chapters/${chapterId}/dashboard/members?${params.toString()}`, { noCache: true });
+      if (res.ok && res.data) {
+        setChapterMembers(res.data.items || []);
+        setMemberTotal(res.data.totalItems ?? (res.data.items || []).length);
+        setMemberTotalPages(res.data.totalPages || Math.ceil((res.data.totalItems || 0) / targetLimit) || 1);
+        setMemberPage(targetPage);
+      } else {
+        setChapterMembers([]);
+        setMemberTotal(0);
+        setMemberTotalPages(1);
+        showToast('error', res.error?.message || 'Không thể tải danh sách thành viên chapter.');
+      }
+    } catch {
+      setChapterMembers([]);
+      setMemberTotal(0);
+      setMemberTotalPages(1);
+      showToast('error', 'Lỗi khi tải thành viên chapter.');
+    } finally {
+      setMembersLoading(false);
+    }
+  }
+
   async function handleOpenChapterDrillDown(chapter: any) {
     setSelectedChapter(chapter);
+    setModalLevel(1);
+    setMemberPage(1);
+    setMemberSearch('');
+    setMemberRoleFilter('');
+    setChapterMembers([]);
+    setMemberTotal(0);
+    setMemberTotalPages(1);
     setKpiHistory([]);
-    setMembersLoading(true);
+    setSelectedMemberSummary(null);
+    setSelectedMemberId(null);
+    setMemberProfileData(null);
+    setMemberProfileError(null);
+
     const chapterId = chapter.chapterId || chapter.id;
-    const [res, kpiRes] = await Promise.all([
-      apiFetch(`/api/v1/chapters/${chapterId}/dashboard/members`, { noCache: true }),
-      apiFetch(`/api/v1/chapters/${chapterId}/kpi`, { noCache: true }),
-    ]);
-    if (kpiRes.ok) setKpiHistory(kpiRes.data?.items || []); else setKpiHistory([]);
-    if (res.ok && res.data) {
-      const items = (res.data.items || []).filter(
-        (m: any) => m.role === 'MEMBER' || (!m.role && m.role !== 'CHAPTER_LEADER')
-      );
-      setChapterMembers(items);
-    } else {
-      setChapterMembers([]);
-      showToast('error', 'Không thể tải danh sách thành viên chapter.');
+    void loadChapterMembers(chapterId, 1, memberLimit, '', '');
+    apiFetch(`/api/v1/chapters/${chapterId}/kpi`, { noCache: true }).then((kpiRes) => {
+      if (kpiRes.ok) setKpiHistory(kpiRes.data?.items || []);
+    }).catch(() => {});
+  }
+
+  async function handleOpenMemberProfile(member: any) {
+    if (modalScrollRef.current) {
+      savedScrollTopRef.current = modalScrollRef.current.scrollTop;
     }
-    setMembersLoading(false);
+    const memberId = member.userId || member.id;
+    const chapterId = selectedChapter?.chapterId || selectedChapter?.id || 'all';
+
+    setSelectedMemberSummary(member);
+    setSelectedMemberId(memberId);
+    setMemberProfileData(null);
+    setMemberProfileError(null);
+    setModalLevel(2);
+    setMemberProfileLoading(true);
+
+    const reqId = ++profileRequestIdRef.current;
+    try {
+      const res = await apiFetch(`/api/v1/chapters/${chapterId}/members/${memberId}/course-progress`, { noCache: true });
+      if (reqId !== profileRequestIdRef.current) return;
+      if (res.ok && res.data) {
+        setMemberProfileData(res.data);
+      } else {
+        setMemberProfileError(res.error?.message || 'Không thể tải hồ sơ chi tiết học viên.');
+      }
+    } catch {
+      if (reqId !== profileRequestIdRef.current) return;
+      setMemberProfileError('Lỗi kết nối khi tải hồ sơ học viên.');
+    } finally {
+      if (reqId === profileRequestIdRef.current) {
+        setMemberProfileLoading(false);
+      }
+    }
+  }
+
+  function handleBackToChapter() {
+    profileRequestIdRef.current += 1;
+    setModalLevel(1);
+    setSelectedMemberSummary(null);
+    setSelectedMemberId(null);
+    setMemberProfileData(null);
+    setMemberProfileError(null);
+    setMemberProfileLoading(false);
+
+    requestAnimationFrame(() => {
+      if (modalScrollRef.current) {
+        modalScrollRef.current.scrollTop = savedScrollTopRef.current;
+      }
+    });
+  }
+
+  function handleCloseModal() {
+    profileRequestIdRef.current += 1;
+    setSelectedChapter(null);
+    setModalLevel(1);
+    setSelectedMemberSummary(null);
+    setSelectedMemberId(null);
+    setMemberProfileData(null);
+    setMemberProfileError(null);
+    setMemberProfileLoading(false);
   }
 
   async function saveKpi() {
@@ -334,125 +454,398 @@ export default function AdminChaptersProgressPage() {
         </div>
       </div>
 
-      {/* Modal / Drill-down: Chapter Members & Individual Progress */}
+      {/* Modal / Drill-down: Chapter Members & Individual Progress (2 Levels) */}
       <Modal
         isOpen={Boolean(selectedChapter)}
-        onClose={() => setSelectedChapter(null)}
-        maxWidth="max-w-3xl"
+        onClose={handleCloseModal}
+        maxWidth="max-w-5xl"
       >
         {selectedChapter && (
-          <div className="p-6 space-y-5 max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center border-b border-[#eff4ff] pb-4">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="whitespace-nowrap inline-flex items-center text-xs font-bold px-2.5 py-0.5 bg-blue-100 text-[#2563EB] rounded-full">
-                    🏛️ Chapter
-                  </span>
-                  <h3 className="text-2xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
-                    {selectedChapter.name}
-                  </h3>
-                </div>
-                <p className="text-xs text-[#737686] mt-1">
-                  Theo dõi tiến độ học tập và bài học hoàn thành của từng học viên trong Chapter
-                </p>
-                <div className="mt-2">
-                  <Link
-                    href={`/leaderboard?group=MEMBER&chapterId=${selectedChapter.chapterId || selectedChapter.id}`}
-                    className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50 hover:bg-blue-100 text-[#2563EB] text-xs font-bold rounded-xl transition border border-blue-200"
+          <div ref={modalScrollRef} className="p-6 space-y-5 max-h-[85vh] sm:max-h-[90vh] overflow-y-auto">
+            {modalLevel === 1 ? (
+              <>
+                {/* Level 1 Header: Chapter Info & Actions */}
+                <div className="flex justify-between items-start border-b border-[#eff4ff] pb-4 gap-4">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="whitespace-nowrap inline-flex items-center text-xs font-bold px-2.5 py-0.5 bg-blue-100 text-[#2563EB] rounded-full">
+                        🏛️ Chapter
+                      </span>
+                      <h3 className="text-2xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
+                        {selectedChapter.name}
+                      </h3>
+                    </div>
+                    <p className="text-xs text-[#737686] mt-1">
+                      Theo dõi tiến độ học tập và bài học hoàn thành của từng học viên trong Chapter
+                    </p>
+                    <div className="mt-2 flex items-center gap-2 flex-wrap">
+                      <Link
+                        href={`/leaderboard?group=MEMBER&chapterId=${selectedChapter.chapterId || selectedChapter.id}`}
+                        className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50 hover:bg-blue-100 text-[#2563EB] text-xs font-bold rounded-xl transition border border-blue-200"
+                      >
+                        🏆 Xem Bảng Xếp Hạng Chapter này →
+                      </Link>
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleCloseModal}
+                    className="text-[#737686] hover:text-[#172554] text-xl font-bold p-1 rounded-lg hover:bg-slate-100 transition shrink-0"
+                    title="Đóng modal"
                   >
-                    🏆 Xem Bảng Xếp Hạng Chapter này →
-                  </Link>
-                </div>
-              </div>
-              <button
-                onClick={() => setSelectedChapter(null)}
-                className="text-[#737686] hover:text-[#172554] text-xl font-bold p-1 rounded-lg hover:bg-slate-100 transition"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="rounded-2xl border border-blue-200 bg-blue-50/50 p-4 space-y-3">
-              <h4 className="font-bold text-[#172554]">Nhập KPI Chapter theo tháng</h4>
-              <div className="grid gap-2 sm:grid-cols-3">
-                <input type="month" value={kpiForm.month} onChange={(e) => setKpiForm({ ...kpiForm, month: e.target.value })} className="rounded-xl border border-[#cbdbf5] px-3 py-2 text-sm" />
-                <select value={kpiForm.status} onChange={(e) => setKpiForm({ ...kpiForm, status: e.target.value })} className="rounded-xl border border-[#cbdbf5] px-3 py-2 text-sm"><option value="BLACK">Đen</option><option value="RED">Đỏ</option><option value="YELLOW">Vàng</option><option value="GREEN">Xanh</option></select>
-                <Button loading={kpiSaving} onClick={saveKpi}>Lưu KPI</Button>
-              </div>
-              <input value={kpiForm.note} onChange={(e) => setKpiForm({ ...kpiForm, note: e.target.value })} placeholder="Ghi chú KPI" className="w-full rounded-xl border border-[#cbdbf5] px-3 py-2 text-sm" />
-              <h5 className="text-xs font-bold uppercase tracking-wide text-[#737686]">Lịch sử các tháng</h5>
-              <div className="max-h-40 overflow-auto divide-y divide-blue-100 text-xs">{kpiHistory.map((item, index) => <div key={`${item.month}-${index}`} className="grid grid-cols-3 gap-2 py-2"><span>{new Date(item.month).toLocaleDateString('vi-VN', { month: '2-digit', year: 'numeric' })}</span><strong>{item.status}</strong><span>{item.note || 'Không ghi chú'}</span></div>)}{!kpiHistory.length && <p className="py-2 text-[#737686]">Chưa có KPI tháng nào.</p>}</div>
-            </div>
-
-            {membersLoading ? (
-              <div className="py-12 text-center text-[#737686]">Đang tải thành viên...</div>
-            ) : chapterMembers.length === 0 ? (
-              <div className="py-12 text-center text-[#737686]">
-                <p className="font-semibold text-[#172554] mb-1">Chapter này chưa có học viên</p>
-                <p className="text-xs">Chưa có học viên nào tham gia chapter này.</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <div className="text-xs font-bold text-[#737686] uppercase tracking-wider">
-                  Tổng số: {chapterMembers.length} thành viên
+                    ✕
+                  </button>
                 </div>
 
-                <div className="divide-y divide-[#eff4ff] border border-[#eff4ff] rounded-2xl overflow-hidden">
-                  {chapterMembers.map((m) => {
-                    const mId = m.userId || m.id;
-                    const isActive = m.status === 'ACTIVE';
+                {/* KPI Input Section */}
+                <div className="rounded-2xl border border-blue-200 bg-blue-50/50 p-4 space-y-3">
+                  <h4 className="font-bold text-[#172554]">Nhập KPI Chapter theo tháng</h4>
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    <input type="month" value={kpiForm.month} onChange={(e) => setKpiForm({ ...kpiForm, month: e.target.value })} className="rounded-xl border border-[#cbdbf5] px-3 py-2 text-sm bg-white" />
+                    <select value={kpiForm.status} onChange={(e) => setKpiForm({ ...kpiForm, status: e.target.value })} className="rounded-xl border border-[#cbdbf5] px-3 py-2 text-sm bg-white">
+                      <option value="BLACK">Đen</option>
+                      <option value="RED">Đỏ</option>
+                      <option value="YELLOW">Vàng</option>
+                      <option value="GREEN">Xanh</option>
+                    </select>
+                    <Button loading={kpiSaving} onClick={saveKpi}>Lưu KPI</Button>
+                  </div>
+                  <input value={kpiForm.note} onChange={(e) => setKpiForm({ ...kpiForm, note: e.target.value })} placeholder="Ghi chú KPI" className="w-full rounded-xl border border-[#cbdbf5] px-3 py-2 text-sm bg-white" />
+                  <h5 className="text-xs font-bold uppercase tracking-wide text-[#737686]">Lịch sử các tháng</h5>
+                  <div className="max-h-36 overflow-auto divide-y divide-blue-100 text-xs">{kpiHistory.map((item, index) => <div key={`${item.month}-${index}`} className="grid grid-cols-3 gap-2 py-2"><span>{new Date(item.month).toLocaleDateString('vi-VN', { month: '2-digit', year: 'numeric' })}</span><strong>{item.status}</strong><span>{item.note || 'Không ghi chú'}</span></div>)}{!kpiHistory.length && <p className="py-2 text-[#737686]">Chưa có KPI tháng nào.</p>}</div>
+                </div>
 
-                    return (
-                      <div key={mId} className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-3 hover:bg-[#f8f9ff] transition">
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold text-[#172554] text-sm">{m.email}</span>
-                            <span
-                              className={`whitespace-nowrap inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                                isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                              }`}
-                            >
-                              {isActive ? 'Active' : 'Inactive'}
-                            </span>
-                          </div>
-                          <div className="text-xs text-[#737686] flex flex-wrap items-center gap-x-3 gap-y-1">
-                            <span>Khóa học: <strong className="text-[#172554]">{m.completedCourses || 0} / {m.totalCourses || 0}</strong></span>
-                            <span>•</span>
-                            <span>⭐ <strong className="text-amber-600">{m.stars || 0}</strong></span>
-                            <span>•</span>
-                            <span>Bài học: <strong className="text-[#2563EB]">{m.completedLessons || 0} / {m.totalLessons || 0}</strong> bài</span>
-                            <span>•</span>
-                            <span suppressHydrationWarning>Tham gia: {m.joinedAt ? new Date(m.joinedAt).toLocaleDateString('vi-VN') : 'Mới'}</span>
-                          </div>
-                        </div>
+                {/* Search & Filter Toolbar */}
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2">
+                  <div className="flex items-center gap-2 flex-1">
+                    <div className="relative flex-1 max-w-sm">
+                      <input
+                        type="text"
+                        value={memberSearch}
+                        placeholder="Tìm tên hoặc email..."
+                        onChange={(e) => setMemberSearch(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            const chapId = selectedChapter.chapterId || selectedChapter.id;
+                            void loadChapterMembers(chapId, 1, memberLimit, memberSearch, memberRoleFilter);
+                          }
+                        }}
+                        className="w-full pl-8 pr-3 py-1.5 rounded-xl border border-[#cbdbf5] bg-white text-xs text-[#172554] focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                      />
+                      <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs">🔍</span>
+                    </div>
+                    <select
+                      value={memberRoleFilter}
+                      onChange={(e) => {
+                        const nextRole = e.target.value;
+                        setMemberRoleFilter(nextRole);
+                        const chapId = selectedChapter.chapterId || selectedChapter.id;
+                        void loadChapterMembers(chapId, 1, memberLimit, memberSearch, nextRole);
+                      }}
+                      className="px-2.5 py-1.5 rounded-xl border border-[#cbdbf5] bg-white text-xs font-semibold text-[#172554] focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                    >
+                      <option value="">Tất cả thành viên</option>
+                      <option value="MEMBER">Học viên thường</option>
+                      <option value="LT">Ban Lãnh Đạo (LT)</option>
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const chapId = selectedChapter.chapterId || selectedChapter.id;
+                        void loadChapterMembers(chapId, 1, memberLimit, memberSearch, memberRoleFilter);
+                      }}
+                      className="px-3 py-1.5 bg-[#2563EB] hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition shadow-xs"
+                    >
+                      Tìm
+                    </button>
+                    {(memberSearch || memberRoleFilter) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMemberSearch('');
+                          setMemberRoleFilter('');
+                          const chapId = selectedChapter.chapterId || selectedChapter.id;
+                          void loadChapterMembers(chapId, 1, memberLimit, '', '');
+                        }}
+                        className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition"
+                      >
+                        Đặt lại
+                      </button>
+                    )}
+                  </div>
 
-                        <div className="flex items-center gap-4">
-                          <Link href={`/chapter-manager/members/${mId}`} className="rounded-lg border border-blue-200 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50">
-                            Lộ trình học
-                          </Link>
-                          {/* Progress bar */}
-                          <div className="text-right shrink-0">
-                            <div className="text-xs font-bold text-[#2563EB]">{m.avgProgress || 0}%</div>
-                            <div className="w-24 bg-slate-100 h-1.5 rounded-full mt-1 overflow-hidden">
-                              <div
-                                className="bg-[#2563EB] h-full rounded-full"
-                                style={{ width: `${m.avgProgress || 0}%` }}
-                              />
+                  <div className="flex items-center gap-2 self-end sm:self-auto text-xs text-[#737686]">
+                    <span>Số lượng/trang:</span>
+                    <select
+                      value={memberLimit}
+                      onChange={(e) => {
+                        const newLimit = Number(e.target.value);
+                        setMemberLimit(newLimit);
+                        const chapId = selectedChapter.chapterId || selectedChapter.id;
+                        void loadChapterMembers(chapId, 1, newLimit, memberSearch, memberRoleFilter);
+                      }}
+                      className="px-2 py-1 rounded-lg border border-[#cbdbf5] bg-white text-xs font-semibold text-[#172554]"
+                    >
+                      <option value={20}>20</option>
+                      <option value={50}>50</option>
+                      <option value={100}>100</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Total Count Summary & Loading Indicator */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-[#737686]">
+                  <div>
+                    Đang hiển thị <span className="font-bold text-[#2563EB]">{chapterMembers.length}</span> trên tổng số{' '}
+                    <span className="font-bold text-[#172554]">{memberTotal}</span> thành viên hợp lệ trong Chapter
+                    {memberSearch && ` • Lọc theo: "${memberSearch}"`}
+                    {memberRoleFilter && ` • Vai trò: ${memberRoleFilter === 'LT' ? 'Ban Lãnh Đạo (LT)' : 'Học viên thường'}`}
+                  </div>
+                  {membersLoading && (
+                    <span className="inline-flex items-center gap-1.5 text-[#2563EB] font-semibold animate-pulse">
+                      <span className="w-2 h-2 rounded-full bg-[#2563EB]" /> Đang tải dữ liệu...
+                    </span>
+                  )}
+                </div>
+
+                {/* Member List */}
+                {membersLoading && chapterMembers.length === 0 ? (
+                  <div className="py-16 text-center text-[#737686]">
+                    <div className="w-8 h-8 border-3 border-[#2563EB] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                    <p className="text-xs font-medium">Đang tải danh sách thành viên Chapter...</p>
+                  </div>
+                ) : chapterMembers.length === 0 ? (
+                  <div className="py-12 text-center text-[#737686] bg-slate-50 rounded-2xl border border-slate-100">
+                    <p className="font-semibold text-[#172554] mb-1">Không tìm thấy thành viên</p>
+                    <p className="text-xs">
+                      {memberSearch || memberRoleFilter
+                        ? 'Không có thành viên nào khớp với bộ lọc tìm kiếm.'
+                        : 'Chapter này chưa có học viên nào tham gia.'}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="divide-y divide-[#eff4ff] border border-[#eff4ff] rounded-2xl overflow-hidden bg-white">
+                      {chapterMembers.map((m) => {
+                        const mId = m.userId || m.id;
+                        const isActive = m.status === 'ACTIVE';
+
+                        return (
+                          <div key={mId} className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-3 hover:bg-[#f8f9ff] transition">
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenMemberProfile(m)}
+                                  className="text-left font-bold text-[#172554] text-sm hover:underline hover:text-[#2563EB] transition-colors cursor-pointer group"
+                                  title="Bấm để xem hồ sơ chi tiết và lộ trình học tập"
+                                >
+                                  <span>{m.displayName || m.email}</span>
+                                </button>
+                                {m.displayName && m.email && (
+                                  <span className="text-xs text-[#737686] font-normal">({m.email})</span>
+                                )}
+                                {m.isLead && (
+                                  <span className="whitespace-nowrap px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                                    LT
+                                  </span>
+                                )}
+                                <span
+                                  className={`whitespace-nowrap inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                    isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                                  }`}
+                                >
+                                  {isActive ? 'Active' : 'Inactive'}
+                                </span>
+                              </div>
+                              <div className="text-xs text-[#737686] flex flex-wrap items-center gap-x-3 gap-y-1">
+                                <span>Khóa học: <strong className="text-[#172554]">{m.completedCourses || 0} / {m.totalCourses || 0}</strong></span>
+                                <span>•</span>
+                                <span>⭐ <strong className="text-amber-600">{m.stars || 0}</strong></span>
+                                <span>•</span>
+                                <span>Bài học: <strong className="text-[#2563EB]">{m.completedLessons || 0} / {m.totalLessons || 0}</strong> bài</span>
+                                <span>•</span>
+                                <span suppressHydrationWarning>Tham gia: {m.joinedAt ? new Date(m.joinedAt).toLocaleDateString('vi-VN') : 'Mới'}</span>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-4 self-end md:self-auto shrink-0">
+                              {/* Progress bar */}
+                              <div className="text-right shrink-0">
+                                <div className="text-xs font-bold text-[#2563EB]">{m.avgProgress || 0}%</div>
+                                <div className="w-24 bg-slate-100 h-1.5 rounded-full mt-1 overflow-hidden">
+                                  <div
+                                    className="bg-[#2563EB] h-full rounded-full"
+                                    style={{ width: `${m.avgProgress || 0}%` }}
+                                  />
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenMemberProfile(m)}
+                                className="px-3 py-1.5 rounded-xl border border-blue-200 text-[#2563EB] hover:bg-blue-50 text-xs font-semibold transition"
+                              >
+                                Xem hồ sơ →
+                              </button>
                             </div>
                           </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Pagination Controls */}
+                    {memberTotalPages > 1 && (
+                      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-[#eff4ff] text-xs">
+                        <span className="text-[#737686]">
+                          Trang <strong className="text-[#172554]">{memberPage}</strong> / {memberTotalPages} (Tổng số: {memberTotal} thành viên)
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            disabled={memberPage <= 1 || membersLoading}
+                            onClick={() => {
+                              const prev = memberPage - 1;
+                              const chapId = selectedChapter.chapterId || selectedChapter.id;
+                              void loadChapterMembers(chapId, prev, memberLimit, memberSearch, memberRoleFilter);
+                            }}
+                            className="px-3 py-1.5 rounded-xl border border-[#cbdbf5] bg-white font-semibold text-[#172554] hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                          >
+                            ← Trước
+                          </button>
+                          {Array.from({ length: memberTotalPages }, (_, i) => i + 1)
+                            .filter((p) => p === 1 || p === memberTotalPages || Math.abs(p - memberPage) <= 1)
+                            .map((p, idx, arr) => (
+                              <span key={p} className="flex items-center">
+                                {idx > 0 && p - arr[idx - 1] > 1 && <span className="px-1 text-slate-400">...</span>}
+                                <button
+                                  type="button"
+                                  disabled={membersLoading}
+                                  onClick={() => {
+                                    if (p !== memberPage) {
+                                      const chapId = selectedChapter.chapterId || selectedChapter.id;
+                                      void loadChapterMembers(chapId, p, memberLimit, memberSearch, memberRoleFilter);
+                                    }
+                                  }}
+                                  className={`w-8 h-8 rounded-xl font-bold text-xs transition ${
+                                    p === memberPage
+                                      ? 'bg-[#2563EB] text-white shadow-xs'
+                                      : 'bg-white border border-[#cbdbf5] text-[#172554] hover:bg-slate-50'
+                                  }`}
+                                >
+                                  {p}
+                                </button>
+                              </span>
+                            ))}
+                          <button
+                            type="button"
+                            disabled={memberPage >= memberTotalPages || membersLoading}
+                            onClick={() => {
+                              const next = memberPage + 1;
+                              const chapId = selectedChapter.chapterId || selectedChapter.id;
+                              void loadChapterMembers(chapId, next, memberLimit, memberSearch, memberRoleFilter);
+                            }}
+                            className="px-3 py-1.5 rounded-xl border border-[#cbdbf5] bg-white font-semibold text-[#172554] hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                          >
+                            Sau →
+                          </button>
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
+                    )}
+                  </div>
+                )}
 
-            <div className="flex justify-end gap-3 pt-3 border-t border-[#eff4ff]">
-              <Button variant="secondary" onClick={() => setSelectedChapter(null)}>
-                Đóng
-              </Button>
-            </div>
+                <div className="flex justify-end gap-3 pt-3 border-t border-[#eff4ff]">
+                  <Button variant="secondary" onClick={handleCloseModal}>
+                    Đóng
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Level 2: Member Profile Drill-Down */}
+                <div className="flex items-center justify-between pb-4 border-b border-slate-100 gap-4">
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={handleBackToChapter}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-white border border-[#cbdbf5] hover:border-[#2563EB] text-[#172554] hover:text-[#2563EB] text-xs font-bold transition shadow-2xs cursor-pointer"
+                    >
+                      ← Quay lại Chapter
+                    </button>
+                    <div>
+                      <h3 className="text-lg font-bold text-[#172554]">
+                        Hồ sơ học tập: {selectedMemberSummary?.displayName || selectedMemberSummary?.email}
+                      </h3>
+                      <p className="text-xs text-[#737686]">
+                        Chapter {selectedChapter.name}
+                        {selectedMemberSummary?.isLead && ' • Ban Lãnh Đạo (LT)'}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleCloseModal}
+                    className="text-[#737686] hover:text-[#172554] text-xl font-bold p-1 rounded-lg hover:bg-slate-100 transition"
+                    title="Đóng modal"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {memberProfileLoading && !memberProfileData ? (
+                  <div className="py-16 text-center space-y-3">
+                    <div className="w-8 h-8 border-3 border-[#2563EB] border-t-transparent rounded-full animate-spin mx-auto" />
+                    <p className="text-xs text-[#737686] font-medium">Đang tải hồ sơ học tập chi tiết...</p>
+                  </div>
+                ) : memberProfileError ? (
+                  <div className="py-12 text-center space-y-3 bg-red-50 rounded-2xl p-6 border border-red-200">
+                    <p className="text-sm font-bold text-red-800">{memberProfileError}</p>
+                    <button
+                      type="button"
+                      onClick={() => selectedMemberSummary && handleOpenMemberProfile(selectedMemberSummary)}
+                      className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl transition"
+                    >
+                      Thử lại
+                    </button>
+                  </div>
+                ) : memberProfileData ? (
+                  <LearnerProfileView
+                    user={{
+                      userId: memberProfileData.user?.userId || selectedMemberId || '',
+                      displayName: memberProfileData.user?.displayName || selectedMemberSummary?.displayName,
+                      email: memberProfileData.user?.email || selectedMemberSummary?.email,
+                      status: memberProfileData.user?.status || selectedMemberSummary?.status,
+                      accountState: memberProfileData.user?.accountState,
+                      role: memberProfileData.user?.role || selectedMemberSummary?.role,
+                      chapterName: memberProfileData.user?.chapterName || selectedChapter?.name,
+                      departmentName: memberProfileData.user?.departmentName || selectedMemberSummary?.department?.name,
+                      createdAt: memberProfileData.user?.joinedAt || memberProfileData.user?.createdAt || selectedMemberSummary?.joinedAt,
+                      deactivatedByRole: memberProfileData.user?.deactivatedByRole,
+                      isLead: selectedMemberSummary?.isLead,
+                    }}
+                    progressData={{
+                      summary: memberProfileData.summary,
+                      courses: memberProfileData.courses,
+                      learningDetail: memberProfileData.learningDetail,
+                    }}
+                    loading={memberProfileLoading}
+                    error={memberProfileError}
+                    onRefresh={() => selectedMemberSummary && handleOpenMemberProfile(selectedMemberSummary)}
+                  />
+                ) : null}
+
+                <div className="flex justify-between items-center gap-3 pt-3 border-t border-[#eff4ff]">
+                  <button
+                    type="button"
+                    onClick={handleBackToChapter}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition"
+                  >
+                    ← Quay lại Chapter
+                  </button>
+                  <Button variant="secondary" onClick={handleCloseModal}>
+                    Đóng
+                  </Button>
+                </div>
+              </>
+            )}
           </div>
         )}
       </Modal>

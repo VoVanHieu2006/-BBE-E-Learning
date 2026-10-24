@@ -45,14 +45,14 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
   const mayViewInactive = await canViewInactiveChapterMember(auth.context!, chapterId)
   if (includeInactive && !mayViewInactive) return NextResponse.json({ error: { code: 'AccessDenied', message: 'Only Admin or this Chapter lead may view inactive accounts' } }, { status: 403 })
   const page = Math.max(parseInt(url.searchParams.get('page') || '1', 10), 1)
-  const limit = Math.min(Math.max(parseInt(url.searchParams.get('limit') || '20', 10), 1), 100)
+  const limit = Math.min(Math.max(parseInt(url.searchParams.get('limit') || '20', 10), 1), 250)
   const skip = (page - 1) * limit
 
   const [sys, chapter, rawMembers] = await Promise.all([
     getPublishedSystemData(),
     prisma.chapter.findUnique({ where: { id: chapterId }, select: { organization_unit_id: true } }),
     listChapterMembers(chapterId, {
-      roles: ['MEMBER'],
+      roles: ['MEMBER', 'CHAPTER_LEADER'],
       status: includeInactive ? undefined : 'ACTIVE',
       search,
     }),

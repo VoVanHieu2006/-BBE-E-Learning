@@ -61,7 +61,7 @@ export async function GET(
     },
   })
 
-  if (!target || target.role !== 'MEMBER') {
+  if (!target || !['MEMBER', 'CHAPTER_LEADER'].includes(target.role)) {
     return NextResponse.json({ error: { code: 'NotFound', message: 'Thành viên không thuộc chapter này' } }, { status: 404 })
   }
   if (target.status !== 'ACTIVE' && !await canViewInactiveChapterMember(auth.context!, chapterId)) {
