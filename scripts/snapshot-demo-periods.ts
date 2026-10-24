@@ -54,6 +54,10 @@ async function main() {
   }
   const seasons = await prisma.transferSeason.findMany({ where: { ends_at: { lte: new Date() } } })
   for (const season of seasons) {
+    const memberItems = await individualPeriodRows(prisma, season.starts_at, season.ends_at, 'MEMBER', undefined, undefined, season.id)
+    await save(`ranking:MEMBER:${season.id}`, { group: 'MEMBER', periodType: 'TERM', period: season, state: 'FINALIZED', items: memberItems })
+    const ltItems = await individualPeriodRows(prisma, season.starts_at, season.ends_at, 'LT', undefined, undefined, season.id)
+    await save(`ranking:LT:${season.id}`, { group: 'LT', periodType: 'TERM', period: season, state: 'FINALIZED', items: ltItems })
     const dnaItems = await individualPeriodRows(prisma, season.starts_at, season.ends_at, 'DNA')
     await save(`ranking:DNA:${season.id}`, { group: 'DNA', periodType: 'TERM', period: season, state: 'FINALIZED', items: dnaItems })
     const chapterResult = await chapterSeasonRows(prisma, season.id, new Date())
@@ -74,4 +78,9 @@ async function main() {
   }, null, 2))
 }
 
-main().catch((error) => { console.error(error); process.exitCode = 1 }).finally(() => prisma.$disconnect())
+main()
+  .catch((error) => { console.error(error); process.exitCode = 1 })
+  .finally(async () => {
+    await prisma.$disconnect()
+    process.exit(process.exitCode || 0)
+  })

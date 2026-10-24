@@ -16,10 +16,14 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
   const [lessonError, setLessonError] = useState<{ code: string; message: string; status: number } | null>(null);
   const [progress, setProgress] = useState<any>(null);
   const [replayEpoch, setReplayEpoch] = useState(0);
-  useEffect(() => { setReplayEpoch(0) }, [currentLessonId]);
+  const seenRewardKeysRef = useRef<Set<string>>(new Set());
+  const durationMismatchRef = useRef(false);
+  useEffect(() => {
+    setReplayEpoch(0);
+    durationMismatchRef.current = false;
+  }, [currentLessonId]);
   const [starReward, setStarReward] = useState<number | null>(null);
   const [starBalance, setStarBalance] = useState<number | null>(null);
-  const seenRewardKeysRef = useRef<Set<string>>(new Set());
   const [courseData, setCourseData] = useState<any>(null);
   const [courseProgress, setCourseProgress] = useState<any>(null);
   const [loadingLesson, setLoadingLesson] = useState(true);
@@ -139,6 +143,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
     if (newLessonId === currentLessonId) return;
 
     const reqId = ++switchReqIdRef.current;
+    if (typeof window !== 'undefined' && (window as any).__bbeProbe) (window as any).__bbePerf?.push({ name: 'lesson_switch', at: performance.now() });
     setIsSwitchingLesson(true);
     setActiveTab('desc'); // Reset tab to description when switching lessons
 
@@ -182,6 +187,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
       setProgress({ lessonId: newLessonId, completed: false, progressPercentage: 0 });
     }
 
+    if (typeof window !== 'undefined' && (window as any).__bbeProbe) (window as any).__bbePerf?.push({ name: 'lesson_switch_done', at: performance.now() });
     setIsSwitchingLesson(false);
   }
 
@@ -202,6 +208,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
     viewSessionId: string;
     playbackRate: number;
     event: 'PLAY' | 'HEARTBEAT' | 'PAUSE' | 'ENDED';
+    playerDurationSeconds?: number;
   }) {
     if (!token) return null; // Guests don't track progress
     const activeLessonId = currentLessonId;
@@ -211,6 +218,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
       body: JSON.stringify({
         positionSeconds: event.currentTime,
         furthestWatchedPositionSeconds: event.furthest,
+        playerDurationSeconds: event.playerDurationSeconds,
         playbackRate: event.playbackRate,
         event: event.event,
         viewSessionId: event.viewSessionId,
@@ -230,6 +238,20 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
       watchedUntil: data.furthestWatchedPositionSeconds ?? event.furthest,
       lastPosition: data.lastPositionSeconds ?? prev?.lastPosition,
     }));
+
+    if (data.videoDurationMismatch?.playerSeconds > 0) {
+      const mismatch = data.videoDurationMismatch;
+      if (!durationMismatchRef.current) {
+        durationMismatchRef.current = true;
+        if (isAdmin) {
+          showToast(
+            'error',
+            `Thời lượng video trong DB (${mismatch.databaseSeconds}s) lệch với YouTube (${Number(mismatch.playerSeconds).toFixed(1)}s). Hãy chạy "npm run db:fix-durations" hoặc sửa số giây của bài học.`,
+            'Lệch thời lượng video'
+          );
+        }
+      }
+    }
 
     if (data.starReward?.awarded && Number(data.starReward.amount) > 0) {
       celebrateStarReward(Number(data.starReward.amount), data.starReward.rewardKey || null);
@@ -335,6 +357,17 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
   const isGuest = !token;
   const allowFreeSeek = isGuest || isAdmin;
 
+  const formatWatchMonth = (monthKey: string) => {
+    const [year, month] = String(monthKey || '').split('-');
+    const names = ['T1', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'T8', 'T9', 'T10', 'T11', 'T12'];
+    const idx = Number(month) - 1;
+    return idx >= 0 && idx < names.length ? `${names[idx]}/${year}` : monthKey;
+  };
+  const historyRows: any[] = progress?.replayHistory || [];
+  const cycleVideoFull = Boolean(progress?.videoCompleted);
+  const cycleVideoPercent = Number(progress?.progressPercentage ?? 0);
+  const cycleLessonFull = Boolean(progress?.lessonCompleted);
+
   const totalLessonsCount = allCourseLessons.length || 1;
   const completedLessonsCount = courseProgress?.completedLessons ?? (progress?.completed ? 1 : 0);
   const overallPercent = Math.round((completedLessonsCount / totalLessonsCount) * 100);
@@ -367,7 +400,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
 
   return (
     <div className="min-h-screen bg-[#f8f9ff] text-[#0b1c30] flex flex-col">
-      {starReward !== null && <StarRewardCelebration amount={starReward} message="Hoàn thành video, nhận Star thôi!" />}
+      {starReward !== null && <StarRewardCelebration amount={starReward} balance={starBalance} message="Hoàn thành video, nhận Star thôi!" />}
       <Toast toast={toast} onClose={() => setToast(null)} />
 
       {/* Top Classroom Header with Official Theme: Navy #172554, Blue #2563EB, White #ffffff */}
@@ -518,6 +551,70 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
               </div>
             )}
           </div>
+
+          {/* Lịch sử học của chính video này: chu kỳ đào tạo khác lượt xem thưởng tháng */}
+          {!isGuest && (cycleVideoPercent > 0 || cycleLessonFull || historyRows.length > 0) && (
+            <div className="rounded-2xl border border-[#eff4ff] bg-white p-4 max-w-5xl w-full mx-auto shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-[#eff4ff]">
+                <h3 className="text-xs font-bold text-[#172554] uppercase tracking-wide flex items-center gap-1.5">
+                  <span>🗓️</span> Lịch sử học video này
+                </h3>
+                <span className="text-[10px] text-[#737686]">
+                  "Hoàn thành đào tạo" (chu kỳ học) khác "lượt xem thưởng" (theo tháng) — hai mốc độc lập.
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3">
+                <div className={`rounded-xl border px-3 py-2 text-xs ${cycleVideoFull ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-[#cbdbf5] bg-[#f8f9ff] text-[#172554]'}`}>
+                  <p className="font-bold">{cycleVideoFull ? '✓ Đã xem đủ video (chu kỳ này)' : `Đang xem: ${cycleVideoPercent}% video`}</p>
+                  <p className="text-[10px] opacity-80 mt-0.5">
+                    Tiến độ backend ghi nhận: {Math.round(progress?.watchedUntil || 0)}/{lesson?.video?.durationSeconds || 0}s
+                  </p>
+                </div>
+                <div className={`rounded-xl border px-3 py-2 text-xs ${cycleLessonFull ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-[#cbdbf5] bg-[#f8f9ff] text-[#172554]'}`}>
+                  <p className="font-bold">{cycleLessonFull ? '✓ Bài học hoàn thành' : hasQuiz ? 'Bài học: còn cần quiz đạt' : 'Bài học: chưa hoàn thành'}</p>
+                  <p className="text-[10px] opacity-80 mt-0.5">
+                    {hasQuiz ? 'Video + quiz đều đạt mới tính xong bài của chu kỳ.' : 'Chu kỳ này chưa có bài kiểm tra đi kèm.'}
+                  </p>
+                </div>
+                <div className={`rounded-xl border px-3 py-2 text-xs ${(progress?.videoStarsThisMonth?.awardedStars || 0) > 0 ? 'border-amber-200 bg-amber-50 text-amber-900' : 'border-[#cbdbf5] bg-[#f8f9ff] text-[#172554]'}`}>
+                  <p className="font-bold">
+                    {(progress?.videoStarsThisMonth?.awardedStars || 0) > 0
+                      ? `Tháng này đã nhận: +${progress.videoStarsThisMonth.awardedStars} ⭐`
+                      : 'Tháng này chưa nhận sao video'}
+                  </p>
+                  <p className="text-[10px] opacity-80 mt-0.5">
+                    {(progress?.videoStarsThisMonth?.awardedStars || 0) > 0 || progress?.videoStarsThisMonth?.completed
+                      ? 'Đủ lượt xem nhận thưởng trong tháng hiện tại.'
+                      : 'Xem lại toàn bộ video trong tháng để nhận sao.'}
+                  </p>
+                </div>
+              </div>
+
+              {historyRows.length > 0 && (
+                <div className="pt-3 mt-3 border-t border-dashed border-[#eff4ff]">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-[#737686] mb-1.5">Những tháng trước</p>
+                  <div className="flex flex-wrap gap-2">
+                    {historyRows.map((row: any) => (
+                      <span
+                        key={row.competitionMonthId}
+                        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-bold ${
+                          row.awardedStars > 0
+                            ? 'border-amber-200 bg-amber-50 text-amber-800'
+                            : row.completed
+                              ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                              : 'border-[#cbdbf5] bg-white text-slate-600'
+                        }`}
+                        title={`Đã xem ${row.watchedSeconds}s`}
+                      >
+                        {formatWatchMonth(row.competitionMonth)}: {row.awardedStars > 0 ? `+${row.awardedStars} ⭐` : row.completed ? '✓ đã xem lại' : `${row.watchedSeconds}s`}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Under-Video Action Bar: Prev / Next with Brand Orange Button #F97316 */}
           {progress?.replay && <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-950"><p>Tháng {progress.replay.competitionMonth}: {progress.replay.completed ? 'Đã hoàn tất lượt xem nhận sao.' : 'Có thể xem lại để nhận sao tháng. Tiến độ đào tạo được giữ nguyên.'}</p><Button variant="outline" onClick={() => setReplayEpoch((value) => value + 1)}>Xem lại từ đầu</Button></div>}

@@ -18,6 +18,7 @@ const SPECS = [
   { name: 'BBE Seed Xuất sắc Chapter', qualified: 46, sepStars: 1200, octStars: 1275 },
   { name: 'BBE Seed Đúng 50 Chapter', qualified: 12, sepStars: 400, octStars: 504 },
   { name: 'BBE Seed Đúng 20 Chapter', qualified: 20, sepStars: 300, octStars: 400 },
+  { name: 'BBE Seed Đúng 21 Chapter', qualified: 16, sepStars: 210, octStars: 210 },
   { name: 'BBE Seed Checkpoint 70 Chapter', qualified: 35, sepStars: 900, octStars: 1100 },
 ] as const
 
@@ -54,11 +55,21 @@ async function main() {
     orderBy: { created_at: 'asc' },
   })
   const coreLessons = coreCourses.flatMap((course) => course.sessions.flatMap((session) => session.lessons))
-  if (coreLessons.length !== 50) throw new Error(`Expected 50 core lessons, found ${coreLessons.length}`)
+  if (!coreLessons.length) throw new Error('A published core curriculum is required')
   const firstVideoId = coreLessons.find((lesson) => lesson.video)?.video?.id
   if (!firstVideoId) throw new Error('Missing core video')
   const sep = await prisma.competitionMonth.findUniqueOrThrow({ where: { key: '2026-09' } })
   const oct = await prisma.competitionMonth.findUniqueOrThrow({ where: { key: '2026-10' } })
+
+  const exact70Count = Math.ceil(coreLessons.length * 0.70)
+  const below70Count = exact70Count - 1
+  const above70Count = Math.min(coreLessons.length, exact70Count + 5)
+  const dynamicOverrides: Record<string, number> = {
+    'member.zero@bbe.vn': 0,
+    'member.below70@bbe.vn': below70Count,
+    'member.exact70@bbe.vn': exact70Count,
+    'member.above70@bbe.vn': above70Count,
+  }
 
   const participants: Array<{ id: string; email: string; chapterId: string | null; chapterName: string | null; counts: number; sepStars: number; octStars: number }> = []
   for (const spec of SPECS) {
@@ -66,18 +77,18 @@ async function main() {
     if (!chapter) throw new Error(`Missing chapter ${spec.name}`)
     const rows = await prisma.chapterMember.findMany({ where: { chapter_id: chapter.id }, include: { user: { select: { id: true, email: true, role: true } } } })
     const members = rows.filter((row) => row.user.role === 'MEMBER').sort((a, b) => a.user.email.localeCompare(b.user.email))
-    const counts = members.map(() => 10)
-    for (let index = 0; index < spec.qualified && index < counts.length; index++) counts[index] = 36
+    const counts = members.map(() => 5)
+    for (let index = 0; index < spec.qualified && index < counts.length; index++) counts[index] = above70Count
     for (let index = 0; index < members.length; index++) {
-      const override = OVERRIDES[members[index].user.email]
+      const override = dynamicOverrides[members[index].user.email] ?? OVERRIDES[members[index].user.email]
       if (override !== undefined) counts[index] = override
     }
-    let qualified = counts.filter((count) => count >= 35).length
+    let qualified = counts.filter((count) => count >= exact70Count).length
     for (let index = 0; index < counts.length && qualified > spec.qualified; index++) {
-      if (counts[index] >= 35) { counts[index] = 34; qualified-- }
+      if (counts[index] >= exact70Count) { counts[index] = below70Count; qualified-- }
     }
     for (let index = 0; index < counts.length && qualified < spec.qualified; index++) {
-      if (counts[index] < 35) { counts[index] = 36; qualified++ }
+      if (counts[index] < exact70Count) { counts[index] = above70Count; qualified++ }
     }
     const octStars = distribute(spec.octStars, members.length)
     const sepStars = distribute(spec.sepStars, members.length)
@@ -120,7 +131,21 @@ async function main() {
   const ids = participants.map((row) => row.id)
   const cycles = await prisma.learningCycle.findMany({ where: { user_id: { in: ids }, ends_at: null }, select: { id: true, user_id: true } })
   const cycleByUser = new Map(cycles.map((cycle) => [cycle.user_id, cycle.id]))
-  if (cycleByUser.size !== ids.length) throw new Error(`Missing active cycles: ${ids.length - cycleByUser.size}`)
+  for (const person of participants) {
+    let cycleId = cycleByUser.get(person.id)
+    if (!cycleId) {
+      const existing = await prisma.learningCycle.findFirst({ where: { user_id: person.id, ends_at: null } })
+      if (existing) {
+        cycleId = existing.id
+      } else {
+        const created = await prisma.learningCycle.create({
+          data: { user_id: person.id, chapter_id: person.chapterId, trigger_key: `rich-seed:${person.id}`, starts_at: CUTOVER, provenance: 'LEGACY' },
+        })
+        cycleId = created.id
+      }
+      cycleByUser.set(person.id, cycleId)
+    }
+  }
 
   const lessonProgress: any[] = []
   const cycleProgress: any[] = []
@@ -129,7 +154,7 @@ async function main() {
     const cycleId = cycleByUser.get(person.id)!
     for (let index = 0; index < person.counts; index++) {
       const lesson = coreLessons[index]
-      const completedAt = new Date(Date.UTC(2026, 8, 10 + (index % 12), 5, 0, 0))
+      const completedAt = new Date(Date.UTC(2026, 8, 5 + (index % 12), 5, 0, 0))
       const duration = lesson.video?.duration_seconds || 180
       lessonProgress.push({
         user_id: person.id, lesson_id: lesson.id, completed: true, completed_at: completedAt,
@@ -145,11 +170,16 @@ async function main() {
       let part = 0
       while (left > 0) {
         const amount = Math.min(5, left)
+        const awardedAt = month === 'SEP'
+          ? (part % 2 === 0
+              ? new Date(Date.UTC(2026, 8, 5 + (part % 8), 10, 0, 0))
+              : new Date(Date.UTC(2026, 8, 16 + (part % 10), 14, 0, 0)))
+          : new Date(Date.UTC(2026, 9, 5 + part, 12, 0, 0))
         stars.push({
           user_id: person.id, amount, reason: StarReason.VIDEO_COMPLETION,
           reward_key: `rich-seed:${month}:${person.id}:${part}`,
           source_type: 'VIDEO', source_id: firstVideoId,
-          awarded_at: month === 'SEP' ? new Date(Date.UTC(2026, 8, 20 + part, 12, 0, 0)) : new Date(Date.UTC(2026, 9, 5 + part, 12, 0, 0)),
+          awarded_at: awardedAt,
           competition_month_id: monthId, learning_cycle_id: cycleId,
           chapter_at_award_id: person.chapterId, provenance: 'NATIVE',
           metadata: { seed: true, chapter: person.chapterName, month: month === 'SEP' ? '2026-09' : '2026-10' },

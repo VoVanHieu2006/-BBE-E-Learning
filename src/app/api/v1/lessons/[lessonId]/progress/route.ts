@@ -30,6 +30,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { lesson
   }
   const positionSeconds = Number(body.positionSeconds ?? body.currentPositionSeconds ?? body.position ?? 0)
   const furthestWatchedPositionSeconds = Number(body.furthestWatchedPositionSeconds ?? body.furthest ?? positionSeconds)
+  const playerDurationSeconds = Number(body.playerDurationSeconds ?? body.playerDuration ?? 0)
   const playbackRate = Number(body.playbackRate ?? body.playback_rate ?? 2)
   const event = body.event ?? body.playbackEvent
   if (!Number.isFinite(positionSeconds) || positionSeconds < 0 || !Number.isFinite(furthestWatchedPositionSeconds)) {
@@ -41,6 +42,10 @@ export async function PATCH(request: NextRequest, { params }: { params: { lesson
 
   // The legacy `completed` client flag is intentionally ignored. Completion is
   // derived only from server-validated watched content.
+  if ((body.playerDurationSeconds !== undefined || body.playerDuration !== undefined)
+    && (!Number.isFinite(playerDurationSeconds) || playerDurationSeconds < 0)) {
+    return NextResponse.json({ error: { code: 'InvalidVideoDuration', message: 'Thời lượng video không hợp lệ.' } }, { status: 400 })
+  }
   const result = await recordVideoHeartbeat(
     userId,
     params.lessonId,
@@ -48,7 +53,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { lesson
     furthestWatchedPositionSeconds,
     isAdmin,
     body.viewSessionId || 'COMPAT',
-    { playbackRate, event },
+    { playbackRate, event, playerDurationSeconds },
   )
   if (!result) return NextResponse.json({ error: { code: 'LessonNotFound' } }, { status: 404 })
   if ('error' in result) return NextResponse.json(result, { status: 403 })
@@ -79,7 +84,7 @@ export async function GET(request: NextRequest, { params }: { params: { lessonId
         updated_at: true,
         lesson: {
           select: {
-            video: { select: { duration_seconds: true } },
+            video: { select: { duration_seconds: true, id: true } },
           },
         },
       },
@@ -107,9 +112,58 @@ export async function GET(request: NextRequest, { params }: { params: { lessonId
   const videoCompleted = hasWatchedFullVideo(Math.min(furthest, duration || Number.MAX_SAFE_INTEGER), duration)
   const progressPercentage = duration > 0 ? Math.min(100, Math.max(0, Math.round((furthest / duration) * 100))) : 0
 
+  // ---- Per-video learning history (LearningCycle + MonthlyVideoReplay + StarLedger) ----
+  const videoId = progress?.lesson.video?.id || null
+  const now = new Date()
+  const recentMonths = await prisma.competitionMonth.findMany({
+    where: { starts_at: { lte: now } },
+    orderBy: { starts_at: 'desc' },
+    take: 6,
+    select: { id: true, key: true, starts_at: true },
+  })
+  const monthIds = recentMonths.map((row) => row.id)
+  const currentMonth = recentMonths.find((row) => row.starts_at.getTime() <= now.getTime())
+  const [replayRows, videoStarRows] = videoId && monthIds.length ? await Promise.all([
+    prisma.monthlyVideoReplay.findMany({
+      where: { user_id: userId, video_id: videoId, competition_month_id: { in: monthIds } },
+      select: { competition_month_id: true, learning_cycle_id: true, furthest_seconds: true, completed_at: true, last_heartbeat_at: true },
+    }),
+    prisma.starLedger.findMany({
+      where: { user_id: userId, source_type: 'VIDEO', source_id: videoId, competition_month_id: { in: monthIds } },
+      select: { competition_month_id: true, amount: true, awarded_at: true },
+      orderBy: { awarded_at: 'desc' },
+    }),
+  ]) : [[], []]
+
+  const starsByMonth = new Map<string, number>()
+  for (const star of videoStarRows) {
+    starsByMonth.set(star.competition_month_id, (starsByMonth.get(star.competition_month_id) || 0) + star.amount)
+  }
+  const replayHistory = recentMonths.map((month) => {
+    const replay = replayRows.find((row) => row.competition_month_id === month.id)
+    return {
+      competitionMonth: month.key,
+      competitionMonthId: month.id,
+      learningCycleId: replay?.learning_cycle_id || null,
+      watchedSeconds: replay?.furthest_seconds || 0,
+      completed: Boolean(replay?.completed_at),
+      completedAt: replay?.completed_at || null,
+      lastHeartbeatAt: replay?.last_heartbeat_at || null,
+      awardedStars: starsByMonth.get(month.id) || 0,
+    }
+  }).filter((row) => row.watchedSeconds > 0 || row.awardedStars > 0)
+  const thisMonthReplay = currentMonth ? replayHistory.find((row) => row.competitionMonthId === currentMonth.id) || null : null
+
   return NextResponse.json({
     lessonId: params.lessonId,
     replay,
+    videoStarsThisMonth: {
+      competitionMonth: replay?.competitionMonth || null,
+      completed: Boolean(replay?.completed),
+      awardedStars: thisMonthReplay?.awardedStars ?? 0,
+      suppressed: Boolean(replay?.suppressed),
+    },
+    replayHistory,
     id: params.lessonId,
     completed: isLessonCompleted,
     lessonCompleted: isLessonCompleted,

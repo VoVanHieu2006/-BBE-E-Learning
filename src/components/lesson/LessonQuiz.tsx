@@ -3,6 +3,8 @@ import Link from 'next/link';
 import { useState, useEffect, useRef } from 'react';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
+import Modal from '@/components/ui/Modal';
+import { QUIZ_COOLDOWN_MINUTES } from '@/lib/config/quiz';
 
 interface LessonQuizProps {
   lessonId: string;
@@ -146,7 +148,7 @@ export default function LessonQuiz({
 
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       e.preventDefault();
-      e.returnValue = 'Bạn đang làm bài kiểm tra. Nếu rời khỏi trang, bài thi sẽ bị hủy và bạn phải chờ 24h mới được làm lại!';
+      e.returnValue = 'Bạn đang làm bài kiểm tra. Nếu rời khỏi trang, bài thi sẽ bị hủy.';
       return e.returnValue;
     };
 
@@ -227,7 +229,7 @@ export default function LessonQuiz({
           onQuizPassed();
           onToast?.('success', `Chúc mừng! Bạn đạt ${data.scorePercent}% và đã vượt qua ${assessmentLabel.toLowerCase()}!`, 'Đạt yêu cầu');
         } else {
-          onToast?.('error', `Bạn đạt ${data.scorePercent}%. Cần đạt từ 85% để vượt qua bài học. Bạn có thể làm lại sau 24h!`, 'Chưa đạt');
+          onToast?.('error', `Bạn đạt ${data.scorePercent}%. Cần đạt từ 85% để vượt qua bài học. Sau thời gian giãn cách ${QUIZ_COOLDOWN_MINUTES} phút bạn có thể làm lại.`, 'Chưa đạt');
         }
       } else {
         onToast?.('error', data?.error?.message || 'Lỗi nộp bài kiểm tra.', 'Lỗi');
@@ -261,7 +263,7 @@ export default function LessonQuiz({
         localStorage.removeItem(`quiz_answers_${attemptId}`);
       }
       setShowCancelModal(false);
-      onToast?.('info', data.message || 'Đã hủy bài kiểm tra. Bạn cần đợi 24 giờ để làm lại.', 'Đã hủy bài làm');
+      onToast?.('info', data.message || `Đã hủy bài kiểm tra. Cần đợi ${QUIZ_COOLDOWN_MINUTES} phút trước khi làm lại.`, 'Đã hủy bài làm');
       onCancel?.(data);
     } catch (e: any) {
       onToast?.('error', e?.message || 'Lỗi khi hủy bài kiểm tra.', 'Lỗi');
@@ -295,9 +297,14 @@ export default function LessonQuiz({
         </div>
 
         {attempt && !result && (
-          <div className="flex items-center gap-2 bg-red-50 text-red-700 px-3 py-1.5 rounded-xl text-xs font-bold border border-red-200 self-start sm:self-auto">
-            <span>⏱️</span>
-            <span>Còn lại: {formatTimer(timeLeft)}</span>
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 bg-[#eff4ff] text-[#2563EB] px-3 py-1.5 rounded-xl text-xs font-bold border border-[#cbdbf5]" title="Số câu tổng của lượt làm bài">
+              {questions.length} câu · {Math.round(timeLeft / 60)} phút còn lại
+            </span>
+            <div className="flex items-center gap-2 bg-red-50 text-red-700 px-3 py-1.5 rounded-xl text-xs font-bold border border-red-200">
+              <span>⏱️</span>
+              <span>Còn lại: {formatTimer(timeLeft)}</span>
+            </div>
           </div>
         )}
       </div>
@@ -349,7 +356,7 @@ export default function LessonQuiz({
           <p className="text-xs max-w-lg mx-auto opacity-90 leading-relaxed">
             {result.passed
               ? `Bạn đã vượt qua ${assessmentLabel.toLowerCase()}! Hãy quay lại lộ trình để tiếp tục.`
-              : 'Bạn cần đạt từ 85% điểm trở lên để vượt qua bài học. Theo quy chế, bạn có thể làm lại sau 24 giờ.'}
+              : 'Bạn cần đạt từ 85% điểm trở lên để vượt qua bài học. Sau giãn cách ' + QUIZ_COOLDOWN_MINUTES + ' phút bạn có thể làm lại.'}
           </p>
         </div>
       )}
@@ -368,8 +375,8 @@ export default function LessonQuiz({
               >
                 <div className="flex items-start justify-between gap-3">
                   <h4 className="font-bold text-sm text-[#172554] leading-relaxed">
-                    <span className="text-[#2563EB] mr-1.5">Câu {qIdx + 1}:</span>
-                    {q.questionText}
+                    <span className="text-[#2563EB] mr-1.5 whitespace-nowrap">Câu <span className="tabular-nums">{qIdx + 1}</span>/{questions.length}:</span>
+                    <span>{q.questionText}</span>
                   </h4>
                   {answerResult && (
                     <span
@@ -480,43 +487,49 @@ export default function LessonQuiz({
         </div>
       )}
 
-      {/* Modal xác nhận Hủy bài kiểm tra */}
-      {showCancelModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fadeIn">
-          <Card className="max-w-md w-full p-6 space-y-4 shadow-2xl border border-red-200">
-            <div className="flex items-center gap-3 text-red-600">
-              <span className="text-2xl">⚠️</span>
-              <h4 className="text-base font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
-                Xác nhận hủy bài kiểm tra?
-              </h4>
-            </div>
-            <p className="text-xs text-[#434655] leading-relaxed">
-              Nếu hủy, bài làm này sẽ <strong>không được tính kết quả</strong>. Bạn sẽ phải <strong>chờ 24 giờ</strong> nữa mới có thể bắt đầu làm lại bài kiểm tra này.
-            </p>
-            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-800">
-              💡 Bạn nên làm tiếp và nộp bài để được ghi nhận điểm số thay vì hủy.
-            </div>
-            <div className="flex gap-2.5 pt-2">
-              <Button
-                variant="outline"
-                className="flex-1 font-bold"
-                onClick={() => setShowCancelModal(false)}
-                disabled={cancelling}
-              >
-                Tiếp tục làm bài
-              </Button>
-              <Button
-                variant="primary"
-                className="flex-1 !bg-rose-600 hover:!bg-rose-700 !text-white font-bold"
-                loading={cancelling}
-                onClick={handleCancelQuiz}
-              >
-                Xác nhận hủy
-              </Button>
-            </div>
-          </Card>
+      {/* Modal xác nhận Hủy bài kiểm tra — portal ra document.body nên luôn
+          căn giữa viewport kể cả khi người học đã cuộn xuống sâu. */}
+      <Modal
+        isOpen={showCancelModal}
+        onClose={() => setShowCancelModal(false)}
+        maxWidth="max-w-md"
+        closeOnBackdrop={false}
+        className=""
+      >
+        <div className="p-6 space-y-4 border-t-8 border-rose-200">
+          <div className="flex items-center gap-3 text-rose-600">
+            <span className="text-2xl">⚠️</span>
+            <h4 className="text-base font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
+              Xác nhận hủy bài kiểm tra?
+            </h4>
+          </div>
+          <p className="text-xs text-[#434655] leading-relaxed">
+              Nếu hủy, bài làm này sẽ <strong>không được tính kết quả</strong> và bạn sẽ chờ{' '}
+            <strong>{QUIZ_COOLDOWN_MINUTES} phút</strong> nữa mới bắt đầu được lượt làm khác.
+          </p>
+          <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-800">
+            💡 Bạn nên làm tiếp và nộp bài để được ghi nhận điểm số thay vì hủy. Bấm Escape hoặc "Tiếp tục làm bài" sẽ giữ nguyên bài của bạn.
+          </div>
+          <div className="flex gap-2.5 pt-2">
+            <Button
+              variant="outline"
+              className="flex-1 font-bold"
+              onClick={() => setShowCancelModal(false)}
+              disabled={cancelling}
+            >
+              Tiếp tục làm bài
+            </Button>
+            <Button
+              variant="primary"
+              className="flex-1 !bg-rose-600 hover:!bg-rose-700 !text-white font-bold"
+              loading={cancelling}
+              onClick={handleCancelQuiz}
+            >
+              Xác nhận hủy
+            </Button>
+          </div>
         </div>
-      )}
+      </Modal>
     </Card>
   );
 }

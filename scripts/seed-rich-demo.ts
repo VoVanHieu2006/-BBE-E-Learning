@@ -46,9 +46,14 @@ const CHAPTERS: ChapterSpec[] = [
   { name: 'BBE Seed Xuất sắc Chapter', slug: 'seed-green', size: 51, qualified: 46, kpi: 'GREEN', sepStars: 1200, octStars: 1275, create: false },
   { name: 'BBE Seed Đúng 50 Chapter', slug: 'seed-exact50', size: 24, qualified: 12, kpi: 'GREEN', sepStars: 400, octStars: 504, create: true },
   { name: 'BBE Seed Đúng 20 Chapter', slug: 'seed-exact20', size: 20, qualified: 20, kpi: 'GREEN', sepStars: 300, octStars: 400, create: true },
+  { name: 'BBE Seed Đúng 21 Chapter', slug: 'seed-exact21', size: 21, qualified: 16, kpi: 'GREEN', sepStars: 210, octStars: 210, create: true },
   {
     name: 'BBE Seed Checkpoint 70 Chapter', slug: 'seed-checkpoint', size: 50, qualified: 35, kpi: 'YELLOW', sepStars: 900, octStars: 1100, create: true,
-    demo: ['member.below70@bbe.vn', 'member.exact70@bbe.vn', 'member.above70@bbe.vn'],
+    demo: [
+      'member.below70@bbe.vn', 'member.exact70@bbe.vn', 'member.above70@bbe.vn',
+      'tie.early@bbe.vn', 'tie.late@bbe.vn', 'tie.exact1@bbe.vn', 'tie.exact2@bbe.vn',
+      'member.to.dna@demo.bbe.vn',
+    ],
   },
 ]
 
@@ -113,7 +118,7 @@ async function main() {
     orderBy: { created_at: 'asc' },
   })
   const coreLessons = coreCourses.flatMap((course) => course.sessions.flatMap((session) => session.lessons))
-  if (coreLessons.length !== 50) throw new Error(`Expected 50 published core lessons, found ${coreLessons.length}.`)
+  if (!coreLessons.length) throw new Error('A published core curriculum is required.')
   const firstVideoId = coreLessons.find((lesson) => lesson.video)?.video?.id
   if (!firstVideoId) throw new Error('A core video is required.')
   // Historical demo snapshots need the core curriculum to have been published
@@ -253,6 +258,22 @@ async function main() {
     }
   }
 
+  // Mid-month DNA transfer: user transfers to DNA on 2026-09-18
+  const dnaTransferUser = userByEmail.get('member.to.dna@demo.bbe.vn')
+  if (dnaTransferUser) {
+    const dnaGroupId = dnaGroups.get('SGDC')!
+    const existingDnaMem = await prisma.organizationMembership.findFirst({ where: { user_id: dnaTransferUser.id, unit_id: dnaGroupId } })
+    if (!existingDnaMem) {
+      await prisma.organizationMembership.create({
+        data: {
+          user_id: dnaTransferUser.id,
+          unit_id: dnaGroupId,
+          starts_at: new Date('2026-09-18T00:00:00.000Z'),
+        },
+      })
+    }
+  }
+
   // Existing seed users must be active in September for historical snapshots.
   const seedChapterIds = Array.from(chapters.values()).map((chapter) => chapter.id)
   const existingMembers = await prisma.chapterMember.findMany({ where: { chapter_id: { in: seedChapterIds } }, select: { user_id: true, chapter_id: true } })
@@ -284,39 +305,48 @@ async function main() {
       return ea.localeCompare(eb)
     })
     if (sorted.length < spec.size && spec.create) throw new Error(`${spec.name}: expected ${spec.size} members, found ${sorted.length}`)
-    const counts = sorted.map(() => 10)
-    for (let index = 0; index < spec.qualified && index < counts.length; index++) counts[index] = 36
+    const exact70Count = Math.ceil(coreLessons.length * 0.70)
+    const below70Count = exact70Count - 1
+    const above70Count = Math.min(coreLessons.length, exact70Count + 5)
+    const counts = sorted.map(() => 5)
+    for (let index = 0; index < spec.qualified && index < counts.length; index++) counts[index] = above70Count
     const emailOf = (id: string) => allDemoUsers.find((u) => u.id === id)?.email
     const overrides: Record<string, number> = {
       'member.zero@bbe.vn': 0,
-      'member.below70@bbe.vn': 34,
-      'member.exact70@bbe.vn': 35,
-      'member.above70@bbe.vn': 40,
+      'member.below70@bbe.vn': below70Count,
+      'member.exact70@bbe.vn': exact70Count,
+      'member.above70@bbe.vn': above70Count,
     }
     sorted.forEach((id, index) => {
       const email = emailOf(id)
       if (email && overrides[email] !== undefined) counts[index] = overrides[email]
     })
     // Correct the qualified count after explicit demo overrides.
-    let qualified = counts.filter((count) => count >= 35).length
+    let qualified = counts.filter((count) => count >= exact70Count).length
     for (let index = 0; index < counts.length && qualified > spec.qualified; index++) {
-      if (counts[index] >= 35 && !(emailOf(sorted[index]) || '').startsWith('member.')) { counts[index] = 34; qualified-- }
+      if (counts[index] >= exact70Count && !(emailOf(sorted[index]) || '').startsWith('member.')) { counts[index] = below70Count; qualified-- }
     }
     for (let index = 0; index < counts.length && qualified < spec.qualified; index++) {
-      if (counts[index] < 35) { counts[index] = 36; qualified++ }
+      if (counts[index] < exact70Count) { counts[index] = above70Count; qualified++ }
     }
 
     const starAmounts = distributeStars(spec.octStars, sorted.length)
     const sepStarAmounts = distributeStars(spec.sepStars, sorted.length)
+    const protectedIndices = new Set<number>()
     sorted.forEach((id, index) => {
       const email = emailOf(id)
-      if (email === 'member.zero@bbe.vn') { starAmounts[index] = 0; sepStarAmounts[index] = 0 }
-      if (email === 'member.below70@bbe.vn') { starAmounts[index] = 0; sepStarAmounts[index] = 0 }
-      if (email === 'member.exact70@bbe.vn') { starAmounts[index] = 5; sepStarAmounts[index] = 3 }
-      if (email === 'member.above70@bbe.vn') { starAmounts[index] = 50; sepStarAmounts[index] = 40 }
+      if (email === 'member.zero@bbe.vn') { starAmounts[index] = 0; sepStarAmounts[index] = 0; protectedIndices.add(index) }
+      if (email === 'member.below70@bbe.vn') { starAmounts[index] = 0; sepStarAmounts[index] = 0; protectedIndices.add(index) }
+      if (email === 'member.exact70@bbe.vn') { starAmounts[index] = 5; sepStarAmounts[index] = 3; protectedIndices.add(index) }
+      if (email === 'member.above70@bbe.vn') { starAmounts[index] = 50; sepStarAmounts[index] = 40; protectedIndices.add(index) }
+      if (email === 'tie.early@bbe.vn') { starAmounts[index] = 0; sepStarAmounts[index] = 50; protectedIndices.add(index) }
+      if (email === 'tie.late@bbe.vn') { starAmounts[index] = 0; sepStarAmounts[index] = 50; protectedIndices.add(index) }
+      if (email === 'tie.exact1@bbe.vn') { starAmounts[index] = 0; sepStarAmounts[index] = 40; protectedIndices.add(index) }
+      if (email === 'tie.exact2@bbe.vn') { starAmounts[index] = 0; sepStarAmounts[index] = 40; protectedIndices.add(index) }
+      if (email === 'member.to.dna@demo.bbe.vn') { starAmounts[index] = 0; sepStarAmounts[index] = 25; protectedIndices.add(index) }
     })
-    rebalance(starAmounts, spec.octStars)
-    rebalance(sepStarAmounts, spec.sepStars)
+    rebalance(starAmounts, spec.octStars, protectedIndices)
+    rebalance(sepStarAmounts, spec.sepStars, protectedIndices)
     sorted.forEach((id, index) => planByUser.set(id, {
       chapterSlug: spec.slug,
       counts: counts[index],
@@ -327,11 +357,11 @@ async function main() {
   // LT / President demo accounts in Chapter Demo: learning and Star data, plus DNA members.
   for (const email of ['president.green@bbe.vn', 'lt.green@bbe.vn']) {
     const user = userByEmail.get(email)
-    if (user) planByUser.set(user.id, { chapterSlug: 'seed-green', counts: 50, starsSep: 50, starsOct: 60 })
+    if (user) planByUser.set(user.id, { chapterSlug: 'seed-green', counts: coreLessons.length, starsSep: 50, starsOct: 60 })
   }
   for (const email of ['dna.sgdc@bbe.vn', 'dna.ldc@bbe.vn', 'dna.tt@bbe.vn', 'leader.dna@bbe.vn']) {
     const user = userByEmail.get(email)
-    if (user) planByUser.set(user.id, { counts: 50, starsSep: 50, starsOct: 60 })
+    if (user) planByUser.set(user.id, { counts: coreLessons.length, starsSep: 50, starsOct: 60 })
   }
 
   // Replace only this seed's progress and stars, never other users' records.
@@ -346,6 +376,7 @@ async function main() {
   for (const [userId, plan] of Array.from(planByUser.entries())) {
     const chapter = plan.chapterSlug ? chapters.get(plan.chapterSlug) : null
     const cycle = await ensureCycle(userId, chapter?.id || null)
+    const userEmail = allDemoUsers.find((u) => u.id === userId)?.email
     for (let index = 0; index < plan.counts; index++) {
       const lesson = coreLessons[index]
       const completedAt = new Date(Date.UTC(2026, 8, 10 + (index % 12), 5, 0, 0))
@@ -360,12 +391,73 @@ async function main() {
       })
     }
     const makeStars = (total: number, monthId: string, month: 'SEP' | 'OCT') => {
+      if (total <= 0) return
+      if (month === 'SEP') {
+        if (userEmail === 'tie.early@bbe.vn') {
+          starRows.push({
+            user_id: userId, amount: 50, reason: 'VIDEO_COMPLETION',
+            reward_key: `rich-seed:${month}:${userId}:tie-early`,
+            source_type: 'VIDEO', source_id: firstVideoId,
+            awarded_at: new Date('2026-09-20T10:00:00.000Z'), competition_month_id: monthId,
+            learning_cycle_id: cycle.id, chapter_at_award_id: chapter?.id || null,
+            provenance: 'NATIVE', metadata: { seed: true, chapter: plan.chapterSlug || null, month: '2026-09' },
+          })
+          return
+        }
+        if (userEmail === 'tie.late@bbe.vn') {
+          starRows.push({
+            user_id: userId, amount: 50, reason: 'VIDEO_COMPLETION',
+            reward_key: `rich-seed:${month}:${userId}:tie-late`,
+            source_type: 'VIDEO', source_id: firstVideoId,
+            awarded_at: new Date('2026-09-20T10:00:15.000Z'), competition_month_id: monthId,
+            learning_cycle_id: cycle.id, chapter_at_award_id: chapter?.id || null,
+            provenance: 'NATIVE', metadata: { seed: true, chapter: plan.chapterSlug || null, month: '2026-09' },
+          })
+          return
+        }
+        if (userEmail === 'tie.exact1@bbe.vn') {
+          starRows.push({
+            user_id: userId, amount: 40, reason: 'VIDEO_COMPLETION',
+            reward_key: `rich-seed:${month}:${userId}:tie-exact1`,
+            source_type: 'VIDEO', source_id: firstVideoId,
+            awarded_at: new Date('2026-09-21T08:30:00.100Z'), competition_month_id: monthId,
+            learning_cycle_id: cycle.id, chapter_at_award_id: chapter?.id || null,
+            provenance: 'NATIVE', metadata: { seed: true, chapter: plan.chapterSlug || null, month: '2026-09' },
+          })
+          return
+        }
+        if (userEmail === 'tie.exact2@bbe.vn') {
+          starRows.push({
+            user_id: userId, amount: 40, reason: 'VIDEO_COMPLETION',
+            reward_key: `rich-seed:${month}:${userId}:tie-exact2`,
+            source_type: 'VIDEO', source_id: firstVideoId,
+            awarded_at: new Date('2026-09-21T08:30:00.600Z'), competition_month_id: monthId,
+            learning_cycle_id: cycle.id, chapter_at_award_id: chapter?.id || null,
+            provenance: 'NATIVE', metadata: { seed: true, chapter: plan.chapterSlug || null, month: '2026-09' },
+          })
+          return
+        }
+        if (userEmail === 'member.to.dna@demo.bbe.vn') {
+          starRows.push({
+            user_id: userId, amount: 25, reason: 'VIDEO_COMPLETION',
+            reward_key: `rich-seed:${month}:${userId}:to-dna`,
+            source_type: 'VIDEO', source_id: firstVideoId,
+            awarded_at: new Date('2026-09-10T08:00:00.000Z'), competition_month_id: monthId,
+            learning_cycle_id: cycle.id, chapter_at_award_id: chapter?.id || null,
+            provenance: 'NATIVE', metadata: { seed: true, chapter: plan.chapterSlug || null, month: '2026-09' },
+          })
+          return
+        }
+      }
+
       let left = total
       let part = 0
       while (left > 0) {
         const amount = Math.min(5, left)
         const awardedAt = month === 'SEP'
-          ? new Date(Date.UTC(2026, 8, 20 + part, 12, 0, 0))
+          ? (part % 2 === 0
+              ? new Date(Date.UTC(2026, 8, 5 + (part % 8), 10, 0, 0))
+              : new Date(Date.UTC(2026, 8, 16 + (part % 10), 14, 0, 0)))
           : new Date(Date.UTC(2026, 9, 5 + part, 12, 0, 0))
         starRows.push({
           user_id: userId, amount, reason: 'VIDEO_COMPLETION',
@@ -411,23 +503,47 @@ async function main() {
     update: {},
     create: { code: '2026-OCT', starts_at: new Date('2026-10-01T00:00:00+07:00'), ends_at: new Date('2027-04-01T00:00:00+07:00'), reward_boundary_at: VN_BOUNDARY_OCT },
   })
-  for (const chapter of Array.from(chapters.values())) {
-    for (const [season, startsAt, endsAt] of [
-      [aprSeason, new Date('2026-04-01T00:00:00+07:00'), new Date('2026-10-01T00:00:00+07:00')],
-      [octSeason, new Date('2026-10-01T00:00:00+07:00'), new Date('2027-04-01T00:00:00+07:00')],
-    ] as const) {
-      const existingTerm = await prisma.chapterCompetitionTerm.findFirst({ where: { chapter_id: chapter.id, season_id: season.id } })
-      if (!existingTerm) await prisma.chapterCompetitionTerm.create({ data: { chapter_id: chapter.id, season_id: season.id, starts_at: startsAt, ends_at: endsAt } })
-      const existingReorganization = await prisma.chapterReorganization.findFirst({ where: { chapter_id: chapter.id, transfer_season_id: season.id, status: 'APPLIED' } })
-      if (!existingReorganization) {
-        await prisma.chapterReorganization.create({
-          data: {
-            chapter_id: chapter.id, transfer_season_id: season.id, effective_at: startsAt,
-            applied_at: new Date(startsAt.getTime() - 86_400_000), status: 'APPLIED',
-            created_by_user_id: admin.id, confirmed_at: new Date(startsAt.getTime() - 2 * 86_400_000), term_number: season.code === '2026-OCT' ? 2 : 1,
-          },
-        })
-      }
+  const chapterTransferSchedule: Record<string, Date> = {
+    'seed-checkpoint': new Date('2026-09-15T00:00:00+07:00'),
+    'seed-balanced': new Date('2026-09-25T00:00:00+07:00'),
+    'seed-exact20': new Date('2026-10-10T00:00:00+07:00'),
+  }
+
+  for (const [slug, chapter] of Array.from(chapters.entries())) {
+    const transferDate = chapterTransferSchedule[slug] || new Date('2026-10-01T00:00:00+07:00')
+    const aprStart = new Date('2026-04-01T00:00:00+07:00')
+    const aprEnd = transferDate
+    const octStart = transferDate
+    const octEnd = new Date('2027-04-01T00:00:00+07:00')
+
+    const existingAprTerm = await prisma.chapterCompetitionTerm.findFirst({ where: { chapter_id: chapter.id, season_id: aprSeason.id } })
+    if (!existingAprTerm) {
+      await prisma.chapterCompetitionTerm.create({ data: { chapter_id: chapter.id, season_id: aprSeason.id, starts_at: aprStart, ends_at: aprEnd } })
+    } else {
+      await prisma.chapterCompetitionTerm.update({ where: { id: existingAprTerm.id }, data: { starts_at: aprStart, ends_at: aprEnd } })
+    }
+
+    const existingOctTerm = await prisma.chapterCompetitionTerm.findFirst({ where: { chapter_id: chapter.id, season_id: octSeason.id } })
+    if (!existingOctTerm) {
+      await prisma.chapterCompetitionTerm.create({ data: { chapter_id: chapter.id, season_id: octSeason.id, starts_at: octStart, ends_at: octEnd } })
+    } else {
+      await prisma.chapterCompetitionTerm.update({ where: { id: existingOctTerm.id }, data: { starts_at: octStart, ends_at: octEnd } })
+    }
+
+    const existingReorganization = await prisma.chapterReorganization.findFirst({ where: { chapter_id: chapter.id, transfer_season_id: octSeason.id, status: 'APPLIED' } })
+    if (!existingReorganization) {
+      await prisma.chapterReorganization.create({
+        data: {
+          chapter_id: chapter.id, transfer_season_id: octSeason.id, effective_at: transferDate,
+          applied_at: transferDate, status: 'APPLIED',
+          created_by_user_id: admin.id, confirmed_at: new Date(transferDate.getTime() - 86_400_000), term_number: 2,
+        },
+      })
+    } else {
+      await prisma.chapterReorganization.update({
+        where: { id: existingReorganization.id },
+        data: { effective_at: transferDate, applied_at: transferDate },
+      })
     }
   }
 
@@ -449,13 +565,15 @@ function distributeStars(total: number, count: number): number[] {
   return Array.from({ length: count }, (_, index) => base + (index < extra ? 1 : 0))
 }
 
-function rebalance(amounts: number[], target: number) {
+function rebalance(amounts: number[], target: number, protectedIndices?: Set<number>) {
   let difference = target - amounts.reduce((sum, amount) => sum + amount, 0)
   let index = 0
-  while (difference !== 0 && index < amounts.length * 4) {
+  while (difference !== 0 && index < amounts.length * 6) {
     const targetIndex = index % amounts.length
-    if (difference > 0) { amounts[targetIndex] += 1; difference-- }
-    else if (amounts[targetIndex] > 0) { amounts[targetIndex] -= 1; difference++ }
+    if (!protectedIndices || !protectedIndices.has(targetIndex)) {
+      if (difference > 0) { amounts[targetIndex] += 1; difference-- }
+      else if (amounts[targetIndex] > 0) { amounts[targetIndex] -= 1; difference++ }
+    }
     index++
   }
 }
@@ -507,5 +625,8 @@ async function ensureMonth(key: string) {
 
 main()
   .catch((error) => { console.error(error); process.exitCode = 1 })
-  .finally(() => prisma.$disconnect())
+  .finally(async () => {
+    await prisma.$disconnect()
+    process.exit(process.exitCode || 0)
+  })
 

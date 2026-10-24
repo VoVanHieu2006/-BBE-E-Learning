@@ -35,6 +35,7 @@ interface ProgressEvent {
   viewSessionId: string;
   playbackRate: number;
   event: PlaybackEvent;
+  playerDurationSeconds?: number;
 }
 
 interface Props {
@@ -54,6 +55,28 @@ function formatTime(s: number): string {
   const m = Math.floor(s / 60);
   const sec = Math.floor(s % 60);
   return `${m}:${sec.toString().padStart(2, '0')}`;
+}
+
+// Optional instrumentation for the playback responsiveness benchmark. Enabled
+// by appending ?probe=1 (persisted, so in-tab navigation keeps sampling).
+function perfMark(name: string) {
+  if (typeof window === 'undefined') return;
+  try {
+    if (!window.__bbeProbe && new URLSearchParams(window.location.search).get('probe') !== '1') return;
+    window.__bbeProbe = true;
+    const list = ((window as any).__bbePerf ||= []);
+    const entry = { name, at: performance.now() };
+    list.push(entry);
+    if (window.__bbePerfLog !== false) console.debug('[bbe-perf]', name, entry.at.toFixed(1));
+  } catch {}
+}
+
+declare global {
+  interface Window {
+    __bbeProbe?: boolean;
+    __bbePerf?: Array<{ name: string; at: number }>;
+    __bbePerfLog?: boolean;
+  }
 }
 
 export default function YouTubePlayer({
@@ -95,9 +118,42 @@ export default function YouTubePlayer({
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const uiTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const controlsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pauseRetryRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const completedFiredRef = useRef(false);
   const endedSentRef = useRef(false);
   const sendProgressRef = useRef<(ct: number, ft: number, event?: PlaybackEvent) => Promise<any>>(async () => null);
+  // Optimistic play/pause intent so the first click reacts instantly. Cleared
+  // the moment YouTube confirms any state change.
+  const [optimisticPlay, setOptimisticPlay] = useState<boolean | null>(null);
+
+  const clearPauseRetry = () => {
+    if (pauseRetryRef.current) {
+      clearInterval(pauseRetryRef.current);
+      pauseRetryRef.current = null;
+    }
+  };
+
+  // YouTube swallows pauseVideo() while it is buffering, so accept the click
+  // immediately and keep asking the player until it really pauses.
+  const reliablePause = () => {
+    const player = playerRef.current;
+    if (!player) return;
+    try {
+      player.pauseVideo();
+    } catch {}
+    clearPauseRetry();
+    if (player.getPlayerState?.() === YT_PAUSED) return;
+    let attempts = 0;
+    pauseRetryRef.current = setInterval(() => {
+      attempts += 1;
+      try {
+        if (playerRef.current) playerRef.current.pauseVideo();
+        if (playerRef.current?.getPlayerState?.() === YT_PAUSED || attempts > 4) clearPauseRetry();
+      } catch {
+        clearPauseRetry();
+      }
+    }, 150);
+  };
 
   // Reset all video progress and completion flags immediately when lesson or video changes
   useEffect(() => {
@@ -115,6 +171,8 @@ export default function YouTubePlayer({
     setIsPlaying(false);
     isPlayingRef.current = false;
     setIsBuffering(false);
+    setOptimisticPlay(null);
+    clearPauseRetry();
     setPlaybackRate(1);
     playbackRateRef.current = 1;
   }, [lessonId, youtubeVideoId]);
@@ -169,12 +227,15 @@ export default function YouTubePlayer({
 
         if (!viewSessionRef.current) viewSessionRef.current = crypto.randomUUID();
         const payload: ProgressEvent = {
-          currentTime: Math.round(ct),
-          duration: Math.round(d),
-          furthest: Math.round(Math.max(ct, safeFurthest)),
+          // Fractions are intentional: the server clamps everything and strict
+          // integer rounding here used to strand viewers at 99.x%.
+          currentTime: ct,
+          duration: d,
+          furthest: Math.max(ct, safeFurthest),
           viewSessionId: viewSessionRef.current,
           playbackRate: playbackRateRef.current,
           event,
+          playerDurationSeconds: d,
         };
         if (onProgress) return await onProgress(payload);
         const response = await apiFetch(`/api/v1/lessons/${lessonId}/progress`, {
@@ -276,6 +337,7 @@ export default function YouTubePlayer({
               setIsReady(true);
               isReadyRef.current = true;
               setIsSlowLoading(false);
+              perfMark('ready');
               // Tắt phụ đề mặc định (cc_load_policy=0 không đủ với một số video)
               try {
                 e.target.unloadModule?.('captions');
@@ -298,9 +360,11 @@ export default function YouTubePlayer({
             },
             onStateChange: (e: any) => {
               if (unmounted) return;
+              setOptimisticPlay(null);
               if (e.data === YT_BUFFERING) {
                 setIsBuffering(true);
               } else if (e.data === YT_PLAYING) {
+                perfMark('playing');
                 setIsBuffering(false);
                 setIsPlaying(true);
                 isPlayingRef.current = true;
@@ -321,6 +385,7 @@ export default function YouTubePlayer({
                 const ct = playerRef.current?.getCurrentTime?.() || 0;
                 void sendProgressRef.current(ct, Math.max(furthestRef.current, ct), 'PLAY');
               } else if (e.data === YT_PAUSED) {
+                perfMark('pause_applied');
                 setIsBuffering(false);
                 setIsPlaying(false);
                 isPlayingRef.current = false;
@@ -416,6 +481,7 @@ export default function YouTubePlayer({
       stopHeartbeat();
       stopUiTimer();
       clearHideControls();
+      clearPauseRetry();
       try {
         playerRef.current?.destroy?.();
       } catch {}
@@ -552,19 +618,26 @@ export default function YouTubePlayer({
     return () => clearInterval(guard);
   }, [isReady, videoError, allowFreeSeek, isGuest]);
 
+  const displayPlaying = optimisticPlay ?? isPlaying;
+
   const togglePlay = () => {
+    const wantPlay = !displayPlaying;
+    // Instant visual feedback — YouTube's state event only confirms later.
+    setOptimisticPlay(wantPlay);
     if (!playerRef.current || !isReady) {
-      pendingPlayRef.current = true;
+      pendingPlayRef.current = wantPlay;
       return;
     }
     try {
-      if (isPlaying) {
-        playerRef.current.pauseVideo();
-      } else {
+      if (wantPlay) {
+        perfMark('click_play');
         playerRef.current.playVideo();
+      } else {
+        perfMark('click_pause');
+        reliablePause();
       }
     } catch {
-      pendingPlayRef.current = true;
+      pendingPlayRef.current = wantPlay;
     }
   };
 
@@ -607,7 +680,7 @@ export default function YouTubePlayer({
 
   const handleMouseMove = () => {
     setShowControls(true);
-    if (isPlaying) {
+    if (displayPlaying) {
       scheduleHideControls();
     } else {
       clearHideControls();
@@ -664,7 +737,7 @@ export default function YouTubePlayer({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [canSeekFree, duration, furthest, isPlaying, isReady]);
+  }, [canSeekFree, duration, furthest, displayPlaying, isReady]);
 
   return (
     <div
@@ -732,21 +805,24 @@ export default function YouTubePlayer({
         <div onClick={togglePlay} className="absolute inset-0 cursor-pointer z-10" />
       )}
 
-      {/* Khi video dừng: phủ kín toàn bộ khung — che sạch tiêu đề/share/chi tiết/logo/đề xuất/phụ đề */}
-      {!videoError && isReady && !isPlaying && (
-        <div className="absolute inset-0 z-[6] pointer-events-none bg-black flex flex-col items-center justify-center gap-3">
-          <span className="w-16 h-16 rounded-full bg-[#2563EB] text-white text-2xl flex items-center justify-center shadow-2xl border-2 border-white/30">
+      {/* Video tạm dừng: giữ nguyên frame đang hiển thị — chỉ phủ gradient mỏng và nhãn,
+          không phủ nền đen toàn khung (người học phải thấy khung cảnh đang dừng). */}
+      {!videoError && isReady && !displayPlaying && (
+        <div className="pointer-events-none absolute inset-0 z-[6] flex flex-col items-center justify-center gap-2 bg-gradient-to-b from-black/25 via-black/10 to-black/25">
+          <span className="grid h-14 w-14 place-items-center rounded-full border border-white/25 bg-black/45 text-xl text-white shadow-xl backdrop-blur-sm">
             ▶
           </span>
-          <span className="text-white text-xs font-semibold opacity-90">Bấm để phát</span>
+          <span className="rounded-full bg-black/55 px-3 py-1 text-[11px] font-semibold text-white/90 backdrop-blur-sm">
+            Bấm để phát
+          </span>
         </div>
       )}
 
-      {/* Video Buffering Spinner (khi YouTube đang nạp dữ liệu / buffer) */}
+      {/* Buffering: chỉ thanh tiến trình mảnh trên cùng —
+          không vẽ spinner riêng đè lên lớp buffering của YouTube. */}
       {!videoError && isReady && isBuffering && isPlaying && (
-        <div className="absolute inset-0 z-20 pointer-events-none bg-black/40 backdrop-blur-[2px] flex flex-col items-center justify-center gap-3">
-          <div className="w-12 h-12 border-4 border-white/20 border-t-[#2563EB] rounded-full animate-spin"></div>
-          <span className="text-white text-xs font-semibold bg-black/60 px-3 py-1 rounded-full shadow">Đang tải video...</span>
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-[12] h-[3px] overflow-hidden">
+          <div className="bbe-buffer-bar h-full w-1/3 rounded-full bg-[#2563EB]" />
         </div>
       )}
 
@@ -768,7 +844,7 @@ export default function YouTubePlayer({
       {!videoError && isReady && (
         <div
           className={`absolute bottom-0 inset-x-0 p-4 z-30 transition-opacity duration-300 [text-shadow:0_1px_3px_rgba(0,0,0,0.85)] ${
-            showControls || !isPlaying ? 'opacity-100' : 'opacity-0 pointer-events-none'
+            showControls || !displayPlaying ? 'opacity-100' : 'opacity-0 pointer-events-none'
           }`}
         >
           {/* Timeline Bar */}
@@ -795,9 +871,9 @@ export default function YouTubePlayer({
               <button
                 onClick={togglePlay}
                 className="w-8 h-8 flex items-center justify-center bg-white/20 hover:bg-white/30 rounded-lg text-sm transition"
-                title={isPlaying ? 'Tạm dừng (Phím cách/Space)' : 'Phát video (Phím cách/Space)'}
+                title={displayPlaying ? 'Tạm dừng (Phím cách/Space)' : 'Phát video (Phím cách/Space)'}
               >
-                {isPlaying ? '⏸' : '▶'}
+                {displayPlaying ? '⏸' : '▶'}
               </button>
 
               {/* Rewind 10s */}

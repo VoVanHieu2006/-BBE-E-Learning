@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
     prisma.learningNotice.findMany({ where: { user_id: userId }, orderBy: { created_at: 'desc' }, take: 20 }),
     prisma.supplementalLearningRequirement.findMany({ where: { user_id: userId, completed_at: null, ended_at: null } }),
     prisma.userLearningAssignment.count({ where: { user_id: userId, mandatory: true, completed_at: null, ended_at: null } }),
-    cycle ? prisma.cycleLessonProgress.findMany({ where: { user_id: userId, learning_cycle_id: cycle.id }, select: { lesson_id: true, completed_at: true } }) : Promise.resolve([]),
+    cycle ? prisma.cycleLessonProgress.findMany({ where: { user_id: userId, learning_cycle_id: cycle.id }, select: { lesson_id: true, completed_at: true, unlocked_at: true } }) : Promise.resolve([]),
     prisma.lessonProgress.findMany({ where: { user_id: userId }, select: { lesson_id: true, completed: true, furthest_watched_position_seconds: true } }),
   ])
 
@@ -52,6 +52,12 @@ export async function GET(request: NextRequest) {
     .filter((p) => !completedLessonIds.includes(p.lesson_id) && ((p.furthest_watched_position_seconds || 0) > 0))
     .map((p) => p.lesson_id)
 
+  // Server-durable unlock prefix from this cycle. Published/public courses do
+  // NOT skip progression for signed-in learners — the UI must follow this list.
+  const unlockedLessonIds = cycle
+    ? cycleProgressList.filter((p) => p.unlocked_at != null).map((p) => p.lesson_id)
+    : []
+
   const payload = {
     cutoverAt: policy?.cutover_at || null, active: Boolean(cycle), cycle, month,
     stars: { history: allStars._sum.amount || 0, month: monthStars?._sum.amount || 0, cycle: cycleStars?._sum.amount || 0 },
@@ -61,6 +67,7 @@ export async function GET(request: NextRequest) {
     replay, programs, notices, supplements,
     completedLessonIds,
     inProgressLessonIds,
+    unlockedLessonIds,
   }
   cache.set(userId, { data: payload, timestamp: Date.now() })
   return NextResponse.json(payload, { headers: { 'Cache-Control': 'no-store' } })

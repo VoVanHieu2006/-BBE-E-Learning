@@ -1,10 +1,10 @@
 import { prisma } from './prisma'
 import {
-  MAX_VIDEO_PLAYBACK_RATE,
   capVideoProgress,
-  hasWatchedFullVideo,
+  endedCompletionToleranceSeconds,
+  hasCompletedVideoAtEnd,
   normalizePlaybackRate,
-  videoHeartbeatGraceSeconds,
+  endedReachAllowanceSeconds,
 } from './video-progress-rules'
 import { heartbeatElapsed } from './learning-cycle-rules'
 import { learningContext, lockLearningUser, rewardEligibility, enqueueAssignmentSync } from './learning-periods'
@@ -19,6 +19,7 @@ export type VideoHeartbeatEvent = 'PLAY' | 'HEARTBEAT' | 'PAUSE' | 'ENDED'
 export interface VideoHeartbeatDetails {
   playbackRate?: number
   event?: VideoHeartbeatEvent | string
+  playerDurationSeconds?: number
 }
 
 function normalizeEvent(value: unknown): VideoHeartbeatEvent {
@@ -93,7 +94,19 @@ export async function recordVideoHeartbeat(
     // pause cannot create progress (the position does not advance). Reusing the
     // gap on PLAY also preserves legitimate playback while a tab was hidden.
     const elapsed = heartbeatElapsed(lastAt, now)
-    const grace = event === 'ENDED' ? videoHeartbeatGraceSeconds(playbackRate) : 0
+    // Only an explicit ENDED event may claim a slightly larger wall-clock reach,
+    // because the final content seconds never trigger a scheduled heartbeat.
+    const grace = event === 'ENDED' ? endedReachAllowanceSeconds(playbackRate) : 0
+    // Database duration is an admin-maintained integer while the player reports
+    // fractional seconds. A persistent gap beyond the ENDED tolerance can never
+    // complete, so report it instead of silently stranding the viewer at 99.x%.
+    const playerDuration = Number.isFinite(details.playerDurationSeconds as number)
+      ? Math.max(0, (details.playerDurationSeconds as number) || 0)
+      : null
+    const videoDurationMismatch = playerDuration && safeDuration > 0
+      && Math.abs(playerDuration - safeDuration) > Math.max(1.5, endedCompletionToleranceSeconds(safeDuration))
+      ? { databaseSeconds: safeDuration, playerSeconds: playerDuration }
+      : null
 
     // ---- Training-cycle progress (cumulative, survives monthly replay) ----
     const oldCycleFurthest = existingCycleProgress?.furthest_seconds || 0
@@ -101,7 +114,7 @@ export async function recordVideoHeartbeat(
     const cycleFurthest = safeDuration > 0
       ? Math.min(safeDuration, cycleTraining.furthestWatchedPositionSeconds)
       : cycleTraining.furthestWatchedPositionSeconds
-    const cycleVideoComplete = hasWatchedFullVideo(cycleFurthest, safeDuration)
+    const cycleVideoComplete = hasCompletedVideoAtEnd(cycleFurthest, safeDuration, event)
     const cyclePassed = !lesson.assessment || (
       cycleVideoComplete && !existingCycleProgress?.completed_at
         ? Boolean(await tx.attempt.count({
@@ -163,7 +176,7 @@ export async function recordVideoHeartbeat(
               .furthestWatchedPositionSeconds,
           )
         : 0
-      rewardComplete = hasWatchedFullVideo(replayFurthest, safeDuration)
+      rewardComplete = hasCompletedVideoAtEnd(replayFurthest, safeDuration, event)
       const replayCompletedAt = replay?.completed_at || (rewardComplete ? now : null)
       const replayData = {
         view_session_id: viewSessionId,
@@ -274,17 +287,18 @@ export async function recordVideoHeartbeat(
       lessonId,
       id: lessonId,
       videoId: lesson.video.id,
-      videoCompleted: context ? cycleVideoComplete : hasWatchedFullVideo(trainingFurthest, safeDuration),
+      videoCompleted: context ? cycleVideoComplete : hasCompletedVideoAtEnd(trainingFurthest, safeDuration, event),
       completed: context ? cycleCompleted : updated.completed,
       completedAt: context ? cycleCompletedAt : updated.completed_at,
       lastPositionSeconds: updated.last_position_seconds,
       furthestWatchedPositionSeconds: context ? Math.floor(cycleFurthest) : updated.furthest_watched_position_seconds,
       progressPercentage,
       durationSeconds: safeDuration,
+      videoDurationMismatch,
       playbackRate,
       event,
       training: {
-        videoCompleted: context ? cycleVideoComplete : hasWatchedFullVideo(trainingFurthest, safeDuration),
+        videoCompleted: context ? cycleVideoComplete : hasCompletedVideoAtEnd(trainingFurthest, safeDuration, event),
         completed: context ? cycleCompleted : updated.completed,
         completedAt: context ? cycleCompletedAt : updated.completed_at,
         furthestWatchedPositionSeconds: Math.floor(trainingFurthest),

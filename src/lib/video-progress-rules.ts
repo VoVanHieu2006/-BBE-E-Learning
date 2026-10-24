@@ -2,6 +2,8 @@
 export const SUPPORTED_PLAYBACK_RATES = [1, 1.25, 1.5, 1.75, 2] as const
 export const MAX_VIDEO_PLAYBACK_RATE = 2
 
+export type VideoProgressEvent = 'PLAY' | 'HEARTBEAT' | 'PAUSE' | 'ENDED'
+
 /** Video completion is strict: unknown/invalid duration is never proof of completion. */
 export function hasWatchedFullVideo(positionSeconds: number, durationSeconds: number): boolean {
   return Number.isFinite(positionSeconds)
@@ -23,6 +25,47 @@ export function normalizePlaybackRate(value: unknown): number {
  */
 export function videoHeartbeatGraceSeconds(playbackRate: number): number {
   return Math.min(6, Math.max(2, normalizePlaybackRate(playbackRate) * 1.5))
+}
+
+/**
+ * An explicit ENDED event may claim slightly more wall-clock content than the
+ * previous committed heartbeat, because queueing/lock contention shaves the
+ * measured gap and the final seconds never trigger a scheduled heartbeat.
+ * Bounded addition only: normal heartbeats never receive it.
+ */
+export function endedReachAllowanceSeconds(playbackRate: number): number {
+  return Math.min(6, videoHeartbeatGraceSeconds(playbackRate) + 2)
+}
+
+/**
+ * Completion tolerance for an explicit ENDED event. The backend stores the
+ * duration as an integer written by an administrator, while the player reports
+ * fractional seconds — a strict equality would strand honest viewers at 99.x%.
+ * Never exceeds 10% of the duration so short videos stay proportionally strict.
+ */
+export function endedCompletionToleranceSeconds(durationSeconds: number): number {
+  const duration = Number.isFinite(durationSeconds) && durationSeconds > 0 ? durationSeconds : 0
+  if (duration <= 0) return 0
+  return Math.min(1.5, duration * 0.1, duration / 3, Math.max(0.6, duration * 0.005))
+}
+
+/**
+ * Completeness check that only relaxes the threshold for a backend-accepted
+ * ENDED event. Every other event keeps the strict rule, so a seek to the very
+ * end can never mark a video complete without real observed playback.
+ */
+export function hasCompletedVideoAtEnd(
+  furthestWatchedPositionSeconds: number,
+  durationSeconds: number,
+  event: VideoProgressEvent,
+): boolean {
+  if (event !== 'ENDED') return hasWatchedFullVideo(furthestWatchedPositionSeconds, durationSeconds)
+  const tolerance = endedCompletionToleranceSeconds(durationSeconds)
+  return tolerance > 0
+    && Number.isFinite(furthestWatchedPositionSeconds)
+    && durationSeconds > 0
+    && furthestWatchedPositionSeconds >= durationSeconds - tolerance
+    && furthestWatchedPositionSeconds <= durationSeconds + endedReachAllowanceSeconds(MAX_VIDEO_PLAYBACK_RATE)
 }
 
 /**

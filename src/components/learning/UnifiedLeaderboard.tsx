@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import Card from '@/components/ui/Card'
 import Modal from '@/components/ui/Modal'
@@ -24,10 +24,13 @@ interface LeaderboardItem {
   email?: string
   chapterName?: string
   departmentName?: string
+  positionName?: string
+  dnaUnitId?: string
+  dnaUnitName?: string
   department?: any
   groupName?: string
   stars?: number
-  score?: number
+  score?: number | null
   rank?: number
   memberCount?: number
   completedCourses?: number
@@ -38,10 +41,10 @@ interface LeaderboardItem {
   avgScore?: number
   avgQuizScore?: number
   assessmentAverageScore?: number
-  kpiStatus?: string
+  kpiStatus?: string | null
   kpi?: any
   completion?: any
-  atLeast70Percent?: number
+  atLeast70Percent?: number | null
   reasons?: string[]
   eligible?: boolean
 }
@@ -59,6 +62,10 @@ export default function UnifiedLeaderboard({
   const [selectedChapterId, setSelectedChapterId] = useState<string>(propChapterId || '')
   const [chapterList, setChapterList] = useState<Array<{ id: string; name: string }>>([])
 
+  const [allowedGroups, setAllowedGroups] = useState<Array<'MEMBER' | 'LT' | 'DNA' | 'CHAPTER'>>(['MEMBER', 'LT', 'DNA', 'CHAPTER'])
+  const [isGlobal, setIsGlobal] = useState<boolean>(true)
+  const requestSeqRef = useRef<number>(0)
+
   const [items, setItems] = useState<LeaderboardItem[]>([])
   const [excludedChapters, setExcludedChapters] = useState<any[]>([])
   const [leaderboardState, setLeaderboardState] = useState<string>('')
@@ -69,12 +76,23 @@ export default function UnifiedLeaderboard({
   const [refreshing, setRefreshing] = useState(false)
   const [showRulesModal, setShowRulesModal] = useState(false)
 
+  const formatChapterScore = (val: number | null | undefined) => {
+    if (val === null || val === undefined) return '—'
+    return Number(val).toLocaleString('vi-VN', {
+      minimumFractionDigits: 3,
+      maximumFractionDigits: 3,
+    })
+  }
+
   // Profile Modal State
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
   const [selectedUserData, setSelectedUserData] = useState<any>(null)
   const [loadingProfile, setLoadingProfile] = useState(false)
 
+  const canViewProfile = Boolean(currentUser && ['ADMIN', 'CHAPTER_LEADER'].includes(currentUser.role))
+
   const handleOpenProfile = async (memberId: string, chapId?: string) => {
+    if (!canViewProfile) return
     setSelectedUserId(memberId)
     setLoadingProfile(true)
     const targetChapter = chapId || selectedChapterId || currentUser?.chapterId || propChapterId || 'me'
@@ -90,7 +108,7 @@ export default function UnifiedLeaderboard({
     }
   }
 
-  // Đọc currentUser từ localStorage & API
+  // Đọc currentUser từ localStorage
   const refreshCurrentUser = useCallback(() => {
     if (typeof window === 'undefined') return null
     try {
@@ -98,17 +116,14 @@ export default function UnifiedLeaderboard({
       if (u) {
         const parsed = JSON.parse(u)
         setCurrentUser(parsed)
-        if (!selectedChapterId && parsed.chapterId) {
-          setSelectedChapterId(parsed.chapterId)
-        }
         return parsed
       }
     } catch {}
     return null
-  }, [selectedChapterId])
+  }, [])
 
   useEffect(() => {
-    const user = refreshCurrentUser()
+    refreshCurrentUser()
     if (typeof window !== 'undefined') {
       const sp = new URLSearchParams(window.location.search)
       const g = sp.get('group') as any
@@ -118,23 +133,35 @@ export default function UnifiedLeaderboard({
       if (['MONTH', 'TERM'].includes(p)) setPeriodType(p)
       if (c) setSelectedChapterId(c)
     }
-    // Lấy danh sách Chapter cho bộ lọc
+
     const storedUser = (() => {
       try { return JSON.parse(localStorage.getItem('user') || 'null') } catch { return null }
     })()
+
     if (storedUser?.role === 'CHAPTER_LEADER' && storedUser.chapterId) {
       setChapterList([{ id: storedUser.chapterId, name: storedUser.chapterName || 'Chapter của tôi' }])
       setSelectedChapterId((current) => current || storedUser.chapterId)
     }
+
     apiFetch<any>('/api/v1/learning/periods').then((res) => {
-      if (res.ok && res.data?.terms) {
+      if (res.ok && res.data) {
+        const scope = res.data.scope
+        const allowed = (scope?.allowedGroups as Array<'MEMBER' | 'LT' | 'DNA' | 'CHAPTER'>) || ['MEMBER', 'LT', 'DNA', 'CHAPTER']
+        setAllowedGroups(allowed)
+        const globalScope = scope?.isGlobal ?? true
+        setIsGlobal(globalScope)
+
         setPeriodCatalog({
           months: res.data.months || [],
           terms: res.data.terms || [],
           seasons: res.data.seasons || [],
         })
+
+        // Tự động chuyển tab nếu tab hiện tại nằm ngoài danh mục được phép
+        setGroup((curr) => (allowed.includes(curr) ? curr : allowed[0]))
+
         const uniqueChapters = new Map<string, string>()
-        res.data.terms.forEach((t: any) => {
+        res.data.terms?.forEach((t: any) => {
           if (t.chapter_id && t.chapterName) uniqueChapters.set(t.chapter_id, t.chapterName)
         })
         const list = Array.from(uniqueChapters.entries()).map(([id, name]) => ({ id, name }))
@@ -151,8 +178,10 @@ export default function UnifiedLeaderboard({
     setPeriodId('')
   }, [group, periodType])
 
-  // Tải dữ liệu bảng xếp hạng
+  // Tải dữ liệu bảng xếp hạng với cơ chế chống race-condition
   const loadLeaderboardData = useCallback(async (forceRefresh = false) => {
+    const currentSeq = ++requestSeqRef.current
+
     if (forceRefresh) {
       setRefreshing(true)
       clearApiCache('/api/v1/leaderboard')
@@ -165,17 +194,28 @@ export default function UnifiedLeaderboard({
     try {
       setAccessError('')
       setExcludedChapters([])
-      const activeChapId = selectedChapterId || currentUser?.chapterId || propChapterId
+      // Bảng tổng toàn hệ thống không âm thầm gán chapterId từ user
+      const activeChapId = isGlobal ? (selectedChapterId || '') : (selectedChapterId || currentUser?.chapterId || propChapterId || '')
       const params = new URLSearchParams({ group, periodType })
-      if ((group === 'MEMBER' || group === 'LT') && activeChapId) params.set('chapterId', activeChapId)
-      if (periodId) params.set('periodId', periodId)
+      if ((group === 'MEMBER' || group === 'LT') && activeChapId) {
+        params.set('chapterId', activeChapId)
+      }
+      if (periodId) {
+        params.set('periodId', periodId)
+      }
+
       const res = await apiFetch<any>(`/api/v1/leaderboard?${params.toString()}`, { noCache: forceRefresh })
+
+      // Nếu request mới hơn đã chạy, bỏ qua response cũ này để tránh hiện sai dữ liệu
+      if (currentSeq !== requestSeqRef.current) return
+
       if (!res.ok) {
         setItems([])
         setLeaderboardState('ERROR')
         setAccessError(res.error?.message || 'Không tải được bảng xếp hạng trong phạm vi của bạn.')
         return
       }
+
       const data = res.data || {}
       setLeaderboardState(data.state || '')
       setExcludedChapters(data.excluded || [])
@@ -183,21 +223,29 @@ export default function UnifiedLeaderboard({
         ...item,
         rank: item.rank ?? idx + 1,
         chapterId: item.chapterId || item.id,
-        displayName: item.displayName || item.name || item.email?.split('@')[0],
+        displayName: item.displayName || item.name || (item.email ? item.email.split('@')[0] : 'Thành viên'),
         name: item.name || item.displayName,
-        score: item.score ?? 0,
+        score: item.score ?? null,
         stars: item.stars ?? item.totalStars ?? 0,
         memberCount: item.memberCount ?? 0,
-        atLeast70Percent: item.atLeast70Percent ?? 0,
-        kpiStatus: item.kpiStatus || item.kpi?.status || 'N/A',
-        departmentName: item.groupName || item.departmentName || (group === 'DNA' ? 'DNA chung' : '—'),
+        atLeast70Percent: item.atLeast70Percent ?? null,
+        kpiStatus: item.kpiStatus || item.kpi?.status || null,
+        departmentName: item.departmentName || item.groupName || (group === 'DNA' ? (item.dnaUnitName || 'Khối DNA') : '—'),
+        positionName: item.positionName || (group === 'LT' ? 'Ban Lãnh Đạo (LT)' : group === 'DNA' ? 'Thành viên DNA' : 'Thành viên'),
       }))
       setItems(list)
+    } catch (err: any) {
+      if (currentSeq !== requestSeqRef.current) return
+      setItems([])
+      setLeaderboardState('ERROR')
+      setAccessError(err?.message || 'Lỗi tải dữ liệu bảng xếp hạng.')
     } finally {
-      setLoading(false)
-      setRefreshing(false)
+      if (currentSeq === requestSeqRef.current) {
+        setLoading(false)
+        setRefreshing(false)
+      }
     }
-  }, [group, periodType, periodId, selectedChapterId, currentUser, propChapterId, refreshCurrentUser])
+  }, [group, periodType, periodId, selectedChapterId, isGlobal, currentUser, propChapterId, refreshCurrentUser])
 
   useEffect(() => {
     loadLeaderboardData()
@@ -279,54 +327,67 @@ export default function UnifiedLeaderboard({
 
       {/* Bộ lọc Tab Nhóm & Chu kỳ */}
       <div className="bg-white p-4 rounded-3xl border border-[#eff4ff] shadow-sm space-y-4">
-        {/* Hàng 1: 4 Tab Đối tượng */}
+        {/* Hàng 1: Tab Đối tượng (chỉ hiển thị các tab được phép cho role này) */}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap gap-1.5 p-1 bg-slate-100 rounded-2xl">
-            <button
-              onClick={() => setGroup('MEMBER')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition ${
-                group === 'MEMBER'
-                  ? 'bg-white text-[#2563EB] shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              👤 Thành viên
-            </button>
-            <button
-              onClick={() => setGroup('LT')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition ${
-                group === 'LT'
-                  ? 'bg-white text-[#2563EB] shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              👑 LT
-            </button>
-            <button
-              onClick={() => setGroup('DNA')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition ${
-                group === 'DNA'
-                  ? 'bg-white text-[#2563EB] shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              🧬 Khối DNA
-            </button>
-            <button
-              onClick={() => setGroup('CHAPTER')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition ${
-                group === 'CHAPTER'
-                  ? 'bg-white text-[#2563EB] shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              🏛️ Toàn Chapter
-            </button>
+            {allowedGroups.includes('MEMBER') && (
+              <button
+                type="button"
+                onClick={() => setGroup('MEMBER')}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition ${
+                  group === 'MEMBER'
+                    ? 'bg-white text-[#2563EB] shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                👤 Thành viên
+              </button>
+            )}
+            {allowedGroups.includes('LT') && (
+              <button
+                type="button"
+                onClick={() => setGroup('LT')}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition ${
+                  group === 'LT'
+                    ? 'bg-white text-[#2563EB] shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                👑 LT
+              </button>
+            )}
+            {allowedGroups.includes('DNA') && (
+              <button
+                type="button"
+                onClick={() => setGroup('DNA')}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition ${
+                  group === 'DNA'
+                    ? 'bg-white text-[#2563EB] shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                🧬 Khối DNA
+              </button>
+            )}
+            {allowedGroups.includes('CHAPTER') && (
+              <button
+                type="button"
+                onClick={() => setGroup('CHAPTER')}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition ${
+                  group === 'CHAPTER'
+                    ? 'bg-white text-[#2563EB] shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                🏛️ Toàn Chapter
+              </button>
+            )}
           </div>
 
           {/* Hàng 2: Chu kỳ Tháng / Nhiệm kỳ */}
           <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-2xl">
             <button
+              type="button"
               onClick={() => setPeriodType('MONTH')}
               className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition ${
                 periodType === 'MONTH'
@@ -337,6 +398,7 @@ export default function UnifiedLeaderboard({
               📅 Theo Tháng
             </button>
             <button
+              type="button"
               onClick={() => setPeriodType('TERM')}
               className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition ${
                 periodType === 'TERM'
@@ -349,30 +411,74 @@ export default function UnifiedLeaderboard({
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-slate-100 text-xs">
-          <span className="font-semibold text-slate-600 shrink-0">Kỳ xếp hạng:</span>
-          <select
-            value={periodId}
-            onChange={(event) => setPeriodId(event.target.value)}
-            className="max-w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 font-semibold text-slate-800 outline-none focus:border-blue-500 sm:max-w-xs"
-          >
-            <option value="">Kỳ hiện tại</option>
-            {periodType === 'MONTH'
-              ? periodCatalog.months.map((month) => (
-                  <option key={month.id} value={month.key}>{month.key}</option>
-                ))
-              : (group === 'CHAPTER' || group === 'DNA' || !selectedChapterId
-                  ? periodCatalog.seasons
-                  : periodCatalog.terms.filter((term) => !selectedChapterId || term.chapter_id === selectedChapterId)
-                ).map((term: any) => (
-                  <option key={term.id} value={term.id}>
-                    {term.code || `${term.chapterName || 'Chapter'} · ${new Date(term.starts_at).toLocaleDateString('vi-VN')}`}
-                  </option>
-                ))}
-          </select>
+        {/* Bộ chọn kỳ & Chip nhanh theo tháng */}
+        <div className="flex flex-col gap-2 pt-2 border-t border-slate-100 text-xs">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="font-semibold text-slate-600 shrink-0">Kỳ xếp hạng:</span>
+            <select
+              value={periodId}
+              onChange={(event) => setPeriodId(event.target.value)}
+              className="max-w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 font-semibold text-slate-800 outline-none focus:border-blue-500 sm:max-w-xs"
+            >
+              <option value="">Kỳ hiện tại (Mặc định)</option>
+              {periodType === 'MONTH'
+                ? periodCatalog.months.map((month) => (
+                    <option key={month.id} value={month.key}>
+                      Tháng {month.key} {month.hasData ? '• 🟢 [Có dữ liệu]' : '• ⚪ [Chưa có dữ liệu]'}
+                    </option>
+                  ))
+                : (group === 'CHAPTER' || group === 'DNA' || !selectedChapterId
+                    ? periodCatalog.seasons
+                    : periodCatalog.terms.filter((term) => !selectedChapterId || term.chapter_id === selectedChapterId)
+                  ).map((term: any) => (
+                    <option key={term.id} value={term.id}>
+                      {term.code || `${term.chapterName || 'Chapter'} · ${new Date(term.starts_at).toLocaleDateString('vi-VN')}`}
+                    </option>
+                  ))}
+            </select>
+          </div>
+
+          {/* Quick-select chips cho danh sách tháng, hiển thị trạng thái có dữ liệu màu xanh */}
+          {periodType === 'MONTH' && periodCatalog.months.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5 pt-1">
+              <span className="text-[11px] font-medium text-slate-400 mr-1">Chọn nhanh:</span>
+              <button
+                type="button"
+                onClick={() => setPeriodId('')}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition border ${
+                  periodId === ''
+                    ? 'bg-blue-50 border-blue-300 text-blue-700 shadow-2xs'
+                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                Kỳ hiện tại
+              </button>
+              {periodCatalog.months.slice(0, 6).map((m: any) => {
+                const isSelected = periodId === m.key
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => setPeriodId(m.key)}
+                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold transition border ${
+                      isSelected
+                        ? 'bg-blue-600 border-blue-600 text-white shadow-2xs'
+                        : m.hasData
+                        ? 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100'
+                        : 'bg-slate-50 border-slate-200 text-slate-400 hover:bg-slate-100'
+                    }`}
+                    title={m.hasData ? `Tháng ${m.key}: Có dữ liệu xếp hạng` : `Tháng ${m.key}: Chưa có dữ liệu`}
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-white' : m.hasData ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+                    {m.key}
+                  </button>
+                )
+              })}
+            </div>
+          )}
         </div>
 
-        {/* Lọc theo Chapter nếu xem Thành viên hoặc LT */}
+        {/* Lọc theo Chapter nếu xem Thành viên hoặc LT (Khối DNA không dùng Chapter) */}
         {(group === 'MEMBER' || group === 'LT') && showChapterSelector && chapterList.length > 0 && (
           <div className="flex items-center gap-3 pt-2 border-t border-slate-100 text-xs">
             <span className="font-semibold text-slate-600 shrink-0">Lọc theo Chapter:</span>
@@ -381,7 +487,7 @@ export default function UnifiedLeaderboard({
               onChange={(e) => setSelectedChapterId(e.target.value)}
               className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 font-semibold text-slate-800 outline-none focus:border-blue-500 max-w-xs"
             >
-              <option value="">Tất cả / Chapter của bạn</option>
+              <option value="">{isGlobal ? 'Tất cả Chapter (Toàn hệ thống)' : 'Chapter của bạn'}</option>
               {chapterList.map((ch) => (
                 <option key={ch.id} value={ch.id}>
                   {ch.name}
@@ -394,27 +500,49 @@ export default function UnifiedLeaderboard({
 
       {/* Main Content Area */}
       {accessError ? (
-        <Card className="space-y-3 border border-rose-200 bg-rose-50 p-8 text-center text-rose-800">
+        <Card className="space-y-3 border border-rose-200 bg-rose-50 p-8 text-center text-rose-800 rounded-3xl">
           <div className="text-3xl">🔒</div>
-          <h3 className="text-base font-bold">Không thể xem bảng xếp hạng</h3>
+          <h3 className="text-base font-bold">Không có quyền xem bảng xếp hạng</h3>
           <p className="text-sm">{accessError}</p>
-          <button type="button" onClick={() => loadLeaderboardData(true)} className="rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white">
+          <button type="button" onClick={() => loadLeaderboardData(true)} className="rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white hover:bg-rose-700 transition">
             Thử lại
           </button>
         </Card>
       ) : leaderboardState === 'AWAITING_CUTOVER' ? (
-        <Card className="p-12 text-center text-sm text-slate-600">Bảng xếp hạng đang chờ Admin kích hoạt chu kỳ học.</Card>
+        <Card className="p-12 text-center text-sm text-slate-600 rounded-3xl space-y-2">
+          <div className="text-4xl">⏳</div>
+          <h3 className="text-base font-bold text-[#172554]">Kỳ chưa được kích hoạt</h3>
+          <p className="text-xs text-slate-500">Bảng xếp hạng đang chờ Quản trị viên kích hoạt chu kỳ học tập.</p>
+        </Card>
+      ) : leaderboardState === 'PERIOD_UNAVAILABLE' ? (
+        <Card className="p-12 text-center text-sm text-slate-600 rounded-3xl space-y-2">
+          <div className="text-4xl">🔍</div>
+          <h3 className="text-base font-bold text-[#172554]">Kỳ xếp hạng chưa mở</h3>
+          <p className="text-xs text-slate-500">Chưa có thông tin kỳ thi đua hoặc kỳ được chọn chưa diễn ra.</p>
+        </Card>
+      ) : leaderboardState === 'AWAITING_SNAPSHOT' ? (
+        <Card className="p-12 text-center text-sm text-slate-600 rounded-3xl space-y-2">
+          <div className="text-4xl">📸</div>
+          <h3 className="text-base font-bold text-[#172554]">Đang chờ chốt bảng xếp hạng</h3>
+          <p className="text-xs text-slate-500">Kỳ đã kết thúc và đang trong tiến trình chốt snapshot thành tích chính thức.</p>
+        </Card>
+      ) : leaderboardState === 'WAITING_KPI' ? (
+        <Card className="p-12 text-center text-sm text-slate-600 rounded-3xl space-y-2">
+          <div className="text-4xl">📊</div>
+          <h3 className="text-base font-bold text-[#172554]">Đang chờ cập nhật KPI</h3>
+          <p className="text-xs text-slate-500">Tháng đã kết thúc, đang chờ tổng hợp dữ liệu KPI chính thức từ Chapter.</p>
+        </Card>
       ) : loading ? (
-        <Card className="p-16 text-center text-[#737686]">
+        <Card className="p-16 text-center text-[#737686] rounded-3xl">
           <div className="w-10 h-10 border-4 border-[#2563EB] border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
           <p className="text-xs font-medium">Đang tải bảng xếp hạng…</p>
         </Card>
       ) : items.length === 0 ? (
-        <Card className="p-16 text-center text-[#737686] space-y-2">
+        <Card className="p-16 text-center text-[#737686] space-y-2 rounded-3xl">
           <div className="text-5xl">⭐</div>
           <h3 className="text-base font-bold text-[#172554]">Chưa có dữ liệu xếp hạng</h3>
           <p className="text-xs max-w-md mx-auto">
-            Chưa có thành viên hoặc Chapter nào ghi nhận thành tích trong chu kỳ này.
+            Chưa có thành viên hoặc Chapter nào ghi nhận thành tích (0 sao) trong kỳ này.
           </p>
         </Card>
       ) : (
@@ -430,7 +558,7 @@ export default function UnifiedLeaderboard({
                     Hạng 2 • Á quân
                   </div>
                   <div className="font-extrabold text-[#172554] text-base truncate mb-0.5">
-                    {group !== 'CHAPTER' && (topThree[1].userId || topThree[1].id) ? (
+                    {group !== 'CHAPTER' && canViewProfile && (topThree[1].userId || topThree[1].id) ? (
                       <button
                         type="button"
                         onClick={() => handleOpenProfile((topThree[1].userId || topThree[1].id)!, topThree[1].chapterId)}
@@ -439,22 +567,24 @@ export default function UnifiedLeaderboard({
                         {topThree[1].displayName}
                       </button>
                     ) : (
-                      topThree[1].displayName
+                      <span>{topThree[1].displayName}</span>
                     )}
                     {isCurrentUserItem(topThree[1]) && (
-                      <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black bg-[#2563EB] text-white">
+                      <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-black bg-[#2563EB] text-white">
                         Bạn
                       </span>
                     )}
                   </div>
                   <p className="text-xs text-[#737686] truncate mb-3">
                     {group === 'CHAPTER'
-                      ? `${topThree[1].memberCount || 0} học viên • Đạt ≥70%: ${topThree[1].atLeast70Percent || 0}%`
-                      : topThree[1].departmentName || topThree[1].groupName || topThree[1].email || 'Thành viên'}
+                      ? `${topThree[1].memberCount || 0} học viên • Đạt ≥70%: ${topThree[1].atLeast70Percent !== null && topThree[1].atLeast70Percent !== undefined ? `${topThree[1].atLeast70Percent}%` : '—'}`
+                      : `${topThree[1].positionName || 'Thành viên'} • ${topThree[1].departmentName || (group === 'DNA' ? 'Khối DNA' : '—')}${isGlobal && topThree[1].chapterName ? ` • ${topThree[1].chapterName}` : ''}`}
                   </p>
                   <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-100 text-slate-800 rounded-full text-sm font-black border border-slate-200">
                     <span>{group === 'CHAPTER' ? '🏆 Điểm:' : '⭐'}</span>{' '}
-                    {(topThree[1].score ?? topThree[1].stars ?? 0).toLocaleString('vi-VN')}
+                    {group === 'CHAPTER'
+                      ? formatChapterScore(topThree[1].score)
+                      : (topThree[1].stars ?? 0).toLocaleString('vi-VN')}
                   </div>
                 </Card>
               ) : (
@@ -469,7 +599,7 @@ export default function UnifiedLeaderboard({
                   </div>
                   <div className="text-5xl mb-1">🥇</div>
                   <div className="font-black text-lg text-[#172554] truncate mb-0.5">
-                    {group !== 'CHAPTER' && (topThree[0].userId || topThree[0].id) ? (
+                    {group !== 'CHAPTER' && canViewProfile && (topThree[0].userId || topThree[0].id) ? (
                       <button
                         type="button"
                         onClick={() => handleOpenProfile((topThree[0].userId || topThree[0].id)!, topThree[0].chapterId)}
@@ -478,7 +608,7 @@ export default function UnifiedLeaderboard({
                         {topThree[0].displayName}
                       </button>
                     ) : (
-                      topThree[0].displayName
+                      <span>{topThree[0].displayName}</span>
                     )}
                     {isCurrentUserItem(topThree[0]) && (
                       <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-black bg-[#2563EB] text-white">
@@ -488,12 +618,14 @@ export default function UnifiedLeaderboard({
                   </div>
                   <p className="text-xs text-[#737686] truncate mb-3">
                     {group === 'CHAPTER'
-                      ? `${topThree[0].memberCount || 0} học viên • Đạt ≥70%: ${topThree[0].atLeast70Percent || 0}%`
-                      : topThree[0].departmentName || topThree[0].groupName || topThree[0].email || 'Thành viên'}
+                      ? `${topThree[0].memberCount || 0} học viên • Đạt ≥70%: ${topThree[0].atLeast70Percent !== null && topThree[0].atLeast70Percent !== undefined ? `${topThree[0].atLeast70Percent}%` : '—'}`
+                      : `${topThree[0].positionName || 'Thành viên'} • ${topThree[0].departmentName || (group === 'DNA' ? 'Khối DNA' : '—')}${isGlobal && topThree[0].chapterName ? ` • ${topThree[0].chapterName}` : ''}`}
                   </p>
                   <div className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-amber-100 text-amber-900 rounded-full text-base font-black border border-amber-300 shadow-inner">
                     <span>{group === 'CHAPTER' ? '🏆 Điểm:' : '⭐'}</span>{' '}
-                    {(topThree[0].score ?? topThree[0].stars ?? 0).toLocaleString('vi-VN')}
+                    {group === 'CHAPTER'
+                      ? formatChapterScore(topThree[0].score)
+                      : (topThree[0].stars ?? 0).toLocaleString('vi-VN')}
                   </div>
                 </Card>
               )}
@@ -506,7 +638,7 @@ export default function UnifiedLeaderboard({
                     Hạng 3 • Quý quân
                   </div>
                   <div className="font-extrabold text-[#172554] text-base truncate mb-0.5">
-                    {group !== 'CHAPTER' && (topThree[2].userId || topThree[2].id) ? (
+                    {group !== 'CHAPTER' && canViewProfile && (topThree[2].userId || topThree[2].id) ? (
                       <button
                         type="button"
                         onClick={() => handleOpenProfile((topThree[2].userId || topThree[2].id)!, topThree[2].chapterId)}
@@ -515,22 +647,24 @@ export default function UnifiedLeaderboard({
                         {topThree[2].displayName}
                       </button>
                     ) : (
-                      topThree[2].displayName
+                      <span>{topThree[2].displayName}</span>
                     )}
                     {isCurrentUserItem(topThree[2]) && (
-                      <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black bg-[#2563EB] text-white">
+                      <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-black bg-[#2563EB] text-white">
                         Bạn
                       </span>
                     )}
                   </div>
                   <p className="text-xs text-[#737686] truncate mb-3">
                     {group === 'CHAPTER'
-                      ? `${topThree[2].memberCount || 0} học viên • Đạt ≥70%: ${topThree[2].atLeast70Percent || 0}%`
-                      : topThree[2].departmentName || topThree[2].groupName || topThree[2].email || 'Thành viên'}
+                      ? `${topThree[2].memberCount || 0} học viên • Đạt ≥70%: ${topThree[2].atLeast70Percent !== null && topThree[2].atLeast70Percent !== undefined ? `${topThree[2].atLeast70Percent}%` : '—'}`
+                      : `${topThree[2].positionName || 'Thành viên'} • ${topThree[2].departmentName || (group === 'DNA' ? 'Khối DNA' : '—')}${isGlobal && topThree[2].chapterName ? ` • ${topThree[2].chapterName}` : ''}`}
                   </p>
                   <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-900 rounded-full text-sm font-black border border-amber-200">
                     <span>{group === 'CHAPTER' ? '🏆 Điểm:' : '⭐'}</span>{' '}
-                    {(topThree[2].score ?? topThree[2].stars ?? 0).toLocaleString('vi-VN')}
+                    {group === 'CHAPTER'
+                      ? formatChapterScore(topThree[2].score)
+                      : (topThree[2].stars ?? 0).toLocaleString('vi-VN')}
                   </div>
                 </Card>
               ) : (
@@ -555,13 +689,19 @@ export default function UnifiedLeaderboard({
                 <thead>
                   <tr className="border-b border-[#eff4ff] bg-slate-50/80 text-[11px] font-bold text-[#737686] uppercase tracking-wider">
                     <th className="py-3.5 px-6 text-center w-20">Hạng</th>
-                    <th className="py-3.5 px-6">{group === 'CHAPTER' ? 'Chapter' : 'Thành viên'}</th>
-                    <th className="py-3.5 px-6">{group === 'CHAPTER' ? 'Quy mô' : 'Ban / Nhóm'}</th>
+                    <th className="py-3.5 px-6">{group === 'CHAPTER' ? 'Chapter' : 'Họ và tên'}</th>
+                    <th className="py-3.5 px-6">{group === 'CHAPTER' ? 'Quy mô' : 'Ban / Đơn vị'}</th>
+                    {isGlobal && group !== 'CHAPTER' && group !== 'DNA' && (
+                      <th className="py-3.5 px-6">Chapter</th>
+                    )}
+                    {group === 'CHAPTER' && periodType === 'TERM' && (
+                      <th className="py-3.5 px-6 text-center">Tháng đạt chuẩn</th>
+                    )}
                     <th className="py-3.5 px-6 text-right">
                       {group === 'CHAPTER' ? 'Điểm BXH' : 'Tổng ⭐ Star'}
                     </th>
                     <th className="py-3.5 px-6 text-center">
-                      {group === 'CHAPTER' ? 'KPI Tháng' : 'Tiến độ'}
+                      {group === 'CHAPTER' ? (periodType === 'TERM' ? 'Trạng thái' : 'KPI Tháng') : 'Tiến độ'}
                     </th>
                   </tr>
                 </thead>
@@ -586,7 +726,7 @@ export default function UnifiedLeaderboard({
                           </span>
                         </td>
 
-                        {/* Tên & Nhãn Bạn */}
+                        {/* Tên, Chức vụ & Nhãn Bạn */}
                         <td className="py-4 px-6">
                           <div className="flex items-center gap-3">
                             <div
@@ -599,35 +739,45 @@ export default function UnifiedLeaderboard({
                               {(item.displayName || item.name || 'U').charAt(0).toUpperCase()}
                             </div>
                             <div className="min-w-0">
-                              {group !== 'CHAPTER' && (item.userId || item.id) ? (
+                              {group !== 'CHAPTER' && canViewProfile && (item.userId || item.id) ? (
                                 <button
                                   type="button"
                                   onClick={() => handleOpenProfile((item.userId || item.id)!, item.chapterId)}
                                   className="text-left group cursor-pointer block"
                                 >
                                   <p className="font-bold text-[#172554] group-hover:text-[#2563EB] transition-colors truncate flex items-center gap-2">
-                                    <span>{item.displayName || item.name || item.email}</span>
+                                    <span>{item.displayName || item.name}</span>
                                     {isYou && (
                                       <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black bg-[#2563EB] text-white shadow-2xs">
                                         Bạn
                                       </span>
                                     )}
                                   </p>
-                                  {item.email && (
+                                  {item.positionName && (
+                                    <span className="text-[11px] text-slate-500 font-medium block truncate">
+                                      {item.positionName}
+                                    </span>
+                                  )}
+                                  {item.email && currentUser && (
                                     <p className="text-[11px] text-[#737686] group-hover:text-[#2563EB] transition-colors truncate">{item.email}</p>
                                   )}
                                 </button>
                               ) : (
                                 <>
                                   <p className="font-bold text-[#172554] truncate flex items-center gap-2">
-                                    <span>{item.displayName || item.name || item.email}</span>
+                                    <span>{item.displayName || item.name}</span>
                                     {isYou && (
                                       <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black bg-[#2563EB] text-white shadow-2xs">
                                         Bạn
                                       </span>
                                     )}
                                   </p>
-                                  {item.email && group !== 'CHAPTER' && (
+                                  {group !== 'CHAPTER' && item.positionName && (
+                                    <span className="text-[11px] text-slate-500 font-medium block truncate">
+                                      {item.positionName}
+                                    </span>
+                                  )}
+                                  {item.email && currentUser && group !== 'CHAPTER' && (
                                     <p className="text-[11px] text-[#737686] truncate">{item.email}</p>
                                   )}
                                 </>
@@ -636,7 +786,7 @@ export default function UnifiedLeaderboard({
                           </div>
                         </td>
 
-                        {/* Ban / Nhóm / Quy mô */}
+                        {/* Ban / Đơn vị / Quy mô */}
                         <td className="py-4 px-6">
                           {group === 'CHAPTER' ? (
                             <span className="inline-block px-2.5 py-1 rounded-full bg-blue-50 text-[#2563EB] text-xs font-bold">
@@ -644,15 +794,35 @@ export default function UnifiedLeaderboard({
                             </span>
                           ) : (
                             <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">
-                              {item.departmentName || item.groupName || item.chapterName || '—'}
+                              {item.departmentName || (group === 'DNA' ? (item.dnaUnitName || 'Khối DNA') : '—')}
                             </span>
                           )}
                         </td>
 
-                        {/* Star hoặc Điểm */}
+                        {/* Chapter (nếu xem bảng Thành viên / LT toàn hệ thống) */}
+                        {isGlobal && group !== 'CHAPTER' && group !== 'DNA' && (
+                          <td className="py-4 px-6">
+                            <span className="text-xs font-semibold text-slate-700">
+                              {item.chapterName || '—'}
+                            </span>
+                          </td>
+                        )}
+
+                        {/* Tháng đạt chuẩn (khi xem Chapter theo Nhiệm kỳ) */}
+                        {group === 'CHAPTER' && periodType === 'TERM' && (
+                          <td className="py-4 px-6 text-center">
+                            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-700">
+                              {(item as any).qualifiedMonthCount ?? 0} tháng
+                            </span>
+                          </td>
+                        )}
+
+                        {/* Star hoặc Điểm BXH (Hiển thị 3 chữ số thập phân cho Chapter) */}
                         <td className="py-4 px-6 text-right">
                           <span className="inline-flex items-center gap-1 font-extrabold text-amber-600 bg-amber-50 px-3 py-1 rounded-xl border border-amber-200">
-                            ⭐ {(item.score ?? item.stars ?? 0).toLocaleString('vi-VN')}
+                            ⭐ {group === 'CHAPTER'
+                              ? formatChapterScore(item.score)
+                              : (item.stars ?? 0).toLocaleString('vi-VN')}
                           </span>
                         </td>
 
@@ -665,10 +835,18 @@ export default function UnifiedLeaderboard({
                                   ? 'bg-green-100 text-green-700'
                                   : item.kpiStatus === 'YELLOW'
                                   ? 'bg-amber-100 text-amber-800'
-                                  : 'bg-red-100 text-red-700'
+                                  : item.kpiStatus === 'RED'
+                                  ? 'bg-red-100 text-red-700'
+                                  : 'bg-slate-100 text-slate-600'
                               }`}
                             >
-                              {item.kpiStatus === 'GREEN' ? 'Xanh' : item.kpiStatus === 'YELLOW' ? 'Vàng' : item.kpiStatus || 'N/A'}
+                              {item.kpiStatus === 'GREEN'
+                                ? 'Xanh'
+                                : item.kpiStatus === 'YELLOW'
+                                ? 'Vàng'
+                                : item.kpiStatus === 'RED'
+                                ? 'Đỏ'
+                                : 'Chờ KPI'}
                             </span>
                           ) : item.completedLessons !== undefined && item.totalLessons !== undefined ? (
                             <span className="font-semibold text-slate-700">
@@ -748,7 +926,7 @@ export default function UnifiedLeaderboard({
                 <li><strong>Video bài giảng:</strong> Nhận 1 Star cho mỗi phút thời lượng chuẩn (tối thiểu 1 Star), chỉ khi backend xác nhận đã xem đủ nội dung.</li>
                 <li><strong>Quiz bài học:</strong> Đạt điểm từ <strong>≥ 85%</strong> trở lên mới nhận sao. Áp dụng cơ chế <em>High-Water Mark</em>: làm lại đạt điểm cao hơn kỷ lục cũ sẽ nhận phần sao chênh lệch.</li>
                 <li><strong>Bài thi cuối khóa:</strong> Đạt từ <strong>≥ 85%</strong> trở lên nhận thưởng sao cuối khóa.</li>
-                <li><strong>Tiêu chí hòa sao:</strong> Nếu hai người có cùng số Star, hệ thống ưu tiên người đạt mốc sao đó sớm hơn theo thời gian thực tế.</li>
+                <li><strong>Quy tắc phá hòa cá nhân:</strong> Ưu tiên tổng Star cao hơn; nếu bằng nhau, ưu tiên người đạt mốc sao cuối sớm hơn tính từ đầu kỳ (chính xác đến giây); nếu tiếp tục bằng nhau thì <strong>đồng hạng</strong>. Không dùng ID/tên để phân hạng.</li>
               </ul>
             </div>
 
@@ -756,8 +934,8 @@ export default function UnifiedLeaderboard({
             <div className="bg-emerald-50/50 p-4 rounded-2xl border border-emerald-100 space-y-1.5">
               <h4 className="font-bold text-sm text-emerald-800">2. Xếp Hạng Khối DNA</h4>
               <ul className="list-disc pl-4 space-y-1">
-                <li>Chỉ áp dụng cho các <strong>Thành viên DNA</strong> đang hoạt động.</li>
-                <li>Tài khoản <strong>Lead DNA</strong> là vai trò quản lý cấp hệ thống nên không tham gia thi đua để bảo đảm tính khách quan.</li>
+                <li>Chỉ tính thành viên <strong>SGDC</strong> và <strong>LDC</strong> hợp lệ. Thành viên nhóm <strong>TT</strong> và tài khoản <strong>Lead DNA / Admin</strong> không tham gia thi đua.</li>
+                <li><strong>Chu kỳ nhiệm kỳ DNA:</strong> Cố định kết thúc vào 31/03 và 30/09; ranh giới xử lý lúc 00:00 ngày 01/04 và 01/10 theo giờ Việt Nam.</li>
               </ul>
             </div>
 
@@ -766,20 +944,34 @@ export default function UnifiedLeaderboard({
               <h4 className="font-bold text-sm text-amber-900">3. Xếp Hạng Toàn Chapter</h4>
               <ul className="list-disc pl-4 space-y-1">
                 <li>
-                  <strong>Công thức tính điểm:</strong>
-                  <div className="my-1.5 p-2 bg-white rounded-xl border border-amber-200 font-mono text-center font-bold text-amber-900">
-                    S_m = A_m / N_m
+                  <strong>Công thức tính điểm tháng:</strong>
+                  <div className="my-1.5 p-2 bg-white rounded-xl border border-amber-200 font-mono text-center font-bold text-amber-900 space-y-1">
+                    <div>Tháng thường: S_m = A_m / N_m</div>
+                    <div className="text-[11px] text-amber-800">Tháng có chuyển giao: S_m = A_1 / N_1 + A_2 / N_2</div>
                   </div>
-                  <p className="text-[11px] text-amber-900/90">A_m = tổng Star trong kỳ; N_m = quân số active bình quân (có trọng số thời gian khi chuyển giao giữa tháng).</p>
+                  <p className="text-[11px] text-amber-900/90">
+                    A_m, A_1, A_2: Tổng Star hợp lệ trong kỳ/giai đoạn. N_m, N_1, N_2: Quân số snapshot hợp lệ tại mốc chốt.
+                  </p>
                 </li>
-                <li><strong>Điều kiện để được xếp hạng:</strong>
+                <li>
+                  <strong>Phân bổ điểm tháng chuyển giao vào 2 nhiệm kỳ:</strong>
+                  Điểm giai đoạn trước chuyển giao (A_1/N_1) được cộng vào nhiệm kỳ cũ; điểm giai đoạn sau chuyển giao (A_2/N_2) được cộng vào nhiệm kỳ mới.
+                </li>
+                <li><strong>Điều kiện Chapter đủ tư cách tham gia:</strong>
                   <ul className="list-circle pl-4 mt-0.5 space-y-0.5">
-                    <li>Quân số Chapter phải <strong>trên 20 thành viên</strong>.</li>
-                    <li>Tối thiểu <strong>50%</strong> thành viên phải đạt tiến độ từ <strong>70%</strong> tổng số bài đã xuất bản của cả ba chương trình lõi Thành viên, LT và DNA.</li>
+                    <li>Quân số Chapter phải <strong>lớn hơn 20 thành viên</strong> (20 bị loại, 21 đạt).</li>
+                    <li>Tối thiểu <strong>50%</strong> thành viên đạt tiến độ từ <strong>70%</strong> tổng bài lõi đã xuất bản của cả 3 chương trình (Thành viên, LT, DNA).</li>
                     <li>KPI tháng phải là <strong>Vàng</strong> hoặc <strong>Xanh</strong>.</li>
                   </ul>
                 </li>
-                <li>Không cộng điểm KPI và không dùng công thức trọng số cũ.</li>
+                <li>
+                  <strong>Độ chính xác & Quy tắc phá hòa Chapter:</strong>
+                  <ul className="list-circle pl-4 mt-0.5 space-y-0.5">
+                    <li>Điểm xếp hạng được tính toán và so sánh ở <strong>độ chính xác cao (chưa làm tròn)</strong>. Giao diện hiển thị 3 chữ số thập phân.</li>
+                    <li><strong>Phá hòa theo tháng:</strong> Nếu bằng điểm thực, ưu tiên Chapter có thời điểm nhận Star hợp lệ cuối cùng sớm hơn trong tháng (chính xác đến giây); nếu bằng thì đồng hạng.</li>
+                    <li><strong>Phá hòa theo nhiệm kỳ:</strong> Nếu bằng điểm thực, ưu tiên Chapter có <strong>nhiều tháng đủ điều kiện</strong> trên BXH hơn; nếu bằng cả hai thì đồng hạng.</li>
+                  </ul>
+                </li>
               </ul>
             </div>
           </div>

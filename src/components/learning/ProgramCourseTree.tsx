@@ -52,6 +52,7 @@ export default function ProgramCourseTree() {
   const [programs, setPrograms] = useState<any[]>([])
   const [completedLessonIds, setCompletedLessonIds] = useState<Set<string>>(new Set())
   const [inProgressLessonIds, setInProgressLessonIds] = useState<Set<string>>(new Set())
+  const [unlockedLessonIds, setUnlockedLessonIds] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [openPrograms, setOpenPrograms] = useState<Record<string, boolean>>({})
@@ -69,6 +70,10 @@ export default function ProgramCourseTree() {
         setPrograms(progList)
         setCompletedLessonIds(new Set(res.data.completedLessonIds || []))
         setInProgressLessonIds(new Set(res.data.inProgressLessonIds || []))
+        // Server-durable unlock committed while heartbeats/quizzes ran. A signed-in
+        // learner ALWAYS follows progression, even on PUBLIC courses — visibility
+        // only governs whom the course is showable to, never sequential learning.
+        setUnlockedLessonIds(new Set(res.data.unlockedLessonIds || []))
         // Programs open by default, but every course starts collapsed. This
         // keeps long curricula scannable and avoids resetting any playing video.
         setOpenPrograms((prev) => {
@@ -215,9 +220,12 @@ export default function ProgramCourseTree() {
                       course.sessions?.forEach((session: any) => {
                         session.lessons?.forEach((lesson: any) => flatLessons.push(lesson))
                       })
-                      const isPublicCourse = course.visibility === 'PUBLIC'
+                      // Progression is mandatory for signed-in learners: a lesson is
+                      // open when the server committed its unlock (or it is the
+                      // first incomplete lesson the server will unlock next).
+                      // PUBLIC visibility never skips progression here.
                       const firstIncompleteIndex = flatLessons.findIndex((lesson) => !completedLessonIds.has(lesson.id))
-                      const unlockedThroughIndex = isPublicCourse || firstIncompleteIndex < 0 ? flatLessons.length - 1 : firstIncompleteIndex
+                      const unlockedThroughIndex = firstIncompleteIndex < 0 ? flatLessons.length - 1 : firstIncompleteIndex
                       const isCourseOpen = openCourses[course.id] ?? false
                       const doneInCourse = flatLessons.filter((lesson) => completedLessonIds.has(lesson.id)).length
                       const coursePercent = flatLessons.length ? Math.round((doneInCourse / flatLessons.length) * 100) : 0
@@ -234,7 +242,7 @@ export default function ProgramCourseTree() {
                               <h4 className="truncate text-sm font-bold text-[#172554]">{course.title}</h4>
                               <p className="mt-0.5 text-[11px] font-medium text-slate-500">
                                 {flatLessons.length} bài · Đã hoàn thành {doneInCourse}/{flatLessons.length} ({coursePercent}%)
-                                {isPublicCourse && <span className="ml-2 rounded-full bg-sky-100 px-1.5 py-0.5 text-[9px] font-bold text-sky-700">Công khai</span>}
+                                {course.visibility === 'PUBLIC' && <span className="ml-2 rounded-full bg-sky-100 px-1.5 py-0.5 text-[9px] font-bold text-sky-700">Công khai</span>}
                               </p>
                             </div>
                             <div className="flex shrink-0 items-center gap-2">
@@ -262,7 +270,7 @@ export default function ProgramCourseTree() {
                                       const lessonIndex = flatLessons.findIndex((item) => item.id === lesson.id)
                                       const isDone = completedLessonIds.has(lesson.id)
                                       const isInProgress = inProgressLessonIds.has(lesson.id) && !isDone
-                                      const isOpen = isPublicCourse || lessonIndex <= unlockedThroughIndex
+                                      const isOpen = unlockedLessonIds.has(lesson.id) || lessonIndex <= unlockedThroughIndex
                                       const status = isDone ? 'done' : !isOpen ? 'locked' : isInProgress ? 'progress' : 'open'
 
                                       return (

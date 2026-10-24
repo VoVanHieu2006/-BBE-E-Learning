@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from './prisma'
 import { authenticate } from './auth'
-import { historicalChapterMonthRows, individualPeriodRows, chapterSeasonRows } from './competition-snapshots'
+import { historicalChapterMonthRows, individualPeriodRows, chapterSeasonRows, competitionCohortAt } from './competition-snapshots'
 import { dnaSeasonEnd } from './chapter-reward-gate'
 import { getLearningManagerKind } from './manager-learning-access'
 import { listAccessibleChapterIds, listManagedOrganizationUnits } from './authorization'
@@ -13,8 +13,8 @@ type PeriodType = 'MONTH' | 'TERM'
 const GROUPS: Group[] = ['MEMBER', 'LT', 'DNA', 'CHAPTER']
 const PERIOD_TYPES: PeriodType[] = ['MONTH', 'TERM']
 
-const CHAPTER_FORMULA = 'S_m = A_m / N_m · A_m = tổng sao trong kỳ · N_m = quân số active bình quân (có trọng số thời gian khi chuyển giao) · KPI Vàng/Xanh · quân số >20 · ≥50% thành viên đạt ≥70% bài lõi.'
-const INDIVIDUAL_FORMULA = 'Tổng sao phát sinh trong kỳ; đồng hạng theo thời điểm đạt tổng sao cuối, sau đó theo ID ổn định.'
+const CHAPTER_FORMULA = 'Tháng thường: S_m = A_m / N_m · Tháng chuyển giao: S_m = A_1 / N_1 + A_2 / N_2 · Điều kiện: KPI Vàng/Xanh, quân số >20, ≥50% thành viên đạt ≥70% bài lõi.'
+const INDIVIDUAL_FORMULA = 'Tổng sao phát sinh trong kỳ; phá hòa theo thời điểm đạt tổng sao cuối (đến giây), bằng nhau đồng hạng.'
 
 function unauthorized(message = 'Bạn không có quyền xem bảng xếp hạng này.') {
   return NextResponse.json({ error: { code: 'AccessDenied', message } }, { status: 403 })
@@ -35,33 +35,55 @@ export async function periodLeaderboard(request: NextRequest) {
   const isAdmin = context?.role === 'ADMIN'
   const managerKind = context && !isAdmin ? await getLearningManagerKind(context.userId, context.role) : null
 
+  const requestedChapterId = query.get('chapterId')
+  let chapterId: string | null = null
   let managedChapterIds: string[] = []
   let managedDnaUnitIds: string[] = []
-  let ownChapterId: string | null = context?.chapterId || null
+  const ownChapterId: string | null = context?.chapterId || null
 
-  if (managerKind === 'LEAD_CHAPTER') {
+  if (isGuest || isAdmin) {
+    // Admin and Guest default to global system-wide.
+    // If and only if an explicit chapterId was requested, apply that filter.
+    chapterId = requestedChapterId || null
+  } else if (managerKind === 'LEAD_CHAPTER') {
     managedChapterIds = await listAccessibleChapterIds(context!, 'VIEW_MEMBER_PROGRESS')
     if (!managedChapterIds.length && ownChapterId) managedChapterIds = [ownChapterId]
     if (!['MEMBER', 'LT'].includes(group)) return unauthorized('Lead Chapter chỉ được xem bảng Thành viên và LT trong Chapter mình quản lý.')
     if (!managedChapterIds.length) return unauthorized('Tài khoản chưa được gán Chapter quản lý.')
-  }
-  if (managerKind === 'LEAD_DNA') {
+    if (requestedChapterId && !managedChapterIds.includes(requestedChapterId)) return unauthorized()
+    chapterId = requestedChapterId || managedChapterIds[0] || null
+  } else if (managerKind === 'LEAD_DNA') {
     const units = await listManagedOrganizationUnits(context!)
     managedDnaUnitIds = units.filter((unit) => unit.type === 'DNA' || unit.type === 'DNA_GROUP').map((unit) => unit.id)
     if (group !== 'DNA') return unauthorized('Lead DNA chỉ được xem bảng xếp hạng DNA trong phạm vi quản lý.')
     if (!managedDnaUnitIds.length) return unauthorized('Tài khoản chưa được gán đơn vị DNA quản lý.')
-  }
+  } else if (context?.role === 'MEMBER') {
+    // Authenticated regular member
+    const now = new Date()
+    const [chapterRow, dnaRow] = await Promise.all([
+      prisma.chapterMember.findUnique({ where: { user_id: context.userId }, select: { chapter_id: true } }),
+      prisma.organizationMembership.findFirst({
+        where: {
+          user_id: context.userId,
+          status: 'ACTIVE',
+          unit: { type: { in: ['DNA', 'DNA_GROUP'] } },
+          starts_at: { lte: now },
+          OR: [{ ends_at: null }, { ends_at: { gt: now } }],
+        },
+        select: { unit_id: true },
+      }),
+    ])
 
-  const requestedChapterId = query.get('chapterId')
-  let chapterId: string | null = requestedChapterId || ownChapterId
-  if (managerKind === 'LEAD_CHAPTER') {
-    if (chapterId && !managedChapterIds.includes(chapterId)) return unauthorized()
-    chapterId = chapterId || managedChapterIds[0] || null
-  }
-  if ((group === 'MEMBER' || group === 'LT') && !chapterId && !isAdmin && !isGuest) {
-    // A member can use the public unscoped board, but a Chapter manager must
-    // always be constrained to an authorized Chapter.
-    if (managerKind === 'LEAD_CHAPTER') return unauthorized()
+    if (dnaRow && !chapterRow) {
+      if (group !== 'DNA') return unauthorized('Thành viên Khối DNA chỉ được xem bảng xếp hạng Khối DNA.')
+      managedDnaUnitIds = [dnaRow.unit_id]
+    } else {
+      if (!['MEMBER', 'LT'].includes(group)) return unauthorized('Thành viên Chapter chỉ được xem bảng Thành viên và LT trong Chapter của mình.')
+      const memberChapterId = chapterRow?.chapter_id || ownChapterId
+      if (!memberChapterId) return unauthorized('Tài khoản thành viên chưa thuộc Chapter nào.')
+      if (requestedChapterId && requestedChapterId !== memberChapterId) return unauthorized('Bạn chỉ được xem bảng xếp hạng của Chapter mình thuộc.')
+      chapterId = memberChapterId
+    }
   }
 
   const policy = await prisma.learningPolicy.findUnique({ where: { id: 'default' } })
@@ -85,7 +107,7 @@ export async function periodLeaderboard(request: NextRequest) {
   const term = periodType === 'TERM' && !useSeason && !useGlobalIndividualTerm
     ? await prisma.chapterCompetitionTerm.findFirst({
         where: periodId
-          ? { id: periodId }
+          ? { id: periodId, ...(chapterId ? { chapter_id: chapterId } : {}) }
           : {
               chapter_id: chapterId || '00000000-0000-0000-0000-000000000000',
               starts_at: { lte: now },
@@ -94,6 +116,14 @@ export async function periodLeaderboard(request: NextRequest) {
         orderBy: { starts_at: 'desc' },
       })
     : null
+
+  if (periodId && periodType === 'TERM' && !useSeason && !useGlobalIndividualTerm && !term && chapterId) {
+    const foreignTerm = await prisma.chapterCompetitionTerm.findUnique({ where: { id: periodId }, select: { chapter_id: true } })
+    if (foreignTerm && foreignTerm.chapter_id !== chapterId) {
+      return unauthorized('Bạn không có quyền xem kỳ thi đua của Chapter khác.')
+    }
+  }
+
   const season = periodType === 'TERM' && (useSeason || useGlobalIndividualTerm)
     ? await prisma.transferSeason.findFirst({
         where: periodId
@@ -124,13 +154,24 @@ export async function periodLeaderboard(request: NextRequest) {
       const allowed = new Set(managedDnaUnitIds)
       payload = { ...payload, items: (payload.items || []).filter((row: any) => row.dnaUnitId && allowed.has(row.dnaUnitId)) }
     }
-    return NextResponse.json(await hydrateRanking(payload), { headers: { 'Cache-Control': 'no-store' } })
+    if (group === 'CHAPTER' && payload.items) {
+      payload = {
+        ...payload,
+        items: payload.items.map((row: any) => ({
+          ...row,
+          name: row.name || row.chapterName,
+          id: row.id || row.chapterId,
+          qualifiedMonthCount: row.qualifiedMonthCount ?? null,
+        })),
+      }
+    }
+    return NextResponse.json(await hydrateRanking(payload, isGuest), { headers: { 'Cache-Control': 'no-store' } })
   }
   if (period.ends_at && period.ends_at <= now) {
     return NextResponse.json({ items: [], state: 'AWAITING_SNAPSHOT', group, periodType, period, formula: group === 'CHAPTER' ? CHAPTER_FORMULA : INDIVIDUAL_FORMULA })
   }
 
-  const cacheKey = `period:${group}:${period.id}:${chapterId || ''}:${managedDnaUnitIds.join(',')}`
+  const cacheKey = `period:${group}:${period.id}:${chapterId || ''}:${managedDnaUnitIds.join(',')}:${isGuest ? 'guest' : 'auth'}`
   const cached = getCachedChapterLeaderboard(cacheKey)
   if (cached) return NextResponse.json(cached, { headers: { 'Cache-Control': 'no-store' } })
 
@@ -145,6 +186,7 @@ export async function periodLeaderboard(request: NextRequest) {
         if (liveMonth) {
           const liveRows = await historicalChapterMonthRows(prisma, liveMonth, now)
           const liveItems = liveRows.map((row) => ({
+            id: row.chapterId,
             chapterId: row.chapterId,
             name: row.chapterName,
             memberCount: Math.round(row.averageMemberCount * 10) / 10,
@@ -155,6 +197,7 @@ export async function periodLeaderboard(request: NextRequest) {
             rank: row.rank,
             eligible: row.eligible,
             exclusionReasons: row.exclusionReasons,
+            qualifiedMonthCount: (row as any).qualifiedMonthCount ?? null,
           }))
           const payload = {
             group,
@@ -170,14 +213,20 @@ export async function periodLeaderboard(request: NextRequest) {
         }
       }
       const result = await chapterSeasonRows(prisma, season.id, now)
+      const seasonItems = result.items.map((item) => ({
+        ...item,
+        id: item.chapterId,
+        name: item.chapterName,
+        qualifiedMonthCount: item.qualifiedMonthCount ?? 0,
+      }))
       return NextResponse.json({
         ...result,
         group,
         periodType,
         period,
         formula: CHAPTER_FORMULA,
-        items: result.items.filter((item) => item.eligible),
-        excluded: result.items.filter((item) => !item.eligible),
+        items: seasonItems.filter((item) => item.eligible),
+        excluded: seasonItems.filter((item) => !item.eligible),
       }, { headers: { 'Cache-Control': 'no-store' } })
     }
     if (!month) {
@@ -190,13 +239,14 @@ export async function periodLeaderboard(request: NextRequest) {
       name: row.chapterName,
       memberCount: Math.round(row.averageMemberCount * 10) / 10,
       totalStars: (row as any).totalStars || 0,
-      score: row.score !== null ? Math.round(row.score * 100) / 100 : null,
+      score: row.score,
       atLeast70Percent: Math.round(row.at70Rate * 1000) / 10,
       kpiStatus: row.kpiStatus || null,
       rank: row.rank,
       eligible: row.eligible,
       exclusionReasons: row.exclusionReasons,
       dataError: (row as any).dataError || null,
+      qualifiedMonthCount: (row as any).qualifiedMonthCount ?? null,
     }))
     const chapterPayload = {
       group,
@@ -218,6 +268,7 @@ export async function periodLeaderboard(request: NextRequest) {
     group,
     group === 'DNA' ? undefined : term?.chapter_id || chapterId || undefined,
     group === 'DNA' ? managedDnaUnitIds : undefined,
+    season?.id,
   )
   const individualPayload = await hydrateRanking({
     items,
@@ -226,29 +277,61 @@ export async function periodLeaderboard(request: NextRequest) {
     period,
     state: 'OPEN',
     formula: INDIVIDUAL_FORMULA,
-  })
+  }, isGuest)
   setCachedChapterLeaderboard(individualPayload, cacheKey)
   return NextResponse.json(individualPayload, { headers: { 'Cache-Control': 'no-store' } })
 }
 
-async function hydrateRanking(payload: any) {
+async function hydrateRanking(payload: any, isGuest = false) {
   if (payload.group === 'CHAPTER') return payload
   const items = payload.items || []
-  const users = items.length
+  if (!items.length) return payload
+
+  const userIds = items.map((row: any) => row.userId).filter(Boolean)
+  const users = userIds.length
     ? await prisma.user.findMany({
-        where: { id: { in: items.map((row: any) => row.userId) } },
-        select: { id: true, display_name: true, anonymized_at: true },
+        where: { id: { in: userIds } },
+        select: { id: true, display_name: true, email: true, anonymized_at: true },
       })
     : []
+
+  const lacksHistorical = items.some((row: any) => !row.departmentName || !row.positionName || (payload.group !== 'DNA' && !row.chapterName))
+  let historicalCohort: any[] | null = null
+  if (lacksHistorical && payload.period) {
+    try {
+      const atDate = new Date(payload.period.ends_at || payload.period.starts_at || Date.now())
+      historicalCohort = await competitionCohortAt(prisma, atDate)
+    } catch {
+      historicalCohort = null
+    }
+  }
+
   return {
     ...payload,
     items: items.map((row: any) => {
       const user = users.find((value) => value.id === row.userId)
-      return {
+      const historical = historicalCohort?.find((c: any) => c.userId === row.userId)
+      const departmentName = row.departmentName || historical?.departmentName || null
+      const positionName = row.positionName || historical?.positionName || null
+      const chapterName = row.chapterName || historical?.chapterName || null
+      const groupName = row.dnaUnitName || departmentName || row.groupName || null
+
+      const baseRow: any = {
         ...row,
-        displayName: user?.anonymized_at ? 'Tài khoản đã gỡ' : user?.display_name || 'Thành viên',
-        groupName: row.dnaUnitName || row.groupName || null,
+        displayName: user?.anonymized_at ? 'Tài khoản đã gỡ' : user?.display_name || row.displayName || 'Thành viên',
+        departmentName,
+        positionName,
+        chapterName,
+        groupName,
+        stars: row.stars ?? 0,
       }
+
+      if (isGuest) {
+        delete baseRow.email
+      } else {
+        baseRow.email = user?.email || row.email || null
+      }
+      return baseRow
     }),
   }
 }

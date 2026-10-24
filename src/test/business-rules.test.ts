@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { capVideoProgress, hasWatchedFullVideo, videoHeartbeatGraceSeconds } from '../lib/video-progress-rules'
+import { capVideoProgress, endedCompletionToleranceSeconds, endedReachAllowanceSeconds, hasCompletedVideoAtEnd, hasWatchedFullVideo, videoHeartbeatGraceSeconds } from '../lib/video-progress-rules'
 import { starsForCourseFinalScore, starsForQuizScore, starsForVideoDuration } from '../lib/reward-rules'
 import { matchesLearningRulePositionScope } from '../lib/learning-rule-scope'
 import { orderOrganizationTree, organizationParentTypeMatches, organizationSubtreeIds, positionScopeMatchesUnitType, validateOrganizationMove } from '../lib/organization-scope'
@@ -387,6 +387,79 @@ describe('strict video progress', () => {
     assert.equal(hasWatchedFullVideo(ended.furthestWatchedPositionSeconds, 600), true)
     const seek = capVideoProgress(0, 600, 600, 0, 2, grace)
     assert.equal(hasWatchedFullVideo(seek.furthestWatchedPositionSeconds, 600), false)
+  })
+
+  it('bounds the ENDED reach allowance to grace + 2, capped at 6 seconds', () => {
+    assert.equal(endedReachAllowanceSeconds(1), 4)
+    assert.equal(endedReachAllowanceSeconds(1.5), 4.25)
+    assert.equal(endedReachAllowanceSeconds(2), 5)
+    assert.equal(endedReachAllowanceSeconds(10), 5)
+  })
+
+  it('scales the ENDED completion tolerance and never exceeds 10% of the duration', () => {
+    assert.equal(endedCompletionToleranceSeconds(0), 0)
+    assert.equal(endedCompletionToleranceSeconds(-5), 0)
+    assert.equal(endedCompletionToleranceSeconds(2), 0.2)
+    assert.equal(endedCompletionToleranceSeconds(15), 0.6)
+    assert.equal(endedCompletionToleranceSeconds(168), 0.84)
+    assert.equal(endedCompletionToleranceSeconds(600), 1.5)
+    assert.equal(endedCompletionToleranceSeconds(Number.NaN), 0)
+  })
+
+  it('relaxes the completion threshold only for an explicit ENDED event', () => {
+    // int DB duration vs fractional real playback: legacy strict check strands viewers
+    assert.equal(hasWatchedFullVideo(167.4, 168), false)
+    assert.equal(hasCompletedVideoAtEnd(167.4, 168, 'HEARTBEAT'), false)
+    assert.equal(hasCompletedVideoAtEnd(167.4, 168, 'ENDED'), true)
+    assert.equal(hasCompletedVideoAtEnd(167.4, 168, 'PLAY'), false)
+    assert.equal(hasCompletedVideoAtEnd(167.4, 168, 'PAUSE'), false)
+    assert.equal(hasCompletedVideoAtEnd(168, 168, 'ENDED'), true)
+    // Overreach by half a second (client clock jitter) must not regress completion.
+    assert.equal(hasCompletedVideoAtEnd(168.6, 168, 'ENDED'), true)
+    assert.equal(hasCompletedVideoAtEnd(167.1, 168, 'ENDED'), false)
+    assert.equal(hasCompletedVideoAtEnd(66, 168, 'ENDED'), false)
+  })
+
+  it('completes continuously watched videos of every supported length and rate', () => {
+    const durations = [1, 2, 5, 15, 29, 30, 168, 600]
+    for (const duration of durations) {
+      for (const rate of [1, 1.25, 1.5, 1.75, 2]) {
+        let furthest = 0
+        const wallSeconds = Math.ceil(duration / rate) + 1
+        for (let elapsed = 1; elapsed <= wallSeconds; elapsed += 1) {
+          const contentPosition = Math.min(duration, elapsed * rate)
+          const result = capVideoProgress(furthest, contentPosition, contentPosition, 1, rate)
+          furthest = result.furthestWatchedPositionSeconds
+          if (furthest >= duration - endedCompletionToleranceSeconds(duration)) break
+        }
+        // Final committed heartbeat followed by the ENDED event within 2 wall seconds.
+        const endedResult = capVideoProgress(furthest, duration, duration, 2, rate, endedReachAllowanceSeconds(rate))
+        assert.equal(
+          hasCompletedVideoAtEnd(endedResult.furthestWatchedPositionSeconds, duration, 'ENDED'),
+          true,
+          `duration ${duration}s at ${rate}x should complete`,
+        )
+      }
+    }
+  })
+
+  it('never lets an instant seek-to-end ENDED reward progress', () => {
+    for (const duration of [168, 600]) {
+      // Authenticated brute-force attempt: PLAY commit, one second later ENDED.
+      const reach = capVideoProgress(0, duration, duration, 1, 2, endedReachAllowanceSeconds(2))
+      assert.equal(reach.furthestWatchedPositionSeconds <= endedReachAllowanceSeconds(2) + 2, true)
+      assert.equal(hasCompletedVideoAtEnd(reach.furthestWatchedPositionSeconds, duration, 'ENDED'), false)
+    }
+  })
+
+  it('keeps short videos from freezing before their first scheduled heartbeat', () => {
+    // A 2s video ends before the 3s interval: PLAY commit then ENDED after 1s of playback.
+    const play = capVideoProgress(0, 0.4, 0.4, 1, 1)
+    assert.equal(play.furthestWatchedPositionSeconds, 0.4)
+    const ended = capVideoProgress(play.furthestWatchedPositionSeconds, 2, 2, 1, 1, endedReachAllowanceSeconds(1))
+    assert.equal(hasCompletedVideoAtEnd(ended.furthestWatchedPositionSeconds, 2, 'ENDED'), true)
+    // And completion must stay reachable when the very first heartbeat is the ENDED one.
+    assert.equal(capVideoProgress(0, 2, 2, 2, 1, endedReachAllowanceSeconds(1)).furthestWatchedPositionSeconds, 2)
   })
 })
 

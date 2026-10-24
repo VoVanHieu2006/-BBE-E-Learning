@@ -8,13 +8,13 @@ export async function getLearningManagerKind(userId: string, role?: string | nul
   const dnaLead = await prisma.positionAssignment.findFirst({
     where: {
       user_id: userId,
-      position: { code: { in: ['DNA_LEAD', 'DNA_MANAGER', 'CHAPTER_LEAD'] } },
+      position: { code: { in: ['DNA_LEAD', 'DNA_MANAGER', 'CHAPTER_LEAD', 'CHAPTER_MANAGER'] } },
       starts_at: { lte: new Date() },
       OR: [{ ends_at: null }, { ends_at: { gt: new Date() } }],
     },
     select: { id: true, position: { select: { code: true } } },
   })
-  return dnaLead ? dnaLead.position.code === 'CHAPTER_LEAD' ? 'LEAD_CHAPTER' as const : 'LEAD_DNA' as const : null
+  return dnaLead ? (['CHAPTER_LEAD', 'CHAPTER_MANAGER'].includes(dnaLead.position.code) ? 'LEAD_CHAPTER' as const : 'LEAD_DNA' as const) : null
 }
 
 export async function isLearningManager(userId: string, role?: string | null) {

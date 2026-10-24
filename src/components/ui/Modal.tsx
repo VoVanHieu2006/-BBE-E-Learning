@@ -9,6 +9,43 @@ let savedOverflow: string | null = null;
 let modalSeq = 0;
 const modalStack: Array<{ id: number; close: () => void }> = [];
 
+const FOCUSABLE_SELECTOR = [
+  'a[href]', 'button:not([disabled])', 'input:not([disabled])', 'select:not([disabled])',
+  'textarea:not([disabled])', '[tabindex]:not([tabindex="-1"])',
+].join(', ');
+
+function focusTrapHandler(event: KeyboardEvent, dialog: HTMLElement) {
+  if (event.key !== 'Tab' && event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return false;
+  const focusable = Array.from(dialog.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR))
+    .filter((el) => el.offsetParent !== null);
+  if (!focusable.length) return false;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  const active = document.activeElement as HTMLElement | null;
+  const goingBack = event.shiftKey || event.key === 'ArrowUp';
+  if (event.key !== 'Tab') {
+    // Arrow keys must keep working inside inputs (radio groups, selects).
+    const tag = active?.tagName;
+    if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return false;
+  }
+  if (!dialog.contains(active)) {
+    event.preventDefault();
+    first.focus();
+    return true;
+  }
+  if (!goingBack && active === last) {
+    event.preventDefault();
+    first.focus();
+    return true;
+  }
+  if (goingBack && active === first) {
+    event.preventDefault();
+    last.focus();
+    return true;
+  }
+  return false;
+}
+
 interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -28,6 +65,8 @@ export default function Modal({
 }: ModalProps) {
   const [mounted, setMounted] = useState(false);
   const onCloseRef = useRef(onClose);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     onCloseRef.current = onClose;
@@ -51,10 +90,23 @@ export default function Modal({
       document.body.style.overflow = 'hidden';
     }
 
+    // Focus trap: the dialog owns Tab, Escape returns focus where it came from.
+    previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
+    const dialog = dialogRef.current;
+    const focusables = dialog
+      ? Array.from(dialog.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter((el) => el.offsetParent !== null)
+      : [];
+    focusables[0]?.focus();
+
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      const top = modalStack[modalStack.length - 1];
-      if (top && top.id === id) top.close();
+      if (e.key === 'Escape') {
+        const top = modalStack[modalStack.length - 1];
+        if (top && top.id === id) top.close();
+        return;
+      }
+      if (modalStack[modalStack.length - 1]?.id === id && dialogRef.current) {
+        focusTrapHandler(e, dialogRef.current);
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
 
@@ -67,6 +119,8 @@ export default function Modal({
         document.body.style.overflow = savedOverflow;
         savedOverflow = null;
       }
+      previouslyFocusedRef.current?.focus?.();
+      previouslyFocusedRef.current = null;
     };
   }, [isOpen, mounted]);
 
@@ -74,6 +128,7 @@ export default function Modal({
 
   const content = (
     <div
+      ref={dialogRef}
       className="fixed inset-0 z-[9999] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto"
       onClick={(e) => {
         if (closeOnBackdrop && e.target === e.currentTarget) {

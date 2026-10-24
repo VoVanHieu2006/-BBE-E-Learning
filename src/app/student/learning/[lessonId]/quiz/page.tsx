@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
+import Modal from '@/components/ui/Modal';
 import Toast, { ToastMessage } from '@/components/ui/Toast';
 import LessonQuiz from '@/components/lesson/LessonQuiz';
 import StarRewardCelebration from '@/components/StarRewardCelebration';
@@ -317,8 +318,13 @@ export default function LessonQuizPage({ params }: { params: { lessonId: string 
                 Sẵn sàng làm bài kiểm tra?
               </h2>
               <div className="flex flex-wrap gap-2 text-xs font-semibold">
+                {role === 'ADMIN' && (
+                  <span className="px-3 py-1.5 bg-amber-50 text-amber-800 border border-amber-200 rounded-xl" title="Chỉ quản trị viên nhìn thấy">
+                    Ngân hàng: {bankQuestionCount} câu
+                  </span>
+                )}
                 <span className="px-3 py-1.5 bg-[#eff4ff] text-[#2563EB] rounded-xl">
-                  {questionCount > 0 ? `${questionCount} câu hỏi` : 'Theo cấu hình đề'}
+                  {questionCount > 0 ? `${questionCount} câu hỏi mỗi lượt` : 'Theo cấu hình đề'}
                 </span>
                 <span className="px-3 py-1.5 bg-[#eff4ff] text-[#2563EB] rounded-xl">
                   {durationMinutes > 0 ? `${durationMinutes} phút` : 'Thời gian theo cấu hình'}
@@ -435,51 +441,54 @@ export default function LessonQuizPage({ params }: { params: { lessonId: string 
       </div>
       {starReward !== null && <StarRewardCelebration amount={starReward} message="Quiz đạt yêu cầu — phần thưởng của bạn!" />}
 
-      {/* Modal Xác nhận trước khi vào làm bài */}
-      {showConfirmStartModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fadeIn">
-          <Card className="max-w-md w-full p-6 space-y-4 shadow-2xl border border-blue-200">
-            <div className="flex items-center gap-3 text-[#2563EB]">
-              <span className="text-3xl">⏱️</span>
-              <h4 className="text-base font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
-                Xác nhận bắt đầu bài kiểm tra?
-              </h4>
+      {/* Modal Xác nhận trước khi vào làm bài — portal, căn giữa viewport */}
+      <Modal
+        isOpen={showConfirmStartModal}
+        onClose={() => setShowConfirmStartModal(false)}
+        maxWidth="max-w-md"
+        closeOnBackdrop={false}
+      >
+        <div className="p-6 space-y-4 border-t-8 border-blue-200">
+          <div className="flex items-center gap-3 text-[#2563EB]">
+            <span className="text-3xl">⏱️</span>
+            <h4 className="text-base font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
+              Xác nhận bắt đầu bài kiểm tra?
+            </h4>
+          </div>
+          <div className="text-xs text-[#434655] space-y-2 leading-relaxed">
+            <p>
+              Đồng hồ đếm ngược sẽ bắt đầu chạy ngay khi bạn xác nhận ({durationMinutes > 0 ? `${durationMinutes} phút` : 'theo cấu hình'} · {questionCount > 0 ? `${questionCount} câu` : 'theo đề'}).
+            </p>
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-1 text-amber-900 font-medium">
+              <p>⚠️ <strong>Lưu ý:</strong></p>
+              <p>• Trong khi làm bài, bạn <strong>không thể quay lại</strong> nếu chưa <strong>Nộp</strong> hoặc <strong>Hủy bài</strong>.</p>
+              <p>• Đóng trình duyệt sẽ được tính là <strong>Hủy bài</strong>.</p>
+              <p>• Mỗi lần làm (dù Nộp hay Hủy) đều phải đợi <strong>{QUIZ_COOLDOWN_MINUTES} phút</strong> mới có thể làm lại.</p>
             </div>
-            <div className="text-xs text-[#434655] space-y-2 leading-relaxed">
-              <p>
-                Đồng hồ đếm ngược sẽ bắt đầu chạy ngay khi bạn xác nhận.
-              </p>
-              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-1 text-amber-900 font-medium">
-                <p>⚠️ <strong>Lưu ý:</strong></p>
-                <p>• Trong khi làm bài, bạn <strong>không thể quay lại</strong> nếu chưa <strong>Nộp</strong> hoặc <strong>Hủy bài</strong>.</p>
-                <p>• Đóng trình duyệt sẽ được tính là <strong>Hủy bài</strong>.</p>
-                <p>• Mỗi lần làm (dù Nộp hay Hủy) đều phải đợi <strong>{QUIZ_COOLDOWN_MINUTES} phút</strong> mới có thể làm lại.</p>
-              </div>
-            </div>
-            <div className="flex gap-2.5 pt-2">
-              <Button
-                variant="outline"
-                className="flex-1 font-bold"
-                onClick={() => setShowConfirmStartModal(false)}
-              >
-                Chưa sẵn sàng
-              </Button>
-              <Button
-                variant="primary"
-                className="flex-1 font-bold shadow-md"
-                onClick={() => {
-                  setShowConfirmStartModal(false);
-                  setIsNewAttempt(true);
-                  setAttemptKey((prev) => prev + 1);
-                  setStarted(true);
-                }}
-              >
-                Tôi đã hiểu, Bắt đầu!
-              </Button>
-            </div>
-          </Card>
+          </div>
+          <div className="flex gap-2.5 pt-2">
+            <Button
+              variant="outline"
+              className="flex-1 font-bold"
+              onClick={() => setShowConfirmStartModal(false)}
+            >
+              Chưa sẵn sàng
+            </Button>
+            <Button
+              variant="primary"
+              className="flex-1 font-bold shadow-md"
+              onClick={() => {
+                setShowConfirmStartModal(false);
+                setIsNewAttempt(true);
+                setAttemptKey((prev) => prev + 1);
+                setStarted(true);
+              }}
+            >
+              Tôi đã hiểu, Bắt đầu!
+            </Button>
+          </div>
         </div>
-      )}
+      </Modal>
     </div>
   );
 }

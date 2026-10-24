@@ -100,14 +100,15 @@ describe('Reward integrity', () => {
 })
 
 describe('Competition Chapter stages and role groups', () => {
-  it('uses A_m / N_m with the time-weighted roster, not the old stage sum', () => {
+  it('uses S_m = A_1 / N_1 + A_2 / N_2 for transfer month, while keeping time-weighted roster for size eligibility', () => {
     const result = chapterCompetitionScore([
       { startsAt: new Date(0), endsAt: new Date(15 * DAY_MS), memberCount: 30, qualifiedCount: 15, stars: 100 },
       { startsAt: new Date(15 * DAY_MS), endsAt: new Date(30 * DAY_MS), memberCount: 15, qualifiedCount: 8, stars: 40 },
     ], 'YELLOW')
     assert.equal(result.totalStars, 140)
     assert.equal(result.averageMemberCount, 22.5)
-    assert.equal(result.score, 140 / 22.5)
+    // S_m = 100/30 + 40/15 = 10/3 + 8/3 = 18/3 = 6
+    assert.equal(result.score, 6)
     assert.ok(result.eligible)
   })
   it('requires strictly more than 20 members and waits for KPI', () => {

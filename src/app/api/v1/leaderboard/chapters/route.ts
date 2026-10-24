@@ -64,19 +64,20 @@ export async function GET(request: NextRequest) {
     },
     stars: {
       total: (row as any).totalStars || 0,
-      averagePerMember: row.score !== null ? Math.round(row.score * 100) / 100 : 0,
-      score: row.score !== null ? Math.round(row.score * 100) / 100 : 0,
-      achievedAt: null,
+      averagePerMember: row.score ?? 0,
+      score: row.score ?? 0,
+      achievedAt: (row as any).lastStarAwardedAt || null,
     },
     kpi: { status: row.kpiStatus || 'WAITING_KPI', bonus: 0 },
     size: { score: 0, cappedAt: 51 },
-    score: row.score !== null ? Math.round(row.score * 100) / 100 : 0,
+    score: row.score ?? 0,
     rank: row.rank,
     atLeast70Percent: Math.round(row.at70Rate * 1000) / 10,
     kpiStatus: row.kpiStatus || null,
     reasons: row.exclusionReasons,
     eligible: row.eligible,
     dataError: (row as any).dataError || null,
+    qualifiedMonthCount: (row as any).qualifiedMonthCount ?? null,
   })
   const mapped = chapterRows.map(mapRow)
   const data = {
@@ -84,7 +85,7 @@ export async function GET(request: NextRequest) {
     monthKey: compMonth.key,
     availableMonths: availableMonths.map((item) => item.key),
     formulaVersion: 'chapter-v8-a-over-n',
-    formula: 'S_m = A_m / N_m; A_m = tổng sao trong kỳ; N_m = quân số active bình quân; KPI Vàng/Xanh; >20 thành viên; ≥50% đạt ≥70% bài lõi',
+    formula: 'Tháng thường: S_m = A_m / N_m; Tháng chuyển giao: S_m = A_1 / N_1 + A_2 / N_2; KPI Vàng/Xanh; >20 thành viên; ≥50% đạt ≥70% bài lõi',
     updatedAt: now.toISOString(),
     items: mapped.filter((row) => row.eligible),
     excluded: mapped.filter((row) => !row.eligible),
