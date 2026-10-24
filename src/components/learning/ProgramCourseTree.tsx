@@ -48,7 +48,17 @@ const PROGRAM_THEME: Record<string, {
 
 const DEFAULT_THEME = PROGRAM_THEME.EXTENDED
 
-export default function ProgramCourseTree() {
+export interface ProgramCourseTreeProps {
+  refreshTrigger?: number
+  onDataLoaded?: (data: {
+    programs: any[]
+    completedLessonIds: Set<string>
+    inProgressLessonIds: Set<string>
+    unlockedLessonIds: Set<string>
+  }) => void
+}
+
+export default function ProgramCourseTree({ refreshTrigger, onDataLoaded }: ProgramCourseTreeProps = {}) {
   const [programs, setPrograms] = useState<any[]>([])
   const [completedLessonIds, setCompletedLessonIds] = useState<Set<string>>(new Set())
   const [inProgressLessonIds, setInProgressLessonIds] = useState<Set<string>>(new Set())
@@ -67,13 +77,22 @@ export default function ProgramCourseTree() {
       const res = await apiFetch<any>('/api/v1/learning/me', { noCache: force })
       if (res.ok && res.data) {
         const progList = res.data.programs || []
+        const completedSet = new Set<string>(res.data.completedLessonIds || [])
+        const inProgressSet = new Set<string>(res.data.inProgressLessonIds || [])
+        const unlockedSet = new Set<string>(res.data.unlockedLessonIds || [])
         setPrograms(progList)
-        setCompletedLessonIds(new Set(res.data.completedLessonIds || []))
-        setInProgressLessonIds(new Set(res.data.inProgressLessonIds || []))
+        setCompletedLessonIds(completedSet)
+        setInProgressLessonIds(inProgressSet)
         // Server-durable unlock committed while heartbeats/quizzes ran. A signed-in
         // learner ALWAYS follows progression, even on PUBLIC courses — visibility
         // only governs whom the course is showable to, never sequential learning.
-        setUnlockedLessonIds(new Set(res.data.unlockedLessonIds || []))
+        setUnlockedLessonIds(unlockedSet)
+        onDataLoaded?.({
+          programs: progList,
+          completedLessonIds: completedSet,
+          inProgressLessonIds: inProgressSet,
+          unlockedLessonIds: unlockedSet,
+        })
         // Programs open by default, but every course starts collapsed. This
         // keeps long curricula scannable and avoids resetting any playing video.
         setOpenPrograms((prev) => {
@@ -92,6 +111,12 @@ export default function ProgramCourseTree() {
   useEffect(() => {
     loadData()
   }, [])
+
+  useEffect(() => {
+    if (refreshTrigger && refreshTrigger > 0) {
+      loadData(true)
+    }
+  }, [refreshTrigger])
 
   const hasAnyCourse = useMemo(
     () => programs.some((p) => (p.courses || []).some((c: any) => (c.sessions || []).some((s: any) => (s.lessons || []).length > 0))),

@@ -743,15 +743,27 @@ describe('quiz question pools', () => {
     })
   })
 
-  it('redistributes from small pools and rejects empty or unassigned pools', () => {
-    const redistributed = selectQuizQuestions(
-      pools,
-      questions.filter((question) => question.poolId !== pools[0].id || question.id !== `${pools[0].id}-question-4`)
-        .filter((question) => question.poolId !== pools[0].id || question.id !== `${pools[0].id}-question-3`),
-      identityShuffle,
-      15,
-    )
-    assert.equal(redistributed.ok, true)
+  it('rejects exceeding Q_max according to Plan B and rejects empty or unassigned pools', () => {
+    const questionsWithSmallPool = questions
+      .filter((question) => question.poolId !== pools[0].id || question.id !== `${pools[0].id}-question-4`)
+      .filter((question) => question.poolId !== pools[0].id || question.id !== `${pools[0].id}-question-3`)
+
+    // Pool 0 has 2 questions, others have 4. Q_max = 5 * 2 = 10.
+    // Requesting 15 exceeds Q_max and must be rejected under Plan B.
+    const exceeded = selectQuizQuestions(pools, questionsWithSmallPool, identityShuffle, 15)
+    assert.deepEqual(exceeded, {
+      ok: false,
+      code: 'QuestionPoolQuotaExceeded',
+      maxAllowed: 10,
+      minCount: 2,
+    })
+
+    // Requesting 10 (= Q_max) succeeds with balanced quotas
+    const balanced = selectQuizQuestions(pools, questionsWithSmallPool, identityShuffle, 10)
+    assert.equal(balanced.ok, true)
+    if (balanced.ok) {
+      assert.deepEqual(balanced.quotas, [2, 2, 2, 2, 2])
+    }
 
     assert.deepEqual(selectQuizQuestions(pools, questions.filter((question) => question.poolId !== pools[0].id), identityShuffle), {
       ok: false, code: 'QuestionPoolIncomplete',

@@ -15,11 +15,9 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
   const [lesson, setLesson] = useState<any>(null);
   const [lessonError, setLessonError] = useState<{ code: string; message: string; status: number } | null>(null);
   const [progress, setProgress] = useState<any>(null);
-  const [replayEpoch, setReplayEpoch] = useState(0);
   const seenRewardKeysRef = useRef<Set<string>>(new Set());
   const durationMismatchRef = useRef(false);
   useEffect(() => {
-    setReplayEpoch(0);
     durationMismatchRef.current = false;
   }, [currentLessonId]);
   const [starReward, setStarReward] = useState<number | null>(null);
@@ -522,17 +520,17 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
               </div>
             ) : lesson.video ? (
               <YouTubePlayer
-                key={`${currentLessonId}:${lesson.video.youtubeVideoId}:${replayEpoch}`}
+                key={`${currentLessonId}:${lesson.video.youtubeVideoId}`}
                 lessonId={currentLessonId}
                 youtubeVideoId={lesson.video.youtubeVideoId}
                 accessToken={token}
                 allowFreeSeek={allowFreeSeek}
                 initialPosition={
-                  replayEpoch > 0 || progress?.completed && (progress?.lastPosition || 0) >= (lesson.video.durationSeconds || 0) - 5
+                  progress?.completed && (progress?.lastPosition || 0) >= (lesson.video.durationSeconds || 0) - 5
                     ? 0
                     : progress?.lastPosition || 0
                 }
-                initialFurthest={replayEpoch > 0 ? 0 : progress?.watchedUntil || progress?.furthestWatchedPositionSeconds || 0}
+                initialFurthest={progress?.watchedUntil || progress?.furthestWatchedPositionSeconds || 0}
                 durationSeconds={lesson.video.durationSeconds || 0}
                 onProgress={handleProgress}
                 onComplete={handleLessonComplete}
@@ -617,9 +615,8 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
           )}
 
           {/* Under-Video Action Bar: Prev / Next with Brand Orange Button #F97316 */}
-          {progress?.replay && <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-950"><p>Tháng {progress.replay.competitionMonth}: {progress.replay.completed ? 'Đã hoàn tất lượt xem nhận sao.' : 'Có thể xem lại để nhận sao tháng. Tiến độ đào tạo được giữ nguyên.'}</p><Button variant="outline" onClick={() => setReplayEpoch((value) => value + 1)}>Xem lại từ đầu</Button></div>}
-          <div className="bg-white rounded-2xl border border-[#eff4ff] shadow-sm p-4 flex items-center justify-between max-w-5xl w-full mx-auto">
-            <div className="flex items-center gap-3">
+          <div className="bg-white rounded-2xl border border-[#eff4ff] shadow-sm p-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 max-w-5xl w-full mx-auto">
+            <div className="flex items-center gap-3 flex-wrap">
               {previousLesson ? (
                 <button
                   disabled={loadingLesson}
@@ -705,7 +702,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
 
           {/* Lesson Tabs: Description & Documents (White/Navy Stitch Theme) */}
           <div className="max-w-5xl w-full mx-auto space-y-4">
-            <div className="flex border-b border-[#cbdbf5]/70 gap-6">
+            <div className="flex border-b border-[#cbdbf5]/70 gap-6 overflow-x-auto whitespace-nowrap pb-0.5 scrollbar-none">
               <button
                 onClick={() => setActiveTab('desc')}
                 className={`pb-3 text-sm font-bold border-b-2 transition ${

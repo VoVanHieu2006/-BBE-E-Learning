@@ -84,6 +84,7 @@ export function clearApiCache(prefix?: string) {
 async function tryRefreshToken(): Promise<string | null> {
   if (typeof window === 'undefined') return null
   const refreshToken = localStorage.getItem('refreshToken')
+  if (!refreshToken) return null
 
   if (isRefreshing && refreshPromise) {
     return refreshPromise

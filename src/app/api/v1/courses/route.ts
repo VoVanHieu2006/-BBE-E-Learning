@@ -6,21 +6,36 @@ import { getCoursesServerCache, invalidateCoursesServerCache, setCoursesServerCa
 const COURSES_CACHE_TTL = 15000
 
 export async function GET(request: NextRequest) {
-  const auth = await authenticate(request).catch(() => ({ ok: false, error: { code: 'UNAUTHORIZED', message: 'Auth error' } }))
-
   const url = new URL(request.url)
   const page = parseInt(url.searchParams.get('page') || '1', 10)
   const requestedLimit = parseInt(url.searchParams.get('limit') || '100', 10)
   const limit = Math.min(Math.max(requestedLimit, 1), 200)
   const skip = (page - 1) * limit
 
-  const role = auth.ok ? (auth as any).context!.role : 'GUEST'
+  // Fast-path guest check: avoid authenticate overhead when no token is presented
+  const hasAuthHeader = Boolean(request.headers.get('authorization'))
+  const hasAccessCookie = Boolean(request.cookies.get('accessToken'))
+  const hasRefreshCookie = Boolean(request.cookies.get('refreshToken'))
+  const isDefinitelyGuest = !hasAuthHeader && !hasAccessCookie && !hasRefreshCookie
+
+  let role = 'GUEST'
+  let auth: any = { ok: false }
+
+  if (!isDefinitelyGuest) {
+    auth = await authenticate(request).catch(() => ({ ok: false, error: { code: 'UNAUTHORIZED', message: 'Auth error' } }))
+    if (auth.ok) role = auth.context.role
+  }
+
   const cacheKey = `${role}:${page}:${limit}`
   const cached = getCoursesServerCache(cacheKey, COURSES_CACHE_TTL)
   if (cached) {
     return NextResponse.json(cached, {
       status: 200,
-      headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' },
+      headers: {
+        'Cache-Control': role === 'GUEST'
+          ? 'public, max-age=15, s-maxage=30, stale-while-revalidate=60'
+          : 'private, no-cache, no-store, must-revalidate',
+      },
     })
   }
 

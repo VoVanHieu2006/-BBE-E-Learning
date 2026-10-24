@@ -1,6 +1,6 @@
-﻿import { currentCycleAttemptFilter } from './learning-periods'
+import { currentCycleAttemptFilter } from './learning-periods'
 import { prisma } from './prisma'
-import { hasWatchedFullVideo } from './video-progress-rules'
+import { hasWatchedFullVideo, endedCompletionToleranceSeconds } from './video-progress-rules'
 import { evaluateCourseFinalRequirements } from './course-final-assessment-rules'
 
 export type ProgressionAction = 'VIEW' | 'WATCH' | 'ASSESS'
@@ -93,13 +93,15 @@ export async function checkCourseFinalProgression(
     : []
   const passedAssessmentIds = new Set(passedAttempts.map((attempt) => attempt.assessment_id))
   const requirements = evaluateCourseFinalRequirements(
-    lessons.map((lesson) => ({
-      videoComplete: !lesson.video || hasWatchedFullVideo(
-        watchedByLesson.get(lesson.id) || 0,
-        lesson.video.duration_seconds || 0,
-      ),
-      assessmentId: lesson.assessment?.id || null,
-    })),
+    lessons.map((lesson) => {
+      const d = lesson.video?.duration_seconds || 0
+      const w = watchedByLesson.get(lesson.id) || 0
+      const videoComplete = !lesson.video || hasWatchedFullVideo(w, d) || (d > 0 && w >= d - endedCompletionToleranceSeconds(d))
+      return {
+        videoComplete,
+        assessmentId: lesson.assessment?.id || null,
+      }
+    }),
     passedAssessmentIds,
   )
   if (requirements.ok === false) return requirements
@@ -146,8 +148,10 @@ export async function checkLessonProgression(
           })
         : await prisma.lessonProgress.findUnique({ where: { user_id_lesson_id: { user_id: userId, lesson_id: lessonId } }, select: { furthest_watched_position_seconds: true } })
       const furthest = cycle ? (progress as any)?.furthest_seconds || 0 : (progress as any)?.furthest_watched_position_seconds || 0
-      const duration = await prisma.video.findUnique({ where: { lesson_id: lessonId }, select: { duration_seconds: true } })
-      if (!hasWatchedFullVideo(furthest, duration?.duration_seconds || 0)) {
+      const duration = (await prisma.video.findUnique({ where: { lesson_id: lessonId }, select: { duration_seconds: true } }))?.duration_seconds || 0
+      const tolerance = endedCompletionToleranceSeconds(duration)
+      const complete = hasWatchedFullVideo(furthest, duration) || (duration > 0 && furthest >= duration - tolerance)
+      if (!complete) {
         return { ok: false, code: 'LessonVideoIncomplete', message: 'Hãy hoàn thành video bài giảng trước khi làm quiz' }
       }
     }
@@ -184,7 +188,10 @@ export async function checkLessonProgression(
           })
         : await prisma.lessonProgress.findUnique({ where: { user_id_lesson_id: { user_id: userId, lesson_id: lessonId } }, select: { furthest_watched_position_seconds: true } })
       const furthest = cycle ? (progress as any)?.furthest_seconds || 0 : (progress as any)?.furthest_watched_position_seconds || 0
-      if (!hasWatchedFullVideo(furthest, current.video.duration_seconds || 0)) {
+      const duration = current.video.duration_seconds || 0
+      const tolerance = endedCompletionToleranceSeconds(duration)
+      const complete = hasWatchedFullVideo(furthest, duration) || (duration > 0 && furthest >= duration - tolerance)
+      if (!complete) {
         return { ok: false, code: 'LessonVideoIncomplete', message: 'Hãy hoàn thành video bài giảng trước khi làm quiz' }
       }
     }
@@ -213,7 +220,9 @@ export async function checkLessonProgression(
   const videoIsComplete = (item: typeof lessons[number]) => {
     if (!item.video) return true
     const duration = item.video.duration_seconds || 0
-    return hasWatchedFullVideo(watchedByLesson.get(item.id) || 0, duration)
+    const watched = watchedByLesson.get(item.id) || 0
+    const tolerance = endedCompletionToleranceSeconds(duration)
+    return hasWatchedFullVideo(watched, duration) || (duration > 0 && watched >= duration - tolerance)
   }
 
   // Every earlier video must be complete

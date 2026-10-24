@@ -265,7 +265,7 @@ export default function AdminCoursesPage() {
         <div className="relative w-full sm:w-96">
           <input
             type="text"
-            placeholder="🔍 Tìm kiếm tên khóa học..."
+            placeholder="Tìm kiếm tên khóa học..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full px-4 py-2.5 pl-10 text-sm bg-white border border-[#e2e8f0] rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition shadow-2xs"
@@ -520,7 +520,7 @@ function CourseCardRow({
             </span>
           </div>
 
-          <h3 className="text-base font-bold text-[#172554] truncate" title={course.title}>
+          <h3 className="text-base font-bold text-[#172554] break-words line-clamp-2" title={course.title}>
             {course.title}
           </h3>
 

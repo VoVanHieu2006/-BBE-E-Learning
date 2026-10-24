@@ -1,5 +1,5 @@
 import { Prisma } from '@prisma/client'
-import { hasWatchedFullVideo } from './video-progress-rules'
+import { hasWatchedFullVideo, endedCompletionToleranceSeconds } from './video-progress-rules'
 import { currentCycleAttemptFilter } from './learning-periods'
 
 /** Persist the unlocked prefix; later bank/content edits cannot revoke earned access. */
@@ -14,7 +14,10 @@ export async function persistLearningUnlocks(tx: Prisma.TransactionClient, userI
   for (const lesson of lessons) {
     unlocked.push(lesson.id)
     const watched = progress.find((row) => row.lesson_id === lesson.id)?.furthest_seconds || 0
-    if (lesson.video && !hasWatchedFullVideo(watched, lesson.video.duration_seconds)) break
+    const duration = lesson.video?.duration_seconds || 0
+    const tolerance = endedCompletionToleranceSeconds(duration)
+    const isWatched = !lesson.video || hasWatchedFullVideo(watched, duration) || (duration > 0 && watched >= duration - tolerance)
+    if (!isWatched) break
     if (lesson.assessment && !passed.has(lesson.assessment.id)) break
   }
   if (!unlocked.length) return

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { checkCourseFinalProgression, checkLessonProgression } from '@/lib/progression'
-import { hasWatchedFullVideo } from '@/lib/video-progress-rules'
+import { hasWatchedFullVideo, endedCompletionToleranceSeconds } from '@/lib/video-progress-rules'
 import { selectQuizQuestions } from '@/lib/quiz-pool-selection'
 import { randomInt } from 'crypto'
 import { isLearningManager } from '@/lib/manager-learning-access'
@@ -133,7 +133,9 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
     })
     const video = assessment.lesson.video
     const furthest = cycleProg ? cycleProg.furthest_seconds : (prog?.furthest_watched_position_seconds || 0)
-    const watchedEnough = !video || hasWatchedFullVideo(furthest, video.duration_seconds)
+    const duration = video?.duration_seconds || 0
+    const tolerance = endedCompletionToleranceSeconds(duration)
+    const watchedEnough = !video || hasWatchedFullVideo(furthest, duration) || (duration > 0 && furthest >= duration - tolerance)
     if (!watchedEnough) {
       return NextResponse.json({
         error: { code: 'VideoNotCompleted', message: 'Bạn cần xem hoàn tất 100% video bài giảng trước khi làm bài kiểm tra' },
@@ -270,12 +272,13 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
       )
   if (poolSelection.ok === false) {
     if (assessment.type === 'COURSE_FINAL') return NextResponse.json({ error: { code: 'FinalExamBankTooSmall', message: `Bài thi cần ${finalVersion!.question_count} câu nhưng phiên bản đề hiện không đủ câu. Vui lòng báo quản trị viên.` } }, { status: 422 })
-    const messages = {
-      QuestionPoolCountInvalid: 'Bài kiểm tra cần từ 1 đến 20 nhóm câu hỏi.',
+    const messages: Record<string, string> = {
+      QuestionPoolCountInvalid: 'Bài kiểm tra cần từ 1 đến 20 nhóm câu hỏi và số câu thi không thể ít hơn số nhóm.',
       QuestionPoolQuestionUnassigned: 'Mỗi câu hỏi phải thuộc một nhóm đã cấu hình.',
       QuestionPoolIncomplete: 'Mỗi nhóm phải có ít nhất một câu hỏi.',
+      QuestionPoolQuotaExceeded: `Số câu cấu hình (${assessment.question_count} câu) vượt quá giới hạn cân bằng tối đa (${(poolSelection as any).maxAllowed ?? ''} câu). Vui lòng báo quản trị viên.`,
     }
-    return NextResponse.json({ error: { code: poolSelection.code, message: messages[poolSelection.code] } }, { status: 422 })
+    return NextResponse.json({ error: { code: poolSelection.code, message: messages[poolSelection.code] || 'Lỗi cấu hình nhóm câu hỏi' } }, { status: 422 })
   }
   const selectedQuestions = poolSelection.questions.map((question) => ({
     ...question,

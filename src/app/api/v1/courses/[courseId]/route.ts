@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { invalidateCoursesServerCache } from '@/lib/server-cache'
+import { getCourseDetailServerCache, setCourseDetailServerCache, invalidateCoursesServerCache } from '@/lib/server-cache'
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -11,7 +11,26 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
     return NextResponse.json({ error: { code: 'CourseNotFound', message: 'Khóa học không tồn tại' } }, { status: 404 })
   }
 
-  const auth = await authenticate(request).catch(() => ({ ok: false, error: { code: 'UNAUTHORIZED', message: 'Auth error' } }))
+  // Fast-path guest check: skip authenticate if no auth header or cookies
+  const hasAuthHeader = Boolean(request.headers.get('authorization'))
+  const hasSessionCookie = Boolean(request.cookies.get('token') || request.cookies.get('session') || request.cookies.get('auth'))
+  const auth = (hasAuthHeader || hasSessionCookie)
+    ? await authenticate(request).catch(() => ({ ok: false, error: { code: 'UNAUTHORIZED', message: 'Auth error' } }))
+    : { ok: false, error: null }
+
+  const isLeaderOrAdmin = auth.ok && ['ADMIN', 'CHAPTER_LEADER'].includes((auth as any).context?.role)
+
+  // Serve from memory cache for non-admin viewers of public courses
+  if (!isLeaderOrAdmin) {
+    const cached = getCourseDetailServerCache(courseId, 30_000)
+    if (cached) {
+      return NextResponse.json(cached, {
+        headers: {
+          'Cache-Control': 'public, max-age=15, s-maxage=30, stale-while-revalidate=60',
+        },
+      })
+    }
+  }
 
   const courseDetail = await prisma.course.findUnique({
     where: { id: courseId },
@@ -56,7 +75,7 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
     return NextResponse.json({ error: { code: 'AccessDenied', message: 'Khóa học chưa Published' } }, { status: 403 })
   }
 
-  return NextResponse.json({
+  const payload = {
     courseId: courseDetail.id,
     id: courseDetail.id,
     title: courseDetail.title,
@@ -107,9 +126,9 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
         sortOrder: l.sort_order,
         hasVideo: !!l.video,
         // Outline provides playable media preview for Admin and Chapter Leader.
-        videoId: auth.ok && ['ADMIN', 'CHAPTER_LEADER'].includes((auth as any).context!.role) ? l.video?.id || null : null,
+        videoId: isLeaderOrAdmin ? l.video?.id || null : null,
         video: l.video ? {
-          ...(auth.ok && ['ADMIN', 'CHAPTER_LEADER'].includes((auth as any).context!.role)
+          ...(isLeaderOrAdmin
             ? { videoId: l.video.id, youtubeVideoId: l.video.youtube_video_id }
             : {}),
           durationSeconds: l.video.duration_seconds,
@@ -133,9 +152,18 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
         })),
       })),
     })),
-  }, {
+  }
+
+  // Populate server cache for public published courses when viewed by non-admin
+  if (!isLeaderOrAdmin && courseDetail.visibility === 'PUBLIC' && courseDetail.status === 'PUBLISHED') {
+    setCourseDetailServerCache(courseId, payload)
+  }
+
+  return NextResponse.json(payload, {
     headers: {
-      'Cache-Control': 'private, max-age=10, stale-while-revalidate=60',
+      'Cache-Control': courseDetail.visibility === 'PUBLIC'
+        ? 'public, max-age=15, s-maxage=30, stale-while-revalidate=60'
+        : 'private, max-age=10, stale-while-revalidate=60',
     },
   })
 }
@@ -246,6 +274,7 @@ export async function DELETE(request: NextRequest, { params }: { params: { cours
   if (!course) return NextResponse.json({ error: { code: 'CourseNotFound', message: 'Khóa học không tồn tại' } }, { status: 404 })
 
   await prisma.course.delete({ where: { id: courseId } })
+  invalidateCoursesServerCache(courseId)
 
   return NextResponse.json({ success: true }, { status: 200 })
 }

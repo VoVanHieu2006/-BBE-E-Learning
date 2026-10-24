@@ -2,6 +2,13 @@ import { enqueueAssignmentSync } from '@/lib/learning-periods'
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import {
+  invalidateCoursesServerCache,
+  getCachedTargetCatalog,
+  setCachedTargetCatalog,
+  getCachedScopes,
+  setCachedScopes,
+} from '@/lib/server-cache'
 
 const targets = [
   { key: 'CONTENT', label: 'Thành viên ban Nội dung', department: 'Nội dung' },
@@ -57,10 +64,17 @@ function chunks<T>(items: T[], size = 1000) {
   return result
 }
 async function targetCatalog() {
+  const cached = getCachedTargetCatalog(60_000)
+  if (cached) return cached
   const configured = await prisma.learningTarget.findMany({ orderBy: { sort_order: 'asc' } })
-  return configured.length ? configured.map((row) => ({ key: row.code, label: row.label })) : [...targets]
+  const result = configured.length ? configured.map((row) => ({ key: row.code, label: row.label })) : [...targets]
+  setCachedTargetCatalog(result)
+  return result
 }
-async function resolveScopes() {
+
+async function resolveScopes(): Promise<Map<string, Scope[]>> {
+  const cached = getCachedScopes(60_000)
+  if (cached) return cached
   const configured = await prisma.learningTarget.findMany({ orderBy: { sort_order: 'asc' } })
   if (configured.length) {
     const [units, positions] = await Promise.all([
@@ -75,6 +89,7 @@ async function resolveScopes() {
         ? scopedUnits.map((row) => ({ organizationUnitId: row.id, positionId: position?.id || null }))
         : position ? [{ organizationUnitId: null, positionId: position.id }] : [])
     }
+    setCachedScopes(result)
     return result
   }
 
@@ -91,6 +106,7 @@ async function resolveScopes() {
     else if ('position' in target) result.set(target.key, leadPosition ? [{ organizationUnitId: null, positionId: leadPosition.id }] : [])
     else result.set(target.key, dna ? [{ organizationUnitId: dna.id, positionId: null }] : [])
   }
+  setCachedScopes(result)
   return result
 }
 
@@ -135,34 +151,182 @@ export async function PUT(request: NextRequest) {
   if ((!changes.length && !rowDefaults.length) || changes.some((item: any) => !item.courseId || !targets.some((target) => target.key === item.targetKey) || (item.enabled && (!Number.isInteger(item.dueDays) || item.dueDays < 1 || item.dueDays > 3650))) || rowDefaults.some((item: any) => !item.courseId || !Number.isInteger(item.dueDays) || item.dueDays < 1 || item.dueDays > 3650)) return NextResponse.json({ error: { code: 'ValidationError', message: 'Cấu hình không hợp lệ.' } }, { status: 400 })
   const scopes = await resolveScopes()
   if (changes.some((item: any) => !(scopes.get(item.targetKey) || []).length)) return NextResponse.json({ error: { code: 'ScopeNotConfigured', message: 'Chưa có đơn vị hoặc chức vụ tương ứng.' } }, { status: 409 })
-  const result = await prisma.$transaction(async (tx) => {
-    const [clock] = await tx.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`
-    const now = clock.now
-    for (const row of rowDefaults) {
-      await tx.course.update({ where: { id: row.courseId }, data: { mandatory_default_due_days: row.dueDays } })
-      await tx.learningRule.updateMany({ where: { course_id: row.courseId, effective_until: null }, data: { due_days: row.dueDays } })
+  
+  // Pre-fetch courses and their active rules in a single joined query
+  const targetCourseIds = Array.from(new Set([
+    ...changes.map((c) => c.courseId),
+    ...rowDefaults.map((r) => r.courseId),
+  ]))
+
+  // Pre-fetch courses and their active rules in a single joined query
+  const courses = await prisma.course.findMany({
+    where: { id: { in: targetCourseIds } },
+    relationLoadStrategy: 'join',
+    select: {
+      id: true,
+      mandatory_default_due_days: true,
+      learning_rules: {
+        where: { effective_until: null },
+        orderBy: { created_at: 'asc' },
+      },
+    },
+  })
+
+  const courseMap = new Map(courses.map((c) => [c.id, c]))
+  for (const id of targetCourseIds) {
+    if (!courseMap.has(id)) {
+      throw new Error(`CourseNotFound: ${id}`)
     }
-    let created = 0, closed = 0
-    for (const change of changes) {
-      const course = await tx.course.findUniqueOrThrow({ where: { id: change.courseId } })
-      for (const scope of scopes.get(change.targetKey) || []) {
-        const existing = await tx.learningRule.findMany({ where: { course_id: change.courseId, organization_unit_id: scope.organizationUnitId, position_id: scope.positionId, effective_until: null }, orderBy: { created_at: 'asc' } })
-        if (!change.enabled) {
-          const result = await tx.learningRule.updateMany({ where: { id: { in: existing.map((row) => row.id) } }, data: { effective_until: now } })
-          closed += result.count
-        } else if (!existing.length) {
-          await tx.learningRule.create({ data: { course_id: change.courseId, organization_unit_id: scope.organizationUnitId, position_id: scope.positionId, due_days: course.mandatory_default_due_days, target_code: change.targetKey } })
-          created++
-        } else {
-          await tx.learningRule.update({ where: { id: existing[0].id }, data: { due_days: course.mandatory_default_due_days, target_code: change.targetKey } })
-          if (existing.length > 1) await tx.learningRule.updateMany({ where: { id: { in: existing.slice(1).map((row) => row.id) } }, data: { effective_until: now } })
+  }
+
+  const rulesByScope = new Map<string, any[]>()
+  for (const course of courses) {
+    for (const rule of course.learning_rules) {
+      const key = scopeKey(rule.course_id, rule.organization_unit_id, rule.position_id)
+      const list = rulesByScope.get(key) || []
+      list.push(rule)
+      rulesByScope.set(key, list)
+    }
+  }
+
+  // Update in-memory courseMap for rowDefaults
+  for (const row of rowDefaults) {
+    const c = courseMap.get(row.courseId)
+    if (c) c.mandatory_default_due_days = row.dueDays
+  }
+
+  // In-memory diffing for changes
+  const now = new Date()
+  const ruleIdsToClose: string[] = []
+  const rulesToCreate: Array<{
+    course_id: string
+    organization_unit_id: string | null
+    position_id: string | null
+    due_days: number | null
+    target_code: string
+  }> = []
+  const rulesToUpdate: Array<{
+    id: string
+    due_days: number | null
+    target_code: string
+  }> = []
+
+  for (const change of changes) {
+    const course = courseMap.get(change.courseId)!
+    for (const scope of scopes.get(change.targetKey) || []) {
+      const key = scopeKey(change.courseId, scope.organizationUnitId, scope.positionId)
+      const existing = rulesByScope.get(key) || []
+
+      if (!change.enabled) {
+        if (existing.length > 0) {
+          for (const row of existing) ruleIdsToClose.push(row.id)
+          rulesByScope.set(key, [])
         }
+      } else if (!existing.length) {
+        rulesToCreate.push({
+          course_id: change.courseId,
+          organization_unit_id: scope.organizationUnitId,
+          position_id: scope.positionId,
+          due_days: course.mandatory_default_due_days,
+          target_code: change.targetKey,
+        })
+        rulesByScope.set(key, [{ id: 'pending', course_id: change.courseId, organization_unit_id: scope.organizationUnitId, position_id: scope.positionId, due_days: course.mandatory_default_due_days, target_code: change.targetKey } as any])
+      } else {
+        const first = existing[0]
+        if (first.due_days !== course.mandatory_default_due_days || first.target_code !== change.targetKey) {
+          rulesToUpdate.push({
+            id: first.id,
+            due_days: course.mandatory_default_due_days,
+            target_code: change.targetKey,
+          })
+        }
+        if (existing.length > 1) {
+          for (const extra of existing.slice(1)) ruleIdsToClose.push(extra.id)
+        }
+        rulesByScope.set(key, [first])
       }
     }
-    const users = await tx.user.findMany({ where: { anonymized_at: null }, select: { id: true } })
-    for (const user of users) await enqueueAssignmentSync(tx, user.id, `matrix:${now.toISOString()}:${user.id}`)
-    await tx.auditLog.create({ data: { actor_user_id: guard.auth!.context!.userId, action: 'UPDATE_MANDATORY_MATRIX', entity_type: 'USER', entity_id: guard.auth!.context!.userId, metadata: { changes, rowDefaults } } })
+  }
+
+  // Check for No-Op
+  const hasRuleChanges = rulesToCreate.length > 0 || ruleIdsToClose.length > 0 || rulesToUpdate.length > 0 || rowDefaults.length > 0
+
+  if (!hasRuleChanges) {
+    // Zero database mutations needed: log audit and return instantly
+    void prisma.auditLog.create({
+      data: {
+        actor_user_id: guard.auth!.context!.userId,
+        action: 'UPDATE_MANDATORY_MATRIX',
+        entity_type: 'USER',
+        entity_id: guard.auth!.context!.userId,
+        metadata: { changes, rowDefaults, hasRuleChanges: false },
+      },
+    }).catch((err) => console.error('AuditLog error:', err))
+
+    return NextResponse.json({ updated: changes.length, rules: { created: 0, closed: 0 } })
+  }
+
+  // Execute writes atomically in an isolated transaction
+  const result = await prisma.$transaction(async (tx) => {
+    const [users, closeRes, createRes] = await Promise.all([
+      tx.user.findMany({ where: { anonymized_at: null }, select: { id: true } }),
+      ruleIdsToClose.length > 0
+        ? tx.learningRule.updateMany({
+            where: { id: { in: ruleIdsToClose } },
+            data: { effective_until: now },
+          })
+        : Promise.resolve({ count: 0 }),
+      rulesToCreate.length > 0
+        ? tx.learningRule.createMany({
+            data: rulesToCreate,
+          })
+        : Promise.resolve({ count: 0 }),
+      ...rowDefaults.map((row) =>
+        tx.course.update({ where: { id: row.courseId }, data: { mandatory_default_due_days: row.dueDays } })
+      ),
+      ...rowDefaults.map((row) =>
+        tx.learningRule.updateMany({ where: { course_id: row.courseId, effective_until: null }, data: { due_days: row.dueDays } })
+      ),
+      ...rulesToUpdate.map((updateItem) =>
+        tx.learningRule.update({
+          where: { id: updateItem.id },
+          data: { due_days: updateItem.due_days, target_code: updateItem.target_code },
+        })
+      ),
+    ])
+
+    const closed = closeRes?.count || 0
+    const created = createRes?.count || 0
+
+    // High-performance bulk outbox enqueue
+    const outboxRows = users.map((u) => ({
+      event_key: `matrix:${now.toISOString()}:${u.id}`,
+      kind: 'RECONCILE_ASSIGNMENTS' as const,
+      user_id: u.id,
+      payload: {},
+    }))
+
+    for (const chunk of chunks(outboxRows, 1000)) {
+      await tx.learningOutbox.createMany({
+        data: chunk,
+        skipDuplicates: true,
+      })
+    }
+
+    await tx.auditLog.create({
+      data: {
+        actor_user_id: guard.auth!.context!.userId,
+        action: 'UPDATE_MANDATORY_MATRIX',
+        entity_type: 'USER',
+        entity_id: guard.auth!.context!.userId,
+        metadata: { changes, rowDefaults, hasRuleChanges: true },
+      },
+    })
+
     return { created, closed }
   }, { timeout: 30_000 })
+
+  invalidateCoursesServerCache()
+
   return NextResponse.json({ updated: changes.length, rules: result })
 }

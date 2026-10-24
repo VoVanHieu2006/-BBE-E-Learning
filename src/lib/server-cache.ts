@@ -79,6 +79,7 @@ export function invalidateChaptersServerCache() {
 
 // 4. Courses Server Cache
 const coursesServerCache = new Map<string, CacheEntry>()
+const courseDetailServerCache = new Map<string, CacheEntry>()
 
 export function getCoursesServerCache(key: string, ttlMs: number) {
   const entry = coursesServerCache.get(key)
@@ -92,8 +93,25 @@ export function setCoursesServerCache(key: string, data: any) {
   coursesServerCache.set(key, { data, timestamp: Date.now() })
 }
 
-export function invalidateCoursesServerCache() {
+export function getCourseDetailServerCache(courseId: string, ttlMs: number) {
+  const entry = courseDetailServerCache.get(courseId)
+  if (entry && Date.now() - entry.timestamp < ttlMs) {
+    return entry.data
+  }
+  return null
+}
+
+export function setCourseDetailServerCache(courseId: string, data: any) {
+  courseDetailServerCache.set(courseId, { data, timestamp: Date.now() })
+}
+
+export function invalidateCoursesServerCache(courseId?: string) {
   coursesServerCache.clear()
+  if (courseId) {
+    courseDetailServerCache.delete(courseId)
+  } else {
+    courseDetailServerCache.clear()
+  }
 }
 
 // 5. Invitations Server Cache
@@ -129,4 +147,29 @@ export function setOrganizationServerCache(key: string, data: any) {
 
 export function invalidateOrganizationServerCache() {
   organizationServerCache.clear()
+}
+
+// 7. Learning Targets and Scopes Cache
+let cachedTargetCatalog: { data: any[]; timestamp: number } | null = null
+let cachedScopes: { data: any; timestamp: number } | null = null
+
+export function getCachedTargetCatalog(ttlMs = 60_000) {
+  return cachedTargetCatalog && Date.now() - cachedTargetCatalog.timestamp < ttlMs ? cachedTargetCatalog.data : null
+}
+
+export function setCachedTargetCatalog(data: any[]) {
+  cachedTargetCatalog = { data, timestamp: Date.now() }
+}
+
+export function getCachedScopes(ttlMs = 60_000) {
+  return cachedScopes && Date.now() - cachedScopes.timestamp < ttlMs ? cachedScopes.data : null
+}
+
+export function setCachedScopes(data: any) {
+  cachedScopes = { data, timestamp: Date.now() }
+}
+
+export function invalidateScopesCache() {
+  cachedTargetCatalog = null
+  cachedScopes = null
 }

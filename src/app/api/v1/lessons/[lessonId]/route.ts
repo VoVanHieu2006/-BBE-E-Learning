@@ -34,7 +34,11 @@ function loadLessonDetail(lessonId: string) {
 }
 
 export async function GET(request: NextRequest, { params }: { params: { lessonId: string } }) {
-  const auth = await authenticate(request).catch(() => ({ ok: false }))
+  const hasAuthHeader = Boolean(request.headers.get('authorization'))
+  const hasSessionCookie = Boolean(request.cookies.get('token') || request.cookies.get('session') || request.cookies.get('auth'))
+  const auth = (hasAuthHeader || hasSessionCookie)
+    ? await authenticate(request).catch(() => ({ ok: false }))
+    : { ok: false }
   const context = auth.ok ? (auth as any).context! : null
   const lessonId = params.lessonId
 
@@ -102,7 +106,14 @@ export async function GET(request: NextRequest, { params }: { params: { lessonId
       fileSize: Number(d.file_size),
       mimeType: d.mime_type,
     })) : [],
-  }, { status: 200 })
+  }, {
+    status: 200,
+    headers: {
+      'Cache-Control': !context && course.visibility === 'PUBLIC'
+        ? 'public, max-age=15, s-maxage=30, stale-while-revalidate=60'
+        : 'private, max-age=5, stale-while-revalidate=30',
+    },
+  })
 }
 
 export async function PATCH(request: NextRequest, { params }: { params: { lessonId: string } }) {

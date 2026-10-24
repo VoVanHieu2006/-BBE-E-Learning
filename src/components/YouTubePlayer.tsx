@@ -669,6 +669,13 @@ export default function YouTubePlayer({
     } catch {}
   };
 
+  const cyclePlaybackRate = () => {
+    const rates = [1, 1.25, 1.5, 1.75, 2];
+    const currentIndex = rates.indexOf(playbackRate);
+    const nextRate = rates[(currentIndex + 1) % rates.length];
+    setSpeed(nextRate);
+  };
+
   const toggleFullscreen = () => {
     if (!wrapperRef.current) return;
     if (!document.fullscreenElement) {
@@ -751,21 +758,15 @@ export default function YouTubePlayer({
       {/* YouTube Player Native Container (phóng nhẹ 1.05 để đưa dải watermark/logo sát mép ngoài vùng hiển thị) */}
       <div ref={containerRef} className="w-full h-full pointer-events-none scale-[1.05] origin-center" />
 
-      {/* Loading Skeleton: shown until the YouTube player is actually ready. */}
+      {/* Loading Skeleton: hiển thị "Đang tải video..." ngay lập tức khi khởi tạo */}
       {!isReady && !videoError && (
-        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 bg-slate-950 p-6 text-white" aria-busy="true" aria-live="polite">
-          <div className="relative grid h-20 w-28 place-items-center rounded-2xl border border-white/10 bg-white/5">
-            <div className="h-10 w-10 animate-spin rounded-full border-4 border-[#2563EB] border-t-transparent" />
-            <span className="absolute bottom-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">YouTube</span>
-          </div>
+        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-slate-950 p-6 text-white" aria-busy="true" aria-live="polite">
+          <div className="h-10 w-10 animate-spin rounded-full border-3 border-[#2563EB] border-t-transparent" />
           <div className="space-y-1 text-center">
-            <p className="text-sm font-bold text-white">Đang khởi tạo trình phát video…</p>
+            <p className="text-sm font-bold text-white">Đang tải video...</p>
             <p className="text-xs text-slate-400">
               {isSlowLoading ? 'Mạng đang chậm hơn bình thường. Video sẽ tự hiển thị khi sẵn sàng.' : 'Video sẽ tự hiển thị, bạn không cần tải lại trang.'}
             </p>
-          </div>
-          <div className="h-1.5 w-48 overflow-hidden rounded-full bg-white/10">
-            <div className="h-full w-1/2 animate-pulse rounded-full bg-[#2563EB]" />
           </div>
         </div>
       )}
@@ -800,19 +801,16 @@ export default function YouTubePlayer({
         </div>
       )}
 
-      {/* Play/Pause Click Overlay (no redundant central logo over YouTube thumbnail) */}
+      {/* Play/Pause Click Overlay: bao quát toàn khung nhưng để hở dải dưới cho thanh điều khiển */}
       {!videoError && isReady && (
-        <div onClick={togglePlay} className="absolute inset-0 cursor-pointer z-10" />
+        <div onClick={togglePlay} className="absolute inset-x-0 top-0 bottom-20 cursor-pointer z-10" />
       )}
 
       {/* Video tạm dừng: giữ nguyên frame đang hiển thị — chỉ phủ gradient mỏng và nhãn,
-          không phủ nền đen toàn khung (người học phải thấy khung cảnh đang dừng). */}
+          không phủ nền đen toàn khung và không vẽ thêm biểu tượng Play to đè lên YouTube. */}
       {!videoError && isReady && !displayPlaying && (
-        <div className="pointer-events-none absolute inset-0 z-[6] flex flex-col items-center justify-center gap-2 bg-gradient-to-b from-black/25 via-black/10 to-black/25">
-          <span className="grid h-14 w-14 place-items-center rounded-full border border-white/25 bg-black/45 text-xl text-white shadow-xl backdrop-blur-sm">
-            ▶
-          </span>
-          <span className="rounded-full bg-black/55 px-3 py-1 text-[11px] font-semibold text-white/90 backdrop-blur-sm">
+        <div className="pointer-events-none absolute inset-0 z-[6] flex flex-col items-center justify-center gap-2 bg-gradient-to-b from-black/20 via-transparent to-black/30">
+          <span className="rounded-full bg-black/60 border border-white/20 px-3 py-1 text-[11px] font-semibold text-white/90 shadow-md backdrop-blur-sm">
             Bấm để phát
           </span>
         </div>
@@ -865,12 +863,13 @@ export default function YouTubePlayer({
             />
           </div>
 
-          <div className="flex items-center justify-between text-white text-xs font-semibold">
+          <div className="flex items-center justify-between gap-1 sm:gap-2 text-white text-xs font-semibold">
             {/* Play/Pause & Time Display */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5 sm:gap-3 min-w-0">
               <button
+                type="button"
                 onClick={togglePlay}
-                className="w-8 h-8 flex items-center justify-center bg-white/20 hover:bg-white/30 rounded-lg text-sm transition"
+                className="w-7 h-7 sm:w-8 sm:h-8 shrink-0 flex items-center justify-center bg-white/20 hover:bg-white/30 rounded-lg text-xs sm:text-sm transition"
                 title={displayPlaying ? 'Tạm dừng (Phím cách/Space)' : 'Phát video (Phím cách/Space)'}
               >
                 {displayPlaying ? '⏸' : '▶'}
@@ -878,8 +877,9 @@ export default function YouTubePlayer({
 
               {/* Rewind 10s */}
               <button
+                type="button"
                 onClick={() => seekDelta(-10)}
-                className="px-2 py-1 flex items-center gap-1 bg-white/10 hover:bg-white/25 rounded-lg text-[11px] font-semibold transition text-slate-200 hover:text-white"
+                className="px-1.5 sm:px-2 py-1 shrink-0 flex items-center gap-0.5 sm:gap-1 bg-white/10 hover:bg-white/25 rounded-lg text-[10px] sm:text-[11px] font-semibold transition text-slate-200 hover:text-white"
                 title="Tua lùi 10 giây (Phím mũi tên trái ←)"
               >
                 <span>↺</span>
@@ -888,40 +888,52 @@ export default function YouTubePlayer({
 
               {/* Forward 10s */}
               <button
+                type="button"
                 disabled={!canSeekFree && currentTime + 5 >= furthest}
                 onClick={() => seekDelta(10)}
-                className="px-2 py-1 flex items-center gap-1 bg-white/10 hover:bg-white/25 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg text-[11px] font-semibold transition text-slate-200 hover:text-white"
+                className="px-1.5 sm:px-2 py-1 shrink-0 flex items-center gap-0.5 sm:gap-1 bg-white/10 hover:bg-white/25 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg text-[10px] sm:text-[11px] font-semibold transition text-slate-200 hover:text-white"
                 title={canSeekFree || currentTime + 5 < furthest ? 'Tua tới 10 giây (Phím mũi tên phải →)' : 'Học viên không thể tua tới đoạn chưa học'}
               >
                 <span>10s</span>
                 <span>↻</span>
               </button>
 
-              <span className="text-xs">
+              <span className="text-[10px] sm:text-xs shrink-0 whitespace-nowrap">
                 {formatTime(currentTime)} / {formatTime(duration)}
               </span>
 
               {canSeekFree ? (
-                <span className="text-[10px] text-amber-300 font-normal px-2 py-0.5 bg-amber-900/40 rounded-full">
+                <span className="text-[10px] text-amber-300 font-normal px-2 py-0.5 bg-amber-900/40 rounded-full hidden md:inline shrink-0">
                   Có thể tua
                 </span>
               ) : (
-                <span className="text-[10px] text-slate-400 font-normal px-2 py-0.5 bg-slate-800/60 rounded-full hidden sm:inline">
+                <span className="text-[10px] text-slate-400 font-normal px-2 py-0.5 bg-slate-800/60 rounded-full hidden lg:inline shrink-0">
                   Không thể tua tới
                 </span>
               )}
             </div>
 
             {/* Right Controls: Speed & Fullscreen */}
-            <div className="flex items-center gap-2">
-              {/* Playback Speed Controls */}
-              <div className="flex items-center gap-1">
-                <span className="text-slate-300 text-[11px] hidden sm:inline">Tốc độ:</span>
+            <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+              {/* Mobile Playback Speed Button (cycles speed on tap without crowding the bar) */}
+              <button
+                type="button"
+                onClick={cyclePlaybackRate}
+                className="sm:hidden px-2 py-1 rounded-lg text-xs bg-white/20 hover:bg-white/30 text-white font-bold transition shrink-0"
+                title="Đổi tốc độ phát (chạm để chuyển)"
+              >
+                {playbackRate}x
+              </button>
+
+              {/* Desktop Playback Speed Controls */}
+              <div className="hidden sm:flex items-center gap-1">
+                <span className="text-slate-300 text-[11px] hidden md:inline">Tốc độ:</span>
                 {[1, 1.25, 1.5, 1.75, 2].map((rate) => (
                   <button
                     key={rate}
+                    type="button"
                     onClick={() => setSpeed(rate)}
-                    className={`px-2 py-1 rounded-lg text-xs transition ${
+                    className={`px-1.5 md:px-2 py-1 rounded-lg text-xs transition ${
                       playbackRate === rate
                         ? 'bg-[#2563EB] text-white font-bold'
                         : 'bg-white/10 hover:bg-white/20 text-slate-200'
@@ -934,8 +946,9 @@ export default function YouTubePlayer({
 
               {/* Fullscreen Button */}
               <button
+                type="button"
                 onClick={toggleFullscreen}
-                className="w-8 h-8 flex items-center justify-center bg-white/20 hover:bg-white/30 rounded-lg text-sm transition ml-1"
+                className="w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center bg-white/20 hover:bg-white/30 rounded-lg text-xs sm:text-sm transition ml-0.5 sm:ml-1 shrink-0"
                 title={isFullscreen ? 'Thu nhỏ màn hình (Esc)' : 'Toàn màn hình (Fullscreen)'}
               >
                 {isFullscreen ? '🗗' : '⛶'}

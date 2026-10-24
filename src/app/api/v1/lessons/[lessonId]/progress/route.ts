@@ -4,8 +4,7 @@ import { recordVideoHeartbeat, getVideoReplayState } from '@/lib/video-heartbeat
 import { prisma } from '@/lib/prisma'
 import { awardStars, canEarnStarsForCourse, starsForVideoDuration } from '@/lib/stars'
 import { checkLessonProgression } from '@/lib/progression'
-import { syncCourseAssignmentCompletion } from '@/lib/learning-assignments'
-import { capVideoProgress, hasWatchedFullVideo } from '@/lib/video-progress-rules'
+import { capVideoProgress, hasWatchedFullVideo, endedCompletionToleranceSeconds } from '@/lib/video-progress-rules'
 import { isLearningManager } from '@/lib/manager-learning-access'
 
 /**
@@ -109,8 +108,9 @@ export async function GET(request: NextRequest, { params }: { params: { lessonId
   const isLessonCompleted = cycle ? Boolean(cycleProgress?.completed_at) : Boolean(progress?.completed)
   const completedAt = cycle ? (cycleProgress?.completed_at || null) : (progress?.completed_at || null)
   const furthest = cycle ? (cycleProgress?.furthest_seconds || 0) : (progress?.furthest_watched_position_seconds || 0)
-  const videoCompleted = hasWatchedFullVideo(Math.min(furthest, duration || Number.MAX_SAFE_INTEGER), duration)
-  const progressPercentage = duration > 0 ? Math.min(100, Math.max(0, Math.round((furthest / duration) * 100))) : 0
+  const tolerance = endedCompletionToleranceSeconds(duration)
+  const videoCompleted = isLessonCompleted || (duration > 0 && (hasWatchedFullVideo(furthest, duration) || furthest >= duration - tolerance))
+  const progressPercentage = duration > 0 ? (videoCompleted ? 100 : Math.min(100, Math.max(0, Math.round((furthest / duration) * 100)))) : 0
 
   // ---- Per-video learning history (LearningCycle + MonthlyVideoReplay + StarLedger) ----
   const videoId = progress?.lesson.video?.id || null

@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
-import { apiFetch } from '@/lib/api/client';
+import { apiFetch, getCachedApiData } from '@/lib/api/client';
 
 export default function CourseDetailPage({ params }: { params: { courseId: string } }) {
   const [user, setUser] = useState<any>(null);
@@ -23,12 +23,25 @@ export default function CourseDetailPage({ params }: { params: { courseId: strin
           setUser(JSON.parse(u));
         } catch {}
       }
+
+      // Read from cache immediately so back navigation renders instantaneously without spinner
+      const cached = getCachedApiData<any>(`/api/v1/courses/${params.courseId}`);
+      if (cached) {
+        setCourse(cached);
+        setLoading(false);
+      }
+      const cachedProg = getCachedApiData<any>(`/api/v1/courses/${params.courseId}/my-progress`);
+      if (cachedProg) {
+        setProgressData(cachedProg);
+      }
     }
     loadCourseAndProgress(token);
   }, [params.courseId]);
 
   async function loadCourseAndProgress(token?: string) {
-    setLoading(true);
+    if (!course && !getCachedApiData<any>(`/api/v1/courses/${params.courseId}`)) {
+      setLoading(true);
+    }
     const hasToken = !!token || (typeof window !== 'undefined' && !!localStorage.getItem('accessToken'));
 
     const [courseRes, progressRes] = await Promise.all([

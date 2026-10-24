@@ -9,6 +9,17 @@ import Modal from '@/components/ui/Modal';
 import { apiFetch, clearApiCache, getCachedApiData } from '@/lib/api/client';
 import { getUrgencyLevel } from '@/lib/deadline-urgency';
 
+function normalizeVietnamese(str: string): string {
+  if (!str) return '';
+  return str
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'd')
+    .trim();
+}
+
 export default function StudentCoursesPage() {
   const [user, setUser] = useState<any>(null);
   const [courses, setCourses] = useState<any[]>([]);
@@ -24,6 +35,14 @@ export default function StudentCoursesPage() {
   const [filter, setFilter] = useState<'ALL' | 'IN_PROGRESS' | 'NOT_STARTED' | 'COMPLETED'>('ALL');
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [currentTime, setCurrentTime] = useState(Date.now());
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [lessonSearchQuery, setLessonSearchQuery] = useState('');
+  const [treeLearningData, setTreeLearningData] = useState<{
+    programs: any[];
+    completedLessonIds: Set<string>;
+    inProgressLessonIds: Set<string>;
+    unlockedLessonIds: Set<string>;
+  } | null>(null);
 
   // Clock tick every 1 second for live zero-lag countdown
   useEffect(() => {
@@ -45,6 +64,7 @@ export default function StudentCoursesPage() {
       const cachedCourses = getCachedApiData<any>('/api/v1/courses');
       if (cachedCourses?.items) {
         setCourses(cachedCourses.items);
+        setLoading(false);
       }
       const cachedProgress = getCachedApiData<any>('/api/v1/members/me/courses');
       if (cachedProgress?.items) {
@@ -65,16 +85,33 @@ export default function StudentCoursesPage() {
   }, []);
 
   async function loadData(forceRefresh = false) {
+    const hasToken = typeof window !== 'undefined' && Boolean(localStorage.getItem('accessToken'));
+
     if (forceRefresh) {
       setRefreshing(true);
       clearApiCache('/api/v1/courses');
-      clearApiCache('/api/v1/members/me/courses');
-      clearApiCache('/api/v1/members/me/deadlines');
-      clearApiCache('/api/v1/users/me');
-      clearApiCache('/api/v1/stars/me?page=1&limit=20');
-      clearApiCache('/api/v1/learning/me');
+      if (hasToken) {
+        clearApiCache('/api/v1/members/me/courses');
+        clearApiCache('/api/v1/members/me/deadlines');
+        clearApiCache('/api/v1/users/me');
+        clearApiCache('/api/v1/stars/me?page=1&limit=20');
+        clearApiCache('/api/v1/learning/me');
+      }
     } else {
-      setLoading(true);
+      if (!courses.length && !getCachedApiData<any>('/api/v1/courses')?.items) {
+        setLoading(true);
+      }
+    }
+
+    if (!hasToken) {
+      // Guest path: ONLY fetch public courses; avoid 4 unauthorized requests
+      const coursesRes = await apiFetch<any>('/api/v1/courses', { noCache: forceRefresh });
+      if (coursesRes.ok && coursesRes.data) {
+        setCourses(coursesRes.data.items || []);
+      }
+      setLoading(false);
+      setRefreshing(false);
+      return;
     }
 
     const [coursesRes, progressRes, deadlinesRes, userRes, starsRes] = await Promise.all([
@@ -151,6 +188,73 @@ export default function StudentCoursesPage() {
     });
   }, [enrichedCourses, filter]);
 
+  const allSearchableLessons = useMemo(() => {
+    if (!treeLearningData?.programs) return [];
+    const results: {
+      programId: string;
+      programName: string;
+      courseId: string;
+      courseTitle: string;
+      sessionId: string;
+      sessionTitle: string;
+      sessionIndex: number;
+      lessonId: string;
+      lessonTitle: string;
+      status: 'done' | 'locked' | 'progress' | 'open';
+    }[] = [];
+
+    const { programs, completedLessonIds, inProgressLessonIds, unlockedLessonIds } = treeLearningData;
+
+    for (const prog of programs) {
+      for (const course of prog.courses || []) {
+        const flatLessons: any[] = [];
+        course.sessions?.forEach((s: any) => {
+          s.lessons?.forEach((l: any) => flatLessons.push(l));
+        });
+        const firstIncompleteIndex = flatLessons.findIndex((l) => !completedLessonIds.has(l.id));
+        const unlockedThroughIndex = firstIncompleteIndex < 0 ? flatLessons.length - 1 : firstIncompleteIndex;
+
+        course.sessions?.forEach((session: any, sIdx: number) => {
+          session.lessons?.forEach((lesson: any) => {
+            const lIdxInCourse = flatLessons.findIndex((item) => item.id === lesson.id);
+            const isDone = completedLessonIds.has(lesson.id);
+            const isInProgress = inProgressLessonIds.has(lesson.id) && !isDone;
+            const isOpen = unlockedLessonIds.has(lesson.id) || lIdxInCourse <= unlockedThroughIndex;
+            const status: 'done' | 'locked' | 'progress' | 'open' = isDone
+              ? 'done'
+              : !isOpen
+              ? 'locked'
+              : isInProgress
+              ? 'progress'
+              : 'open';
+
+            results.push({
+              programId: prog.id,
+              programName: prog.name,
+              courseId: course.id,
+              courseTitle: course.title,
+              sessionId: session.id,
+              sessionTitle: session.title,
+              sessionIndex: sIdx,
+              lessonId: lesson.id,
+              lessonTitle: lesson.title,
+              status,
+            });
+          });
+        });
+      }
+    }
+    return results;
+  }, [treeLearningData]);
+
+  const searchResults = useMemo(() => {
+    const query = normalizeVietnamese(lessonSearchQuery);
+    if (!query) return [];
+    return allSearchableLessons.filter((item) =>
+      normalizeVietnamese(item.lessonTitle).includes(query)
+    );
+  }, [allSearchableLessons, lessonSearchQuery]);
+
   // Overall deadline countdown calculations
   const mostUrgentDueAt = deadlinesSummary?.earliestDueAt
     ? new Date(deadlinesSummary.earliestDueAt).getTime()
@@ -207,7 +311,10 @@ export default function StudentCoursesPage() {
               <div className="flex flex-wrap items-center gap-2.5 shrink-0">
                 <button
                   type="button"
-                  onClick={() => loadData(true)}
+                  onClick={() => {
+                    setRefreshTrigger((prev) => prev + 1);
+                    loadData(true);
+                  }}
                   disabled={refreshing}
                   className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white/20 hover:bg-white/30 text-white text-xs font-bold backdrop-blur-md border border-white/25 transition shadow-xs disabled:opacity-50"
                   title="Làm mới tiến độ và hạn hoàn thành mới nhất"
@@ -306,14 +413,161 @@ export default function StudentCoursesPage() {
             </button>
           </div>
 
-          {/* Tab Content */}
-          {mainTab === 'PROGRAM_TREE' ? (
-            <div className="space-y-6">
-              <LearningPeriodSummary />
-              <ProgramCourseTree />
+          {/* Tab 1: Lộ trình theo Chương trình */}
+          <div className={mainTab === 'PROGRAM_TREE' ? 'space-y-6' : 'hidden'}>
+            <LearningPeriodSummary />
+            <ProgramCourseTree
+              refreshTrigger={refreshTrigger}
+              onDataLoaded={setTreeLearningData}
+            />
+          </div>
+
+          {/* Tab 2: Khóa học của bạn */}
+          <div className={mainTab === 'MY_COURSES' ? 'space-y-8' : 'hidden'}>
+            {/* Ô tìm kiếm bài học (Dành riêng cho Tab Khóa học của bạn) */}
+            <div className="rounded-3xl border border-blue-100 bg-white p-5 shadow-xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-base font-bold text-[#172554] flex items-center gap-2">
+                    <span>🔍</span> Tìm kiếm bài học
+                  </h2>
+                  <p className="text-xs text-[#737686] mt-0.5">
+                    Tra cứu nhanh bài học theo tên (hỗ trợ tiếng Việt có dấu và không dấu)
+                  </p>
+                </div>
+                <div className="relative w-full sm:w-80">
+                  <input
+                    type="text"
+                    value={lessonSearchQuery}
+                    onChange={(e) => setLessonSearchQuery(e.target.value)}
+                    placeholder="Nhập tên bài học cần tìm..."
+                    className="w-full px-4 py-2.5 pl-10 text-xs sm:text-sm bg-slate-50 hover:bg-white focus:bg-white border border-[#cbdbf5] rounded-2xl focus:outline-none focus:ring-2 focus:ring-[#2563EB] transition shadow-2xs"
+                  />
+                  <span className="absolute left-3.5 top-2.5 text-slate-400 text-sm pointer-events-none">🔍</span>
+                  {lessonSearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setLessonSearchQuery('')}
+                      className="absolute right-3.5 top-2.5 text-slate-400 hover:text-slate-600 text-xs font-bold"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Danh sách kết quả tìm kiếm */}
+              {lessonSearchQuery.trim() !== '' && (
+                <div className="mt-4 pt-4 border-t border-slate-100 space-y-3">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-slate-600">
+                      Kết quả tìm kiếm cho: &ldquo;<strong className="text-[#172554]">{lessonSearchQuery}</strong>&rdquo;
+                    </span>
+                    <span className="font-bold text-[#2563EB]">
+                      {searchResults.length} bài học tìm thấy
+                    </span>
+                  </div>
+
+                  {searchResults.length === 0 ? (
+                    <div className="py-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                      <span className="text-2xl">🔎</span>
+                      <p className="text-sm font-bold text-[#172554] mt-1.5">Không tìm thấy bài học phù hợp</p>
+                      <p className="text-xs text-[#737686] mt-0.5">
+                        Không có bài học nào chứa từ khóa &ldquo;{lessonSearchQuery}&rdquo;. Hãy thử tìm với từ khóa khác.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[500px] overflow-y-auto pr-1">
+                      {searchResults.map((item) => {
+                        const isLocked = item.status === 'locked';
+                        const isDone = item.status === 'done';
+                        const isInProgress = item.status === 'progress';
+
+                        return (
+                          <div
+                            key={item.lessonId}
+                            className={`p-3.5 rounded-2xl border transition flex flex-col justify-between gap-3 ${
+                              isLocked
+                                ? 'bg-slate-50/80 border-slate-200 opacity-80'
+                                : 'bg-white border-blue-100 hover:border-blue-300 hover:shadow-xs'
+                            }`}
+                          >
+                            <div className="space-y-1.5">
+                              {/* Cấu trúc: Khóa học → Buổi học → Bài học */}
+                              <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 flex-wrap">
+                                <span className="text-[#2563EB] font-bold">{item.courseTitle}</span>
+                                <span>→</span>
+                                <span>Buổi {item.sessionIndex + 1}: {item.sessionTitle}</span>
+                              </div>
+
+                              <div className="flex items-start gap-2">
+                                <span className="text-base shrink-0 mt-0.5">
+                                  {isDone ? '✅' : isLocked ? '🔒' : isInProgress ? '⏳' : '📖'}
+                                </span>
+                                <div className="min-w-0 flex-1">
+                                  <h4
+                                    className={`text-sm font-bold break-words line-clamp-2 ${
+                                      isLocked ? 'text-slate-500' : 'text-[#172554]'
+                                    }`}
+                                    title={item.lessonTitle}
+                                  >
+                                    {item.lessonTitle}
+                                  </h4>
+                                  {isLocked && (
+                                    <p className="text-[11px] text-amber-700 font-medium mt-0.5">
+                                      Cần hoàn thành các bài học trước để mở khóa bài này.
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
+                              <div>
+                                {isDone ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                    ✓ Đã hoàn thành
+                                  </span>
+                                ) : isLocked ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-200 text-slate-600 border border-slate-300">
+                                    🔒 Đang khóa
+                                  </span>
+                                ) : isInProgress ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200 animate-pulse">
+                                    ⏳ Đang học
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                                    ▶ Sẵn sàng học
+                                  </span>
+                                )}
+                              </div>
+
+                              {isLocked ? (
+                                <button
+                                  disabled
+                                  className="px-3 py-1 rounded-xl bg-slate-100 text-slate-400 text-xs font-semibold cursor-not-allowed border border-slate-200"
+                                  title="Bài học đang bị khóa"
+                                >
+                                  Đang khóa 🔒
+                                </button>
+                              ) : (
+                                <Link
+                                  href={`/student/learning/${item.lessonId}`}
+                                  className="px-3 py-1 rounded-xl bg-[#2563EB] hover:bg-[#1d4ed8] text-white text-xs font-bold transition shadow-2xs"
+                                >
+                                  {isDone ? 'Xem lại →' : isInProgress ? 'Học tiếp →' : 'Vào học →'}
+                                </Link>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
-          ) : (
-            <div className="space-y-8">
 
           {/* Countdown & Mandatory Deadline Banner (Item 7) */}
           {mandatoryCourses.length > 0 && msRemaining !== null && (
@@ -582,7 +836,6 @@ export default function StudentCoursesPage() {
             )}
           </div>
         </div>
-      )}
 
           {/* Modal: Department Term History */}
           <Modal

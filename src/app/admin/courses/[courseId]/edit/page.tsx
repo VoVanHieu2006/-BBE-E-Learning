@@ -1294,6 +1294,27 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
       return;
     }
 
+    if (activeAssessmentMode === 'LESSON' && quizPoolNames.length > 0) {
+      if (minLessonPoolCount === 0) {
+        const msg = 'Mỗi nhóm câu hỏi cần có ít nhất 1 câu hỏi để đủ điều kiện lưu cấu hình.';
+        setAssessmentFormError(msg);
+        showToast('error', msg);
+        return;
+      }
+      if (assessmentForm.questionCount < quizPoolNames.length) {
+        const msg = `Số câu mỗi lượt (${assessmentForm.questionCount}) không thể nhỏ hơn số nhóm (${quizPoolNames.length}).`;
+        setAssessmentFormError(msg);
+        showToast('error', msg);
+        return;
+      }
+      if (assessmentForm.questionCount > maxLessonQuestionsAllowed) {
+        const msg = `Với ${quizPoolNames.length} nhóm và nhóm ít câu nhất có ${minLessonPoolCount} câu, bài kiểm tra chỉ được chọn tối đa ${maxLessonQuestionsAllowed} câu để bảo đảm phân phối cân bằng.`;
+        setAssessmentFormError(msg);
+        showToast('error', msg);
+        return;
+      }
+    }
+
     setAssessmentSaving(true);
     clearApiCache('/api/v1/courses');
 
@@ -1413,6 +1434,33 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
       showToast('error', res.error?.message || 'Lỗi khi xóa bài kiểm tra');
     }
   };
+
+  const lessonPoolCounts = activeAssessmentMode === 'LESSON' && quizPoolNames.length > 0
+    ? quizPoolNames.map((_, idx) => assessmentForm.questions.filter((q) => (q.poolIndex ?? 0) === idx).length)
+    : [];
+  const minLessonPoolCount = lessonPoolCounts.length > 0 ? Math.min(...lessonPoolCounts) : 0;
+  const maxLessonQuestionsAllowed = quizPoolNames.length * minLessonPoolCount;
+  const isLessonQuizInvalid = activeAssessmentMode === 'LESSON' && quizPoolNames.length > 0 && (
+    quizPoolNames.length < 1 ||
+    quizPoolNames.length > 20 ||
+    minLessonPoolCount === 0 ||
+    assessmentForm.questionCount < quizPoolNames.length ||
+    assessmentForm.questionCount > maxLessonQuestionsAllowed
+  );
+
+  const expectedDistributionText = (() => {
+    if (activeAssessmentMode !== 'LESSON' || quizPoolNames.length === 0 || minLessonPoolCount === 0) return null;
+    const K = quizPoolNames.length;
+    const Q = assessmentForm.questionCount;
+    if (Q < K || Q > maxLessonQuestionsAllowed) return null;
+    const B = Math.floor(Q / K);
+    const R = Q % K;
+    if (R === 0) {
+      return `Phân phối dự kiến: ${Array(K).fill(B).join('–')} (chia đều mỗi nhóm ${B} câu)`;
+    }
+    const dist = [...Array(R).fill(B + 1), ...Array(K - R).fill(B)].join('–');
+    return `Phân phối dự kiến: ${dist} (nhóm nhận câu dư được chọn ngẫu nhiên)`;
+  })();
 
   const isPublished = course?.status === 'PUBLISHED';
 
@@ -1658,21 +1706,21 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
 
                     return (
                       <details key={sId} className="rounded-2xl border border-[#eff4ff] bg-white p-6 shadow-sm">
-                        <summary className="flex cursor-pointer list-none items-start justify-between gap-4">
-                          <div className="flex items-start gap-3">
+                        <summary className="flex cursor-pointer list-none items-start justify-between gap-4 flex-wrap sm:flex-nowrap">
+                          <div className="flex items-start gap-3 min-w-0 flex-1">
                             <span className="w-7 h-7 bg-[#2563EB] text-white rounded-lg flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">
                               {sIdx + 1}
                             </span>
-                            <div>
-                              <h3 className="text-base font-bold text-[#172554]">{session.title}</h3>
+                            <div className="min-w-0 flex-1">
+                              <h3 className="text-base font-bold text-[#172554] break-words line-clamp-2" title={session.title}>{session.title}</h3>
                               {session.description && (
-                                <p className="text-xs text-[#737686] mt-0.5 leading-relaxed">{session.description}</p>
+                                <p className="text-xs text-[#737686] mt-0.5 leading-relaxed break-words">{session.description}</p>
                               )}
                             </div>
                           </div>
 
                           {!isPublished && (
-                            <div className="flex items-center gap-2 shrink-0" onClick={(event) => { event.preventDefault(); event.stopPropagation(); }}>
+                            <div className="flex items-center gap-2 shrink-0 flex-wrap" onClick={(event) => { event.preventDefault(); event.stopPropagation(); }}>
                               {sIdx > 0 && (
                                 <button
                                   type="button"
@@ -1737,7 +1785,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
                                   className="p-4 bg-[#f8f9ff] rounded-2xl border border-[#eff4ff] space-y-3"
                                 >
                                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                                    <div className="flex items-center gap-3">
+                                    <div className="flex items-center gap-3 min-w-0 flex-1">
                                       <div className="flex flex-col items-center gap-0.5 shrink-0">
                                         <span className="text-xs font-bold text-[#737686]">
                                           {sIdx + 1}.{lIdx + 1}
@@ -1775,21 +1823,21 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
                                           className="w-14 h-9 object-cover rounded-md shrink-0 shadow-sm"
                                         />
                                       )}
-                                      <div>
+                                      <div className="min-w-0 flex-1">
                                         <div className="flex items-center gap-2 flex-wrap">
-                                          <h4 className="text-sm font-bold text-[#172554]">{lesson.title}</h4>
+                                          <h4 className="text-sm font-bold text-[#172554] break-words line-clamp-2" title={lesson.title}>{lesson.title}</h4>
                                           {lesson.assessment && (
-                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
                                               📝 Quiz ({lesson.assessment.questionCount || 0} câu/lượt · {lesson.assessment.durationMinutes || 0} phút · ngân hàng {lesson.assessment.bankQuestionCount || lesson.assessment.questions?.length || 0})
                                             </span>
                                           )}
                                         </div>
-                                        <p className="text-xs text-[#737686]">
+                                        <p className="text-xs text-[#737686] truncate">
                                           Video YouTube: <span className="font-mono">{vidId}</span> • Thời lượng:{' '}
                                           {durSec > 0 ? `${durMin}:${durRemSec.toString().padStart(2, '0')} (${durSec}s)` : '—'}
                                         </p>
                                         {lesson.description && (
-                                          <p className="text-xs text-[#434655] bg-white/80 px-2.5 py-1 rounded-lg border border-[#eff4ff] mt-1.5 leading-relaxed">
+                                          <p className="text-xs text-[#434655] bg-white/80 px-2.5 py-1 rounded-lg border border-[#eff4ff] mt-1.5 leading-relaxed break-words">
                                             {lesson.description}
                                           </p>
                                         )}
@@ -1797,7 +1845,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
                                     </div>
 
                                     {!isPublished && (
-                                      <div className="flex items-center gap-2 flex-wrap">
+                                      <div className="flex items-center gap-2 flex-wrap shrink-0">
                                         <button
                                           type="button"
                                           onClick={() => openAssessmentEditorForLesson(sId, lesson)}
@@ -2171,13 +2219,56 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
                 <label className="text-sm font-semibold text-[#172554]">Thời gian (phút)<input type="number" min={1} max={240} value={assessmentForm.durationMinutes} onChange={(e) => setAssessmentForm({ ...assessmentForm, durationMinutes: Number(e.target.value) })} className="mt-1 w-full rounded-xl border border-[#cbdbf5] px-3 py-2 font-normal"/></label>
               </div>
 
-              <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-900">
-                Ngân hàng: {activeAssessmentMode === 'COURSE_FINAL' ? finalAvailableQuestions : assessmentForm.questions.length} câu
-                <span className="mx-2 text-blue-300">|</span>
-                Mỗi lần thi: {assessmentForm.questionCount} câu
-                <span className="mx-2 text-blue-300">|</span>
-                Thời gian: {assessmentForm.durationMinutes} phút
-              </div>
+              {activeAssessmentMode === 'LESSON' && quizPoolNames.length > 0 ? (
+                <div className="rounded-2xl border border-blue-200 bg-blue-50/80 p-4 space-y-2.5 text-sm text-[#172554]">
+                  <div className="flex flex-wrap items-center gap-y-1 gap-x-2.5 text-xs font-semibold text-blue-900">
+                    <span>Tổng số nhóm: <strong>{quizPoolNames.length}</strong></span>
+                    <span className="text-blue-300">•</span>
+                    <span>Số câu từng nhóm: <strong>{quizPoolNames.map((name, idx) => `${name || `Nhóm ${idx + 1}`}: ${lessonPoolCounts[idx]} câu`).join(' | ')}</strong></span>
+                    <span className="text-blue-300">•</span>
+                    <span>Tổng ngân hàng: <strong>{assessmentForm.questions.length} câu</strong></span>
+                    <span className="text-blue-300">•</span>
+                    <span>Mỗi lượt: <strong>{assessmentForm.questionCount} câu</strong></span>
+                    <span className="text-blue-300">•</span>
+                    <span>Tối đa cân bằng: <strong>{maxLessonQuestionsAllowed} câu/lượt</strong></span>
+                  </div>
+
+                  {expectedDistributionText && (
+                    <div className="text-xs font-bold text-emerald-800 bg-emerald-100/90 border border-emerald-300 px-3 py-1.5 rounded-xl">
+                      ✓ {expectedDistributionText} (Tối đa: {maxLessonQuestionsAllowed} câu/lượt)
+                    </div>
+                  )}
+
+                  {minLessonPoolCount === 0 && (
+                    <div className="text-xs font-bold text-amber-800 bg-amber-100/90 border border-amber-300 px-3 py-2 rounded-xl flex items-center gap-2">
+                      <span>⚠️</span>
+                      <span>Có nhóm chưa có câu hỏi (0 câu). Mỗi nhóm phải có ít nhất 1 câu hỏi để đủ điều kiện xuất bản cấu hình mới.</span>
+                    </div>
+                  )}
+
+                  {minLessonPoolCount > 0 && assessmentForm.questionCount < quizPoolNames.length && (
+                    <div className="text-xs font-bold text-amber-800 bg-amber-100/90 border border-amber-300 px-3 py-2 rounded-xl flex items-center gap-2">
+                      <span>⚠️</span>
+                      <span>Số câu mỗi lượt ({assessmentForm.questionCount}) không thể nhỏ hơn số nhóm ({quizPoolNames.length}) để bảo đảm phân phối cân bằng.</span>
+                    </div>
+                  )}
+
+                  {minLessonPoolCount > 0 && assessmentForm.questionCount > maxLessonQuestionsAllowed && (
+                    <div className="text-xs font-bold text-red-800 bg-red-100/90 border border-red-300 px-3 py-2 rounded-xl flex items-center gap-2">
+                      <span>⚠️</span>
+                      <span>Với {quizPoolNames.length} nhóm và nhóm ít câu nhất có {minLessonPoolCount} câu, bài kiểm tra chỉ được chọn tối đa {maxLessonQuestionsAllowed} câu để bảo đảm phân phối cân bằng.</span>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-900">
+                  Ngân hàng: {activeAssessmentMode === 'COURSE_FINAL' ? finalAvailableQuestions : assessmentForm.questions.length} câu
+                  <span className="mx-2 text-blue-300">|</span>
+                  Mỗi lần thi: {assessmentForm.questionCount} câu
+                  <span className="mx-2 text-blue-300">|</span>
+                  Thời gian: {assessmentForm.durationMinutes} phút
+                </div>
+              )}
 
               {activeAssessmentMode === 'COURSE_FINAL' && <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">Ngân hàng quiz hiện có {finalAvailableQuestions} câu. Bài thi sẽ lưu một phiên bản đề riêng và lấy câu hỏi đều từ các bài học. Nếu số câu giảm xuống dưới mức đã cấu hình, hệ thống sẽ chặn thao tác sửa/xóa quiz và hướng dẫn điều chỉnh.</div>}
               {activeAssessmentMode === 'COURSE_FINAL' && finalAvailableQuestions < assessmentForm.questionCount && <p className="text-sm font-semibold text-red-700">Đang thiếu {assessmentForm.questionCount - finalAvailableQuestions} câu so với cấu hình. Hãy giảm số câu mỗi lượt hoặc bổ sung quiz bài học.</p>}
@@ -2413,7 +2504,12 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
                   <Button variant="outline" onClick={closeAssessmentModal}>
                     Hủy
                   </Button>
-                  <Button loading={assessmentSaving} loadingText="Đang lưu..." onClick={handleSaveAssessment}>
+                  <Button
+                    loading={assessmentSaving}
+                    loadingText="Đang lưu..."
+                    disabled={isLessonQuizInvalid || assessmentSaving}
+                    onClick={handleSaveAssessment}
+                  >
                     Lưu bài kiểm tra
                   </Button>
                 </div>

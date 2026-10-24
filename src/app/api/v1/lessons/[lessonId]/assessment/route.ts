@@ -174,19 +174,31 @@ export async function POST(
     const usesPools = pools !== undefined;
     if (usesPools) {
       if (!Array.isArray(pools) || pools.length < 1 || pools.length > 20 || pools.some((pool: unknown) => typeof pool !== 'string' || !pool.trim())) {
-        return NextResponse.json({ error: { code: 'ValidationError', message: 'Quiz pool phải gồm đúng 5 tên pool.' } }, { status: 400 });
+        return NextResponse.json({ error: { code: 'ValidationError', message: 'Quiz pool phải gồm từ 1 đến 20 tên nhóm.' } }, { status: 400 });
       }
-      if (questionCount < pools.length) return NextResponse.json({ error: { code: 'ValidationError', message: 'Số câu mỗi lượt không thể ít hơn số nhóm.' } }, { status: 400 });
+      if (questionCount < pools.length) {
+        return NextResponse.json({ error: { code: 'ValidationError', message: 'Số câu mỗi lượt không thể ít hơn số nhóm.' } }, { status: 400 });
+      }
       const poolCounts = Array.from({ length: pools.length }, () => 0);
       for (const question of questions) {
         const poolIndex = Number((question as any).poolIndex);
         if (!Number.isInteger(poolIndex) || poolIndex < 0 || poolIndex >= pools.length) {
-          return NextResponse.json({ error: { code: 'ValidationError', message: 'Mỗi câu hỏi phải thuộc một trong năm pool.' } }, { status: 400 });
+          return NextResponse.json({ error: { code: 'ValidationError', message: 'Mỗi câu hỏi phải thuộc một trong các nhóm đã tạo.' } }, { status: 400 });
         }
         poolCounts[poolIndex]++;
       }
       if (poolCounts.some((count) => count < 1)) {
-        return NextResponse.json({ error: { code: 'QuestionPoolIncomplete', message: 'Mỗi pool cần ít nhất 3 câu hỏi.' } }, { status: 400 });
+        return NextResponse.json({ error: { code: 'QuestionPoolIncomplete', message: 'Mỗi nhóm phải có ít nhất 1 câu hỏi để đủ điều kiện lưu cấu hình.' } }, { status: 400 });
+      }
+      const minCount = Math.min(...poolCounts);
+      const maxAllowed = pools.length * minCount;
+      if (questionCount > maxAllowed) {
+        return NextResponse.json({
+          error: {
+            code: 'QuestionPoolQuotaExceeded',
+            message: `Với ${pools.length} nhóm và nhóm ít câu nhất có ${minCount} câu, bài kiểm tra chỉ được chọn tối đa ${maxAllowed} câu để bảo đảm phân phối cân bằng.`,
+          },
+        }, { status: 400 });
       }
     }
 
