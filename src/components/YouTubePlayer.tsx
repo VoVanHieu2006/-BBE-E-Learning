@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { apiFetch } from '@/lib/api/client';
+import { VideoPlaybackGuard } from '@/lib/video-playback-guard';
 
 declare global {
   interface Window {
@@ -126,6 +127,27 @@ export default function YouTubePlayer({
   const pauseRetryRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const completedFiredRef = useRef(false);
   const sendProgressRef = useRef<(ct: number, ft: number, event?: PlaybackEvent, overrideRate?: number) => Promise<any>>(async () => null);
+
+  // VideoPlaybackGuard engine separating legitimate continuous playback from unauthorized seek
+  const guardRef = useRef<VideoPlaybackGuard>(
+    new VideoPlaybackGuard({
+      lessonId,
+      videoId: youtubeVideoId,
+      duration: durationSeconds || 0,
+      initialPosition,
+      initialFurthest,
+      allowFreeSeek,
+      isGuest: !accessToken,
+      isCompleted: durationSeconds > 0 && initialFurthest >= durationSeconds,
+      onSeekCorrection: (targetTime) => {
+        try {
+          playerRef.current?.seekTo?.(targetTime, true);
+          setCurrentTime(targetTime);
+        } catch {}
+      },
+    })
+  );
+
   // Optimistic play/pause intent so the first click reacts instantly. Cleared
   // the moment YouTube confirms any state change.
   const [optimisticPlay, setOptimisticPlay] = useState<boolean | null>(null);
@@ -161,9 +183,25 @@ export default function YouTubePlayer({
 
   // Reset all video progress and completion flags immediately when lesson or video changes
   useEffect(() => {
-    sessionIdRef.current = crypto.randomUUID();
-    isVerifyingEndedRef.current = false;
     const alreadyFinished = durationSeconds > 0 && initialFurthest >= durationSeconds;
+    guardRef.current = new VideoPlaybackGuard({
+      lessonId,
+      videoId: youtubeVideoId,
+      duration: durationSeconds || 0,
+      initialPosition: initialPosition || 0,
+      initialFurthest: initialFurthest || 0,
+      allowFreeSeek,
+      isGuest: !accessToken,
+      isCompleted: alreadyFinished,
+      onSeekCorrection: (targetTime) => {
+        try {
+          playerRef.current?.seekTo?.(targetTime, true);
+          setCurrentTime(targetTime);
+        } catch {}
+      },
+    });
+    sessionIdRef.current = guardRef.current.viewSessionId;
+    isVerifyingEndedRef.current = false;
     setIsCompleted(alreadyFinished);
     setVerificationState(alreadyFinished ? 'COMPLETED' : 'IDLE');
     completedFiredRef.current = false;
@@ -186,10 +224,12 @@ export default function YouTubePlayer({
   // Update furthest and currentTime when props arrive asynchronously after mount (fixes F5 loss)
   useEffect(() => {
     if (initialFurthest >= 0) {
-      serverConfirmedFurthestRef.current = initialFurthest;
-      setServerConfirmedFurthest(initialFurthest);
+      guardRef.current.updateServerFurthestFromProps(initialFurthest);
+      serverConfirmedFurthestRef.current = guardRef.current.serverConfirmedFurthest;
+      setServerConfirmedFurthest(guardRef.current.serverConfirmedFurthest);
     }
-    if (initialPosition > 0 && currentTime === 0) {
+    // Only seek to initialPosition if player hasn't started playing yet to avoid rewinding active playback
+    if (initialPosition > 0 && currentTime === 0 && !isPlayingRef.current) {
       setCurrentTime(initialPosition);
       if (playerRef.current?.seekTo) {
         try {
@@ -200,8 +240,11 @@ export default function YouTubePlayer({
     if (durationSeconds > 0 && initialFurthest >= durationSeconds) {
       setIsCompleted(true);
       setVerificationState('COMPLETED');
+      guardRef.current.isCompleted = true;
     }
-  }, [initialPosition, initialFurthest, durationSeconds]);
+    guardRef.current.allowFreeSeek = Boolean(allowFreeSeek);
+    guardRef.current.isGuest = !accessToken;
+  }, [initialPosition, initialFurthest, durationSeconds, allowFreeSeek, accessToken]);
 
   // Hẹn giờ tự ẩn thanh điều khiển (thanh tua) sau 3s khi đang phát.
   const scheduleHideControls = () => {
@@ -225,30 +268,44 @@ export default function YouTubePlayer({
       try {
         const d = durationRef.current || duration || 0;
         const actualRate = overrideRate ?? (playerRef.current?.getPlaybackRate?.() || playbackRateRef.current || 1);
+        const reqInfo = guardRef.current.createProgressRequest(ct);
         const payload: ProgressEvent = {
           lessonId,
           videoId: youtubeVideoId,
           currentTime: ct,
           duration: d,
-          furthest: ft,
-          viewSessionId: sessionIdRef.current,
+          furthest: reqInfo.furthestWatchedPositionSeconds,
+          viewSessionId: guardRef.current.viewSessionId,
           playbackRate: actualRate,
           event,
           playerDurationSeconds: d,
         };
-        if (onProgress) return await onProgress(payload);
-        const response = await apiFetch(`/api/v1/lessons/${lessonId}/progress`, {
-          method: 'PATCH',
-          body: JSON.stringify({
-            positionSeconds: payload.currentTime,
-            furthestWatchedPositionSeconds: payload.furthest,
-            playerDurationSeconds: payload.playerDurationSeconds,
-            playbackRate: payload.playbackRate,
-            event: payload.event,
-            viewSessionId: payload.viewSessionId,
-          }),
-        });
-        return response.ok ? response.data : null;
+        let responseData: any = null;
+        if (onProgress) {
+          responseData = await onProgress(payload);
+        } else {
+          const response = await apiFetch(`/api/v1/lessons/${lessonId}/progress`, {
+            method: 'PATCH',
+            body: JSON.stringify({
+              positionSeconds: payload.currentTime,
+              furthestWatchedPositionSeconds: payload.furthest,
+              playerDurationSeconds: payload.playerDurationSeconds,
+              playbackRate: payload.playbackRate,
+              event: payload.event,
+              viewSessionId: payload.viewSessionId,
+            }),
+          });
+          responseData = response.ok ? response.data : null;
+        }
+
+        if (responseData) {
+          const result = guardRef.current.onServerProgressResponse(reqInfo.seq, responseData);
+          if (result.applied) {
+            serverConfirmedFurthestRef.current = guardRef.current.serverConfirmedFurthest;
+            setServerConfirmedFurthest(guardRef.current.serverConfirmedFurthest);
+          }
+        }
+        return responseData;
       } catch {
         return null;
       }
@@ -418,6 +475,9 @@ export default function YouTubePlayer({
             onStateChange: (e: any) => {
               if (unmounted) return;
               setOptimisticPlay(null);
+              const ctNow = playerRef.current?.getCurrentTime?.() || 0;
+              guardRef.current.onStateChange(e.data, ctNow);
+
               if (e.data === YT_BUFFERING) {
                 setIsBuffering(true);
               } else if (e.data === YT_PLAYING) {
@@ -544,13 +604,15 @@ export default function YouTubePlayer({
     if (!result || typeof result !== 'object') return;
     const serverFurthest = Number(result.furthestWatchedPositionSeconds);
     if (Number.isFinite(serverFurthest) && serverFurthest >= 0) {
-      serverConfirmedFurthestRef.current = serverFurthest;
-      setServerConfirmedFurthest(serverFurthest);
+      guardRef.current.updateServerFurthestFromProps(serverFurthest);
+      serverConfirmedFurthestRef.current = guardRef.current.serverConfirmedFurthest;
+      setServerConfirmedFurthest(guardRef.current.serverConfirmedFurthest);
     }
     if (result.videoCompleted || result.completed || Number(result.progressPercentage) >= 100) {
       setIsCompleted(true);
       setVerificationState('COMPLETED');
       completedFiredRef.current = true;
+      guardRef.current.isCompleted = true;
     }
   };
 
@@ -617,9 +679,25 @@ export default function YouTubePlayer({
         if (d > 0) {
           durationRef.current = d;
           setDuration(d);
+          guardRef.current.duration = d;
         }
-        // ONLY update UI display position! NEVER mutate serverConfirmedFurthest here!
-        setCurrentTime(ct);
+
+        // Run anti-cheat guard tick: preserves continuous legitimate playback while intercepting forward jumps
+        const tickRes = guardRef.current.onTick(ct);
+        if (tickRes.shouldSeek) {
+          try {
+            playerRef.current?.seekTo?.(tickRes.seekTarget, true);
+            setCurrentTime(tickRes.seekTarget);
+          } catch {}
+        } else {
+          setCurrentTime(ct);
+        }
+
+        // Keep serverConfirmedFurthest synchronized with monotonic guard state
+        if (guardRef.current.serverConfirmedFurthest !== serverConfirmedFurthestRef.current) {
+          serverConfirmedFurthestRef.current = guardRef.current.serverConfirmedFurthest;
+          setServerConfirmedFurthest(guardRef.current.serverConfirmedFurthest);
+        }
 
         // Transition to ENDING state within 2.5 seconds of finish
         if (d > 0 && ct >= d - 2.5 && !isVerifyingEndedRef.current && !completedFiredRef.current) {
@@ -673,24 +751,6 @@ export default function YouTubePlayer({
     return () => document.removeEventListener('visibilitychange', handleVisibility);
   }, [isGuest]);
 
-  // Anti-cheat seek-ahead guard for Member role (BR-03: Members CANNOT seek past furthest watched position)
-  // Skipped for guests and Admin/BĐHU (allowFreeSeek === true) or already completed videos
-  useEffect(() => {
-    if (allowFreeSeek || isGuest || isCompleted || !isReady || videoError) return;
-    const guard = setInterval(() => {
-      try {
-        const ct = playerRef.current?.getCurrentTime?.() || 0;
-        const maxAllowed = serverConfirmedFurthestRef.current;
-        if (ct > maxAllowed + 3) {
-          playerRef.current?.seekTo?.(maxAllowed, true);
-          setCurrentTime(maxAllowed);
-        }
-      } catch {}
-    }, 500);
-
-    return () => clearInterval(guard);
-  }, [isReady, videoError, allowFreeSeek, isGuest, isCompleted]);
-
   const displayPlaying = optimisticPlay ?? isPlaying;
 
   const togglePlay = () => {
@@ -719,13 +779,11 @@ export default function YouTubePlayer({
     const pos = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
     const targetTime = pos * duration;
 
-    // BR-03: Member can only seek backwards or up to serverConfirmedFurthest, UNLESS allowFreeSeek, isGuest or isCompleted
-    const maxAllowed = (allowFreeSeek || isGuest || isCompleted) ? duration : serverConfirmedFurthestRef.current;
-    const clampedTarget = Math.min(targetTime, maxAllowed);
+    const { clampedTime } = guardRef.current.clampManualSeek(targetTime);
 
     try {
-      playerRef.current.seekTo(clampedTarget, true);
-      setCurrentTime(clampedTarget);
+      playerRef.current.seekTo(clampedTime, true);
+      setCurrentTime(clampedTime);
     } catch {}
   };
 
@@ -735,6 +793,7 @@ export default function YouTubePlayer({
       playerRef.current.setPlaybackRate(rate);
       playbackRateRef.current = rate;
       setPlaybackRate(rate);
+      guardRef.current.setPlaybackRate(rate);
       const ct = playerRef.current.getCurrentTime?.() || 0;
       void sendProgressRef.current(ct, serverConfirmedFurthestRef.current, 'HEARTBEAT', rate).then(applyServerProgress);
     } catch {}
@@ -771,29 +830,20 @@ export default function YouTubePlayer({
 
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
   const canSeekFree = allowFreeSeek || isGuest || isCompleted;
-  const allowedSeekPercent = duration > 0 ? ((canSeekFree ? duration : serverConfirmedFurthest) / duration) * 100 : 0;
+  const allowedSeekPercent = duration > 0 ? ((canSeekFree ? duration : guardRef.current.computeAllowedManualSeekUntil()) / duration) * 100 : 0;
 
   const seekDelta = (deltaSeconds: number) => {
     if (!playerRef.current) return;
     try {
       const ct = playerRef.current.getCurrentTime?.() || 0;
       const d = durationRef.current || duration || Infinity;
-      if (deltaSeconds < 0) {
-        const targetTime = Math.max(0, ct + deltaSeconds);
-        playerRef.current.seekTo(targetTime, true);
-        setCurrentTime(targetTime);
+      const targetTime = Math.max(0, Math.min(d, ct + deltaSeconds));
+      const { clampedTime } = guardRef.current.clampManualSeek(targetTime);
+      if (canSeekFree || clampedTime !== ct || deltaSeconds < 0) {
+        playerRef.current.seekTo(clampedTime, true);
+        setCurrentTime(clampedTime);
         setShowControls(true);
         scheduleHideControls();
-      } else {
-        const maxAllowed = (allowFreeSeek || isGuest || isCompleted) ? d : serverConfirmedFurthestRef.current;
-        const targetTime = Math.min(d, ct + deltaSeconds);
-        const allowedTarget = Math.min(targetTime, maxAllowed);
-        if (allowFreeSeek || isGuest || isCompleted || allowedTarget > ct) {
-          playerRef.current.seekTo(allowedTarget, true);
-          setCurrentTime(allowedTarget);
-          setShowControls(true);
-          scheduleHideControls();
-        }
       }
     } catch {}
   };
@@ -994,10 +1044,10 @@ export default function YouTubePlayer({
               {/* Forward 10s */}
               <button
                 type="button"
-                disabled={!canSeekFree && currentTime + 3 >= serverConfirmedFurthest}
+                disabled={!canSeekFree && currentTime + 3 >= guardRef.current.computeAllowedManualSeekUntil()}
                 onClick={() => seekDelta(10)}
                 className="px-1.5 sm:px-2 py-1 shrink-0 flex items-center gap-0.5 sm:gap-1 bg-white/10 hover:bg-white/25 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg text-[10px] sm:text-[11px] font-semibold transition text-slate-200 hover:text-white"
-                title={canSeekFree || currentTime + 3 < serverConfirmedFurthest ? 'Tua tới 10 giây (Phím mũi tên phải →)' : 'Học viên không thể tua tới đoạn chưa học'}
+                title={canSeekFree || currentTime + 3 < guardRef.current.computeAllowedManualSeekUntil() ? 'Tua tới 10 giây (Phím mũi tên phải →)' : 'Học viên không thể tua tới đoạn chưa học'}
               >
                 <span>10s</span>
                 <span>↻</span>

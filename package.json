@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "test:business-rules": "ts-node -P tsconfig.test.json src/test/business-rules.test.ts",
+    "test:video-guard": "ts-node -P tsconfig.test.json src/test/video-playback-guard.test.ts",
     "test:baseline-safety": "node --test scripts/baseline-empty-database.test.mjs",
     "test:leaderboard-integration": "node scripts/test-chapter-leaderboard-integration.mjs",
     "test:learning-flow-integration": "node scripts/test-learning-flow-integration.mjs",
