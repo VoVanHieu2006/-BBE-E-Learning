@@ -1,0 +1,12 @@
+{
+  "outcome": "PASS",
+  "browser": "156.0.8078.4",
+  "mode": "native",
+  "media": "real YouTube",
+  "conflictingPosition": "relative",
+  "beforeFullscreen": "0:22/10:35",
+  "afterFullscreen": "0:28/10:35",
+  "failedHosts": [
+    "www.youtube.com"
+  ]
+}

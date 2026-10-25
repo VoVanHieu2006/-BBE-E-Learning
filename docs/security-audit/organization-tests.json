@@ -1,0 +1,134 @@
+[
+  {
+    "name": "first Lead succeeds; second Chapter rejected at database",
+    "expected": "Invariant holds",
+    "actual": "As expected",
+    "status": "PASS"
+  },
+  {
+    "name": "revocation preserves history and permanent Chapter binding",
+    "expected": "Invariant holds",
+    "actual": "As expected",
+    "status": "PASS"
+  },
+  {
+    "name": "a permanently bound Lead cannot join DNA, even after revocation or through a future raw import",
+    "expected": "Invariant holds",
+    "actual": "As expected",
+    "status": "PASS"
+  },
+  {
+    "name": "a binding cannot be changed/deleted and imports cannot fabricate a past tenure elsewhere",
+    "expected": "Invariant holds",
+    "actual": "As expected",
+    "status": "PASS"
+  },
+  {
+    "name": "retyping a unit through import cannot bypass the permanent Lead/DNA guard",
+    "expected": "Invariant holds",
+    "actual": "As expected",
+    "status": "PASS"
+  },
+  {
+    "name": "concurrent raw imports to two Lead Chapters at READ COMMITTED",
+    "expected": "Invariant holds",
+    "actual": "As expected",
+    "status": "PASS"
+  },
+  {
+    "name": "concurrent raw imports to two Lead Chapters at REPEATABLE READ",
+    "expected": "Invariant holds",
+    "actual": "As expected",
+    "status": "PASS"
+  },
+  {
+    "name": "concurrent raw imports to two Lead Chapters at SERIALIZABLE",
+    "expected": "Invariant holds",
+    "actual": "As expected",
+    "status": "PASS"
+  },
+  {
+    "name": "actual Admin API refuses second Chapter with the bound Chapter name",
+    "expected": "Invariant holds",
+    "actual": "As expected",
+    "status": "PASS"
+  },
+  {
+    "name": "revocation is immediate for the same JWT and authorization rejects foreign Chapter",
+    "expected": "Invariant holds",
+    "actual": "As expected",
+    "status": "PASS"
+  },
+  {
+    "name": "Chapter to DNA transaction preserves progress/stars/history, cancels Ban and scheduled positions",
+    "expected": "Invariant holds",
+    "actual": "As expected",
+    "status": "PASS"
+  },
+  {
+    "name": "same-Chapter overlapping aliases cannot create two active tenures",
+    "expected": "Invariant holds",
+    "actual": "As expected",
+    "status": "PASS"
+  },
+  {
+    "name": "Admin transfer retry is idempotent; old Lead cannot read or add the DNA learner",
+    "expected": "Invariant holds",
+    "actual": "As expected",
+    "status": "PASS"
+  },
+  {
+    "name": "DNA month/term include all same-period stars; previous Chapter month history stays intact",
+    "expected": "Invariant holds",
+    "actual": "As expected",
+    "status": "PASS"
+  },
+  {
+    "name": "email casing/whitespace cannot create a second identity or escape binding",
+    "expected": "Invariant holds",
+    "actual": "As expected",
+    "status": "PASS"
+  },
+  {
+    "name": "organization history is Admin-only and explicitly labels ended Chapter affiliation",
+    "expected": "Invariant holds",
+    "actual": "As expected",
+    "status": "PASS"
+  },
+  {
+    "name": "browser cache never reuses current organization or auth scope across requests",
+    "expected": "Invariant holds",
+    "actual": "As expected",
+    "status": "PASS"
+  },
+  {
+    "name": "Admin retains unrestricted global management",
+    "expected": "Invariant holds",
+    "actual": "As expected",
+    "status": "PASS"
+  },
+  {
+    "name": "Chapter/DNA exclusivity works before cutover, including raw import",
+    "expected": "Invariant holds",
+    "actual": "As expected",
+    "status": "PASS"
+  },
+  {
+    "name": "concurrent Chapter/DNA imports at READ COMMITTED",
+    "expected": "Invariant holds",
+    "actual": "As expected",
+    "status": "PASS"
+  },
+  {
+    "name": "concurrent Chapter/DNA imports at REPEATABLE READ",
+    "expected": "Invariant holds",
+    "actual": "As expected",
+    "status": "PASS"
+  },
+  {
+    "name": "concurrent Chapter/DNA imports at SERIALIZABLE",
+    "expected": "Invariant holds",
+    "actual": "As expected",
+    "status": "PASS"
+  }
+]

@@ -5,7 +5,6 @@ import { historicalChapterMonthRows, individualPeriodRows, chapterSeasonRows, co
 import { dnaSeasonEnd } from './chapter-reward-gate'
 import { getLearningManagerKind } from './manager-learning-access'
 import { listAccessibleChapterIds, listManagedOrganizationUnits } from './authorization'
-import { getCachedChapterLeaderboard, setCachedChapterLeaderboard } from './chapter-leaderboard-cache'
 
 type Group = 'MEMBER' | 'LT' | 'DNA' | 'CHAPTER'
 type PeriodType = 'MONTH' | 'TERM'
@@ -171,10 +170,8 @@ export async function periodLeaderboard(request: NextRequest) {
     return NextResponse.json({ items: [], state: 'AWAITING_SNAPSHOT', group, periodType, period, formula: group === 'CHAPTER' ? CHAPTER_FORMULA : INDIVIDUAL_FORMULA })
   }
 
-  const cacheKey = `period:${group}:${period.id}:${chapterId || ''}:${managedDnaUnitIds.join(',')}:${isGuest ? 'guest' : 'auth'}`
-  const cached = getCachedChapterLeaderboard(cacheKey)
-  if (cached) return NextResponse.json(cached, { headers: { 'Cache-Control': 'no-store' } })
-
+  // Closed snapshots returned above remain immutable. Live affiliation-sensitive
+  // rankings are read fresh, including changes committed by another server.
   if (group === 'CHAPTER') {
     if (season) {
       // The current season has no closed month yet. Show a clearly labelled
@@ -208,7 +205,6 @@ export async function periodLeaderboard(request: NextRequest) {
             items: liveItems.filter((row) => row.eligible),
             excluded: liveItems.filter((row) => !row.eligible),
           }
-          setCachedChapterLeaderboard(payload, cacheKey)
           return NextResponse.json(payload, { headers: { 'Cache-Control': 'no-store' } })
         }
       }
@@ -257,7 +253,6 @@ export async function periodLeaderboard(request: NextRequest) {
       items: formulaRows.filter((row) => row.eligible),
       excluded: formulaRows.filter((row) => !row.eligible),
     }
-    setCachedChapterLeaderboard(chapterPayload, cacheKey)
     return NextResponse.json(chapterPayload, { headers: { 'Cache-Control': 'no-store' } })
   }
 
@@ -278,7 +273,6 @@ export async function periodLeaderboard(request: NextRequest) {
     state: 'OPEN',
     formula: INDIVIDUAL_FORMULA,
   }, isGuest)
-  setCachedChapterLeaderboard(individualPayload, cacheKey)
   return NextResponse.json(individualPayload, { headers: { 'Cache-Control': 'no-store' } })
 }
 

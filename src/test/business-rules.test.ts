@@ -94,6 +94,7 @@ describe('Organization-scoped authorization rules', () => {
   it('derives legacy Chapter scope from current membership rather than a stale token claim', () => {
     assert.equal(resolveLegacyChapterMembershipScope([]), undefined)
     assert.equal(resolveLegacyChapterMembershipScope(['current-chapter']), 'current-chapter')
+    assert.equal(resolveLegacyChapterMembershipScope(['chapter-a', 'chapter-b']), undefined)
   })
 
   it('grants a parent position downward but never sideways or upward', () => {

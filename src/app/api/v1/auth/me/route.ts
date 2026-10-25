@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
   const managerChapters = managedOrganizationUnits
     .filter((unit) => unit.type === 'CHAPTER' && unit.chapterId)
     .map((unit) => ({ id: unit.chapterId!, name: unit.name, canManageMembers: unit.canManageMembers }))
-  const legacyChapter = managerKind === 'LEAD_DNA' ? null : user.chapter_members[0]?.chapter
+  const legacyChapter = managerKind ? null : user.chapter_members[0]?.chapter
   const primaryChapter = legacyChapter || managerChapters[0] || null
 
   return NextResponse.json({

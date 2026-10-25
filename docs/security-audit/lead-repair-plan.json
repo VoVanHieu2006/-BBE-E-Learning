@@ -1,0 +1,31 @@
+{
+  "mode": "DRY_RUN",
+  "planHash": "a5d5bd80d2649be7925d9c48f1eedc50c9d605ff38a369f273dda018fbfc9343",
+  "plan": {
+    "userRef": "063e5b4edb3972c4cceded76281dab6f",
+    "keptChapterId": "907af9ae-139e-4d5a-9cd2-7218dd77f591",
+    "keptChapterName": "Chapter Demo",
+    "expectedLegacyChapterId": "1ff2d557-6c39-4b64-be9a-318dbcea3155",
+    "correctCurrentAffiliationIndex": true,
+    "expectedAssignments": [
+      {
+        "id": "7016941d-3bd0-49ad-9f48-aa7eeab77bd9",
+        "unit_id": "36571212-ca97-4397-a5a7-568f59f82728",
+        "position_id": "87090377-01f6-44d7-9a04-6b0040bd400a",
+        "code": "CHAPTER_LEAD",
+        "chapter_id": "907af9ae-139e-4d5a-9cd2-7218dd77f591"
+      }
+    ],
+    "endAssignmentIds": [],
+    "endMembershipIds": [],
+    "createKeptAssignment": false,
+    "preserved": [
+      "all assignment rows",
+      "ended Chapter affiliation history",
+      "StarLedger",
+      "LessonProgress",
+      "learning cycles",
+      "closed snapshots"
+    ]
+  }
+}

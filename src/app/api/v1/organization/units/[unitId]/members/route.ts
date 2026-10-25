@@ -1,3 +1,7 @@
+import { hasActiveDnaAffiliation } from '@/lib/affiliation-access'
+import { OrganizationConflict } from '@/lib/chapter-lead'
+import { lockLearningUser } from '@/lib/learning-periods'
+import { invalidateOrganizationViews } from '@/lib/organization-view-cache'
 import { prepareOrganizationTransition } from '@/lib/organization-transition'
 import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
@@ -191,7 +195,11 @@ export async function POST(request: NextRequest, { params }: { params: { unitId:
     }
     try {
       const membership = await prisma.$transaction(async (tx) => {
+        await lockLearningUser(tx, user.id)
+        if (parentChapter && auth.context!.role !== 'ADMIN' && await hasActiveDnaAffiliation(user.id, tx)) throw new OrganizationConflict('DnaMembershipConflict', 'A current DNA member cannot be added back to a Chapter by its Lead.')
         const effectiveAt = await prepareOrganizationTransition(tx, user.id, unit.id, auth.context!.userId)
+        const duplicate = await tx.organizationMembership.findFirst({ where: { user_id: user.id, unit_id: unit.id, status: 'ACTIVE', ends_at: null } })
+        if (duplicate) return duplicate
         const created = await tx.organizationMembership.create({ data: { user_id: user.id, unit_id: unit.id, starts_at: effectiveAt } })
         if (parentChapter) {
           await tx.chapterMember.upsert({
@@ -209,12 +217,15 @@ export async function POST(request: NextRequest, { params }: { params: { unitId:
             metadata: { unitId: unit.id, userId: user.id },
           },
         })
+        await reconcileLearningAssignmentsForUser(user.id, tx)
         return created
       }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
-      await reconcileLearningAssignmentsForUser(user.id)
+      invalidateOrganizationViews()
       invalidateUserAuthCache(user.id)
       return NextResponse.json({ membership }, { status: 201 })
     } catch (error: any) {
+      if (error instanceof OrganizationConflict) return NextResponse.json({ error: { code: error.code, message: error.message } }, { status: 409 })
+      if (/SingleOrganizationAffiliationRequired|MembershipExists|ChapterLead/.test(error?.message || '')) return NextResponse.json({ error: { code: 'OrganizationConflict' } }, { status: 409 })
       if (error?.code === 'P2034') return NextResponse.json({ error: { code: 'MembershipChangedConcurrently' } }, { status: 409 })
       if (error?.code === 'P2002') return NextResponse.json({ error: { code: 'MembershipExists' } }, { status: 409 })
       throw error
@@ -250,6 +261,7 @@ export async function POST(request: NextRequest, { params }: { params: { unitId:
     })
     await reconcileLearningAssignmentsForUser(body.userId)
     invalidateUserAuthCache(body.userId)
+    invalidateOrganizationViews()
     return NextResponse.json({ removed: true, endedMemberships: active.length })
   }
 

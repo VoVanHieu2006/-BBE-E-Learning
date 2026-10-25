@@ -1,0 +1,27 @@
+{
+  "kind": "Observed command results across the audit session; physical phones are not included",
+  "head": "da8a810a6d1c42bb2eea06facf7830e6390f6f56",
+  "checks": [
+    { "command": "npx tsc --noEmit -p tsconfig.check.json", "status": "PASS", "afterSharedDeadlineChange": true },
+    { "command": "npm run build", "status": "PASS", "staticPages": 74, "afterSharedDeadlineChange": true },
+    { "command": "npm run test:organization-integrity", "status": "PASS", "passed": 22, "evidence": "organization-tests.json", "afterSharedDeadlineChange": true },
+    { "command": "npm run test:organization-repair", "status": "PASS", "passed": 5, "evidence": "repair-tests.json" },
+    { "command": "npm run test:business-rules", "status": "PASS", "passed": 66 },
+    { "command": "npm run test:video-guard", "status": "PASS", "passed": 15 },
+    { "command": "npm run test:video-player-ui", "status": "PASS", "passed": 23 },
+    { "command": "npm run test:video-switching-leak", "status": "PASS", "passed": 9 },
+    { "command": "npm run test:formula-audit", "status": "PASS", "passed": 49, "limitation": "Contains inherited expectations inconsistent with handbook section 13; not overall formula acceptance" },
+    { "command": "npm run test:shared-deadline", "status": "PASS", "passed": 8 },
+    { "command": "npm run audit:handbook-formulas", "status": "FAIL", "passed": 8, "failed": 3, "evidence": "handbook-formula-tests.json", "expectedExitCode": 1 },
+    { "suite": "player browser core production build", "status": "PASS_WITH_SKIPS", "passed": 65, "skipped": 7, "evidence": "../../scratch/player-browser-report/index.html" },
+    { "suite": "player authenticated heartbeat browser supplement", "status": "PASS_WITH_SKIPS", "passed": 5, "skipped": 3, "limitation": "Mock progress API, same player/session retained" },
+    { "suite": "Admin organization history browser supplement", "status": "PASS_WITH_SKIPS", "passed": 1, "skipped": 3, "evidence": "organization-history-ui.png", "limitation": "Synthetic user and mocked API; actual API security tested separately in PostgreSQL suite" },
+    { "suite": "real YouTube desktop native", "status": "PASS", "evidence": "player-native-result.json" },
+    { "suite": "real YouTube desktop theater", "status": "PASS", "evidence": "player-theater-result.json" },
+    { "suite": "Android Chrome physical device", "status": "NOT VERIFIED" },
+    { "suite": "iPhone Safari physical device", "status": "NOT VERIFIED" },
+    { "suite": "Chrome iPhone physical device", "status": "NOT VERIFIED" },
+    { "suite": "entire historical migration chain on empty local database", "status": "BLOCKED", "reason": "Baseline migration 20261013_course_final_assessment references missing assessments.lesson_id" }
+  ],
+  "deployment": { "databaseMigrationsApplied": ["20261025_organization_integrity", "20261025_lead_binding_guards"], "approvedDemoRepairApplied": true, "applicationDeployed": false, "committed": false, "pushed": false }
+}

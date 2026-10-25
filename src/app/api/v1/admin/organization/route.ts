@@ -1,4 +1,7 @@
 import { prepareOrganizationTransition } from '@/lib/organization-transition'
+import { assertLeadAppointment, OrganizationConflict } from '@/lib/chapter-lead'
+import { lockLearningUser } from '@/lib/learning-periods'
+import { invalidateOrganizationViews } from '@/lib/organization-view-cache'
 import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { authenticate, invalidateUserAuthCache } from '@/lib/auth'
@@ -6,9 +9,8 @@ import { prisma } from '@/lib/prisma'
 import { reconcileLearningAssignmentsForUser } from '@/lib/learning-assignments'
 import { organizationParentTypeMatches, organizationSubtreeIds, positionScopeMatchesUnitType, validateOrganizationMove } from '@/lib/organization-scope'
 import { isOrganizationId, normalizeOrganizationPagination, normalizeOrganizationSearch, parseAssignmentFilterStatus, parseMembershipFilterStatus } from '@/lib/organization-admin-rules'
-import { getOrganizationServerCache, invalidateOrganizationServerCache, setOrganizationServerCache } from '@/lib/server-cache'
+import { invalidateOrganizationServerCache } from '@/lib/server-cache'
 
-const ORGANIZATION_CACHE_TTL = 30_000
 
 async function getChapterIdForUnit(unitId: string): Promise<string | null> {
   let currentId: string | null = unitId
@@ -42,9 +44,6 @@ export async function GET(request: NextRequest) {
   if (auth.context?.role !== 'ADMIN') return NextResponse.json({ error: { code: 'AccessDenied' } }, { status: 403 })
 
   const params = new URL(request.url).searchParams
-  const cacheKey = params.toString()
-  const cached = getOrganizationServerCache(cacheKey, ORGANIZATION_CACHE_TTL)
-  if (cached) return NextResponse.json(cached, { headers: { 'Cache-Control': 'private, max-age=15, stale-while-revalidate=60' } })
   const now = new Date()
   const membershipSearch = normalizeOrganizationSearch(params.get('membershipSearch'))
   const membershipUnitId = params.get('membershipUnitId') || ''
@@ -59,11 +58,11 @@ export async function GET(request: NextRequest) {
 
   const membershipWhere: Prisma.OrganizationMembershipWhereInput = {
     ...(membershipUnitId ? { unit_id: membershipUnitId } : {}),
-    ...(membershipStatus !== 'ALL' ? { status: membershipStatus } : {}),
-    ...(membershipSearch ? { OR: [
+    ...(membershipStatus === 'ACTIVE' ? { status: 'ACTIVE' as const, starts_at: { lte: now }, OR: [{ ends_at: null }, { ends_at: { gt: now } }] } : membershipStatus === 'ENDED' ? { OR: [{ status: 'ENDED' as const }, { ends_at: { lte: now } }] } : {}),
+    ...(membershipSearch ? { AND: [{ OR: [
       { user: { email: { contains: membershipSearch, mode: 'insensitive' } } },
       { unit: { name: { contains: membershipSearch, mode: 'insensitive' } } },
-    ] } : {}),
+    ] }] } : {}),
   }
   const assignmentConditions: Prisma.PositionAssignmentWhereInput[] = []
   if (assignmentUnitId) assignmentConditions.push({ unit_id: assignmentUnitId })
@@ -128,11 +127,10 @@ export async function GET(request: NextRequest) {
     assignmentPagination: { page: assignmentPagination.page, limit: assignmentPagination.limit, total: assignmentPagination.total, totalPages: assignmentPagination.totalPages },
     recentKpis: recentKpis.map((item) => ({ id: item.id, chapterName: item.chapter.name, month: item.month_start, status: item.status, note: item.note, updatedAt: item.updated_at, configuredBy: item.configured_by.email })),
   }
-  setOrganizationServerCache(cacheKey, payload)
-  return NextResponse.json(payload, { headers: { 'Cache-Control': 'private, max-age=15, stale-while-revalidate=60' } })
+  return NextResponse.json(payload, { headers: { 'Cache-Control': 'no-store' } })
 }
 
-export async function POST(request: NextRequest) {
+async function mutateOrganization(request: NextRequest) {
   const auth = await authenticate(request)
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: 401 })
   if (auth.context?.role !== 'ADMIN') return NextResponse.json({ error: { code: 'AccessDenied' } }, { status: 403 })
@@ -307,7 +305,7 @@ export async function POST(request: NextRequest) {
     if (Number.isNaN(startsAt.getTime())) return NextResponse.json({ error: { code: 'ValidationError', message: 'Ngày bắt đầu không hợp lệ.' } }, { status: 400 })
     if (startsAt > new Date()) return NextResponse.json({ error: { code: 'ValidationError', message: 'Membership đơn vị chỉ bắt đầu ngay hoặc trong quá khứ; chức vụ có thể được lên lịch trước.' } }, { status: 400 })
     const [user, unit] = await Promise.all([
-      prisma.user.findUnique({ where: { id: body.userId }, select: { id: true } }),
+      prisma.user.findUnique({ where: { id: body.userId }, select: { id: true, role: true } }),
       prisma.organizationUnit.findUnique({ where: { id: body.unitId }, select: { id: true, type: true, parent_id: true, chapter: { select: { id: true } } } }),
     ])
     if (!user || !unit) return NextResponse.json({ error: { code: 'NotFound', message: 'Không tìm thấy người dùng hoặc đơn vị.' } }, { status: 404 })
@@ -319,8 +317,6 @@ export async function POST(request: NextRequest) {
       if (ancestor.type === 'CHAPTER') chapterId = ancestor.chapter?.id || null
       ancestorId = ancestor.parent_id
     }
-    const duplicate = await prisma.organizationMembership.findFirst({ where: { user_id: user.id, unit_id: unit.id, status: 'ACTIVE', ends_at: null } })
-    if (duplicate) return NextResponse.json({ error: { code: 'MembershipExists', message: 'Người dùng đã thuộc đơn vị này.' } }, { status: 409 })
     if (chapterId) {
       const otherChapter = await prisma.chapterMember.findFirst({
         where: { user_id: user.id, chapter_id: { not: chapterId } },
@@ -330,7 +326,8 @@ export async function POST(request: NextRequest) {
     }
     const membership = await prisma.$transaction(async (tx) => {
       const effectiveAt = await prepareOrganizationTransition(tx, user.id, unit.id, auth.context!.userId)
-      const created = await tx.organizationMembership.create({ data: { user_id: user.id, unit_id: unit.id, starts_at: effectiveAt } })
+      const duplicate = await tx.organizationMembership.findFirst({ where: { user_id: user.id, unit_id: unit.id, status: 'ACTIVE', starts_at: { lte: effectiveAt }, OR: [{ ends_at: null }, { ends_at: { gt: effectiveAt } }] } })
+      const created = duplicate || await tx.organizationMembership.create({ data: { user_id: user.id, unit_id: unit.id, starts_at: effectiveAt } })
       if (chapterId) {
         await tx.chapterMember.upsert({
           where: { chapter_id_user_id: { chapter_id: chapterId, user_id: user.id } },
@@ -338,9 +335,10 @@ export async function POST(request: NextRequest) {
           update: {},
         })
       }
+      if (!duplicate) await tx.auditLog.create({ data: { actor_user_id: auth.context!.userId, action: 'ADD_ORGANIZATION_MEMBERSHIP', entity_type: 'ORGANIZATION_MEMBERSHIP', entity_id: created.id, metadata: { userId: user.id, unitId: unit.id, effectiveAt: effectiveAt.toISOString() } } })
+      await reconcileLearningAssignmentsForUser(user.id, tx)
       return created
     })
-    await reconcileLearningAssignmentsForUser(body.userId)
     invalidateUserAuthCache(body.userId)
     return NextResponse.json({ membership }, { status: 201 })
   }
@@ -387,15 +385,19 @@ export async function POST(request: NextRequest) {
     const endsAt = body.endsAt ? new Date(body.endsAt) : null
     if (Number.isNaN(startsAt.getTime()) || (endsAt && Number.isNaN(endsAt.getTime())) || (endsAt && endsAt <= startsAt)) return NextResponse.json({ error: { code: 'ValidationError' } }, { status: 400 })
     const [user, position, unit] = await Promise.all([
-      prisma.user.findUnique({ where: { id: body.userId }, select: { id: true } }),
-      prisma.position.findUnique({ where: { id: body.positionId }, select: { id: true, scope: true } }),
+      prisma.user.findUnique({ where: { id: body.userId }, select: { id: true, role: true } }),
+      prisma.position.findUnique({ where: { id: body.positionId }, select: { id: true, scope: true, code: true } }),
       prisma.organizationUnit.findUnique({ where: { id: body.unitId }, select: { id: true, type: true } }),
     ])
     if (!user || !position || !unit) return NextResponse.json({ error: { code: 'NotFound', message: 'Không tìm thấy người dùng, chức vụ hoặc đơn vị.' } }, { status: 404 })
     if (!positionScopeMatchesUnitType(position.scope, unit.type)) {
       return NextResponse.json({ error: { code: 'PositionScopeMismatch', message: 'Phạm vi chức vụ không khớp loại đơn vị được bổ nhiệm.' } }, { status: 400 })
     }
-    if (unit.type === 'CHAPTER' || unit.type === 'DEPARTMENT') {
+    if (['CHAPTER_LEAD', 'CHAPTER_MANAGER'].includes(position.code) && user.role !== 'ADMIN') {
+      const bound = await prisma.chapterLeadBinding.findUnique({ where: { user_id: user.id }, include: { chapter: { select: { organization_unit_id: true, name: true } } } })
+      if (bound && bound.chapter.organization_unit_id !== unit.id) return NextResponse.json({ error: { code: 'ChapterLeadPermanentBinding', message: `Tài khoản đã gắn cố định với ${bound.chapter.name}; không thể đổi sang Chapter khác.`, chapterName: bound.chapter.name } }, { status: 409 })
+    }
+    if (user.role !== 'ADMIN' && (unit.type === 'CHAPTER' || unit.type === 'DEPARTMENT')) {
       const targetChapterId = await getChapterIdForUnit(unit.id)
       const currentChapter = await prisma.chapterMember.findUnique({ where: { user_id: user.id } })
       if (!targetChapterId || currentChapter?.chapter_id !== targetChapterId) return NextResponse.json({ error: { code: 'OrganizationMembershipRequired', message: 'Hãy chuyển tư cách tổ chức trước khi bổ nhiệm chức vụ Chapter/Ban.' } }, { status: 409 })
@@ -406,14 +408,18 @@ export async function POST(request: NextRequest) {
     }
     const isPrimary = Boolean(body.isPrimary)
     const assignment = await prisma.$transaction(async (tx) => {
+      await lockLearningUser(tx, user.id)
+      await assertLeadAppointment(tx, user.id, position.code, unit.id, startsAt, endsAt)
       let effectiveAt = startsAt
       if (['DNA', 'DNA_GROUP'].includes(unit.type) && startsAt <= new Date()) {
         effectiveAt = await prepareOrganizationTransition(tx, user.id, unit.id, auth.context!.userId)
         if (!await tx.organizationMembership.count({ where: { user_id: user.id, unit_id: unit.id, status: 'ACTIVE', ends_at: null } })) await tx.organizationMembership.create({ data: { user_id: user.id, unit_id: unit.id, starts_at: effectiveAt } })
+        const existing = await tx.positionAssignment.findFirst({ where: { user_id: user.id, position_id: position.id, unit_id: unit.id, starts_at: { lte: effectiveAt }, OR: [{ ends_at: null }, { ends_at: { gt: effectiveAt } }] } })
+        if (existing) return existing
       }
       if (isPrimary) {
         await tx.positionAssignment.updateMany({
-          where: { unit_id: unit.id, is_primary: true, starts_at: { lt: startsAt }, OR: [{ ends_at: null }, { ends_at: { gt: startsAt } }] },
+          where: { unit_id: unit.id, position_id: position.id, is_primary: true, starts_at: { lt: startsAt }, OR: [{ ends_at: null }, { ends_at: { gt: startsAt } }] },
           data: { ends_at: startsAt },
         })
       }
@@ -482,4 +488,19 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ assignment })
   }
   return NextResponse.json({ error: { code: 'UnknownAction' } }, { status: 400 })
+}
+
+// Central mapping keeps both validation and DB constraint races actionable for Admin.
+export async function POST(request: NextRequest) {
+  try {
+    const response = await mutateOrganization(request)
+    if (response.ok) invalidateOrganizationViews()
+    return response
+  } catch (error: any) {
+    if (error instanceof OrganizationConflict) return NextResponse.json({ error: { code: error.code, message: error.message, chapterName: error.chapterName } }, { status: 409 })
+    if (error?.code === 'P2034' || error?.code === 'P2002' || /ChapterLead|SingleOrganizationAffiliationRequired|MembershipExists/.test(error?.message || '')) {
+      return NextResponse.json({ error: { code: 'OrganizationConflict', message: 'Organization scope changed or conflicts with an existing membership/Lead binding. Reload and review the current scope.' } }, { status: 409 })
+    }
+    throw error
+  }
 }

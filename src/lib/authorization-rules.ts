@@ -10,7 +10,8 @@ export function isLegacyChapterCompatibilityPermission(permissionCode: string): 
 
 /** Legacy Chapter access must follow current membership, never a stale JWT claim. */
 export function resolveLegacyChapterMembershipScope(chapterIds: readonly string[]): string | undefined {
-  return chapterIds[0]
+  const unique = Array.from(new Set(chapterIds))
+  return unique.length === 1 ? unique[0] : undefined
 }
 
 /** Comment moderation is scoped to the author or a global Admin. */

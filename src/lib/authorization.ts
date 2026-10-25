@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma'
-import { hasPermissionInOrganizationScope, isLegacyChapterCompatibilityPermission } from '@/lib/authorization-rules'
+import { chapterLeadScope } from './chapter-lead'
+import { hasPermissionInOrganizationScope } from '@/lib/authorization-rules'
 
 type LegacyAuthContext = { userId: string; role: 'ADMIN' | 'CHAPTER_LEADER' | 'MEMBER'; chapterId?: string }
 
@@ -76,11 +77,8 @@ export async function canAccessOrganizationUnitPermission(
   const ancestorIds = await getOrganizationUnitAncestors(unitId)
   if (!ancestorIds) return false
 
-  // Preserve only the two old Chapter permissions, and only within that Chapter tree.
-  if (context.role === 'CHAPTER_LEADER' && context.chapterId && isLegacyChapterCompatibilityPermission(permissionCode)) {
-    const chapter = await prisma.chapter.findUnique({ where: { id: context.chapterId }, select: { organization_unit_id: true } })
-    if (chapter?.organization_unit_id && ancestorIds.includes(chapter.organization_unit_id)) return true
-  }
+  const lead = await chapterLeadScope(context.userId)
+  if (lead.isLead && (!lead.chapterId || await getOwningChapterId(unitId) !== lead.chapterId)) return false
 
   return hasScopedUnitPermission(context.userId, ancestorIds, permissionCode)
 }
@@ -102,6 +100,7 @@ export async function listManagedOrganizationUnits(
       select: { unit_id: true, position: { select: { permissions: { select: { permission: { select: { code: true } } } } } } },
     }),
   ])
+  const lead = context.role === 'ADMIN' ? null : await chapterLeadScope(context.userId)
   const byId = new Map(units.map((unit) => [unit.id, unit]))
   const grants = assignments.map((assignment) => ({ unitId: assignment.unit_id, codes: new Set(assignment.position.permissions.map((grant) => grant.permission.code)) }))
   const ancestors = (unitId: string) => {
@@ -123,21 +122,23 @@ export async function listManagedOrganizationUnits(
   }
   return units.filter((unit) => unit.type !== 'ROOT').flatMap((unit) => {
     const ancestorIds = ancestors(unit.id)
-    const legacy = context.role === 'CHAPTER_LEADER' && context.chapterId && owningChapter(unit.id) === context.chapterId
+    if (lead?.isLead && (!lead.chapterId || owningChapter(unit.id) !== lead.chapterId)) return []
     const has = (code: string) => context.role === 'ADMIN' || grants.some((grant) => ancestorIds.includes(grant.unitId) && grant.codes.has(code))
-    if (!has(permissionCode) && !(legacy && isLegacyChapterCompatibilityPermission(permissionCode))) return []
+    if (!has(permissionCode)) return []
     return [{
       id: unit.id,
       name: unit.name,
       type: unit.type as ManagedOrganizationUnit['type'],
       chapterId: unit.chapter?.id || owningChapter(unit.id),
-      canManageMembers: has(memberManagementPermission(unit.type)) || Boolean(legacy),
+      canManageMembers: has(memberManagementPermission(unit.type)),
     }]
   })
 }
 
 /** RBAC permission checked through an active, scoped position assignment. */
 export async function hasChapterPermission(userId: string, chapterId: string, permissionCode: string): Promise<boolean> {
+  const lead = await chapterLeadScope(userId)
+  if (lead.isLead && lead.chapterId !== chapterId) return false
   const chapter = await prisma.chapter.findUnique({ where: { id: chapterId }, select: { organization_unit_id: true } })
   if (!chapter?.organization_unit_id) return false
   const ancestorIds = await getOrganizationUnitAncestors(chapter.organization_unit_id)
@@ -151,7 +152,6 @@ export async function hasChapterPermission(userId: string, chapterId: string, pe
  */
 export async function canAccessChapterPermission(context: LegacyAuthContext, chapterId: string, permissionCode: string): Promise<boolean> {
   if (context.role === 'ADMIN') return true
-  if (context.role === 'CHAPTER_LEADER' && context.chapterId === chapterId && isLegacyChapterCompatibilityPermission(permissionCode)) return true
   const chapter = await prisma.chapter.findUnique({ where: { id: chapterId }, select: { organization_unit_id: true } })
   if (!chapter?.organization_unit_id) return false
   return canAccessOrganizationUnitPermission(context, chapter.organization_unit_id, permissionCode)
@@ -159,6 +159,10 @@ export async function canAccessChapterPermission(context: LegacyAuthContext, cha
 
 /** Lists only real Chapters for which this caller has the requested permission. */
 export async function listAccessibleChapterIds(context: LegacyAuthContext, permissionCode: string): Promise<string[]> {
+  if (context.role !== 'ADMIN') {
+    const lead = await chapterLeadScope(context.userId)
+    if (lead.isLead) return lead.chapterId && await canAccessChapterPermission(context, lead.chapterId, permissionCode) ? [lead.chapterId] : []
+  }
   const chapters = await prisma.chapter.findMany({ select: { id: true }, orderBy: { id: 'asc' } })
   if (context.role === 'ADMIN') return chapters.map((chapter) => chapter.id)
 
@@ -170,7 +174,6 @@ export async function listAccessibleChapterIds(context: LegacyAuthContext, permi
 
 /** Resolve /chapters/me only when the caller has one unambiguous Chapter scope. */
 export async function resolveSingleManagedChapter(context: LegacyAuthContext): Promise<string | null> {
-  if (context.role === 'CHAPTER_LEADER' && context.chapterId) return context.chapterId
   if (context.role === 'ADMIN') return null
   const scopedIds = await listAccessibleChapterIds(context, 'VIEW_MEMBER_PROGRESS')
   return scopedIds.length === 1 ? scopedIds[0] : null

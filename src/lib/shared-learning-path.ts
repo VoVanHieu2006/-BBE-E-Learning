@@ -1,5 +1,5 @@
 import { Prisma } from '@prisma/client'
-import { CourseBudget, budgetFingerprint, calculateSharedDeadline } from './learning-cycle-rules'
+import { CourseBudget, SharedDeadlineReason, budgetFingerprint, calculateSharedDeadline } from './learning-cycle-rules'
 
 /** Caller holds the learning user lock and passes the complete new required set. */
 export async function reconcileSharedPath(tx: Prisma.TransactionClient, userId: string, cycleId: string, now: Date) {
@@ -15,16 +15,15 @@ export async function reconcileSharedPath(tx: Prisma.TransactionClient, userId: 
   let due = path.due_at
   if (path.budget_fingerprint !== fingerprint) {
     const reduced = next.some((course) => previous.some((old) => old.courseId === course.courseId && old.days > course.days))
-    let reason: 'CYCLE_INITIALIZED' | 'ADMIN_BUDGET_SHORTENED' | 'MANDATORY_COURSE_ADDED' | 'MANDATORY_COURSE_REMOVED' = 'MANDATORY_COURSE_ADDED'
+    let reason: SharedDeadlineReason = 'ROLE_CHANGED'
     if (!previous.length) {
       reason = 'CYCLE_INITIALIZED'
     } else if (reduced) {
       reason = 'ADMIN_BUDGET_SHORTENED'
-    } else if (next.some((c) => !previous.some((p) => p.courseId === c.courseId))) {
-      reason = 'MANDATORY_COURSE_ADDED'
-    } else if (previous.some((p) => !next.some((c) => c.courseId === p.courseId))) {
-      reason = 'MANDATORY_COURSE_REMOVED'
     }
+
+    // A changed required set uses the agreed shared deadline, measured from
+    // the original start and this change, rather than appending to the old due date.
 
     due = calculateSharedDeadline({
       startsAt: path.starts_at,

@@ -23,10 +23,17 @@ const apiCache = new Map<string, CacheEntry>()
 const inFlightRequests = new Map<string, Promise<ApiResponse<any>>>()
 const CACHE_TTL_MS = 30000 // 30s in-memory cache
 
+// Permissions and current affiliations must be revalidated after another Admin's
+// changes, including when this tab still has an old sessionStorage response.
+function currentOrganizationView(path: string): boolean {
+  return /^\/api\/v1\/(auth\/me|users|chapters|organization\/(managed-units|units)|admin\/organization)([/?]|$)/.test(path)
+}
+
 let isRefreshing = false
 let refreshPromise: Promise<string | null> | null = null
 
 export function getCachedApiData<T = any>(path: string): T | null {
+  if (currentOrganizationView(path)) return null
   if (typeof window === 'undefined') return null
   const token = localStorage.getItem('accessToken') || 'guest'
   const cacheKey = `${token}:${path}`
@@ -126,6 +133,7 @@ export async function apiFetch<T = any>(
 ): Promise<ApiResponse<T>> {
   const method = (options.method || 'GET').toUpperCase()
   const isGet = method === 'GET'
+  if (isGet && currentOrganizationView(path)) options = { ...options, noCache: true }
   const retryCount = options.retryCount || 0
 
   let token = options.token
@@ -264,7 +272,7 @@ export async function apiFetch<T = any>(
 
       // 4. Save to memory and sessionStorage cache for GET requests
       // Always store the latest successful response so subsequent reads have fresh data
-      if (isGet) {
+      if (isGet && !options.noCache) {
         const entry = { data, timestamp: Date.now() }
         apiCache.set(cacheKey, entry)
         if (typeof window !== 'undefined') {

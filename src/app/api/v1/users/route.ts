@@ -3,13 +3,10 @@ import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getPublishedSystemData, calculateBatchUsersProgress } from '@/lib/progress/calculator'
 import {
-  getUserQueryCache,
-  setUserQueryCache,
   getServerMetadataCache,
   setServerMetadataCache,
 } from '@/lib/server-cache'
 
-const USER_QUERY_CACHE_TTL = 15000 // 15 seconds
 const META_CACHE_TTL = 60000 // 60 seconds
 
 async function getGlobalMetadata() {
@@ -77,18 +74,6 @@ export async function GET(request: NextRequest) {
   const skip = (page - 1) * limit
   const now = new Date()
 
-  // Check query cache
-  const cacheKey = `${search}:${role}:${status}:${chapterId}:${compact}:${page}:${limit}`
-  const cached = getUserQueryCache(cacheKey, USER_QUERY_CACHE_TTL)
-  if (cached) {
-    return NextResponse.json(cached, {
-      status: 200,
-      headers: {
-        'Cache-Control': 'no-store, no-cache, must-revalidate',
-      },
-    })
-  }
-
   // Exclude ADMIN users from the management table (only manage BĐHU & Members)
   const where: any = {
     anonymized_at: null,
@@ -134,6 +119,10 @@ export async function GET(request: NextRequest) {
       },
     }
   }
+
+  if (chapterId || role === 'MEMBER' || role === 'CHAPTER_MEMBER') where.organization_memberships = { none: {
+    status: 'ACTIVE', starts_at: { lte: now }, OR: [{ ends_at: null }, { ends_at: { gt: now } }], unit: { type: { in: ['DNA', 'DNA_GROUP'] } },
+  } }
 
   if (status && ['ACTIVE', 'INACTIVE', 'LOCKED'].includes(status)) {
     where.status = status
@@ -290,7 +279,6 @@ export async function GET(request: NextRequest) {
     totalCoursesSystem: sys.totalCourses,
   }
 
-  setUserQueryCache(cacheKey, responsePayload)
 
   return NextResponse.json(
     responsePayload,

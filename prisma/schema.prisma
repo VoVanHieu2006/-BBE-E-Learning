@@ -204,6 +204,7 @@ model User {
   lock_reason            String?   @db.VarChar(50)
 
   chapter_members  ChapterMember[]
+  chapter_lead_binding ChapterLeadBinding?
   invitations      Invitation[] @relation("InvitedBy")
   courses          Course[]
   lessonProgress   LessonProgress[]
@@ -242,6 +243,7 @@ model Chapter {
   current_term_number  Int?
 
   chapter_members ChapterMember[]
+  lead_bindings ChapterLeadBinding[]
   invitations     Invitation[]
   organization_unit OrganizationUnit? @relation(fields: [organization_unit_id], references: [id], onDelete: SetNull)
   monthly_kpis ChapterMonthlyKpi[]
@@ -263,6 +265,17 @@ model ChapterMember {
   @@unique([chapter_id, user_id])
   @@unique([user_id])
   @@index([chapter_id, user_id])
+}
+
+// Permanent Chapter identity for a Lead; ending a tenure does not free this binding.
+model ChapterLeadBinding {
+  user_id    String   @id @db.Uuid
+  chapter_id String   @db.Uuid
+  bound_at   DateTime @default(now()) @db.Timestamptz(3)
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  chapter    Chapter  @relation(fields: [chapter_id], references: [id], onDelete: Restrict)
+  @@index([chapter_id])
+  @@map("chapter_lead_bindings")
 }
 
 model Invitation {

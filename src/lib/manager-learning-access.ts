@@ -1,10 +1,11 @@
+import { chapterLeadScope } from './chapter-lead'
 import { prisma } from '@/lib/prisma'
 
 /** Lead Chapter and Lead DNA are management-only accounts, never learners. */
 export async function getLearningManagerKind(userId: string, role?: string | null) {
   if (!role) role = (await prisma.user.findUnique({ where: { id: userId }, select: { role: true } }))?.role
   if (role === 'ADMIN') return null
-  if (role === 'CHAPTER_LEADER') return 'LEAD_CHAPTER' as const
+  if (role === 'CHAPTER_LEADER') return (await chapterLeadScope(userId)).chapterId ? 'LEAD_CHAPTER' as const : null
   const dnaLead = await prisma.positionAssignment.findFirst({
     where: {
       user_id: userId,

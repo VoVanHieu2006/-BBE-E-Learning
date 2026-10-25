@@ -75,7 +75,7 @@ export function calculateSharedDeadline(input: CalculateSharedDeadlineInput): Da
           startsAt.getTime() + totalNewDays * DAY_MS,
           changedAt.getTime() + addedDays * DAY_MS
         )
-        return new Date(Math.max(calculatedDue, currentDueAt ? currentDueAt.getTime() : 0))
+        return new Date(calculatedDue)
       }
 
       case 'ADMIN_MANUAL_EXTENSION': {

@@ -1,0 +1,22 @@
+[
+  {
+    "test": "Migration refuses ambiguous data without choosing a Chapter",
+    "status": "PASS"
+  },
+  {
+    "test": "Dry run proposes exact correction, writes no organization data",
+    "status": "PASS"
+  },
+  {
+    "test": "Approved repair fixes current index and preserves assignment, historical interval and ledger",
+    "status": "PASS"
+  },
+  {
+    "test": "Migration succeeds after reviewed repair and creates permanent binding",
+    "status": "PASS"
+  },
+  {
+    "test": "Stale repair plan/retry cannot change a new state or duplicate assignments",
+    "status": "PASS"
+  }
+]

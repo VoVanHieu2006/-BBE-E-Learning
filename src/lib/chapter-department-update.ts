@@ -1,11 +1,15 @@
 import { prisma } from './prisma'
 import { lockLearningUser } from './learning-periods'
 import { reconcileLearningAssignmentsForUser } from './learning-assignments'
+import { hasActiveDnaAffiliation } from './affiliation-access'
+import { OrganizationConflict } from './chapter-lead'
+import { invalidateOrganizationViews } from './organization-view-cache'
 
 /** President is a Chapter position; seven departments remain independent units. */
 export async function updateChapterDepartment(input: { chapterId: string; userId: string; departmentUnitId: string | null; makeLead: boolean; actorId: string }) {
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const now = await lockLearningUser(tx, input.userId)
+    if (await hasActiveDnaAffiliation(input.userId, tx)) throw new OrganizationConflict('DnaMembershipConflict', 'Thành viên đang thuộc DNA; không thể thêm lại vào Ban của Chapter.')
     const member = await tx.chapterMember.findUnique({ where: { user_id: input.userId } })
     const chapter = await tx.chapter.findUniqueOrThrow({ where: { id: input.chapterId } })
     if (member?.chapter_id !== chapter.id || !chapter.organization_unit_id) throw new Error('MemberNotInChapter')
@@ -30,4 +34,6 @@ export async function updateChapterDepartment(input: { chapterId: string; userId
     await tx.auditLog.create({ data: { actor_user_id: input.actorId, action: 'UPDATE_CHAPTER_DEPARTMENT', entity_type: 'USER', entity_id: input.userId, metadata: { chapterId: chapter.id, departmentUnitId: president ? null : input.departmentUnitId, president, isLead: president || input.makeLead, effectiveAt: now.toISOString() } } })
     return { departmentUnitId: input.departmentUnitId, isLead: president || input.makeLead }
   }, { timeout: 30_000 })
+  invalidateOrganizationViews()
+  return result
 }

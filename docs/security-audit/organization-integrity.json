@@ -1,0 +1,209 @@
+{
+  "audited_at": "2026-10-25T12:51:53.990Z",
+  "connected": true,
+  "mode": "READ_ONLY_DRY_RUN",
+  "summary": {
+    "multiChapterLeadAccounts": 0,
+    "dualDnaChapterAccounts": 0,
+    "normalizedEmailCollisionGroups": 0,
+    "legacy_leads_without_tenure": 0,
+    "overlapping_lead_tenure_pairs": 0,
+    "noncanonical_emails": 0,
+    "active_status_not_current": 0,
+    "orphan_open_chapter_intervals": 0,
+    "active_lead_assignments": 10
+  },
+  "leadCodes": [
+    {
+      "code": "CHAPTER_LEAD",
+      "scope": "CHAPTER",
+      "is_manager": true
+    },
+    {
+      "code": "CHAPTER_MANAGER",
+      "scope": "CHAPTER",
+      "is_manager": true
+    },
+    {
+      "code": "CHAPTER_PRESIDENT",
+      "scope": "CHAPTER",
+      "is_manager": false
+    }
+  ],
+  "leadConflicts": [],
+  "affiliationConflicts": [],
+  "triggers": [
+    {
+      "table_name": "chapter_members",
+      "tgname": "chapter_membership_integrity",
+      "tgenabled": "O"
+    },
+    {
+      "table_name": "chapter_members",
+      "tgname": "learning_chapter_affiliation",
+      "tgenabled": "O"
+    },
+    {
+      "table_name": "chapter_members",
+      "tgname": "serialize_chapter_membership",
+      "tgenabled": "O"
+    },
+    {
+      "table_name": "chapter_members",
+      "tgname": "single_affiliation_chapter",
+      "tgenabled": "O"
+    },
+    {
+      "table_name": "organization_memberships",
+      "tgname": "organization_membership_integrity",
+      "tgenabled": "O"
+    },
+    {
+      "table_name": "organization_memberships",
+      "tgname": "serialize_organization_membership",
+      "tgenabled": "O"
+    },
+    {
+      "table_name": "organization_memberships",
+      "tgname": "single_affiliation_membership",
+      "tgenabled": "O"
+    },
+    {
+      "table_name": "position_assignments",
+      "tgname": "position_assignment_integrity",
+      "tgenabled": "O"
+    },
+    {
+      "table_name": "position_assignments",
+      "tgname": "serialize_position_assignment",
+      "tgenabled": "O"
+    },
+    {
+      "table_name": "users",
+      "tgname": "learning_account_state",
+      "tgenabled": "O"
+    },
+    {
+      "table_name": "users",
+      "tgname": "organization_email",
+      "tgenabled": "O"
+    },
+    {
+      "table_name": "users",
+      "tgname": "organization_user_role_integrity",
+      "tgenabled": "O"
+    }
+  ],
+  "indexes": [
+    {
+      "tablename": "chapter_members",
+      "indexname": "chapter_members_pkey",
+      "indexdef": "CREATE UNIQUE INDEX chapter_members_pkey ON public.chapter_members USING btree (id)"
+    },
+    {
+      "tablename": "chapter_members",
+      "indexname": "chapter_members_chapter_id_user_id_idx",
+      "indexdef": "CREATE INDEX chapter_members_chapter_id_user_id_idx ON public.chapter_members USING btree (chapter_id, user_id)"
+    },
+    {
+      "tablename": "chapter_members",
+      "indexname": "chapter_members_chapter_id_user_id_key",
+      "indexdef": "CREATE UNIQUE INDEX chapter_members_chapter_id_user_id_key ON public.chapter_members USING btree (chapter_id, user_id)"
+    },
+    {
+      "tablename": "chapter_members",
+      "indexname": "chapter_members_user_id_key",
+      "indexdef": "CREATE UNIQUE INDEX chapter_members_user_id_key ON public.chapter_members USING btree (user_id)"
+    },
+    {
+      "tablename": "organization_memberships",
+      "indexname": "organization_memberships_pkey",
+      "indexdef": "CREATE UNIQUE INDEX organization_memberships_pkey ON public.organization_memberships USING btree (id)"
+    },
+    {
+      "tablename": "organization_memberships",
+      "indexname": "organization_memberships_user_id_status_idx",
+      "indexdef": "CREATE INDEX organization_memberships_user_id_status_idx ON public.organization_memberships USING btree (user_id, status)"
+    },
+    {
+      "tablename": "organization_memberships",
+      "indexname": "organization_memberships_unit_id_status_idx",
+      "indexdef": "CREATE INDEX organization_memberships_unit_id_status_idx ON public.organization_memberships USING btree (unit_id, status)"
+    },
+    {
+      "tablename": "organization_memberships",
+      "indexname": "organization_memberships_user_id_status_starts_at_ends_at_idx",
+      "indexdef": "CREATE INDEX organization_memberships_user_id_status_starts_at_ends_at_idx ON public.organization_memberships USING btree (user_id, status, starts_at, ends_at)"
+    },
+    {
+      "tablename": "organization_memberships",
+      "indexname": "organization_memberships_unit_id_status_starts_at_ends_at_idx",
+      "indexdef": "CREATE INDEX organization_memberships_unit_id_status_starts_at_ends_at_idx ON public.organization_memberships USING btree (unit_id, status, starts_at, ends_at)"
+    },
+    {
+      "tablename": "position_assignments",
+      "indexname": "position_assignments_pkey",
+      "indexdef": "CREATE UNIQUE INDEX position_assignments_pkey ON public.position_assignments USING btree (id)"
+    },
+    {
+      "tablename": "position_assignments",
+      "indexname": "position_assignments_user_id_starts_at_ends_at_idx",
+      "indexdef": "CREATE INDEX position_assignments_user_id_starts_at_ends_at_idx ON public.position_assignments USING btree (user_id, starts_at, ends_at)"
+    },
+    {
+      "tablename": "position_assignments",
+      "indexname": "position_assignments_unit_id_position_id_starts_at_ends_at_idx",
+      "indexdef": "CREATE INDEX position_assignments_unit_id_position_id_starts_at_ends_at_idx ON public.position_assignments USING btree (unit_id, position_id, starts_at, ends_at)"
+    },
+    {
+      "tablename": "users",
+      "indexname": "users_pkey",
+      "indexdef": "CREATE UNIQUE INDEX users_pkey ON public.users USING btree (id)"
+    },
+    {
+      "tablename": "users",
+      "indexname": "users_email_key",
+      "indexdef": "CREATE UNIQUE INDEX users_email_key ON public.users USING btree (email)"
+    },
+    {
+      "tablename": "users",
+      "indexname": "users_email_idx",
+      "indexdef": "CREATE INDEX users_email_idx ON public.users USING btree (email)"
+    },
+    {
+      "tablename": "users",
+      "indexname": "users_status_idx",
+      "indexdef": "CREATE INDEX users_status_idx ON public.users USING btree (status)"
+    },
+    {
+      "tablename": "users",
+      "indexname": "users_role_idx",
+      "indexdef": "CREATE INDEX users_role_idx ON public.users USING btree (role)"
+    },
+    {
+      "tablename": "users",
+      "indexname": "users_cascade_lead_id_idx",
+      "indexdef": "CREATE INDEX users_cascade_lead_id_idx ON public.users USING btree (cascade_lead_id)"
+    },
+    {
+      "tablename": "users",
+      "indexname": "users_deactivated_by_user_id_idx",
+      "indexdef": "CREATE INDEX users_deactivated_by_user_id_idx ON public.users USING btree (deactivated_by_user_id)"
+    },
+    {
+      "tablename": "users",
+      "indexname": "users_email_normalized_key",
+      "indexdef": "CREATE UNIQUE INDEX users_email_normalized_key ON public.users USING btree (lower(btrim((email)::text)))"
+    }
+  ],
+  "policy": [
+    {
+      "cutover_at": "2026-09-01T00:00:00.000Z",
+      "mapping_approved_at": "2026-10-23T07:04:08.821Z"
+    }
+  ],
+  "remediation": {
+    "applied": false,
+    "approvalRequired": []
+  }
+}

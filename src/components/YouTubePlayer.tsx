@@ -111,6 +111,7 @@ export default function YouTubePlayer({
   const [controls] = useState(() => new VideoControls(setShowControls));
   const [isCompleted, setIsCompleted] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [fullscreenMode, setFullscreenMode] = useState<FullscreenMode>('NONE');
   const [videoError, setVideoError] = useState('');
   const [isSlowLoading, setIsSlowLoading] = useState(false);
   const [retryNonce, setRetryNonce] = useState(0);
@@ -322,10 +323,12 @@ export default function YouTubePlayer({
     const wrapper = wrapperRef.current;
     if (!wrapper) return;
     fullscreenModeRef.current = 'NONE';
+    setFullscreenMode('NONE');
     setIsFullscreen(false);
     const fullscreen = new VideoFullscreen(wrapper, mode => {
       fullscreenModeRef.current = mode;
-      setIsFullscreen(mode !== 'NONE');
+      setFullscreenMode(mode);
+      setIsFullscreen(mode === 'NATIVE' || mode === 'THEATER');
       controls.endSeek();
       controls.reveal();
     });
@@ -844,7 +847,7 @@ export default function YouTubePlayer({
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     const rect = wrapperRef.current?.getBoundingClientRect();
-    if (rect) controls.pointerMove(e.clientX, e.clientY, fullscreenModeRef.current !== 'NONE', rect, e.pointerType);
+    if (rect) controls.pointerMove(e.clientX, e.clientY, fullscreenModeRef.current === 'NATIVE' || fullscreenModeRef.current === 'THEATER', rect, e.pointerType);
   };
 
   const handleControlsBlur = (e: React.FocusEvent<HTMLDivElement>) => {
@@ -903,6 +906,7 @@ export default function YouTubePlayer({
     <div
       ref={wrapperRef}
       data-video-player
+      data-fullscreen-mode={fullscreenMode}
       onPointerEnter={e => controls.pointerEnter(e.clientX, e.clientY, e.pointerType)}
       onPointerMove={handlePointerMove}
       onPointerLeave={e => controls.pointerLeave(e.pointerType)}
@@ -917,6 +921,14 @@ export default function YouTubePlayer({
           : 'relative aspect-video rounded-3xl overflow-hidden'
       }`}
     >
+      {fullscreenMode === 'THEATER' && showControls && (
+        <span role="status" className="pointer-events-none absolute left-4 top-4 z-40 rounded-lg bg-slate-900/90 px-3 py-2 text-xs text-white mt-[env(safe-area-inset-top)] ml-[env(safe-area-inset-left)]" title="Trình duyệt không cho phép toàn màn hình thiết bị với player này; thanh địa chỉ có thể vẫn hiển thị.">
+          Xem rộng trong trình duyệt
+        </span>
+      )}
+      {fullscreenMode === 'UNAVAILABLE' && (
+        <p role="status" className="pointer-events-none absolute left-4 right-4 top-4 z-40 rounded-lg bg-slate-900/95 px-3 py-2 text-center text-xs text-white">Không thể mở toàn màn hình trên trình duyệt này. Bạn có thể tiếp tục xem trong trang.</p>
+      )}
       {/* Explicit Exit Fullscreen Button in Theater / Fullscreen Mode (Essential for mobile & iOS) */}
       {isFullscreen && (
         <button

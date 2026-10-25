@@ -19,14 +19,17 @@ export async function listChapterMembers(
   const unitIds = chapter.organization_unit_id
     ? await getOrganizationUnitTreeIds(chapter.organization_unit_id)
     : []
-  const userWhere: Record<string, unknown> = {}
+  const now = new Date()
+  // A legacy Chapter index must never turn a DNA learner into a current Chapter member.
+  const userWhere: Record<string, unknown> = { organization_memberships: { none: {
+    status: 'ACTIVE', starts_at: { lte: now }, OR: [{ ends_at: null }, { ends_at: { gt: now } }],
+    unit: { type: { in: ['DNA', 'DNA_GROUP'] } },
+  } } }
   if (options.roles?.length) userWhere.role = { in: options.roles }
   if (options.status) userWhere.status = options.status
   const search = options.search?.trim().slice(0, 255)
   if (search) userWhere.OR = [{ email: { contains: search, mode: 'insensitive' } }, { display_name: { contains: search, mode: 'insensitive' } }]
   const relationFilter = Object.keys(userWhere).length ? { user: userWhere } : {}
-  const now = new Date()
-
   const [legacyRows, organizationRows] = await Promise.all([
     prisma.chapterMember.findMany({
       where: { chapter_id: chapterId, ...relationFilter } as any,

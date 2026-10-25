@@ -242,6 +242,8 @@ for (const legacy of [false, true]) {
     });
     await fullscreen(page).click();
     await viewportFilled(page);
+    await expect(wrapper(page)).toHaveAttribute('data-fullscreen-mode', 'THEATER');
+    expect(await page.evaluate(() => document.fullscreenElement === null)).toBe(true);
     await expect.poll(() => page.evaluate(() => history.state?.bbeTheater)).toBeTruthy();
     if (!legacy) await expect(wrapper(page)).toHaveJSProperty('popover', 'manual');
     await hiddenAfterIdle(page);
@@ -386,6 +388,7 @@ test('real Chromium native fullscreen enters/exits with same iframe and no synth
   await wrapper(page).evaluate(el => { (window as any).__originalFrame = el.querySelector('iframe'); });
   await fullscreen(page).click();
   await expect.poll(() => page.evaluate(() => document.fullscreenElement?.hasAttribute('data-video-player'))).toBe(true);
+  await expect(wrapper(page)).toHaveAttribute('data-fullscreen-mode', 'NATIVE');
   await viewportFilled(page);
   await hiddenAfterIdle(page);
   await page.screenshot({ path: 'scratch/player-chromium-native-hidden.png' });
@@ -395,4 +398,94 @@ test('real Chromium native fullscreen enters/exits with same iframe and no synth
   await expect(wrapper(page)).not.toHaveClass(/bbe-player-fullscreen/);
   expect(await page.evaluate(() => document.querySelector('[data-video-player] iframe') === (window as any).__originalFrame)).toBe(true);
   await hiddenAfterIdle(page);
+});
+
+test('unavailable presentation is reported honestly and a later retry can enter theater', async ({ page }) => {
+  await setup(page, { theater: true });
+  await start(page);
+  const state = await page.evaluate(() => history.state);
+  await wrapper(page).evaluate(el => { (window as any).__originalFrame = el.querySelector('iframe'); });
+  const stylesheet = await page.addStyleTag({ content: '.bbe-player-fullscreen { position: relative !important; }' });
+  await fullscreen(page).click();
+  await expect(wrapper(page)).toHaveAttribute('data-fullscreen-mode', 'UNAVAILABLE');
+  await expect(wrapper(page)).not.toHaveClass(/bbe-player-fullscreen/);
+  await expect(page.locator('.bbe-fullscreen-locked')).toHaveCount(0);
+  await expect(page.getByRole('status').filter({ hasText: 'Không thể mở toàn màn hình' })).toBeVisible();
+  expect(await page.evaluate(() => history.state)).toEqual(state);
+  expect(await page.evaluate(() => document.querySelector('[data-video-player] iframe') === (window as any).__originalFrame)).toBe(true);
+  await stylesheet.evaluate(el => el.remove());
+  await fullscreen(page).click();
+  await expect(wrapper(page)).toHaveAttribute('data-fullscreen-mode', 'THEATER');
+  await viewportFilled(page);
+  await wrapper(page).locator(':scope > button').click();
+  await expect(wrapper(page)).toHaveAttribute('data-fullscreen-mode', 'NONE');
+});
+
+for (const native of [false, true]) {
+  test(`authenticated heartbeat/session survives ${native ? 'native' : 'theater'} fullscreen and speed changes`, async ({ page, browserName, isMobile }) => {
+    test.skip(native && (browserName !== 'chromium' || isMobile), 'Actual native API case is desktop Chromium only; no device claim.');
+    const events: any[] = [];
+    await page.route('**/api/v1/lessons/player-ui-regression/progress', async route => {
+      events.push(route.request().postDataJSON());
+      await route.fulfill({ json: {} });
+    });
+    await setup(page, { theater: !native });
+    // Mount the selected video with auth already present, then establish the
+    // baseline. Subsequent fullscreen changes must never create another player.
+    await page.locator('input').first().fill('ui-test-token');
+    await page.locator('input').nth(1).fill('aqz-KE-bpKQ');
+    await page.clock.fastForward(100);
+    await expect(bar(page)).toBeVisible();
+    await page.evaluate(() => { (window as any).__createsBeforeFullscreen = (window as any).__playerMock.creates; });
+    await start(page);
+    await page.clock.fastForward(11000);
+    await expect.poll(() => events.filter(event => event.event === 'HEARTBEAT').length).toBeGreaterThan(0);
+    const before = events.filter(event => event.event === 'HEARTBEAT').length;
+    await reveal(page);
+    await fullscreen(page).click();
+    await expect(wrapper(page)).toHaveAttribute('data-fullscreen-mode', native ? 'NATIVE' : 'THEATER');
+    await page.clock.fastForward(11000);
+    await expect.poll(() => events.filter(event => event.event === 'HEARTBEAT').length).toBeGreaterThan(before);
+    await reveal(page);
+    if (isMobile) await bar(page).locator('button[title^="Đổi tốc độ"]').click();
+    else await bar(page).getByRole('button', { name: '1.5x', exact: true }).click();
+    await expect.poll(() => events.some(event => event.playbackRate > 1)).toBe(true);
+    await wrapper(page).locator(':scope > button').click();
+    await page.clock.fastForward(11000);
+    expect(new Set(events.map(event => event.viewSessionId)).size).toBe(1);
+    expect(events.every(event => event.viewSessionId && event.event && event.positionSeconds >= 0)).toBe(true);
+    expect(await page.evaluate(() => (window as any).__playerMock.creates === (window as any).__createsBeforeFullscreen)).toBe(true);
+  });
+}
+
+test('Admin organization history distinguishes ended Chapter and current DNA', async ({ page, context, browserName, isMobile }) => {
+  test.skip(browserName !== 'chromium' || isMobile, 'Admin UI check on desktop Chromium; API security is separately tested against local PostgreSQL.');
+  const nextEnv = await import('@next/env');
+  nextEnv.default.loadEnvConfig(process.cwd());
+  const { SignJWT } = await import('jose');
+  const userId = '11111111-1111-4111-8111-111111111111';
+  // This synthetic subject does not exist in the application DB. All API requests
+  // are mocked, and the token is used solely for the local middleware page gate.
+  const token = await new SignJWT({ role: 'ADMIN' }).setProtectedHeader({ alg: 'HS256' }).setSubject(userId).setExpirationTime('2m').sign(new TextEncoder().encode(process.env.JWT_ACCESS_SECRET));
+  await context.addCookies([{ name: 'accessToken', value: token, url: 'http://127.0.0.1:3117', httpOnly: true }]);
+  await page.addInitScript(({ token }) => {
+    localStorage.setItem('accessToken', token);
+    localStorage.setItem('user', JSON.stringify({ id: '11111111-1111-4111-8111-111111111111', role: 'ADMIN', email: 'ui-test@invalid.example' }));
+  }, { token });
+  await page.route('**/api/v1/**', route => {
+    const pathname = new URL(route.request().url()).pathname;
+    if (pathname.endsWith('/organization/history')) return route.fulfill({ json: {
+      user: { id: userId, display_name: 'Synthetic learner' },
+      chapters: [{ id: 'history', name: 'Phoenix', label: 'Đã rời Chapter', starts_at: '2026-04-01T00:00:00Z', ends_at: '2026-05-15T00:00:00Z' }],
+      memberships: [{ id: 'dna', unit: { name: 'DNA SGDC' }, status: 'ACTIVE', starts_at: '2026-05-15T00:00:00Z', ends_at: null }], positions: [],
+    } });
+    if (pathname.endsWith('/auth/me')) return route.fulfill({ json: { user: { id: userId, role: 'ADMIN' } } });
+    return route.fulfill({ json: { items: [], stats: {} } });
+  });
+  await page.goto(`/admin/users/${userId}/organization-history`);
+  await expect(page.getByRole('heading', { name: 'Lịch sử tổ chức' })).toBeVisible();
+  await expect(page.getByText('Đã rời Chapter', { exact: true })).toBeVisible();
+  await expect(page.getByText('DNA SGDC', { exact: true })).toBeVisible();
+  await expect(page.getByText('Đang hoạt động', { exact: true })).toBeVisible();
+  await page.screenshot({ path: 'scratch/organization-history-ui.png', fullPage: true });
 });

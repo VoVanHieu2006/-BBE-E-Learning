@@ -1,3 +1,4 @@
+import { invalidateOrganizationViews } from './organization-view-cache'
 import { prepareOrganizationTransition } from './organization-transition'
 import { prisma } from './prisma'
 import { hashToken, generateToken } from './tokens'
@@ -39,13 +40,13 @@ export interface SendInvitationError {
 
 /** Common validation: check if email already has an ACTIVE or INACTIVE account */
 export async function isEmailActive(email: string): Promise<boolean> {
-  const user = await prisma.user.findUnique({ where: { email } })
+  const user = await prisma.user.findUnique({ where: { email: email.trim().toLowerCase() } })
   return user !== null && user.status === 'ACTIVE'
 }
 
 /** BR-02: email must not belong to ANY existing account (Active or Inactive) */
 export async function emailHasAnyAccount(email: string): Promise<boolean> {
-  const user = await prisma.user.findUnique({ where: { email } })
+  const user = await prisma.user.findUnique({ where: { email: email.trim().toLowerCase() } })
   return user !== null
 }
 
@@ -123,9 +124,11 @@ export async function sendChapterLeaderInvitation(
   chapterDescription: string | undefined,
   invitedBy: string
 ): Promise<{ ok: true; invitationId: string; chapterId: string | null; status: InvitationStatus; expiresAt: Date; token: string; emailSent: boolean; emailError?: string } | SendInvitationError> {
+  email = email.trim().toLowerCase()
   // BR-02 (issue #10): no invitation if email already belongs to ANY account
   if (await emailHasAnyAccount(email)) {
-    const u = await prisma.user.findUnique({ where: { email } })
+    const u = await prisma.user.findUnique({ where: { email: email.trim().toLowerCase() }, include: { chapter_lead_binding: { include: { chapter: true } } } })
+    if (u?.chapter_lead_binding) return { ok: false, code: 'ChapterLeadPermanentBinding', message: `Tài khoản đã gắn cố định với ${u.chapter_lead_binding.chapter.name}; không thể gán Chapter khác.` }
     if (u?.status === 'ACTIVE') {
       return { ok: false, code: 'EmailAlreadyActive', message: 'Email đã có tài khoản đang hoạt động.' }
     } else {
@@ -202,13 +205,16 @@ export async function sendChapterLeaderInvitation(
 }
 
 export async function sendDnaLeaderInvitation(email: string, invitedBy: string) {
+  email = email.trim().toLowerCase()
+  const binding = await prisma.chapterLeadBinding.findFirst({ where: { user: { email, role: { not: 'ADMIN' } } }, include: { chapter: { select: { name: true } } } })
+  if (binding) return { ok: false as const, code: 'LeadChapterCannotJoinDna', message: `Lead đã gắn cố định với ${binding.chapter.name}; không được chuyển sang DNA.` }
   const dnaUnit = await prisma.organizationUnit.findFirst({ where: { type: 'DNA' }, orderBy: { created_at: 'asc' } })
   if (!dnaUnit) return { ok: false as const, code: 'DnaNotConfigured', message: 'Chưa có đơn vị DNA trong hệ thống.' }
   const activeLead = await prisma.positionAssignment.findFirst({
     where: { unit_id: dnaUnit.id, position: { code: 'DNA_LEAD' }, starts_at: { lte: new Date() }, OR: [{ ends_at: null }, { ends_at: { gt: new Date() } }] },
   })
   if (activeLead) return { ok: false as const, code: 'DnaLeadExists', message: 'Hệ thống đã có một Lead DNA đang hoạt động.' }
-  const existingUser = await prisma.user.findUnique({ where: { email } })
+  const existingUser = await prisma.user.findUnique({ where: { email: email.trim().toLowerCase() } })
   if (existingUser) {
     if (existingUser.status !== 'ACTIVE') return { ok: false as const, code: 'AccountInactive', message: 'Tài khoản hiện có đang bị vô hiệu hóa.' }
     const assignment = await prisma.$transaction(async (tx) => {
@@ -219,6 +225,7 @@ export async function sendDnaLeaderInvitation(email: string, invitedBy: string) 
       return tx.positionAssignment.create({ data: { user_id: existingUser.id, position_id: position.id, unit_id: dnaUnit.id, is_primary: true, starts_at: effectiveAt, appointed_by: invitedBy } })
     })
     await reconcileLearningAssignmentsForUser(existingUser.id)
+    invalidateOrganizationViews()
     return { ok: true as const, invitationId: assignment.id, organizationUnitId: dnaUnit.id, status: 'ACCEPTED' as InvitationStatus, expiresAt: new Date(), token: '', emailSent: true, assignedExisting: true }
   }
   return sendMemberInvitation({ email, role: 'DNA_LEAD', organizationUnitId: dnaUnit.id, invitedBy })
@@ -366,7 +373,7 @@ export async function acceptInvitation(
   const accepted = await prisma.$transaction(async (tx) => {
     const user = await tx.user.create({
       data: {
-        email: invitation.email,
+        email: invitation.email.trim().toLowerCase(),
         password_hash: passwordHash,
         role: (invitation.role === 'DNA_LEAD' ? 'MEMBER' : invitation.role) as UserRole,
         status: 'ACTIVE',
@@ -462,7 +469,7 @@ export async function acceptInvitation(
       data: { status: 'ACCEPTED', accepted_at: new Date() },
     })
 
-    console.log(`[ACCOUNT] User created: ${user.email} (${user.role})`)
+    console.log(`[ACCOUNT] User created (${user.role})`)
 
     return {
       ok: true as const,

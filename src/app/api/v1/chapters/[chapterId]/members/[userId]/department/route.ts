@@ -1,3 +1,4 @@
+import { OrganizationConflict } from '@/lib/chapter-lead'
 import { updateChapterDepartment } from '@/lib/chapter-department-update'
 import { lockLearningUser } from '@/lib/learning-periods'
 import { NextRequest, NextResponse } from 'next/server'
@@ -49,6 +50,11 @@ export async function POST(
   const makeLead = isPresident ? true : Boolean(body.makeLead)
 
 
+  try {
   const updated = await updateChapterDepartment({ chapterId: params.chapterId, userId: params.userId, departmentUnitId, makeLead, actorId: auth.context!.userId })
   return NextResponse.json({ success: true, ...updated })
+  } catch (error) {
+    if (error instanceof OrganizationConflict) return NextResponse.json({ error: { code: error.code, message: error.message } }, { status: 409 })
+    throw error
+  }
 }

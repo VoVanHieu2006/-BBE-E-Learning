@@ -679,6 +679,7 @@ export default function AdminUsersPage() {
                         </td>
                         <td className="px-6 py-4 text-right">
                           <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                            <Link href={`/admin/users/${uId}/organization-history`} className="whitespace-nowrap px-2.5 py-1 text-xs font-bold text-blue-700 border border-blue-200 rounded-lg">Lịch sử tổ chức</Link>
                             {/* Password reset button */}
                             {u.accountState === 'PASSWORD_LOCK' ? (
                               <button

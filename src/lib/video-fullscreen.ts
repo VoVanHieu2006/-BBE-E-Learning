@@ -1,4 +1,4 @@
-export type FullscreenMode = 'NONE' | 'NATIVE' | 'THEATER';
+export type FullscreenMode = 'NONE' | 'NATIVE' | 'THEATER' | 'UNAVAILABLE';
 
 // A video replacement can create a controller before the previous entry finishes popping.
 const pendingHistoryExits = new WeakSet<Window>();
@@ -71,33 +71,39 @@ export class VideoFullscreen {
     if (this.disposed || this.mode === 'THEATER') return;
     this.pending = false;
     this.nativeRequested = false;
-    this.wrapper.classList.add('bbe-player-fullscreen');
-    // Top layer escapes overflow, transforms and stacking contexts, without reparenting.
-    if (typeof this.wrapper.showPopover === 'function') {
-      try {
-        this.wrapper.setAttribute('popover', 'manual');
-        this.wrapper.showPopover();
-        this.popover = true;
-      } catch { this.wrapper.removeAttribute('popover'); }
-    }
-    // Older WebKit without Popover: temporarily remove ancestor containing blocks.
-    if (!this.popover) {
-      for (let element = this.wrapper.parentElement; element; element = element.parentElement) {
-        if (!element.classList.contains('bbe-theater-ancestor')) {
-          element.classList.add('bbe-theater-ancestor');
-          this.ancestors.push(element);
+    try {
+      this.wrapper.classList.add('bbe-player-fullscreen');
+      // Top layer escapes overflow, transforms and stacking contexts, without reparenting.
+      if (typeof this.wrapper.showPopover === 'function') {
+        try {
+          this.wrapper.setAttribute('popover', 'manual');
+          this.wrapper.showPopover();
+          this.popover = true;
+        } catch { this.wrapper.removeAttribute('popover'); }
+      }
+      // Older WebKit without Popover: temporarily remove ancestor containing blocks.
+      if (!this.popover) {
+        for (let element = this.wrapper.parentElement; element; element = element.parentElement) {
+          if (!element.classList.contains('bbe-theater-ancestor')) {
+            element.classList.add('bbe-theater-ancestor');
+            this.ancestors.push(element);
+          }
         }
       }
+      this.doc.documentElement.classList.add('bbe-fullscreen-locked');
+      this.doc.body.classList.add('bbe-fullscreen-locked');
+      if (!this.wrapper.isConnected || this.win.getComputedStyle(this.wrapper).position !== 'fixed') throw new Error('Viewport presentation unavailable');
+      this.historyToken = crypto.randomUUID();
+      this.historyUrl = this.win.location.href;
+      try {
+        // Preserve Next.js's router state. Only theater needs a synthetic Back entry.
+        this.win.history.pushState({ ...this.win.history.state, bbeTheater: this.historyToken }, '');
+      } catch { this.historyToken = ''; }
+      this.update('THEATER');
+    } catch {
+      this.removeTheater();
+      this.update('UNAVAILABLE');
     }
-    this.doc.documentElement.classList.add('bbe-fullscreen-locked');
-    this.doc.body.classList.add('bbe-fullscreen-locked');
-    this.historyToken = crypto.randomUUID();
-    this.historyUrl = this.win.location.href;
-    try {
-      // Preserve Next.js's router state. Only theater needs a synthetic Back entry.
-      this.win.history.pushState({ ...this.win.history.state, bbeTheater: this.historyToken }, '');
-    } catch { this.historyToken = ''; }
-    this.update('THEATER');
   }
 
   private exitNative() {
@@ -146,7 +152,7 @@ export class VideoFullscreen {
 
   async toggle() {
     if (this.disposed || this.historyWaiting || pendingHistoryExits.has(this.win)) return;
-    if (this.mode !== 'NONE' || this.pending) {
+    if (this.mode === 'NATIVE' || this.mode === 'THEATER' || this.pending) {
       this.exit();
       return;
     }
