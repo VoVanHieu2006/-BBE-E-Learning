@@ -166,10 +166,52 @@ h1, h2, h3, h4, h5, h6 {
   }
 }
 
-/* Lock background scrolling and gestures during mobile viewport theater mode */
+/* Lock background scrolling without disabling touch gestures on player controls. */
 html.bbe-fullscreen-locked,
 body.bbe-fullscreen-locked {
   overflow: hidden !important;
-  touch-action: none !important;
-  height: 100% !important;
+  overscroll-behavior: none;
+}
+
+.bbe-player-fullscreen {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 99999;
+  width: 100vw !important;
+  height: 100vh !important;
+  height: 100dvh !important;
+  max-width: none !important;
+  max-height: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+}
+
+.bbe-player-fullscreen::backdrop {
+  background: #000;
+}
+
+/* Only used on browsers without a working Popover top layer. Restored on exit. */
+.bbe-theater-ancestor {
+  overflow: visible !important;
+  transform: none !important;
+  translate: none !important;
+  rotate: none !important;
+  scale: none !important;
+  filter: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  perspective: none !important;
+  contain: none !important;
+  content-visibility: visible !important;
+  will-change: auto !important;
+  clip-path: none !important;
+  isolation: auto !important;
+  opacity: 1 !important;
+  z-index: auto !important;
+  animation: none !important;
 }

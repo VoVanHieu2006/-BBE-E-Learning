@@ -2,6 +2,8 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { apiFetch } from '@/lib/api/client';
 import { VideoPlaybackGuard } from '@/lib/video-playback-guard';
+import { VideoControls } from '@/lib/video-controls';
+import { VideoFullscreen, type FullscreenMode } from '@/lib/video-fullscreen';
 
 declare global {
   interface Window {
@@ -106,7 +108,7 @@ export default function YouTubePlayer({
   const [serverConfirmedFurthest, setServerConfirmedFurthest] = useState(initialFurthest);
   const [playbackRate, setPlaybackRate] = useState(1);
   const [showControls, setShowControls] = useState(true);
-  const [isCursorHidden, setIsCursorHidden] = useState(false);
+  const [controls] = useState(() => new VideoControls(setShowControls));
   const [isCompleted, setIsCompleted] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [videoError, setVideoError] = useState('');
@@ -124,22 +126,13 @@ export default function YouTubePlayer({
   const isReadyRef = useRef(false);
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const uiTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const controlsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const safeZoneTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastPointerPosRef = useRef<{ x: number; y: number }>({ x: -1, y: -1 });
-  const isInteractingWithControlsRef = useRef<boolean>(false);
-  const isSeekingActiveRef = useRef<boolean>(false);
-  const isKeyboardFocusedRef = useRef<boolean>(false);
-  const isTouchInteractionRef = useRef<boolean>(false);
-  const isPointerInsidePlayerRef = useRef<boolean>(false);
   const pauseRetryRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const completedFiredRef = useRef(false);
   const sendProgressRef = useRef<(ct: number, ft: number, event?: PlaybackEvent, overrideRate?: number) => Promise<any>>(async () => null);
 
   // Mobile Tiered Fullscreen management (Native Fullscreen + Viewport Theater Mode fallback for iPhone/WebKit)
-  const fullscreenModeRef = useRef<'NONE' | 'NATIVE' | 'THEATER'>('NONE');
-  const originalBodyOverflowRef = useRef<string>('');
-  const originalBodyTouchActionRef = useRef<string>('');
+  const fullscreenModeRef = useRef<FullscreenMode>('NONE');
+  const fullscreenControllerRef = useRef<VideoFullscreen | null>(null);
 
   // VideoPlaybackGuard engine separating legitimate continuous playback from unauthorized seek
   const guardRef = useRef<VideoPlaybackGuard>(
@@ -164,6 +157,7 @@ export default function YouTubePlayer({
   // Optimistic play/pause intent so the first click reacts instantly. Cleared
   const [optimisticPlay, setOptimisticPlay] = useState<boolean | null>(null);
   const displayPlaying = optimisticPlay ?? isPlaying;
+  const isCursorHidden = isFullscreen && !showControls && displayPlaying;
 
   const clearPauseRetry = () => {
     if (pauseRetryRef.current) {
@@ -196,14 +190,6 @@ export default function YouTubePlayer({
 
   // Reset all video progress and completion flags immediately when lesson or video changes
   useEffect(() => {
-    if (fullscreenModeRef.current === 'THEATER' && typeof document !== 'undefined') {
-      document.documentElement.classList.remove('bbe-fullscreen-locked');
-      document.body.classList.remove('bbe-fullscreen-locked');
-      document.body.style.overflow = originalBodyOverflowRef.current || '';
-      document.body.style.touchAction = originalBodyTouchActionRef.current || '';
-      fullscreenModeRef.current = 'NONE';
-      setIsFullscreen(false);
-    }
     const alreadyFinished = durationSeconds > 0 && initialFurthest >= durationSeconds;
     guardRef.current = new VideoPlaybackGuard({
       lessonId,
@@ -238,21 +224,7 @@ export default function YouTubePlayer({
     setIsBuffering(false);
     setOptimisticPlay(null);
     clearPauseRetry();
-    if (controlsTimerRef.current) {
-      clearTimeout(controlsTimerRef.current);
-      controlsTimerRef.current = null;
-    }
-    if (safeZoneTimerRef.current) {
-      clearTimeout(safeZoneTimerRef.current);
-      safeZoneTimerRef.current = null;
-    }
-    setShowControls(true);
-    setIsCursorHidden(false);
-    isInteractingWithControlsRef.current = false;
-    isSeekingActiveRef.current = false;
-    isKeyboardFocusedRef.current = false;
-    isTouchInteractionRef.current = false;
-    isPointerInsidePlayerRef.current = false;
+    controls.reset();
     setPlaybackRate(1);
     playbackRateRef.current = 1;
   }, [lessonId, youtubeVideoId]);
@@ -283,72 +255,10 @@ export default function YouTubePlayer({
     }
   }, [initialPosition, initialFurthest, durationSeconds, allowFreeSeek, accessToken]);
 
-  // ==================== YOUTUBE-LIKE CONTROLS COORDINATOR ====================
-  // Check if controls are currently pinned (should not auto-hide)
-  const isControlsPinned = useCallback(() => {
-    if (!displayPlaying) return true;
-    if (isSeekingActiveRef.current) return true;
-    if (isInteractingWithControlsRef.current) return true;
-    if (isKeyboardFocusedRef.current) return true;
-    return false;
-  }, [displayPlaying]);
-
-  const clearHideControls = useCallback(() => {
-    if (controlsTimerRef.current) {
-      clearTimeout(controlsTimerRef.current);
-      controlsTimerRef.current = null;
-    }
-  }, []);
-
-  const clearSafeZoneTimer = useCallback(() => {
-    if (safeZoneTimerRef.current) {
-      clearTimeout(safeZoneTimerRef.current);
-      safeZoneTimerRef.current = null;
-    }
-  }, []);
-
-  // Schedule auto-hiding of controls
-  const scheduleHideControls = useCallback((delayMs: number = 2500) => {
-    clearHideControls();
-    if (isControlsPinned()) return;
-
-    controlsTimerRef.current = setTimeout(() => {
-      if (isControlsPinned()) return;
-      setShowControls(false);
-      if (fullscreenModeRef.current !== 'NONE') {
-        setIsCursorHidden(true);
-      }
-    }, delayMs);
-  }, [clearHideControls, isControlsPinned]);
-
-  // Immediately reveal controls and restore cursor
-  const revealControls = useCallback((autoHideDelay: number = 2500) => {
-    setShowControls(true);
-    setIsCursorHidden(false);
-    clearSafeZoneTimer();
-    if (displayPlaying && !isControlsPinned()) {
-      scheduleHideControls(autoHideDelay);
-    } else {
-      clearHideControls();
-    }
-  }, [displayPlaying, isControlsPinned, scheduleHideControls, clearHideControls, clearSafeZoneTimer]);
-
-  // Keep controls visible when paused; auto-hide when playing if pointer not hovering controls
-  useEffect(() => {
-    if (!displayPlaying) {
-      clearHideControls();
-      clearSafeZoneTimer();
-      setShowControls(true);
-      setIsCursorHidden(false);
-    } else {
-      if (isPointerInsidePlayerRef.current) {
-        scheduleHideControls(2500);
-      } else {
-        clearHideControls();
-        setShowControls(false);
-      }
-    }
-  }, [displayPlaying, clearHideControls, clearSafeZoneTimer, scheduleHideControls]);
+  // UI intent is independent of YouTube buffering and asynchronous player callbacks.
+  const clearHideControls = useCallback(() => controls.clear(), [controls]);
+  const revealControls = useCallback((delay = 2500) => controls.reveal(delay), [controls]);
+  useEffect(() => controls.setPlaying(displayPlaying), [controls, displayPlaying]);
 
   const isGuest = !accessToken;
 
@@ -408,138 +318,23 @@ export default function YouTubePlayer({
     sendProgressRef.current = sendProgress;
   }, [sendProgress]);;
 
-  // Theater Mode for iPhone Safari / WebKit without div requestFullscreen
-  const enterTheaterMode = useCallback(() => {
-    if (typeof document !== 'undefined') {
-      originalBodyOverflowRef.current = document.body.style.overflow;
-      originalBodyTouchActionRef.current = document.body.style.touchAction;
-      document.documentElement.classList.add('bbe-fullscreen-locked');
-      document.body.classList.add('bbe-fullscreen-locked');
-    }
-    if (typeof window !== 'undefined' && !window.history.state?.bbeFullscreen) {
-      window.history.pushState({ bbeFullscreen: true }, '');
-    }
-    fullscreenModeRef.current = 'THEATER';
-    setIsFullscreen(true);
-  }, []);
-
-  const exitTheaterMode = useCallback(() => {
-    if (typeof document !== 'undefined') {
-      document.documentElement.classList.remove('bbe-fullscreen-locked');
-      document.body.classList.remove('bbe-fullscreen-locked');
-      document.body.style.overflow = originalBodyOverflowRef.current || '';
-      document.body.style.touchAction = originalBodyTouchActionRef.current || '';
-    }
+  useEffect(() => {
+    const wrapper = wrapperRef.current;
+    if (!wrapper) return;
     fullscreenModeRef.current = 'NONE';
     setIsFullscreen(false);
-  }, []);
-
-  // Helper functions for robust cross-browser Fullscreen API (iOS/WebKit, Chrome, Firefox, Edge)
-  const isDocFullscreen = (): boolean => {
-    if (typeof document === 'undefined') return false;
-    return Boolean(
-      document.fullscreenElement ||
-      (document as any).webkitFullscreenElement ||
-      (document as any).mozFullScreenElement ||
-      (document as any).msFullscreenElement
-    );
-  };
-
-  const canUseNativeFullscreen = (element: HTMLElement | null): boolean => {
-    if (typeof document === 'undefined' || !element) return false;
-    const doc = document as any;
-    const hasDocSupport = Boolean(
-      doc.fullscreenEnabled ||
-      doc.webkitFullscreenEnabled ||
-      doc.mozFullScreenEnabled ||
-      doc.msFullscreenEnabled
-    );
-    const el = element as any;
-    const hasElSupport = Boolean(
-      el.requestFullscreen ||
-      el.webkitRequestFullscreen ||
-      el.mozRequestFullScreen ||
-      el.msRequestFullscreen
-    );
-    return hasDocSupport && hasElSupport;
-  };
-
-  const requestDocFullscreen = async (element: HTMLElement) => {
-    if (element.requestFullscreen) {
-      return element.requestFullscreen();
-    } else if ((element as any).webkitRequestFullscreen) {
-      return (element as any).webkitRequestFullscreen();
-    } else if ((element as any).mozRequestFullScreen) {
-      return (element as any).mozRequestFullScreen();
-    } else if ((element as any).msRequestFullscreen) {
-      return (element as any).msRequestFullscreen();
-    }
-    throw new Error('Native fullscreen is not supported');
-  };
-
-  const exitDocFullscreen = async () => {
-    if (document.exitFullscreen) {
-      return document.exitFullscreen();
-    } else if ((document as any).webkitExitFullscreen) {
-      return (document as any).webkitExitFullscreen();
-    } else if ((document as any).mozCancelFullScreen) {
-      return (document as any).mozCancelFullScreen();
-    } else if ((document as any).msExitFullscreen) {
-      return (document as any).msExitFullscreen();
-    }
-  };
-
-  // Fullscreen change listener across all browser engines
-  useEffect(() => {
-    const handleFullscreenChange = () => {
-      const docFs = isDocFullscreen();
-      if (!docFs && fullscreenModeRef.current === 'NATIVE') {
-        fullscreenModeRef.current = 'NONE';
-        setIsFullscreen(false);
-      } else if (docFs) {
-        fullscreenModeRef.current = 'NATIVE';
-        setIsFullscreen(true);
-      }
-    };
-
-    const handleFullscreenError = () => {
-      console.warn('[YouTubePlayer] Native fullscreen error, falling back to Viewport Theater mode');
-      if (fullscreenModeRef.current === 'NATIVE') {
-        enterTheaterMode();
-      }
-    };
-
-    const handlePopState = () => {
-      if (fullscreenModeRef.current === 'THEATER') {
-        exitTheaterMode();
-      } else if (fullscreenModeRef.current === 'NATIVE' || isDocFullscreen()) {
-        fullscreenModeRef.current = 'NONE';
-        setIsFullscreen(false);
-        exitDocFullscreen().catch(() => {});
-      }
-    };
-
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
-    document.addEventListener('mozfullscreenchange', handleFullscreenChange);
-    document.addEventListener('MSFullscreenChange', handleFullscreenChange);
-    document.addEventListener('fullscreenerror', handleFullscreenError);
-    document.addEventListener('webkitfullscreenerror', handleFullscreenError);
-    window.addEventListener('popstate', handlePopState);
-
+    const fullscreen = new VideoFullscreen(wrapper, mode => {
+      fullscreenModeRef.current = mode;
+      setIsFullscreen(mode !== 'NONE');
+      controls.endSeek();
+      controls.reveal();
+    });
+    fullscreenControllerRef.current = fullscreen;
     return () => {
-      document.removeEventListener('fullscreenchange', handleFullscreenChange);
-      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
-      document.removeEventListener('mozfullscreenchange', handleFullscreenChange);
-      document.removeEventListener('MSFullscreenChange', handleFullscreenChange);
-      document.removeEventListener('fullscreenerror', handleFullscreenError);
-      document.removeEventListener('webkitfullscreenerror', handleFullscreenError);
-      window.removeEventListener('popstate', handlePopState);
-      if (fullscreenModeRef.current === 'THEATER') {
-        exitTheaterMode();
-      }
+      fullscreen.dispose();
+      fullscreenControllerRef.current = null;
     };
-  }, [enterTheaterMode, exitTheaterMode]);
+  }, [lessonId, youtubeVideoId, controls]);
 
   // Robust YouTube IFrame Player API loader and mounting. The effect is
   // intentionally keyed by video and retryNonce: changing auth or progress does
@@ -655,8 +450,7 @@ export default function YouTubePlayer({
                 isPlayingRef.current = true;
                 setVerificationState('PLAYING');
                 setProgressNotice('');
-                setShowControls(true);
-                scheduleHideControls();
+                controls.setPlaying(true);
                 try {
                   e.target.unloadModule?.('captions');
                 } catch {}
@@ -671,8 +465,7 @@ export default function YouTubePlayer({
                 isPlayingRef.current = false;
                 stopUiTimer();
                 stopHeartbeat();
-                clearHideControls();
-                setShowControls(true);
+                controls.setPlaying(false);
                 try {
                   e.target.unloadModule?.('captions');
                 } catch {}
@@ -681,6 +474,7 @@ export default function YouTubePlayer({
                   void sendProgressRef.current(ct, serverConfirmedFurthestRef.current, 'PAUSE').then(applyServerProgress);
                 }
               } else if (e.data === YT_ENDED) {
+                controls.setPlaying(false);
                 setIsBuffering(false);
                 setIsPlaying(false);
                 isPlayingRef.current = false;
@@ -975,41 +769,54 @@ export default function YouTubePlayer({
     } catch {}
   };
 
-  const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
-    performSeekFromClientX(e.clientX, e.currentTarget);
-    if (displayPlaying) {
-      scheduleHideControls(2500);
-    }
-  };
+  const seekFromClientXRef = useRef(performSeekFromClientX);
+  seekFromClientXRef.current = performSeekFromClientX;
+
+  const finishSeek = useCallback((event: { pointerId: number; clientX: number; clientY: number }, commit: boolean) => {
+    if (controls.seekingPointerId !== event.pointerId) return;
+    if (commit) seekFromClientXRef.current(event.clientX);
+    const rect = wrapperRef.current?.getBoundingClientRect();
+    if (rect) controls.pointerInside = event.clientX >= rect.left && event.clientX <= rect.right && event.clientY >= rect.top && event.clientY <= rect.bottom;
+    controls.endSeek(event.pointerId);
+    try { timelineRef.current?.releasePointerCapture(event.pointerId); } catch {}
+  }, [controls]);
 
   const handleTimelinePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!e.isPrimary || (e.pointerType === 'mouse' && e.button !== 0)) return;
     e.stopPropagation();
-    isSeekingActiveRef.current = true;
-    clearHideControls();
-    setShowControls(true);
-    setIsCursorHidden(false);
-    try {
-      e.currentTarget.setPointerCapture(e.pointerId);
-    } catch {}
+    if (!controls.beginSeek(e.pointerId)) return;
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
     performSeekFromClientX(e.clientX, e.currentTarget);
   };
 
   const handleTimelinePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!isSeekingActiveRef.current) return;
-    performSeekFromClientX(e.clientX, e.currentTarget);
+    if (controls.seekingPointerId === e.pointerId) performSeekFromClientX(e.clientX, e.currentTarget);
   };
 
-  const handleTimelinePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!isSeekingActiveRef.current) return;
-    try {
-      e.currentTarget.releasePointerCapture(e.pointerId);
-    } catch {}
-    isSeekingActiveRef.current = false;
-    performSeekFromClientX(e.clientX, e.currentTarget);
-    if (displayPlaying) {
-      scheduleHideControls(2500);
-    }
-  };
+  // Capture at window level too: pointer capture may fail or be lost outside the player.
+  useEffect(() => {
+    const pointerUp = (event: PointerEvent) => finishSeek(event, true);
+    const pointerCancel = (event: PointerEvent) => finishSeek(event, false);
+    const blur = () => controls.windowBlur();
+    const visibility = () => { if (document.hidden) blur(); };
+    const keyboard = () => {
+      controls.keyDown();
+      if (wrapperRef.current?.contains(document.activeElement)) controls.focus();
+    };
+    window.addEventListener('pointerup', pointerUp, true);
+    window.addEventListener('pointercancel', pointerCancel, true);
+    window.addEventListener('blur', blur);
+    window.addEventListener('keydown', keyboard, true);
+    document.addEventListener('visibilitychange', visibility);
+    return () => {
+      window.removeEventListener('pointerup', pointerUp, true);
+      window.removeEventListener('pointercancel', pointerCancel, true);
+      window.removeEventListener('blur', blur);
+      window.removeEventListener('keydown', keyboard, true);
+      document.removeEventListener('visibilitychange', visibility);
+      controls.clear();
+    };
+  }, [controls, finishSeek]);
 
   const setSpeed = (rate: number) => {
     if (!playerRef.current) return;
@@ -1030,168 +837,18 @@ export default function YouTubePlayer({
     setSpeed(nextRate);
   };
 
-  const toggleFullscreen = async () => {
-    const wrapper = wrapperRef.current;
-    if (!wrapper) return;
-
-    // 1. Exit fullscreen if already active in either mode
-    if (isFullscreen || isDocFullscreen() || fullscreenModeRef.current !== 'NONE') {
-      if (typeof window !== 'undefined' && window.history.state?.bbeFullscreen) {
-        window.history.back();
-        return;
-      }
-      if (fullscreenModeRef.current === 'THEATER') {
-        exitTheaterMode();
-      } else {
-        try {
-          await exitDocFullscreen();
-        } catch {
-          exitTheaterMode();
-        }
-      }
-      return;
-    }
-
-    // 2. Enter fullscreen: Tiered strategy (Native Fullscreen -> Viewport Theater Mode)
-    if (canUseNativeFullscreen(wrapper)) {
-      try {
-        await requestDocFullscreen(wrapper);
-        fullscreenModeRef.current = 'NATIVE';
-        setIsFullscreen(true);
-        if (typeof window !== 'undefined' && !window.history.state?.bbeFullscreen) {
-          window.history.pushState({ bbeFullscreen: true }, '');
-        }
-      } catch (err) {
-        console.warn('[YouTubePlayer] Native fullscreen rejected, falling back to Viewport Theater mode:', err);
-        enterTheaterMode();
-      }
-    } else {
-      // iPhone Safari and mobile browsers without div requestFullscreen support
-      enterTheaterMode();
-    }
+  const toggleFullscreen = () => {
+    revealControls();
+    void fullscreenControllerRef.current?.toggle();
   };
 
-  const handlePointerEnter = (e: React.MouseEvent<HTMLDivElement>) => {
-    isPointerInsidePlayerRef.current = true;
-    lastPointerPosRef.current = { x: e.clientX, y: e.clientY };
-    revealControls(2500);
-  };
-
-  const handlePointerLeave = () => {
-    isPointerInsidePlayerRef.current = false;
-    clearSafeZoneTimer();
-
-    // In windowed mode, when user leaves the player while playing:
-    // Controls should hide smoothly right away without waiting 2.5 - 3 seconds!
-    if (displayPlaying && !isControlsPinned()) {
-      clearHideControls();
-      setShowControls(false);
-    }
-  };
-
-  const handlePointerMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    // If it was a touch event emulating mouse, ignore
-    if (isTouchInteractionRef.current) {
-      isTouchInteractionRef.current = false;
-      return;
-    }
-
-    isPointerInsidePlayerRef.current = true;
-    const x = e.clientX;
-    const y = e.clientY;
-
-    const prevX = lastPointerPosRef.current.x;
-    const prevY = lastPointerPosRef.current.y;
-    const dx = Math.abs(x - prevX);
-    const dy = Math.abs(y - prevY);
-    const distance = Math.hypot(dx, dy);
-
-    lastPointerPosRef.current = { x, y };
-
-    const wrapper = wrapperRef.current;
-    if (!wrapper) return;
-    const rect = wrapper.getBoundingClientRect();
-
-    const isFullscreenActive = fullscreenModeRef.current !== 'NONE';
-
-    // 1. FULLSCREEN SAFE ZONE (Left 12% of screen)
-    if (isFullscreenActive) {
-      const isOverBottomControls = y >= rect.bottom - 80;
-      const isInLeftSafeZone = (x - rect.left) < (rect.width * 0.12);
-
-      // If mouse is inside the Left Safe Zone AND NOT targeting the bottom controls:
-      if (isInLeftSafeZone && !isOverBottomControls && !isControlsPinned()) {
-        // Do NOT trigger controls to appear!
-        // If controls are currently visible, auto-hide them quickly (after 600ms)
-        if (showControls) {
-          if (!safeZoneTimerRef.current) {
-            safeZoneTimerRef.current = setTimeout(() => {
-              if (!isControlsPinned()) {
-                setShowControls(false);
-                setIsCursorHidden(true);
-              }
-            }, 600);
-          }
-        }
-        return;
-      }
-    }
-
-    // 2. MOVEMENT THRESHOLD
-    // In Fullscreen: require significant movement (>= 6px) to avoid micro-jitter waking controls
-    // In Windowed: threshold >= 3px
-    const minThreshold = isFullscreenActive ? 6 : 3;
-    if (distance < minThreshold && prevX >= 0) {
-      return;
-    }
-
-    // 3. REVEAL CONTROLS UPON VALID MOVEMENT
-    revealControls(2500);
-  };
-
-  const handleTouchStart = () => {
-    isTouchInteractionRef.current = true;
-    // On touch devices: toggle controls when playing
-    if (displayPlaying) {
-      if (showControls) {
-        clearHideControls();
-        setShowControls(false);
-      } else {
-        revealControls(3000);
-      }
-    } else {
-      revealControls(3000);
-    }
-  };
-
-  const handleControlsMouseEnter = () => {
-    isInteractingWithControlsRef.current = true;
-    clearHideControls();
-    setShowControls(true);
-    setIsCursorHidden(false);
-  };
-
-  const handleControlsMouseLeave = () => {
-    isInteractingWithControlsRef.current = false;
-    if (displayPlaying && !isControlsPinned()) {
-      scheduleHideControls(2500);
-    }
-  };
-
-  const handleControlsFocus = () => {
-    isKeyboardFocusedRef.current = true;
-    clearHideControls();
-    setShowControls(true);
-    setIsCursorHidden(false);
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const rect = wrapperRef.current?.getBoundingClientRect();
+    if (rect) controls.pointerMove(e.clientX, e.clientY, fullscreenModeRef.current !== 'NONE', rect, e.pointerType);
   };
 
   const handleControlsBlur = (e: React.FocusEvent<HTMLDivElement>) => {
-    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-      isKeyboardFocusedRef.current = false;
-      if (displayPlaying && !isControlsPinned()) {
-        scheduleHideControls(2500);
-      }
-    }
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) controls.blur();
   };
 
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
@@ -1222,7 +879,7 @@ export default function YouTubePlayer({
 
       if (e.key === 'Escape' && fullscreenModeRef.current === 'THEATER') {
         e.preventDefault();
-        exitTheaterMode();
+        fullscreenControllerRef.current?.exit();
         return;
       }
 
@@ -1240,21 +897,24 @@ export default function YouTubePlayer({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [canSeekFree, duration, serverConfirmedFurthest, displayPlaying, isReady, exitTheaterMode]);
+  }, [canSeekFree, duration, serverConfirmedFurthest, displayPlaying, isReady]);
 
   return (
     <div
       ref={wrapperRef}
-      onMouseEnter={handlePointerEnter}
-      onMouseMove={handlePointerMove}
-      onMouseLeave={handlePointerLeave}
-      onTouchStart={handleTouchStart}
-      className={`relative w-full bg-black select-none group transition-[border-radius] duration-200 ${
+      data-video-player
+      onPointerEnter={e => controls.pointerEnter(e.clientX, e.clientY, e.pointerType)}
+      onPointerMove={handlePointerMove}
+      onPointerLeave={e => controls.pointerLeave(e.pointerType)}
+      onPointerDownCapture={e => controls.pointerInput(e.pointerType)}
+      onFocusCapture={() => controls.focus()}
+      onBlurCapture={handleControlsBlur}
+      className={`w-full bg-black select-none group transition-[border-radius] duration-200 ${
         isFullscreen && isCursorHidden && displayPlaying ? '!cursor-none' : 'cursor-default'
       } ${
         isFullscreen
-          ? 'fixed inset-0 z-[99999] !w-screen !h-screen !h-[100dvh] !max-h-none !max-w-none rounded-none aspect-auto overflow-hidden flex items-center justify-center'
-          : 'aspect-video rounded-3xl overflow-hidden'
+          ? 'bbe-player-fullscreen rounded-none aspect-auto overflow-hidden flex items-center justify-center'
+          : 'relative aspect-video rounded-3xl overflow-hidden'
       }`}
     >
       {/* Explicit Exit Fullscreen Button in Theater / Fullscreen Mode (Essential for mobile & iOS) */}
@@ -1387,12 +1047,10 @@ export default function YouTubePlayer({
       {/* High-Contrast Floating Video Controls Bar */}
       {!videoError && isReady && (
         <div
-          onMouseEnter={handleControlsMouseEnter}
-          onMouseLeave={handleControlsMouseLeave}
-          onFocusCapture={handleControlsFocus}
-          onBlurCapture={handleControlsBlur}
-          className={`absolute bottom-0 inset-x-0 z-30 transition-all duration-300 pointer-events-auto select-none ${
-            showControls || !displayPlaying ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2 pointer-events-none'
+          data-video-controls
+          onClickCapture={() => controls.reveal()}
+          className={`absolute bottom-0 inset-x-0 z-30 transition-all duration-300 select-none ${
+            showControls || !displayPlaying ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-2 pointer-events-none'
           }`}
         >
           {/* Pure Floating Controls: NO dark gradient or black band covering the video bottom.
@@ -1402,12 +1060,13 @@ export default function YouTubePlayer({
             {/* Timeline Bar (High-Contrast Track with distinct scrubber thumb) */}
             <div
               ref={timelineRef}
-              onClick={handleSeek}
               onPointerDown={handleTimelinePointerDown}
               onPointerMove={handleTimelinePointerMove}
-              onPointerUp={handleTimelinePointerUp}
-              onPointerCancel={handleTimelinePointerUp}
-              className="relative py-2.5 cursor-pointer group/timeline select-none touch-manipulation"
+              onPointerUp={e => finishSeek(e, true)}
+              onPointerCancel={e => finishSeek(e, false)}
+              onLostPointerCapture={e => finishSeek(e, false)}
+              data-video-timeline
+              className="relative py-2.5 cursor-pointer group/timeline select-none touch-none"
               title={canSeekFree ? 'Bấm để tua video' : 'Chỉ có thể tua trong đoạn đã xem'}
             >
               {/* Timeline Track (Solid Dark Slate Track with subtle border & shadow) */}

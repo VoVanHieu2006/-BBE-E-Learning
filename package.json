@@ -36,7 +36,9 @@
     "test:learning-security": "node scripts/test-learning-security.mjs",
     "test:reward-pause-integration": "node scripts/test-reward-pause-integration.cjs",
     "db:audit-learning-mapping": "node scripts/audit-learning-mapping.mjs",
-    "test:migration-rehearsal": "node scripts/rehearse-learning-migration.mjs"
+    "test:migration-rehearsal": "node scripts/rehearse-learning-migration.mjs",
+    "test:video-player-ui": "ts-node -P tsconfig.test.json src/test/video-player-ui.test.ts",
+    "test:video-player-browser": "playwright test -c playwright.player.config.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1121.0",
@@ -53,6 +55,7 @@
     "resend": "^6.25.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "@types/bcrypt": "^5.0.2",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20.19.43",
