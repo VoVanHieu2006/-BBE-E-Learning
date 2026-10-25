@@ -89,11 +89,17 @@ export async function recordVideoHeartbeat(
 
     const event = normalizeEvent(details.event)
     const playbackRate = normalizePlaybackRate(details.playbackRate)
+    const isNewSession = Boolean(
+      viewSessionId &&
+      viewSessionId !== 'COMPAT' &&
+      replay?.view_session_id &&
+      replay.view_session_id !== viewSessionId
+    )
     const lastAt = replay?.last_heartbeat_at || existing?.last_watched_at || null
-    // Elapsed time is always capped by the reported content position, so a
-    // pause cannot create progress (the position does not advance). Reusing the
-    // gap on PLAY also preserves legitimate playback while a tab was hidden.
-    const elapsed = heartbeatElapsed(lastAt, now)
+    // If a learner switches between lessons, a new session is generated. The
+    // wall-clock gap between previous session and current session cannot be
+    // counted as watch time on this video.
+    const elapsed = isNewSession ? 0 : heartbeatElapsed(lastAt, now)
     // Only an explicit ENDED event may claim a slightly larger wall-clock reach,
     // because the final content seconds never trigger a scheduled heartbeat.
     const grace = event === 'ENDED' ? endedReachAllowanceSeconds(playbackRate) : 0
@@ -305,6 +311,7 @@ export async function recordVideoHeartbeat(
       lessonId,
       id: lessonId,
       videoId: lesson.video.id,
+      viewSessionId,
       videoCompleted: effectiveVideoCompleted,
       completed: context ? cycleCompleted : updated.completed,
       completedAt: context ? cycleCompletedAt : updated.completed_at,

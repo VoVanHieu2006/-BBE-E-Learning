@@ -165,3 +165,11 @@ h1, h2, h3, h4, h5, h6 {
     animation: none !important;
   }
 }
+
+/* Lock background scrolling and gestures during mobile viewport theater mode */
+html.bbe-fullscreen-locked,
+body.bbe-fullscreen-locked {
+  overflow: hidden !important;
+  touch-action: none !important;
+  height: 100% !important;
+}

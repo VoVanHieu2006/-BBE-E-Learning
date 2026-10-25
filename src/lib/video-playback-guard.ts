@@ -355,6 +355,35 @@ export class VideoPlaybackGuard {
       };
     }
 
+    // Strict identity verification: Lesson ID, Video ID, Session ID
+    if (response.lessonId && response.lessonId !== this.lessonId) {
+      this.recordLog('HEARTBEAT_DROPPED_WRONG_LESSON', 0, {
+        seq,
+        responseLesson: response.lessonId,
+        currentLesson: this.lessonId,
+      });
+      return {
+        applied: false,
+        reason: 'LESSON_MISMATCH',
+        serverConfirmedFurthest: this.serverConfirmedFurthest,
+        isCompleted: this.isCompleted,
+      };
+    }
+
+    if (response.videoId && response.videoId !== this.videoId) {
+      this.recordLog('HEARTBEAT_DROPPED_WRONG_VIDEO', 0, {
+        seq,
+        responseVideo: response.videoId,
+        currentVideo: this.videoId,
+      });
+      return {
+        applied: false,
+        reason: 'VIDEO_MISMATCH',
+        serverConfirmedFurthest: this.serverConfirmedFurthest,
+        isCompleted: this.isCompleted,
+      };
+    }
+
     // Verify session identity if provided in response
     if (response.viewSessionId && response.viewSessionId !== this.viewSessionId) {
       this.recordLog('HEARTBEAT_DROPPED_WRONG_SESSION', 0, {
@@ -455,6 +484,34 @@ export class VideoPlaybackGuard {
       this.localContinuousPosition = Math.max(this.localContinuousPosition, this.serverConfirmedFurthest);
       this.allowedManualSeekUntil = this.computeAllowedManualSeekUntil();
     }
+  }
+
+  public syncProps(params: {
+    initialFurthest?: number;
+    duration?: number;
+    allowFreeSeek?: boolean;
+    isGuest?: boolean;
+    isCompleted?: boolean;
+  }): void {
+    if (params.duration !== undefined && Number.isFinite(params.duration)) {
+      this.duration = Math.max(0, params.duration);
+    }
+    if (params.allowFreeSeek !== undefined) {
+      this.allowFreeSeek = Boolean(params.allowFreeSeek);
+    }
+    if (params.isGuest !== undefined) {
+      this.isGuest = Boolean(params.isGuest);
+    }
+    if (params.initialFurthest !== undefined && Number.isFinite(params.initialFurthest) && params.initialFurthest >= 0) {
+      this.serverConfirmedFurthest = Math.max(this.serverConfirmedFurthest, params.initialFurthest);
+      this.localContinuousPosition = Math.max(this.localContinuousPosition, this.serverConfirmedFurthest);
+    }
+    if (params.isCompleted !== undefined) {
+      this.isCompleted = Boolean(params.isCompleted);
+    } else if (this.duration > 0 && this.serverConfirmedFurthest >= this.duration) {
+      this.isCompleted = true;
+    }
+    this.allowedManualSeekUntil = this.computeAllowedManualSeekUntil();
   }
 
   private recordLog(action: string, currentTime: number, details: Record<string, any> = {}): void {

@@ -33,6 +33,9 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
   const [openSessions, setOpenSessions] = useState<Record<string, boolean>>({});
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [toast, setToast] = useState<ToastMessage | null>(null);
+  const currentLessonIdRef = useRef(currentLessonId);
+  currentLessonIdRef.current = currentLessonId;
+  const pendingLessonIdRef = useRef<string | null>(null);
   const switchReqIdRef = useRef(0);
   const switchAbortRef = useRef<AbortController | null>(null);
 
@@ -141,22 +144,29 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
   const revalidateProgress = useCallback(async () => {
     const activeToken = token || (typeof window !== 'undefined' ? localStorage.getItem('accessToken') : '') || '';
     if (!activeToken) return;
+    const targetLessonId = currentLessonIdRef.current;
     const cid = lesson?.session?.courseId || courseData?.courseId || courseData?.id;
     const [progRes, courseProgRes] = await Promise.all([
-      apiFetch(`/api/v1/lessons/${currentLessonId}/progress`, { noCache: true, token: activeToken }),
+      apiFetch(`/api/v1/lessons/${targetLessonId}/progress`, { noCache: true, token: activeToken }),
       cid ? apiFetch(`/api/v1/courses/${cid}/my-progress`, { noCache: true, token: activeToken }) : Promise.resolve<any>(null),
     ]);
+    // Stale guard: if user switched to another lesson, drop this result
+    if (targetLessonId !== currentLessonIdRef.current) return;
     if (progRes.ok && progRes.data) {
-      setProgress((prev: any) => ({
-        ...prev,
-        ...progRes.data,
-        lessonId: currentLessonId,
-      }));
+      if (progRes.data.lessonId && progRes.data.lessonId !== targetLessonId) return;
+      setProgress((prev: any) => {
+        if (prev?.lessonId && prev.lessonId !== targetLessonId) return prev;
+        return {
+          ...prev,
+          ...progRes.data,
+          lessonId: targetLessonId,
+        };
+      });
     }
     if (courseProgRes && courseProgRes.ok && courseProgRes.data) {
       setCourseProgress(courseProgRes.data);
     }
-  }, [currentLessonId, lesson?.session?.courseId, courseData, token]);
+  }, [lesson?.session?.courseId, courseData, token]);
 
   useEffect(() => {
     let timer: any = null;
@@ -192,7 +202,9 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
 
   // Fast In-Place Lesson Switch with AbortController and Zero Race Conditions
   async function switchLesson(newLessonId: string, options?: { skipPushHistory?: boolean }) {
-    if (newLessonId === currentLessonId) return;
+    if (newLessonId === currentLessonId && !pendingLessonIdRef.current) return;
+    if (pendingLessonIdRef.current === newLessonId) return;
+    pendingLessonIdRef.current = newLessonId;
 
     if (switchAbortRef.current) {
       switchAbortRef.current.abort();
@@ -204,6 +216,15 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
     if (typeof window !== 'undefined' && (window as any).__bbeProbe) (window as any).__bbePerf?.push({ name: 'lesson_switch', at: performance.now() });
     setIsSwitchingLesson(true);
     setActiveTab('desc'); // Reset tab to description when switching lessons
+
+    // Clear progress immediately so previous lesson progress cannot leak into current view
+    setProgress({
+      lessonId: newLessonId,
+      completed: false,
+      watchedUntil: 0,
+      lastPosition: 0,
+      progressPercentage: 0,
+    });
 
     // Update browser URL without adding redundant history entries on popstate
     if (!options?.skipPushHistory && typeof window !== 'undefined') {
@@ -222,8 +243,10 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
 
       // Ignore if a newer lesson switch request has already fired
       if (reqId !== switchReqIdRef.current) return;
+      pendingLessonIdRef.current = null;
 
       setCurrentLessonId(newLessonId);
+      currentLessonIdRef.current = newLessonId;
 
       if (lessonRes.ok && lessonRes.data) {
         setLesson(lessonRes.data);
@@ -254,6 +277,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
       }
     } finally {
       if (reqId === switchReqIdRef.current) {
+        pendingLessonIdRef.current = null;
         if (typeof window !== 'undefined' && (window as any).__bbeProbe) (window as any).__bbePerf?.push({ name: 'lesson_switch_done', at: performance.now() });
         setIsSwitchingLesson(false);
       }
@@ -298,19 +322,22 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
     const data = res.data;
 
     // Strict isolation: Only update local active state if response is for the currently viewed lesson
-    if (targetLessonId === currentLessonId && reqId === switchReqIdRef.current) {
-      setProgress((prev: any) => ({
-        ...prev,
-        lessonId: targetLessonId,
-        videoCompleted: Boolean(data.videoCompleted),
-        completed: Boolean(data.completed),
-        replay: data.replay,
-        progressPercentage: data.progressPercentage,
-        watchedUntil: data.furthestWatchedPositionSeconds ?? event.furthest,
-        lastPosition: data.lastPositionSeconds ?? prev?.lastPosition,
-        ...(data.videoStarsThisMonth ? { videoStarsThisMonth: data.videoStarsThisMonth } : {}),
-        ...(data.replayHistory ? { replayHistory: data.replayHistory } : {}),
-      }));
+    if (targetLessonId === currentLessonId && targetLessonId === currentLessonIdRef.current && reqId === switchReqIdRef.current) {
+      setProgress((prev: any) => {
+        if (prev?.lessonId && prev.lessonId !== targetLessonId) return prev;
+        return {
+          ...prev,
+          lessonId: targetLessonId,
+          videoCompleted: Boolean(data.videoCompleted),
+          completed: Boolean(data.completed),
+          replay: data.replay,
+          progressPercentage: data.progressPercentage,
+          watchedUntil: data.furthestWatchedPositionSeconds ?? event.furthest,
+          lastPosition: data.lastPositionSeconds ?? prev?.lastPosition,
+          ...(data.videoStarsThisMonth ? { videoStarsThisMonth: data.videoStarsThisMonth } : {}),
+          ...(data.replayHistory ? { replayHistory: data.replayHistory } : {}),
+        };
+      });
 
       if (data.videoDurationMismatch?.playerSeconds > 0) {
         const mismatch = data.videoDurationMismatch;
@@ -359,6 +386,11 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
           };
         });
       }
+    }
+
+    // Do not return data if user switched away to another lesson
+    if (targetLessonId !== currentLessonIdRef.current) {
+      return null;
     }
     return data;
   }
@@ -604,11 +636,16 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                 accessToken={token}
                 allowFreeSeek={allowFreeSeek}
                 initialPosition={
+                  progress?.lessonId === currentLessonId &&
                   progress?.completed && (progress?.lastPosition || 0) >= (lesson.video.durationSeconds || 0) - 5
                     ? 0
-                    : progress?.lastPosition || 0
+                    : (progress?.lessonId === currentLessonId ? (progress?.lastPosition || 0) : 0)
                 }
-                initialFurthest={progress?.watchedUntil || progress?.furthestWatchedPositionSeconds || 0}
+                initialFurthest={
+                  progress?.lessonId === currentLessonId
+                    ? (progress?.watchedUntil ?? progress?.furthestWatchedPositionSeconds ?? 0)
+                    : 0
+                }
                 durationSeconds={lesson.video.durationSeconds || 0}
                 onProgress={handleProgress}
                 onComplete={handleLessonComplete}

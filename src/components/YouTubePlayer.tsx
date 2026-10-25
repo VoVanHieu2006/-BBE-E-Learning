@@ -106,6 +106,7 @@ export default function YouTubePlayer({
   const [serverConfirmedFurthest, setServerConfirmedFurthest] = useState(initialFurthest);
   const [playbackRate, setPlaybackRate] = useState(1);
   const [showControls, setShowControls] = useState(true);
+  const [isCursorHidden, setIsCursorHidden] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [videoError, setVideoError] = useState('');
@@ -124,9 +125,21 @@ export default function YouTubePlayer({
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const uiTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const controlsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const safeZoneTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastPointerPosRef = useRef<{ x: number; y: number }>({ x: -1, y: -1 });
+  const isInteractingWithControlsRef = useRef<boolean>(false);
+  const isSeekingActiveRef = useRef<boolean>(false);
+  const isKeyboardFocusedRef = useRef<boolean>(false);
+  const isTouchInteractionRef = useRef<boolean>(false);
+  const isPointerInsidePlayerRef = useRef<boolean>(false);
   const pauseRetryRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const completedFiredRef = useRef(false);
   const sendProgressRef = useRef<(ct: number, ft: number, event?: PlaybackEvent, overrideRate?: number) => Promise<any>>(async () => null);
+
+  // Mobile Tiered Fullscreen management (Native Fullscreen + Viewport Theater Mode fallback for iPhone/WebKit)
+  const fullscreenModeRef = useRef<'NONE' | 'NATIVE' | 'THEATER'>('NONE');
+  const originalBodyOverflowRef = useRef<string>('');
+  const originalBodyTouchActionRef = useRef<string>('');
 
   // VideoPlaybackGuard engine separating legitimate continuous playback from unauthorized seek
   const guardRef = useRef<VideoPlaybackGuard>(
@@ -149,8 +162,8 @@ export default function YouTubePlayer({
   );
 
   // Optimistic play/pause intent so the first click reacts instantly. Cleared
-  // the moment YouTube confirms any state change.
   const [optimisticPlay, setOptimisticPlay] = useState<boolean | null>(null);
+  const displayPlaying = optimisticPlay ?? isPlaying;
 
   const clearPauseRetry = () => {
     if (pauseRetryRef.current) {
@@ -183,6 +196,14 @@ export default function YouTubePlayer({
 
   // Reset all video progress and completion flags immediately when lesson or video changes
   useEffect(() => {
+    if (fullscreenModeRef.current === 'THEATER' && typeof document !== 'undefined') {
+      document.documentElement.classList.remove('bbe-fullscreen-locked');
+      document.body.classList.remove('bbe-fullscreen-locked');
+      document.body.style.overflow = originalBodyOverflowRef.current || '';
+      document.body.style.touchAction = originalBodyTouchActionRef.current || '';
+      fullscreenModeRef.current = 'NONE';
+      setIsFullscreen(false);
+    }
     const alreadyFinished = durationSeconds > 0 && initialFurthest >= durationSeconds;
     guardRef.current = new VideoPlaybackGuard({
       lessonId,
@@ -217,17 +238,40 @@ export default function YouTubePlayer({
     setIsBuffering(false);
     setOptimisticPlay(null);
     clearPauseRetry();
+    if (controlsTimerRef.current) {
+      clearTimeout(controlsTimerRef.current);
+      controlsTimerRef.current = null;
+    }
+    if (safeZoneTimerRef.current) {
+      clearTimeout(safeZoneTimerRef.current);
+      safeZoneTimerRef.current = null;
+    }
+    setShowControls(true);
+    setIsCursorHidden(false);
+    isInteractingWithControlsRef.current = false;
+    isSeekingActiveRef.current = false;
+    isKeyboardFocusedRef.current = false;
+    isTouchInteractionRef.current = false;
+    isPointerInsidePlayerRef.current = false;
     setPlaybackRate(1);
     playbackRateRef.current = 1;
   }, [lessonId, youtubeVideoId]);
 
   // Update furthest and currentTime when props arrive asynchronously after mount (fixes F5 loss)
   useEffect(() => {
-    if (initialFurthest >= 0) {
-      guardRef.current.updateServerFurthestFromProps(initialFurthest);
-      serverConfirmedFurthestRef.current = guardRef.current.serverConfirmedFurthest;
-      setServerConfirmedFurthest(guardRef.current.serverConfirmedFurthest);
-    }
+    const alreadyFinished = Boolean(allowFreeSeek || (durationSeconds > 0 && initialFurthest >= durationSeconds));
+    guardRef.current.syncProps({
+      initialFurthest: initialFurthest >= 0 ? initialFurthest : 0,
+      duration: durationSeconds,
+      allowFreeSeek,
+      isGuest: !accessToken,
+      isCompleted: alreadyFinished,
+    });
+    serverConfirmedFurthestRef.current = guardRef.current.serverConfirmedFurthest;
+    setServerConfirmedFurthest(guardRef.current.serverConfirmedFurthest);
+    setIsCompleted(alreadyFinished);
+    setVerificationState(alreadyFinished ? 'COMPLETED' : 'IDLE');
+
     // Only seek to initialPosition if player hasn't started playing yet to avoid rewinding active playback
     if (initialPosition > 0 && currentTime === 0 && !isPlayingRef.current) {
       setCurrentTime(initialPosition);
@@ -237,27 +281,74 @@ export default function YouTubePlayer({
         } catch {}
       }
     }
-    if (durationSeconds > 0 && initialFurthest >= durationSeconds) {
-      setIsCompleted(true);
-      setVerificationState('COMPLETED');
-      guardRef.current.isCompleted = true;
-    }
-    guardRef.current.allowFreeSeek = Boolean(allowFreeSeek);
-    guardRef.current.isGuest = !accessToken;
   }, [initialPosition, initialFurthest, durationSeconds, allowFreeSeek, accessToken]);
 
-  // Hẹn giờ tự ẩn thanh điều khiển (thanh tua) sau 3s khi đang phát.
-  const scheduleHideControls = () => {
-    if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current);
-    controlsTimerRef.current = setTimeout(() => setShowControls(false), 3000);
-  };
+  // ==================== YOUTUBE-LIKE CONTROLS COORDINATOR ====================
+  // Check if controls are currently pinned (should not auto-hide)
+  const isControlsPinned = useCallback(() => {
+    if (!displayPlaying) return true;
+    if (isSeekingActiveRef.current) return true;
+    if (isInteractingWithControlsRef.current) return true;
+    if (isKeyboardFocusedRef.current) return true;
+    return false;
+  }, [displayPlaying]);
 
-  const clearHideControls = () => {
+  const clearHideControls = useCallback(() => {
     if (controlsTimerRef.current) {
       clearTimeout(controlsTimerRef.current);
       controlsTimerRef.current = null;
     }
-  };
+  }, []);
+
+  const clearSafeZoneTimer = useCallback(() => {
+    if (safeZoneTimerRef.current) {
+      clearTimeout(safeZoneTimerRef.current);
+      safeZoneTimerRef.current = null;
+    }
+  }, []);
+
+  // Schedule auto-hiding of controls
+  const scheduleHideControls = useCallback((delayMs: number = 2500) => {
+    clearHideControls();
+    if (isControlsPinned()) return;
+
+    controlsTimerRef.current = setTimeout(() => {
+      if (isControlsPinned()) return;
+      setShowControls(false);
+      if (fullscreenModeRef.current !== 'NONE') {
+        setIsCursorHidden(true);
+      }
+    }, delayMs);
+  }, [clearHideControls, isControlsPinned]);
+
+  // Immediately reveal controls and restore cursor
+  const revealControls = useCallback((autoHideDelay: number = 2500) => {
+    setShowControls(true);
+    setIsCursorHidden(false);
+    clearSafeZoneTimer();
+    if (displayPlaying && !isControlsPinned()) {
+      scheduleHideControls(autoHideDelay);
+    } else {
+      clearHideControls();
+    }
+  }, [displayPlaying, isControlsPinned, scheduleHideControls, clearHideControls, clearSafeZoneTimer]);
+
+  // Keep controls visible when paused; auto-hide when playing if pointer not hovering controls
+  useEffect(() => {
+    if (!displayPlaying) {
+      clearHideControls();
+      clearSafeZoneTimer();
+      setShowControls(true);
+      setIsCursorHidden(false);
+    } else {
+      if (isPointerInsidePlayerRef.current) {
+        scheduleHideControls(2500);
+      } else {
+        clearHideControls();
+        setShowControls(false);
+      }
+    }
+  }, [displayPlaying, clearHideControls, clearSafeZoneTimer, scheduleHideControls]);
 
   const isGuest = !accessToken;
 
@@ -317,6 +408,32 @@ export default function YouTubePlayer({
     sendProgressRef.current = sendProgress;
   }, [sendProgress]);;
 
+  // Theater Mode for iPhone Safari / WebKit without div requestFullscreen
+  const enterTheaterMode = useCallback(() => {
+    if (typeof document !== 'undefined') {
+      originalBodyOverflowRef.current = document.body.style.overflow;
+      originalBodyTouchActionRef.current = document.body.style.touchAction;
+      document.documentElement.classList.add('bbe-fullscreen-locked');
+      document.body.classList.add('bbe-fullscreen-locked');
+    }
+    if (typeof window !== 'undefined' && !window.history.state?.bbeFullscreen) {
+      window.history.pushState({ bbeFullscreen: true }, '');
+    }
+    fullscreenModeRef.current = 'THEATER';
+    setIsFullscreen(true);
+  }, []);
+
+  const exitTheaterMode = useCallback(() => {
+    if (typeof document !== 'undefined') {
+      document.documentElement.classList.remove('bbe-fullscreen-locked');
+      document.body.classList.remove('bbe-fullscreen-locked');
+      document.body.style.overflow = originalBodyOverflowRef.current || '';
+      document.body.style.touchAction = originalBodyTouchActionRef.current || '';
+    }
+    fullscreenModeRef.current = 'NONE';
+    setIsFullscreen(false);
+  }, []);
+
   // Helper functions for robust cross-browser Fullscreen API (iOS/WebKit, Chrome, Firefox, Edge)
   const isDocFullscreen = (): boolean => {
     if (typeof document === 'undefined') return false;
@@ -326,6 +443,25 @@ export default function YouTubePlayer({
       (document as any).mozFullScreenElement ||
       (document as any).msFullscreenElement
     );
+  };
+
+  const canUseNativeFullscreen = (element: HTMLElement | null): boolean => {
+    if (typeof document === 'undefined' || !element) return false;
+    const doc = document as any;
+    const hasDocSupport = Boolean(
+      doc.fullscreenEnabled ||
+      doc.webkitFullscreenEnabled ||
+      doc.mozFullScreenEnabled ||
+      doc.msFullscreenEnabled
+    );
+    const el = element as any;
+    const hasElSupport = Boolean(
+      el.requestFullscreen ||
+      el.webkitRequestFullscreen ||
+      el.mozRequestFullScreen ||
+      el.msRequestFullscreen
+    );
+    return hasDocSupport && hasElSupport;
   };
 
   const requestDocFullscreen = async (element: HTMLElement) => {
@@ -338,6 +474,7 @@ export default function YouTubePlayer({
     } else if ((element as any).msRequestFullscreen) {
       return (element as any).msRequestFullscreen();
     }
+    throw new Error('Native fullscreen is not supported');
   };
 
   const exitDocFullscreen = async () => {
@@ -355,23 +492,54 @@ export default function YouTubePlayer({
   // Fullscreen change listener across all browser engines
   useEffect(() => {
     const handleFullscreenChange = () => {
-      setIsFullscreen(isDocFullscreen());
+      const docFs = isDocFullscreen();
+      if (!docFs && fullscreenModeRef.current === 'NATIVE') {
+        fullscreenModeRef.current = 'NONE';
+        setIsFullscreen(false);
+      } else if (docFs) {
+        fullscreenModeRef.current = 'NATIVE';
+        setIsFullscreen(true);
+      }
+    };
+
+    const handleFullscreenError = () => {
+      console.warn('[YouTubePlayer] Native fullscreen error, falling back to Viewport Theater mode');
+      if (fullscreenModeRef.current === 'NATIVE') {
+        enterTheaterMode();
+      }
+    };
+
+    const handlePopState = () => {
+      if (fullscreenModeRef.current === 'THEATER') {
+        exitTheaterMode();
+      } else if (fullscreenModeRef.current === 'NATIVE' || isDocFullscreen()) {
+        fullscreenModeRef.current = 'NONE';
+        setIsFullscreen(false);
+        exitDocFullscreen().catch(() => {});
+      }
     };
 
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
     document.addEventListener('mozfullscreenchange', handleFullscreenChange);
     document.addEventListener('MSFullscreenChange', handleFullscreenChange);
-    window.addEventListener('orientationchange', handleFullscreenChange);
+    document.addEventListener('fullscreenerror', handleFullscreenError);
+    document.addEventListener('webkitfullscreenerror', handleFullscreenError);
+    window.addEventListener('popstate', handlePopState);
 
     return () => {
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
       document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
       document.removeEventListener('mozfullscreenchange', handleFullscreenChange);
       document.removeEventListener('MSFullscreenChange', handleFullscreenChange);
-      window.removeEventListener('orientationchange', handleFullscreenChange);
+      document.removeEventListener('fullscreenerror', handleFullscreenError);
+      document.removeEventListener('webkitfullscreenerror', handleFullscreenError);
+      window.removeEventListener('popstate', handlePopState);
+      if (fullscreenModeRef.current === 'THEATER') {
+        exitTheaterMode();
+      }
     };
-  }, []);
+  }, [enterTheaterMode, exitTheaterMode]);
 
   // Robust YouTube IFrame Player API loader and mounting. The effect is
   // intentionally keyed by video and retryNonce: changing auth or progress does
@@ -602,6 +770,11 @@ export default function YouTubePlayer({
 
   const applyServerProgress = (result: any) => {
     if (!result || typeof result !== 'object') return;
+    // Strict identity validation: ignore response belonging to another lesson or session
+    if (result.lessonId && result.lessonId !== lessonId) return;
+    if (result.videoId && result.videoId !== youtubeVideoId) return;
+    if (result.viewSessionId && result.viewSessionId !== guardRef.current.viewSessionId) return;
+
     const serverFurthest = Number(result.furthestWatchedPositionSeconds);
     if (Number.isFinite(serverFurthest) && serverFurthest >= 0) {
       guardRef.current.updateServerFurthestFromProps(serverFurthest);
@@ -618,6 +791,8 @@ export default function YouTubePlayer({
 
   const finishPlayback = async () => {
     if (isGuest || isVerifyingEndedRef.current || completedFiredRef.current) return;
+    const currentSession = guardRef.current.viewSessionId;
+    const currentLesson = lessonId;
     isVerifyingEndedRef.current = true;
     setVerificationState('VERIFYING');
     setProgressNotice('Đang kiểm tra và xác nhận hoàn thành video...');
@@ -636,6 +811,11 @@ export default function YouTubePlayer({
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
         result = await sendProgress(d, d, 'ENDED', actualRate);
+        // Abort processing if user switched away to another lesson while request was in flight
+        if (guardRef.current.viewSessionId !== currentSession || lessonId !== currentLesson) {
+          isVerifyingEndedRef.current = false;
+          return;
+        }
         if (result?.videoCompleted || result?.completed || Number(result?.progressPercentage) >= 100) {
           applyServerProgress(result);
           setIsCompleted(true);
@@ -657,6 +837,11 @@ export default function YouTubePlayer({
       if (attempt < 3) {
         await new Promise((resolve) => setTimeout(resolve, attempt * 1000));
       }
+    }
+
+    if (guardRef.current.viewSessionId !== currentSession || lessonId !== currentLesson) {
+      isVerifyingEndedRef.current = false;
+      return;
     }
 
     isVerifyingEndedRef.current = false;
@@ -751,8 +936,6 @@ export default function YouTubePlayer({
     return () => document.removeEventListener('visibilitychange', handleVisibility);
   }, [isGuest]);
 
-  const displayPlaying = optimisticPlay ?? isPlaying;
-
   const togglePlay = () => {
     const wantPlay = !displayPlaying;
     setOptimisticPlay(wantPlay);
@@ -773,10 +956,15 @@ export default function YouTubePlayer({
     }
   };
 
-  const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
+  const timelineRef = useRef<HTMLDivElement | null>(null);
+
+  const performSeekFromClientX = (clientX: number, targetElement?: HTMLElement | null) => {
     if (!playerRef.current) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const pos = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const el = targetElement || timelineRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    if (rect.width <= 0) return;
+    const pos = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
     const targetTime = pos * duration;
 
     const { clampedTime } = guardRef.current.clampManualSeek(targetTime);
@@ -785,6 +973,42 @@ export default function YouTubePlayer({
       playerRef.current.seekTo(clampedTime, true);
       setCurrentTime(clampedTime);
     } catch {}
+  };
+
+  const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
+    performSeekFromClientX(e.clientX, e.currentTarget);
+    if (displayPlaying) {
+      scheduleHideControls(2500);
+    }
+  };
+
+  const handleTimelinePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    isSeekingActiveRef.current = true;
+    clearHideControls();
+    setShowControls(true);
+    setIsCursorHidden(false);
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {}
+    performSeekFromClientX(e.clientX, e.currentTarget);
+  };
+
+  const handleTimelinePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isSeekingActiveRef.current) return;
+    performSeekFromClientX(e.clientX, e.currentTarget);
+  };
+
+  const handleTimelinePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isSeekingActiveRef.current) return;
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {}
+    isSeekingActiveRef.current = false;
+    performSeekFromClientX(e.clientX, e.currentTarget);
+    if (displayPlaying) {
+      scheduleHideControls(2500);
+    }
   };
 
   const setSpeed = (rate: number) => {
@@ -806,25 +1030,167 @@ export default function YouTubePlayer({
     setSpeed(nextRate);
   };
 
-  const toggleFullscreen = () => {
-    if (!wrapperRef.current) return;
-    if (!isDocFullscreen()) {
-      requestDocFullscreen(wrapperRef.current).catch((err) => {
-        console.warn('requestFullscreen error:', err);
-      });
+  const toggleFullscreen = async () => {
+    const wrapper = wrapperRef.current;
+    if (!wrapper) return;
+
+    // 1. Exit fullscreen if already active in either mode
+    if (isFullscreen || isDocFullscreen() || fullscreenModeRef.current !== 'NONE') {
+      if (typeof window !== 'undefined' && window.history.state?.bbeFullscreen) {
+        window.history.back();
+        return;
+      }
+      if (fullscreenModeRef.current === 'THEATER') {
+        exitTheaterMode();
+      } else {
+        try {
+          await exitDocFullscreen();
+        } catch {
+          exitTheaterMode();
+        }
+      }
+      return;
+    }
+
+    // 2. Enter fullscreen: Tiered strategy (Native Fullscreen -> Viewport Theater Mode)
+    if (canUseNativeFullscreen(wrapper)) {
+      try {
+        await requestDocFullscreen(wrapper);
+        fullscreenModeRef.current = 'NATIVE';
+        setIsFullscreen(true);
+        if (typeof window !== 'undefined' && !window.history.state?.bbeFullscreen) {
+          window.history.pushState({ bbeFullscreen: true }, '');
+        }
+      } catch (err) {
+        console.warn('[YouTubePlayer] Native fullscreen rejected, falling back to Viewport Theater mode:', err);
+        enterTheaterMode();
+      }
     } else {
-      exitDocFullscreen().catch((err) => {
-        console.warn('exitFullscreen error:', err);
-      });
+      // iPhone Safari and mobile browsers without div requestFullscreen support
+      enterTheaterMode();
     }
   };
 
-  const handleMouseMove = () => {
-    setShowControls(true);
-    if (displayPlaying) {
-      scheduleHideControls();
-    } else {
+  const handlePointerEnter = (e: React.MouseEvent<HTMLDivElement>) => {
+    isPointerInsidePlayerRef.current = true;
+    lastPointerPosRef.current = { x: e.clientX, y: e.clientY };
+    revealControls(2500);
+  };
+
+  const handlePointerLeave = () => {
+    isPointerInsidePlayerRef.current = false;
+    clearSafeZoneTimer();
+
+    // In windowed mode, when user leaves the player while playing:
+    // Controls should hide smoothly right away without waiting 2.5 - 3 seconds!
+    if (displayPlaying && !isControlsPinned()) {
       clearHideControls();
+      setShowControls(false);
+    }
+  };
+
+  const handlePointerMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    // If it was a touch event emulating mouse, ignore
+    if (isTouchInteractionRef.current) {
+      isTouchInteractionRef.current = false;
+      return;
+    }
+
+    isPointerInsidePlayerRef.current = true;
+    const x = e.clientX;
+    const y = e.clientY;
+
+    const prevX = lastPointerPosRef.current.x;
+    const prevY = lastPointerPosRef.current.y;
+    const dx = Math.abs(x - prevX);
+    const dy = Math.abs(y - prevY);
+    const distance = Math.hypot(dx, dy);
+
+    lastPointerPosRef.current = { x, y };
+
+    const wrapper = wrapperRef.current;
+    if (!wrapper) return;
+    const rect = wrapper.getBoundingClientRect();
+
+    const isFullscreenActive = fullscreenModeRef.current !== 'NONE';
+
+    // 1. FULLSCREEN SAFE ZONE (Left 12% of screen)
+    if (isFullscreenActive) {
+      const isOverBottomControls = y >= rect.bottom - 80;
+      const isInLeftSafeZone = (x - rect.left) < (rect.width * 0.12);
+
+      // If mouse is inside the Left Safe Zone AND NOT targeting the bottom controls:
+      if (isInLeftSafeZone && !isOverBottomControls && !isControlsPinned()) {
+        // Do NOT trigger controls to appear!
+        // If controls are currently visible, auto-hide them quickly (after 600ms)
+        if (showControls) {
+          if (!safeZoneTimerRef.current) {
+            safeZoneTimerRef.current = setTimeout(() => {
+              if (!isControlsPinned()) {
+                setShowControls(false);
+                setIsCursorHidden(true);
+              }
+            }, 600);
+          }
+        }
+        return;
+      }
+    }
+
+    // 2. MOVEMENT THRESHOLD
+    // In Fullscreen: require significant movement (>= 6px) to avoid micro-jitter waking controls
+    // In Windowed: threshold >= 3px
+    const minThreshold = isFullscreenActive ? 6 : 3;
+    if (distance < minThreshold && prevX >= 0) {
+      return;
+    }
+
+    // 3. REVEAL CONTROLS UPON VALID MOVEMENT
+    revealControls(2500);
+  };
+
+  const handleTouchStart = () => {
+    isTouchInteractionRef.current = true;
+    // On touch devices: toggle controls when playing
+    if (displayPlaying) {
+      if (showControls) {
+        clearHideControls();
+        setShowControls(false);
+      } else {
+        revealControls(3000);
+      }
+    } else {
+      revealControls(3000);
+    }
+  };
+
+  const handleControlsMouseEnter = () => {
+    isInteractingWithControlsRef.current = true;
+    clearHideControls();
+    setShowControls(true);
+    setIsCursorHidden(false);
+  };
+
+  const handleControlsMouseLeave = () => {
+    isInteractingWithControlsRef.current = false;
+    if (displayPlaying && !isControlsPinned()) {
+      scheduleHideControls(2500);
+    }
+  };
+
+  const handleControlsFocus = () => {
+    isKeyboardFocusedRef.current = true;
+    clearHideControls();
+    setShowControls(true);
+    setIsCursorHidden(false);
+  };
+
+  const handleControlsBlur = (e: React.FocusEvent<HTMLDivElement>) => {
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      isKeyboardFocusedRef.current = false;
+      if (displayPlaying && !isControlsPinned()) {
+        scheduleHideControls(2500);
+      }
     }
   };
 
@@ -842,8 +1208,7 @@ export default function YouTubePlayer({
       if (canSeekFree || clampedTime !== ct || deltaSeconds < 0) {
         playerRef.current.seekTo(clampedTime, true);
         setCurrentTime(clampedTime);
-        setShowControls(true);
-        scheduleHideControls();
+        revealControls(2500);
       }
     } catch {}
   };
@@ -852,6 +1217,12 @@ export default function YouTubePlayer({
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return;
+      }
+
+      if (e.key === 'Escape' && fullscreenModeRef.current === 'THEATER') {
+        e.preventDefault();
+        exitTheaterMode();
         return;
       }
 
@@ -869,24 +1240,44 @@ export default function YouTubePlayer({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [canSeekFree, duration, serverConfirmedFurthest, displayPlaying, isReady]);
+  }, [canSeekFree, duration, serverConfirmedFurthest, displayPlaying, isReady, exitTheaterMode]);
 
   return (
     <div
       ref={wrapperRef}
-      onMouseMove={handleMouseMove}
-      onTouchStart={handleMouseMove}
-      className={`relative w-full bg-black overflow-hidden select-none group ${
+      onMouseEnter={handlePointerEnter}
+      onMouseMove={handlePointerMove}
+      onMouseLeave={handlePointerLeave}
+      onTouchStart={handleTouchStart}
+      className={`relative w-full bg-black select-none group transition-[border-radius] duration-200 ${
+        isFullscreen && isCursorHidden && displayPlaying ? '!cursor-none' : 'cursor-default'
+      } ${
         isFullscreen
-          ? 'fixed inset-0 z-[9999] w-screen h-screen !max-h-none !max-w-none rounded-none aspect-auto'
-          : 'aspect-video rounded-3xl'
+          ? 'fixed inset-0 z-[99999] !w-screen !h-screen !h-[100dvh] !max-h-none !max-w-none rounded-none aspect-auto overflow-hidden flex items-center justify-center'
+          : 'aspect-video rounded-3xl overflow-hidden'
       }`}
     >
-      {/* YouTube Player Native Container (phóng nhẹ 1.05 để đưa dải watermark/logo sát mép ngoài vùng hiển thị) */}
+      {/* Explicit Exit Fullscreen Button in Theater / Fullscreen Mode (Essential for mobile & iOS) */}
+      {isFullscreen && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            toggleFullscreen();
+          }}
+          className="absolute top-4 right-4 z-40 px-3.5 py-2 rounded-xl bg-slate-900/95 hover:bg-slate-800 active:bg-slate-700 text-white border border-slate-700/80 text-xs font-bold flex items-center gap-1.5 shadow-xl backdrop-blur-md transition-all active:scale-95 cursor-pointer touch-manipulation select-none mt-[env(safe-area-inset-top)] mr-[env(safe-area-inset-right)]"
+          title="Thu nhỏ màn hình (Esc)"
+        >
+          <span className="text-sm">🗗</span>
+          <span>Thu nhỏ</span>
+        </button>
+      )}
+
+      {/* YouTube Player Native Container */}
       <div
         ref={containerRef}
         className={`w-full h-full pointer-events-none origin-center ${
-          isFullscreen ? 'scale-100 flex items-center justify-center' : 'scale-[1.05]'
+          isFullscreen ? 'scale-100 flex items-center justify-center aspect-video max-h-full max-w-full' : 'scale-100'
         }`}
       />
 
@@ -935,15 +1326,15 @@ export default function YouTubePlayer({
 
       {/* Play/Pause Click Overlay: bao quát toàn khung nhưng để hở dải dưới cho thanh điều khiển */}
       {!videoError && isReady && (
-        <div onClick={togglePlay} className="absolute inset-x-0 top-0 bottom-20 cursor-pointer z-10" />
+        <div onClick={togglePlay} className="absolute inset-x-0 top-0 bottom-24 cursor-pointer z-10" />
       )}
 
-      {/* Video tạm dừng: giữ nguyên frame đang hiển thị — chỉ phủ gradient mỏng và nhãn,
-          không phủ nền đen toàn khung và không vẽ thêm biểu tượng Play to đè lên YouTube. */}
+      {/* Video tạm dừng: giữ nguyên frame đang hiển thị — KHÔNG phủ gradient tối đen che mờ video,
+          chỉ hiển thị nhãn nổi bo góc tương phản cao ở giữa khung hình */}
       {!videoError && isReady && !displayPlaying && (
-        <div className="pointer-events-none absolute inset-0 z-[6] flex flex-col items-center justify-center gap-2 bg-gradient-to-b from-black/20 via-transparent to-black/30">
-          <span className="rounded-full bg-black/60 border border-white/20 px-3 py-1 text-[11px] font-semibold text-white/90 shadow-md backdrop-blur-sm">
-            Bấm để phát
+        <div className="pointer-events-none absolute inset-0 z-[6] flex flex-col items-center justify-center">
+          <span className="rounded-full bg-slate-900/90 border border-slate-600/80 px-4 py-1.5 text-xs font-bold text-white shadow-xl backdrop-blur-md">
+            ▶ Bấm để phát
           </span>
         </div>
       )}
@@ -993,124 +1384,155 @@ export default function YouTubePlayer({
         </div>
       )}
 
-      {/* Custom Video Controls Bar */}
+      {/* High-Contrast Floating Video Controls Bar */}
       {!videoError && isReady && (
         <div
-          className={`absolute bottom-0 inset-x-0 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] z-30 transition-opacity duration-300 [text-shadow:0_1px_3px_rgba(0,0,0,0.85)] ${
-            showControls || !displayPlaying ? 'opacity-100' : 'opacity-0 pointer-events-none'
+          onMouseEnter={handleControlsMouseEnter}
+          onMouseLeave={handleControlsMouseLeave}
+          onFocusCapture={handleControlsFocus}
+          onBlurCapture={handleControlsBlur}
+          className={`absolute bottom-0 inset-x-0 z-30 transition-all duration-300 pointer-events-auto select-none ${
+            showControls || !displayPlaying ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2 pointer-events-none'
           }`}
         >
-          {/* Timeline Bar */}
-          <div
-            onClick={handleSeek}
-            className="relative h-2 bg-white/20 rounded-full cursor-pointer mb-3 group/timeline overflow-hidden"
-            title={canSeekFree ? 'Bấm để tua video' : 'Chỉ có thể tua trong đoạn đã xem'}
-          >
-            {/* Furthest Watched Bar (Allowed Seek Range for Members) */}
+          {/* Pure Floating Controls: NO dark gradient or black band covering the video bottom.
+              Every control element has its own compact high-contrast pill backdrop. */}
+
+          <div className="relative px-3 sm:px-4 pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2">
+            {/* Timeline Bar (High-Contrast Track with distinct scrubber thumb) */}
             <div
-              className="absolute top-0 bottom-0 left-0 bg-white/40 rounded-full"
-              style={{ width: `${canSeekFree ? 100 : allowedSeekPercent}%` }}
-            />
-            {/* Current Watched Position */}
-            <div
-              className="absolute top-0 bottom-0 left-0 bg-[#2563EB] rounded-full"
-              style={{ width: `${progressPercent}%` }}
-            />
-          </div>
-
-          <div className="flex items-center justify-between gap-1 sm:gap-2 text-white text-xs font-semibold">
-            {/* Play/Pause & Time Display */}
-            <div className="flex items-center gap-1.5 sm:gap-3 min-w-0">
-              <button
-                type="button"
-                onClick={togglePlay}
-                className="w-7 h-7 sm:w-8 sm:h-8 shrink-0 flex items-center justify-center bg-white/20 hover:bg-white/30 rounded-lg text-xs sm:text-sm transition"
-                title={displayPlaying ? 'Tạm dừng (Phím cách/Space)' : 'Phát video (Phím cách/Space)'}
-              >
-                {displayPlaying ? '⏸' : '▶'}
-              </button>
-
-              {/* Rewind 10s */}
-              <button
-                type="button"
-                onClick={() => seekDelta(-10)}
-                className="px-1.5 sm:px-2 py-1 shrink-0 flex items-center gap-0.5 sm:gap-1 bg-white/10 hover:bg-white/25 rounded-lg text-[10px] sm:text-[11px] font-semibold transition text-slate-200 hover:text-white"
-                title="Tua lùi 10 giây (Phím mũi tên trái ←)"
-              >
-                <span>↺</span>
-                <span>10s</span>
-              </button>
-
-              {/* Forward 10s */}
-              <button
-                type="button"
-                disabled={!canSeekFree && currentTime + 3 >= guardRef.current.computeAllowedManualSeekUntil()}
-                onClick={() => seekDelta(10)}
-                className="px-1.5 sm:px-2 py-1 shrink-0 flex items-center gap-0.5 sm:gap-1 bg-white/10 hover:bg-white/25 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg text-[10px] sm:text-[11px] font-semibold transition text-slate-200 hover:text-white"
-                title={canSeekFree || currentTime + 3 < guardRef.current.computeAllowedManualSeekUntil() ? 'Tua tới 10 giây (Phím mũi tên phải →)' : 'Học viên không thể tua tới đoạn chưa học'}
-              >
-                <span>10s</span>
-                <span>↻</span>
-              </button>
-
-              <span className="text-[10px] sm:text-xs shrink-0 whitespace-nowrap">
-                {formatTime(currentTime)} / {formatTime(duration)}
-              </span>
-
-              {canSeekFree ? (
-                <span className="text-[10px] text-amber-300 font-normal px-2 py-0.5 bg-amber-900/40 rounded-full hidden md:inline shrink-0">
-                  Có thể tua
-                </span>
-              ) : (
-                <span className="text-[10px] text-slate-400 font-normal px-2 py-0.5 bg-slate-800/60 rounded-full hidden lg:inline shrink-0">
-                  Không thể tua tới
-                </span>
-              )}
-            </div>
-
-            {/* Right Controls: Speed & Fullscreen */}
-            <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-              {/* Mobile Playback Speed Button (cycles speed on tap without crowding the bar) */}
-              <button
-                type="button"
-                onClick={cyclePlaybackRate}
-                className="sm:hidden px-2 py-1 rounded-lg text-xs bg-white/20 hover:bg-white/30 text-white font-bold transition shrink-0"
-                title="Đổi tốc độ phát (chạm để chuyển)"
-              >
-                {playbackRate}x
-              </button>
-
-              {/* Desktop Playback Speed Controls */}
-              <div className="hidden sm:flex items-center gap-1">
-                <span className="text-slate-300 text-[11px] hidden md:inline">Tốc độ:</span>
-                {[1, 1.25, 1.5, 1.75, 2].map((rate) => (
-                  <button
-                    key={rate}
-                    type="button"
-                    onClick={() => setSpeed(rate)}
-                    className={`px-1.5 md:px-2 py-1 rounded-lg text-xs transition ${
-                      playbackRate === rate
-                        ? 'bg-[#2563EB] text-white font-bold'
-                        : 'bg-white/10 hover:bg-white/20 text-slate-200'
-                    }`}
-                  >
-                    {rate}x
-                  </button>
-                ))}
+              ref={timelineRef}
+              onClick={handleSeek}
+              onPointerDown={handleTimelinePointerDown}
+              onPointerMove={handleTimelinePointerMove}
+              onPointerUp={handleTimelinePointerUp}
+              onPointerCancel={handleTimelinePointerUp}
+              className="relative py-2.5 cursor-pointer group/timeline select-none touch-manipulation"
+              title={canSeekFree ? 'Bấm để tua video' : 'Chỉ có thể tua trong đoạn đã xem'}
+            >
+              {/* Timeline Track (Solid Dark Slate Track with subtle border & shadow) */}
+              <div className="relative h-2 w-full bg-slate-800/90 rounded-full overflow-hidden border border-slate-600/70 shadow-sm backdrop-blur-xs">
+                {/* Furthest Watched Bar (Allowed Seek Range for Members) */}
+                <div
+                  className="absolute top-0 bottom-0 left-0 bg-slate-400/90 rounded-full transition-all duration-150"
+                  style={{ width: `${canSeekFree ? 100 : allowedSeekPercent}%` }}
+                />
+                {/* Current Watched Position (Vibrant BBE Blue) */}
+                <div
+                  className="absolute top-0 bottom-0 left-0 bg-[#2563EB] rounded-full transition-all duration-75 shadow-sm"
+                  style={{ width: `${progressPercent}%` }}
+                />
               </div>
 
-              {/* Fullscreen Button */}
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  toggleFullscreen();
-                }}
-                className="w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center bg-white/20 hover:bg-white/30 rounded-lg text-xs sm:text-sm transition ml-0.5 sm:ml-1 shrink-0 cursor-pointer"
-                title={isFullscreen ? 'Thu nhỏ màn hình (Esc)' : 'Toàn màn hình (Fullscreen)'}
-              >
-                {isFullscreen ? '🗗' : '⛶'}
-              </button>
+              {/* Scrubber Playhead Handle (White Thumb with BBE Blue ring) */}
+              <div
+                className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3.5 h-3.5 sm:w-4 sm:h-4 bg-white border-2 border-[#2563EB] rounded-full shadow-md pointer-events-none transition-transform group-hover/timeline:scale-125"
+                style={{ left: `${Math.min(100, Math.max(0, progressPercent))}%` }}
+              />
+            </div>
+
+            {/* Bottom Row Controls */}
+            <div className="flex items-center justify-between gap-1 sm:gap-2 text-white">
+              {/* Left Group: Play/Pause, Rewind 10s, Forward 10s, Time Display, Status Badge */}
+              <div className="flex items-center gap-1 sm:gap-2 min-w-0">
+                {/* Play / Pause Button */}
+                <button
+                  type="button"
+                  onClick={togglePlay}
+                  className="min-w-[36px] h-[36px] sm:min-w-[40px] sm:h-[40px] px-2 shrink-0 flex items-center justify-center bg-[#1e293b]/90 hover:bg-[#334155] active:bg-[#475569] text-white border border-slate-600/80 rounded-xl text-xs sm:text-sm font-bold transition shadow-md backdrop-blur-sm cursor-pointer touch-manipulation select-none"
+                  title={displayPlaying ? 'Tạm dừng (Phím cách/Space)' : 'Phát video (Phím cách/Space)'}
+                >
+                  {displayPlaying ? '⏸' : '▶'}
+                </button>
+
+                {/* Rewind 10s */}
+                <button
+                  type="button"
+                  onClick={() => seekDelta(-10)}
+                  className="h-[36px] sm:h-[40px] px-2 sm:px-2.5 shrink-0 flex items-center gap-0.5 sm:gap-1 bg-[#1e293b]/90 hover:bg-[#334155] active:bg-[#475569] text-[#F1F5F9] border border-slate-600/80 rounded-xl text-[11px] sm:text-xs font-bold transition shadow-md backdrop-blur-sm cursor-pointer touch-manipulation select-none"
+                  title="Tua lùi 10 giây (Phím mũi tên trái ←)"
+                >
+                  <span className="text-xs">↺</span>
+                  <span>10s</span>
+                </button>
+
+                {/* Forward 10s */}
+                <button
+                  type="button"
+                  disabled={!canSeekFree && currentTime + 3 >= guardRef.current.computeAllowedManualSeekUntil()}
+                  onClick={() => seekDelta(10)}
+                  className="h-[36px] sm:h-[40px] px-2 sm:px-2.5 shrink-0 flex items-center gap-0.5 sm:gap-1 bg-[#1e293b]/90 hover:bg-[#334155] active:bg-[#475569] disabled:opacity-35 disabled:cursor-not-allowed text-[#F1F5F9] border border-slate-600/80 rounded-xl text-[11px] sm:text-xs font-bold transition shadow-md backdrop-blur-sm cursor-pointer touch-manipulation select-none"
+                  title={canSeekFree || currentTime + 3 < guardRef.current.computeAllowedManualSeekUntil() ? 'Tua tới 10 giây (Phím mũi tên phải →)' : 'Học viên không thể tua tới đoạn chưa học'}
+                >
+                  <span>10s</span>
+                  <span className="text-xs">↻</span>
+                </button>
+
+                {/* Floating High-Contrast Time Display Badge */}
+                <div className="flex items-center text-[11px] sm:text-xs font-bold tabular-nums ml-0.5 sm:ml-1 whitespace-nowrap select-none bg-[#0f172a]/85 border border-slate-700/70 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-xl shadow-md backdrop-blur-xs">
+                  <span className="text-white">{formatTime(currentTime)}</span>
+                  <span className="text-slate-400 mx-1">/</span>
+                  <span className="text-slate-300">{formatTime(duration)}</span>
+                </div>
+
+                {/* Status Badge */}
+                {canSeekFree ? (
+                  <span className="text-[10px] text-amber-200 font-semibold px-2 py-1 bg-amber-950/85 border border-amber-600/60 rounded-xl shadow-md backdrop-blur-xs hidden lg:inline-flex items-center gap-1 shrink-0">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                    Có thể tua
+                  </span>
+                ) : (
+                  <span className="text-[10px] text-slate-300 font-semibold px-2 py-1 bg-slate-800/85 border border-slate-700/70 rounded-xl shadow-md backdrop-blur-xs hidden xl:inline-flex items-center gap-1 shrink-0">
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+                    Chưa mở tua tới
+                  </span>
+                )}
+              </div>
+
+              {/* Right Group: Playback Speed & Fullscreen */}
+              <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                {/* Mobile Speed Cycle Button */}
+                <button
+                  type="button"
+                  onClick={cyclePlaybackRate}
+                  className="sm:hidden h-[36px] min-w-[36px] px-2 rounded-xl text-xs bg-[#1e293b]/90 hover:bg-[#334155] active:bg-[#475569] text-white font-bold border border-slate-600/80 transition shadow-md backdrop-blur-sm shrink-0 flex items-center justify-center cursor-pointer touch-manipulation select-none"
+                  title="Đổi tốc độ phát (chạm để chuyển)"
+                >
+                  {playbackRate}x
+                </button>
+
+                {/* Desktop Playback Speed Controls */}
+                <div className="hidden sm:flex items-center gap-1 bg-slate-900/90 p-0.5 rounded-xl border border-slate-700/80 shadow-md backdrop-blur-sm">
+                  <span className="text-slate-400 text-[11px] px-1.5 font-medium hidden md:inline">Tốc độ:</span>
+                  {[1, 1.25, 1.5, 1.75, 2].map((rate) => (
+                    <button
+                      key={rate}
+                      type="button"
+                      onClick={() => setSpeed(rate)}
+                      className={`px-2 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                        playbackRate === rate
+                          ? 'bg-[#2563EB] text-white shadow-sm'
+                          : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                      }`}
+                    >
+                      {rate}x
+                    </button>
+                  ))}
+                </div>
+
+                {/* Fullscreen Button */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleFullscreen();
+                  }}
+                  className="min-w-[36px] h-[36px] sm:min-w-[40px] sm:h-[40px] flex items-center justify-center bg-[#1e293b]/90 hover:bg-[#334155] active:bg-[#475569] text-white border border-slate-600/80 rounded-xl text-xs sm:text-sm font-bold transition shadow-md backdrop-blur-sm shrink-0 cursor-pointer touch-manipulation select-none"
+                  title={isFullscreen ? 'Thu nhỏ màn hình (Esc)' : 'Toàn màn hình (Fullscreen)'}
+                >
+                  {isFullscreen ? '🗗' : '⛶'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
