@@ -5,25 +5,33 @@ import { highWaterIncrement } from '../lib/learning-cycle-rules'
 import { starsForVideoDuration } from '../lib/reward-rules'
 
 describe('P0 — Anti-Seek & Video Progress Integrity', () => {
-  it('capVideoProgress strictly caps client-reported furthest to wall-clock elapsed time at max rate', () => {
+  it('capVideoProgress strictly caps client-reported furthest to wall-clock elapsed time at max rate and rejects discontinuous seeks', () => {
     const currentFurthest = 10
-    const requestedPosition = 500
-    const requestedFurthest = 500
-    const elapsedSeconds = 5 // only 5 seconds passed in reality
+    const continuousPosition = 20
+    const elapsedSeconds = 5 // 5 seconds passed in reality
     const maxPlaybackRate = 2
 
-    const result = capVideoProgress(
+    // 1. Continuous forward playback reaches 20s legitimately
+    const continuousResult = capVideoProgress(
       currentFurthest,
-      requestedPosition,
-      requestedFurthest,
+      continuousPosition,
+      continuousPosition,
       elapsedSeconds,
       maxPlaybackRate,
     )
+    assert.equal(continuousResult.furthestWatchedPositionSeconds, 20)
+    assert.equal(continuousResult.lastPositionSeconds, 20)
 
-    // Maximum reachable = 10 + 5 * 2 = 20 seconds.
-    // It must NEVER allow jumping to 500s.
-    assert.equal(result.furthestWatchedPositionSeconds, 20)
-    assert.equal(result.lastPositionSeconds, 20)
+    // 2. Discontinuous jump to 500s must NEVER award unearned progress (must remain at 10s)
+    const seekResult = capVideoProgress(
+      currentFurthest,
+      500,
+      500,
+      elapsedSeconds,
+      maxPlaybackRate,
+    )
+    assert.equal(seekResult.furthestWatchedPositionSeconds, 10, 'Discontinuous forward seek must not advance furthest')
+    assert.equal(seekResult.lastPositionSeconds, 10)
   })
 
   it('rejects zero or negative elapsed time without making progress', () => {

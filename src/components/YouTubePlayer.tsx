@@ -396,6 +396,8 @@ export default function YouTubePlayer({
         };
 
         playerRef.current = new window.YT.Player(mountDiv, {
+          width: '100%',
+          height: '100%',
           videoId: youtubeVideoId,
           playerVars: {
             controls: 0,
@@ -948,9 +950,7 @@ export default function YouTubePlayer({
       {/* YouTube Player Native Container */}
       <div
         ref={containerRef}
-        className={`w-full h-full pointer-events-none origin-center ${
-          isFullscreen ? 'scale-100 flex items-center justify-center aspect-video max-h-full max-w-full' : 'scale-100'
-        }`}
+        className="w-full h-full pointer-events-none origin-center flex items-center justify-center overflow-hidden"
       />
 
       {/* Loading Skeleton: hiển thị "Đang tải video..." ngay lập tức khi khởi tạo */}

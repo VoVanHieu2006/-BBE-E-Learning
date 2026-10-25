@@ -347,13 +347,20 @@ describe('strict video progress', () => {
     assert.equal(hasWatchedFullVideo(100, Number.NaN), false)
   })
 
-  it('limits reported progress to elapsed time at 2x, retaining prior progress', () => {
-    assert.deepEqual(capVideoProgress(0, 600, 600, 10), {
+  it('limits reported progress to elapsed time at 2x, retaining prior progress and rejecting discontinuous seeks', () => {
+    // Continuous forward playback over 10s at 2x legitimately reaches 20s
+    assert.deepEqual(capVideoProgress(0, 20, 20, 10), {
       furthestWatchedPositionSeconds: 20,
       lastPositionSeconds: 20,
     })
+    // Unauthorized forward jump to 600s is blocked: cannot claim 20s of unearned progress
+    assert.deepEqual(capVideoProgress(0, 600, 600, 10), {
+      furthestWatchedPositionSeconds: 0,
+      lastPositionSeconds: 0,
+    })
+    // Rewinding to 5s retains prior furthest of 40s without advancing furthest while rewound
     assert.deepEqual(capVideoProgress(40, 5, 100, 10), {
-      furthestWatchedPositionSeconds: 60,
+      furthestWatchedPositionSeconds: 40,
       lastPositionSeconds: 5,
     })
     assert.equal(capVideoProgress(20, 500, 500, 0).furthestWatchedPositionSeconds, 20)

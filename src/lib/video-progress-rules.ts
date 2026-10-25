@@ -69,12 +69,22 @@ export function hasCompletedVideoAtEnd(
 }
 
 /**
- * Cap client-reported watch progress to the elapsed wall time at the fastest
- * supported playback rate. Keeping this pure makes the anti-seek rule testable.
+ * Cap client-reported watch progress by verifying continuous playback from the
+ * server-confirmed furthest point.
  *
- * - `currentFurthestSeconds` is the server's accepted content position.
- * - `elapsedSeconds` is the verified server-side gap between heartbeats.
- * - `graceSeconds` is only supplied for an explicit ENDED event.
+ * Requirements:
+ * 1. Legitimate continuous forward playback:
+ *    - Starts within or near already authorized territory (position <= current + jitter).
+ *    - Advances by at most the verified wall-clock elapsed time at the supported playback rate.
+ * 2. Unauthorized forward jump / seek (e.g. from 60s to 540s):
+ *    - If position exceeds what could physically be watched continuously (position > continuousCeiling),
+ *      the learner is playing in unverified/skipped territory.
+ *    - This remote watch time must NEVER be credited as progress from currentFurthest.
+ *    - Furthest remains strictly at currentFurthest.
+ * 3. Rewind or replaying inside already verified territory (position <= current):
+ *    - Furthest remains at currentFurthest (monotonic).
+ *    - lastPosition updates to reflect the current rewound position.
+ * 4. Client-reported furthest (requestedFurthestSeconds) is never trusted independently.
  */
 export function capVideoProgress(
   currentFurthestSeconds: number,
@@ -87,18 +97,36 @@ export function capVideoProgress(
   const nonNegative = (value: number) => Number.isFinite(value) ? Math.max(0, value) : 0
   const current = nonNegative(currentFurthestSeconds)
   const position = nonNegative(requestedPositionSeconds)
-  const requestedFurthest = nonNegative(requestedFurthestSeconds)
   const elapsed = nonNegative(elapsedSeconds)
   const rate = Math.min(MAX_VIDEO_PLAYBACK_RATE, nonNegative(maxPlaybackRate))
   const grace = Math.min(10, nonNegative(graceSeconds))
-  const maximumReachable = current + elapsed * rate + grace
-  const furthestWatchedPositionSeconds = Math.max(
-    current,
-    Math.min(Math.max(position, requestedFurthest), maximumReachable),
-  )
 
+  // Allow a small jitter buffer (2.0s) for audio clock drift and timer sampling
+  const jitterTolerance = Math.max(2.0, rate * 1.2)
+  const maxAdvance = elapsed * rate + grace + jitterTolerance
+  const continuousCeiling = current + maxAdvance
+
+  if (position <= current) {
+    // Rewind or replaying inside already verified territory
+    return {
+      furthestWatchedPositionSeconds: current,
+      lastPositionSeconds: position,
+    }
+  }
+
+  if (position <= continuousCeiling) {
+    // Continuous legitimate forward playback starting from or near current furthest
+    return {
+      furthestWatchedPositionSeconds: Math.max(current, position),
+      lastPositionSeconds: position,
+    }
+  }
+
+  // Unauthorized forward jump / seek into unverified territory!
+  // The player is at a remote position (position > continuousCeiling).
+  // This cannot be accepted as proof of continuous watch time from current.
   return {
-    furthestWatchedPositionSeconds,
-    lastPositionSeconds: Math.min(position, furthestWatchedPositionSeconds),
+    furthestWatchedPositionSeconds: current,
+    lastPositionSeconds: current,
   }
 }

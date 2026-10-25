@@ -195,6 +195,15 @@ body.bbe-fullscreen-locked {
   background: #000;
 }
 
+/* Ensure embedded YouTube iframe fills the player container completely across mobile and desktop */
+[data-video-player] iframe,
+.bbe-player-fullscreen iframe {
+  width: 100% !important;
+  height: 100% !important;
+  display: block !important;
+  border: 0 !important;
+}
+
 /* Only used on browsers without a working Popover top layer. Restored on exit. */
 .bbe-theater-ancestor {
   overflow: visible !important;

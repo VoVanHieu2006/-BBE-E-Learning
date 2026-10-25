@@ -15,7 +15,6 @@ export class VideoFullscreen {
   private historyToken = '';
   private historyUrl = '';
   private ancestors: HTMLElement[] = [];
-  private popover = false;
   private readonly doc: Document;
   private readonly events = ['fullscreenchange', 'webkitfullscreenchange', 'mozfullscreenchange', 'MSFullscreenChange'];
   private readonly errors = ['fullscreenerror', 'webkitfullscreenerror'];
@@ -55,11 +54,6 @@ export class VideoFullscreen {
   }
 
   private removeTheater() {
-    if (this.popover) {
-      try { this.wrapper.hidePopover(); } catch {}
-      this.wrapper.removeAttribute('popover');
-      this.popover = false;
-    }
     this.ancestors.forEach(element => element.classList.remove('bbe-theater-ancestor'));
     this.ancestors = [];
     this.doc.documentElement.classList.remove('bbe-fullscreen-locked');
@@ -73,21 +67,11 @@ export class VideoFullscreen {
     this.nativeRequested = false;
     try {
       this.wrapper.classList.add('bbe-player-fullscreen');
-      // Top layer escapes overflow, transforms and stacking contexts, without reparenting.
-      if (typeof this.wrapper.showPopover === 'function') {
-        try {
-          this.wrapper.setAttribute('popover', 'manual');
-          this.wrapper.showPopover();
-          this.popover = true;
-        } catch { this.wrapper.removeAttribute('popover'); }
-      }
-      // Older WebKit without Popover: temporarily remove ancestor containing blocks.
-      if (!this.popover) {
-        for (let element = this.wrapper.parentElement; element; element = element.parentElement) {
-          if (!element.classList.contains('bbe-theater-ancestor')) {
-            element.classList.add('bbe-theater-ancestor');
-            this.ancestors.push(element);
-          }
+      // Neutralize ancestor containing blocks without moving or reloading the iframe
+      for (let element = this.wrapper.parentElement; element; element = element.parentElement) {
+        if (!element.classList.contains('bbe-theater-ancestor')) {
+          element.classList.add('bbe-theater-ancestor');
+          this.ancestors.push(element);
         }
       }
       this.doc.documentElement.classList.add('bbe-fullscreen-locked');
