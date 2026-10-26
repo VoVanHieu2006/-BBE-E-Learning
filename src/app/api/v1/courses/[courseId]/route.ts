@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getCourseDetailServerCache, setCourseDetailServerCache, invalidateCoursesServerCache } from '@/lib/server-cache'
+import { LEARNING_PROGRAMS } from '@/lib/learning-catalog'
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -209,7 +210,22 @@ export async function PATCH(request: NextRequest, { params }: { params: { course
     if (programCode === null || programCode === '') {
       targetProgramId = null
     } else {
-      const prog = await prisma.learningProgram.findUnique({ where: { code: programCode } })
+      let prog = await prisma.learningProgram.findUnique({ where: { code: programCode } })
+      if (!prog) {
+        const catalogProg = LEARNING_PROGRAMS.find((p) => p.code === programCode)
+        if (catalogProg) {
+          prog = await prisma.learningProgram.upsert({
+            where: { code: programCode },
+            update: {},
+            create: {
+              code: catalogProg.code,
+              name: catalogProg.name,
+              is_core: catalogProg.is_core,
+              sort_order: catalogProg.sort_order,
+            },
+          })
+        }
+      }
       if (!prog) {
         return NextResponse.json({ error: { code: 'ProgramNotFound', message: 'Chương trình học không tồn tại' } }, { status: 400 })
       }

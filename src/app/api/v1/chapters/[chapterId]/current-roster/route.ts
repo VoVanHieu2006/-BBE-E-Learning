@@ -6,6 +6,7 @@ import { EXACT_7_BANS, ORDERED_CHAPTER_ROSTER, CHAPTER_ROSTER_COLUMNS } from '@/
 import { listChapterMembers } from '@/lib/chapter-members'
 import { getActiveMetricChapterIds } from '@/lib/active-chapters'
 import { applyDueChapterReorganizations } from '@/lib/chapter-reorganizations'
+import { ensureChapterStandardDepartments } from '@/lib/chapter-departments'
 
 export async function GET(
   request: NextRequest,
@@ -35,6 +36,9 @@ export async function GET(
   if (!chapter || !chapter.organization_unit_id) {
     return NextResponse.json({ error: { code: 'ChapterNotFound' } }, { status: 404 })
   }
+
+  // Ensure all 7 standard departments exist for this chapter
+  await ensureChapterStandardDepartments(chapter.organization_unit_id)
 
   const [departments, allChapterMembers, scheduledBatchRecord, presidentAssignments] = await Promise.all([
     prisma.organizationUnit.findMany({

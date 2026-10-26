@@ -1,5 +1,6 @@
 import { OrganizationConflict } from '@/lib/chapter-lead'
 import { updateChapterDepartment } from '@/lib/chapter-department-update'
+import { ensureChapterStandardDepartments } from '@/lib/chapter-departments'
 import { lockLearningUser } from '@/lib/learning-periods'
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
@@ -31,6 +32,9 @@ export async function POST(
   const member = await prisma.chapterMember.findUnique({ where: { user_id: params.userId } })
   if (!member || member.chapter_id !== params.chapterId) return NextResponse.json({ error: { code: 'MemberNotInChapter' } }, { status: 404 })
 
+  // Đảm bảo đủ 7 Ban chuẩn cho Chapter
+  await ensureChapterStandardDepartments(chapter.organization_unit_id)
+
   const body = await request.json().catch(() => ({}))
   const departmentUnitId = typeof body.departmentUnitId === 'string' ? body.departmentUnitId.trim() : null
 
@@ -46,15 +50,29 @@ export async function POST(
   }
 
   const targetDept = departments.find((d) => d.id === departmentUnitId)
-  const isPresident = targetDept?.name.toLowerCase() === 'chủ tịch'
+  const isPresident = departmentUnitId === chapter.organization_unit_id || targetDept?.name.toLowerCase() === 'chủ tịch'
   const makeLead = isPresident ? true : Boolean(body.makeLead)
 
-
   try {
-  const updated = await updateChapterDepartment({ chapterId: params.chapterId, userId: params.userId, departmentUnitId, makeLead, actorId: auth.context!.userId })
-  return NextResponse.json({ success: true, ...updated })
-  } catch (error) {
-    if (error instanceof OrganizationConflict) return NextResponse.json({ error: { code: error.code, message: error.message } }, { status: 409 })
-    throw error
+    const updated = await updateChapterDepartment({
+      chapterId: params.chapterId,
+      userId: params.userId,
+      departmentUnitId,
+      makeLead,
+      actorId: auth.context!.userId,
+    })
+    return NextResponse.json({ success: true, ...updated })
+  } catch (error: any) {
+    if (error instanceof OrganizationConflict) {
+      return NextResponse.json({ error: { code: error.code, message: error.message } }, { status: 409 })
+    }
+    if (error?.message === 'InvalidDepartment') {
+      return NextResponse.json({ error: { code: 'InvalidDepartment', message: 'Ban không hợp lệ hoặc không thuộc Chapter này' } }, { status: 400 })
+    }
+    if (error?.message === 'MemberNotInChapter') {
+      return NextResponse.json({ error: { code: 'MemberNotInChapter', message: 'Thành viên không thuộc Chapter này' } }, { status: 404 })
+    }
+    console.error('Error updating member department:', error)
+    return NextResponse.json({ error: { code: 'InternalError', message: error?.message || 'Lỗi cập nhật ban cho thành viên' } }, { status: 500 })
   }
 }
