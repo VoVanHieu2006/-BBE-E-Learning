@@ -10,6 +10,7 @@ type UserRole = 'ADMIN' | 'CHAPTER_LEADER' | 'MEMBER';
 type InvitationRole = 'CHAPTER_LEADER' | 'DNA_LEAD' | 'MEMBER';
 type InvitationStatus = 'PENDING' | 'ACCEPTED' | 'EXPIRED' | 'CANCELLED';
 import bcrypt from 'bcryptjs'
+import { ensureChapterStandardDepartments } from './chapter-departments'
 
 export interface SendInvitationOptions {
   email: string
@@ -385,9 +386,25 @@ export async function acceptInvitation(
     let organizationUnitId = invitation.organization_unit_id
     if (!chapterId && invitation.role === 'CHAPTER_LEADER' && invitation.chapter_name) {
       const unit = await tx.organizationUnit.create({ data: { name: invitation.chapter_name, type: 'CHAPTER' } })
-      const chapter = await tx.chapter.create({ data: { name: invitation.chapter_name, description: invitation.chapter_description, organization_unit_id: unit.id } })
+      const chapter = await tx.chapter.create({
+        data: {
+          name: invitation.chapter_name,
+          description: invitation.chapter_description,
+          organization_unit_id: unit.id,
+          current_term_number: 1,
+        },
+      })
       chapterId = chapter.id
       organizationUnitId = unit.id
+      await tx.chapterCompetitionTerm.create({
+        data: {
+          chapter_id: chapter.id,
+          starts_at: chapter.created_at,
+          ends_at: null,
+          season_id: null,
+        },
+      })
+      await ensureChapterStandardDepartments(unit.id, tx)
       await tx.invitation.update({ where: { id: invitation.id }, data: { chapter_id: chapter.id, organization_unit_id: unit.id } })
     }
     if (chapterId) {
@@ -497,6 +514,7 @@ export async function acceptInvitation(
 export async function getInvitations(params: {
   actorId: string
   actorRole: UserRole
+  kind?: 'LEAD'
   status?: InvitationStatus
   chapterId?: string
   organizationUnitId?: string
@@ -514,6 +532,10 @@ export async function getInvitations(params: {
 
   // Build where clause
   const where: Record<string, unknown> = {}
+  if (params.kind === 'LEAD') {
+    if (actorRole !== 'ADMIN') throw new Error('AccessDenied')
+    where.role = { in: ['CHAPTER_LEADER', 'DNA_LEAD'] }
+  }
 
   // Filter by status
   if (status) where.status = status

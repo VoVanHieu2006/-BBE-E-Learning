@@ -116,7 +116,7 @@ function ChapterManagerLayoutInner({ children }: { children: React.ReactNode }) 
     const chapterId = user.chapterId;
     const PREFETCH_URLS = [
       `/api/v1/chapters/${chapterId}/dashboard/members`,
-      `/api/v1/chapters/${chapterId}/dashboard/members?search=&includeInactive=1`,
+      `/api/v1/chapters/${chapterId}/dashboard/members?search=`,
       `/api/v1/chapters/${chapterId}/dashboard/courses`,
       `/api/v1/invitations?chapterId=${chapterId}`,
     ];

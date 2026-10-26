@@ -1,0 +1,319 @@
+{
+  "createdAt": "2026-10-25T05:02:36.619Z",
+  "kind": "CONDITIONAL_MODEL_NOT_A_1000_VU_TEST",
+  "sourceRuns": [
+    {
+      "runId": "2026-10-24T18-22-34-740Z_08a2b22c",
+      "mode": "diagnostic-read",
+      "diagnosticOnly": true,
+      "thresholds": {
+        "errorRate": 0.01,
+        "p95Ms": 30000
+      }
+    },
+    {
+      "runId": "2026-10-24T18-30-20-514Z_e857472f",
+      "mode": "video",
+      "diagnosticOnly": true,
+      "thresholds": {
+        "errorRate": 0.01,
+        "p95Ms": 30000
+      }
+    },
+    {
+      "runId": "2026-10-24T18-43-40-908Z_f29ee846",
+      "mode": "quiz",
+      "diagnosticOnly": true,
+      "thresholds": {
+        "errorRate": 0.01,
+        "p95Ms": 30000
+      }
+    }
+  ],
+  "measured": {
+    "login": {
+      "samples": 3,
+      "cpuMeanMs": 334,
+      "cpuMinMs": 298,
+      "cpuMaxMs": 360,
+      "wallMeanMs": 5260.605500000001,
+      "sqlMeanCount": 16
+    },
+    "member_courses": {
+      "samples": 3,
+      "cpuMeanMs": 67.33333333333333,
+      "cpuMinMs": 31,
+      "cpuMaxMs": 109,
+      "wallMeanMs": 8103.97643333333,
+      "sqlMeanCount": 37.333333333333336
+    },
+    "streak": {
+      "samples": 3,
+      "cpuMeanMs": 5.333333333333333,
+      "cpuMinMs": 0,
+      "cpuMaxMs": 16,
+      "wallMeanMs": 1962.8086333333365,
+      "sqlMeanCount": 8
+    },
+    "stars": {
+      "samples": 5,
+      "cpuMeanMs": 21.6,
+      "cpuMinMs": 0,
+      "cpuMaxMs": 47,
+      "wallMeanMs": 4490.172279999993,
+      "sqlMeanCount": 21.2
+    },
+    "courses": {
+      "samples": 3,
+      "cpuMeanMs": 15.666666666666666,
+      "cpuMinMs": 0,
+      "cpuMaxMs": 31,
+      "wallMeanMs": 949.7214666666696,
+      "sqlMeanCount": 8.333333333333334
+    },
+    "deadlines": {
+      "samples": 3,
+      "cpuMeanMs": 5.333333333333333,
+      "cpuMinMs": 0,
+      "cpuMaxMs": 16,
+      "wallMeanMs": 891.4764000000044,
+      "sqlMeanCount": 8
+    },
+    "course": {
+      "samples": 3,
+      "cpuMeanMs": 15.666666666666666,
+      "cpuMinMs": 0,
+      "cpuMaxMs": 47,
+      "wallMeanMs": 1060.2810666666774,
+      "sqlMeanCount": 4.333333333333333
+    },
+    "learning": {
+      "samples": 4,
+      "cpuMeanMs": 78.25,
+      "cpuMinMs": 63,
+      "cpuMaxMs": 93,
+      "wallMeanMs": 8306.810049999998,
+      "sqlMeanCount": 74
+    },
+    "progress": {
+      "samples": 4,
+      "cpuMeanMs": 46.75,
+      "cpuMinMs": 16,
+      "cpuMaxMs": 62,
+      "wallMeanMs": 3587.9414249999973,
+      "sqlMeanCount": 28
+    },
+    "leaderboard": {
+      "samples": 3,
+      "cpuMeanMs": 265.6666666666667,
+      "cpuMinMs": 203,
+      "cpuMaxMs": 375,
+      "wallMeanMs": 6150.965866666661,
+      "sqlMeanCount": 35.333333333333336
+    },
+    "lesson": {
+      "samples": 1,
+      "cpuMeanMs": 31,
+      "cpuMinMs": 31,
+      "cpuMaxMs": 31,
+      "wallMeanMs": 4301.485800000002,
+      "sqlMeanCount": 20
+    },
+    "heartbeat": {
+      "samples": 13,
+      "cpuMeanMs": 81.6923076923077,
+      "cpuMinMs": 46,
+      "cpuMaxMs": 219,
+      "wallMeanMs": 8252.201076923076,
+      "sqlMeanCount": 35.15384615384615
+    },
+    "start_quiz": {
+      "samples": 1,
+      "cpuMeanMs": 171,
+      "cpuMinMs": 171,
+      "cpuMaxMs": 171,
+      "wallMeanMs": 29226.4389,
+      "sqlMeanCount": 117
+    },
+    "submit_quiz": {
+      "samples": 1,
+      "cpuMeanMs": 157,
+      "cpuMinMs": 157,
+      "cpuMaxMs": 157,
+      "wallMeanMs": 20593.3107,
+      "sqlMeanCount": 63
+    }
+  },
+  "missingEndpoints": [],
+  "scenarios": [
+    {
+      "learnersAssumed": 100,
+      "apiRpsAssumed": 7.8888888888888875,
+      "apiRequests15Minutes": 7099.999999999999,
+      "apiRequestsOneHour": 28399.999999999996,
+      "localCpuEquivalentCores": 0.5245099715099716,
+      "sqlPerSecondNaiveLinear": 220.8376068376068,
+      "pendingHttpIfLocalLatencyUnchanged": 50.29378526324788,
+      "hobbyInvocationBudgetHoursAtThisRate": 35.21126760563381,
+      "cpuSensitivity": [
+        {
+          "uncalibratedHardwareFactor": 0.5,
+          "projectedCpuCores": 0.2622549857549858,
+          "hobbyFourCpuHoursBudgetWallHours": 15.252331575259499
+        },
+        {
+          "uncalibratedHardwareFactor": 1,
+          "projectedCpuCores": 0.5245099715099716,
+          "hobbyFourCpuHoursBudgetWallHours": 7.626165787629749
+        },
+        {
+          "uncalibratedHardwareFactor": 2,
+          "projectedCpuCores": 1.0490199430199432,
+          "hobbyFourCpuHoursBudgetWallHours": 3.8130828938148746
+        }
+      ]
+    },
+    {
+      "learnersAssumed": 300,
+      "apiRpsAssumed": 23.666666666666664,
+      "apiRequests15Minutes": 21299.999999999996,
+      "apiRequestsOneHour": 85199.99999999999,
+      "localCpuEquivalentCores": 1.5735299145299146,
+      "sqlPerSecondNaiveLinear": 662.5128205128206,
+      "pendingHttpIfLocalLatencyUnchanged": 150.8813557897436,
+      "hobbyInvocationBudgetHoursAtThisRate": 11.737089201877936,
+      "cpuSensitivity": [
+        {
+          "uncalibratedHardwareFactor": 0.5,
+          "projectedCpuCores": 0.7867649572649573,
+          "hobbyFourCpuHoursBudgetWallHours": 5.0841105250865
+        },
+        {
+          "uncalibratedHardwareFactor": 1,
+          "projectedCpuCores": 1.5735299145299146,
+          "hobbyFourCpuHoursBudgetWallHours": 2.54205526254325
+        },
+        {
+          "uncalibratedHardwareFactor": 2,
+          "projectedCpuCores": 3.1470598290598293,
+          "hobbyFourCpuHoursBudgetWallHours": 1.271027631271625
+        }
+      ]
+    },
+    {
+      "learnersAssumed": 500,
+      "apiRpsAssumed": 39.44444444444445,
+      "apiRequests15Minutes": 35500.00000000001,
+      "apiRequestsOneHour": 142000.00000000003,
+      "localCpuEquivalentCores": 2.6225498575498576,
+      "sqlPerSecondNaiveLinear": 1104.1880341880342,
+      "pendingHttpIfLocalLatencyUnchanged": 251.46892631623933,
+      "hobbyInvocationBudgetHoursAtThisRate": 7.04225352112676,
+      "cpuSensitivity": [
+        {
+          "uncalibratedHardwareFactor": 0.5,
+          "projectedCpuCores": 1.3112749287749288,
+          "hobbyFourCpuHoursBudgetWallHours": 3.0504663150519002
+        },
+        {
+          "uncalibratedHardwareFactor": 1,
+          "projectedCpuCores": 2.6225498575498576,
+          "hobbyFourCpuHoursBudgetWallHours": 1.5252331575259501
+        },
+        {
+          "uncalibratedHardwareFactor": 2,
+          "projectedCpuCores": 5.245099715099715,
+          "hobbyFourCpuHoursBudgetWallHours": 0.7626165787629751
+        }
+      ]
+    },
+    {
+      "learnersAssumed": 750,
+      "apiRpsAssumed": 59.16666666666667,
+      "apiRequests15Minutes": 53250.00000000001,
+      "apiRequestsOneHour": 213000.00000000003,
+      "localCpuEquivalentCores": 3.933824786324787,
+      "sqlPerSecondNaiveLinear": 1656.282051282051,
+      "pendingHttpIfLocalLatencyUnchanged": 377.20338947435897,
+      "hobbyInvocationBudgetHoursAtThisRate": 4.694835680751173,
+      "cpuSensitivity": [
+        {
+          "uncalibratedHardwareFactor": 0.5,
+          "projectedCpuCores": 1.9669123931623935,
+          "hobbyFourCpuHoursBudgetWallHours": 2.0336442100345997
+        },
+        {
+          "uncalibratedHardwareFactor": 1,
+          "projectedCpuCores": 3.933824786324787,
+          "hobbyFourCpuHoursBudgetWallHours": 1.0168221050172999
+        },
+        {
+          "uncalibratedHardwareFactor": 2,
+          "projectedCpuCores": 7.867649572649574,
+          "hobbyFourCpuHoursBudgetWallHours": 0.5084110525086499
+        }
+      ]
+    },
+    {
+      "learnersAssumed": 1000,
+      "apiRpsAssumed": 78.8888888888889,
+      "apiRequests15Minutes": 71000.00000000001,
+      "apiRequestsOneHour": 284000.00000000006,
+      "localCpuEquivalentCores": 5.245099715099715,
+      "sqlPerSecondNaiveLinear": 2208.3760683760684,
+      "pendingHttpIfLocalLatencyUnchanged": 502.93785263247867,
+      "hobbyInvocationBudgetHoursAtThisRate": 3.52112676056338,
+      "cpuSensitivity": [
+        {
+          "uncalibratedHardwareFactor": 0.5,
+          "projectedCpuCores": 2.6225498575498576,
+          "hobbyFourCpuHoursBudgetWallHours": 1.5252331575259501
+        },
+        {
+          "uncalibratedHardwareFactor": 1,
+          "projectedCpuCores": 5.245099715099715,
+          "hobbyFourCpuHoursBudgetWallHours": 0.7626165787629751
+        },
+        {
+          "uncalibratedHardwareFactor": 2,
+          "projectedCpuCores": 10.49019943019943,
+          "hobbyFourCpuHoursBudgetWallHours": 0.38130828938148753
+        }
+      ]
+    }
+  ],
+  "assumptions": {
+    "dashboardRequests": 6,
+    "dashboardCycleSeconds": 45,
+    "videoHeartbeatSeconds": 10,
+    "quizSessionSeconds": 180,
+    "quizQuestionCountMeasured": 6,
+    "quizRequestsPerSession": 2,
+    "leaderboardCycleSeconds": 45,
+    "allApiRequestsReachFunctions": true,
+    "loginRefreshStartupMediaExcluded": true,
+    "cacheBehaviorHeldAsSampled": true,
+    "backendPoolLimit": 3
+  },
+  "caveats": [
+    "Local Windows CPU is not Vercel billable CPU; 0.5/1/2 factors are sensitivity assumptions, not a confidence interval.",
+    "CPU counters showed quantization around 15-16ms; zero samples are below resolution, not free execution.",
+    "Cold/warm caches, concurrent scheduling and DB pool behavior will change; SQL/request extrapolation is not measured DB throughput.",
+    "Latency was measured from Vietnam to Supabase us-west-1; Vercel sfo1 is only source configuration, not verified deployed placement/RTT.",
+    "No maximum supported users or SLA claim can be derived from this model."
+  ],
+  "perLearner": {
+    "basis": "Weighted average of the assumed 25/40/20/15 workload, extrapolated from endpoint profiles; not a measured one-hour user session",
+    "apiRequestsPerHour": 284.00000000000006,
+    "cpuSecondsPerHour": 18.882358974358976,
+    "cpuMillisecondsPerWallSecond": 5.245099715099715
+  },
+  "capacityDivision": {
+    "assumption": "Vercel CPU execution cost equals measured local CPU; ignores DB, RAM, scaling distribution and SLA constraints",
+    "learnersPerOneCpuAt100Percent": 190.65414469074378,
+    "learnersPerOneCpuAt70Percent": 133.45790128352064,
+    "equivalentOneCpuInstancesFor1000At70Percent": 8,
+    "learnerHoursFromFourCpuHours": 762.616578762975,
+    "learnerHoursFromOneMillionInvocations": 3521.12676056338
+  }
+}

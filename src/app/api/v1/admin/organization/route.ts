@@ -10,6 +10,7 @@ import { reconcileLearningAssignmentsForUser } from '@/lib/learning-assignments'
 import { organizationParentTypeMatches, organizationSubtreeIds, positionScopeMatchesUnitType, validateOrganizationMove } from '@/lib/organization-scope'
 import { isOrganizationId, normalizeOrganizationPagination, normalizeOrganizationSearch, parseAssignmentFilterStatus, parseMembershipFilterStatus } from '@/lib/organization-admin-rules'
 import { invalidateOrganizationServerCache } from '@/lib/server-cache'
+import { ensureChapterStandardDepartments } from '@/lib/chapter-departments'
 
 
 async function getChapterIdForUnit(unitId: string): Promise<string | null> {
@@ -155,8 +156,19 @@ async function mutateOrganization(request: NextRequest) {
       const result = await prisma.$transaction(async (tx) => {
         const unit = await tx.organizationUnit.create({ data: { name, type: body.type, parent_id: body.parentId || null } })
         const chapter = body.type === 'CHAPTER'
-          ? await tx.chapter.create({ data: { name, organization_unit_id: unit.id } })
+          ? await tx.chapter.create({ data: { name, organization_unit_id: unit.id, current_term_number: 1 } })
           : null
+        if (chapter) {
+          await tx.chapterCompetitionTerm.create({
+            data: {
+              chapter_id: chapter.id,
+              starts_at: chapter.created_at,
+              ends_at: null,
+              season_id: null,
+            },
+          })
+          await ensureChapterStandardDepartments(unit.id, tx)
+        }
         return { unit, chapter }
       })
       return NextResponse.json(result, { status: 201 })

@@ -95,7 +95,7 @@ async function main() {
 
   const first = await recordVideoHeartbeat(user.id, lesson.id, 10, 10)
   assert.equal(first.starReward.amount, 0, 'training completion cannot pay for a new monthly replay')
-  await prisma.monthlyVideoReplay.updateMany({ where: { user_id: user.id, video_id: video.id }, data: { last_heartbeat_at: new Date(Date.now() - 31_000) } })
+  await prisma.monthlyVideoReplay.updateMany({ where: { user_id: user.id, video_id: video.id }, data: { last_heartbeat_at: new Date(Date.now() - 301_000) } })
   assert.equal((await recordVideoHeartbeat(user.id, lesson.id, 10, 10)).replay.watchedSeconds, 0, 'disconnected time is not watched time')
   await prisma.monthlyVideoReplay.updateMany({ where: { user_id: user.id, video_id: video.id }, data: { last_heartbeat_at: new Date(Date.now() - 6000), view_session_id: 'first-view' } })
   assert.equal((await recordVideoHeartbeat(user.id, lesson.id, 10, 10, false, 'new-view')).replay.watchedSeconds, 0, 'a new viewing session cannot claim time elapsed in an earlier tab')

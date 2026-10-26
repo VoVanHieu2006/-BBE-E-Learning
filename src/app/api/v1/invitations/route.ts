@@ -14,6 +14,9 @@ export async function GET(request: NextRequest) {
   }
 
   const url = new URL(request.url)
+  const kind = url.searchParams.get('kind') || undefined
+  if (kind && kind !== 'LEAD') return NextResponse.json({ error: { code: 'ValidationError' } }, { status: 400 })
+  if (kind === 'LEAD' && auth.context!.role !== 'ADMIN') return NextResponse.json({ error: { code: 'AccessDenied' } }, { status: 403 })
   const status = url.searchParams.get('status') as any
   const chapterId = url.searchParams.get('chapterId') || undefined
   const requestedOrganizationUnitId = url.searchParams.get('organizationUnitId') || undefined
@@ -49,7 +52,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: { code: 'AccessDenied' } }, { status: 403 })
   }
 
-  const cacheKey = `${(auth as any).context!.userId}:${status || ''}:${effectiveChapterId || ''}:${effectiveOrganizationUnitId || ''}:${page}:${safeLimit}`
+  const cacheKey = `${(auth as any).context!.userId}:${kind || ''}:${status || ''}:${effectiveChapterId || ''}:${effectiveOrganizationUnitId || ''}:${page}:${safeLimit}`
   const cached = getInvitationsServerCache(cacheKey, INVITATIONS_CACHE_TTL)
   if (cached) {
     return NextResponse.json(cached, {
@@ -59,6 +62,7 @@ export async function GET(request: NextRequest) {
   }
 
   const result = await getInvitations({
+    kind: kind === 'LEAD' ? kind : undefined,
     actorId: (auth as any).context!.userId,
     actorRole: (auth as any).context!.role,
     status: status || undefined,

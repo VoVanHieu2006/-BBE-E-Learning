@@ -330,6 +330,17 @@ export class VideoPlaybackGuard {
     };
   }
 
+  public finishProgressRequest(seq: number, httpStatus: number, reason: string): void {
+    this.pendingRequests.delete(seq);
+    this.recordLog('REQUEST_FINISHED', 0, { seq, httpStatus, reason });
+  }
+
+  public recordSeek(source: string, position: number, target: number): void {
+    this.recordLog('SEEK', position, {
+      seekSource: source, target, ceiling: this.computeAllowedManualSeekUntil(),
+    });
+  }
+
   /**
    * Called when server responds to a progress / heartbeat request.
    * Enforces sequence ordering and monotonic furthest progression.
@@ -533,6 +544,7 @@ export class VideoPlaybackGuard {
     };
 
     this.logEntries.push(entry);
+    if (this.logEntries.length > 300) this.logEntries.splice(0, this.logEntries.length - 300);
 
     if (typeof console !== 'undefined' && console.debug && (this.debugLog || (typeof window !== 'undefined' && (window as any).__bbePerfLog))) {
       console.debug(`[BBE-PlaybackGuard] ${action}: ct=${currentTime.toFixed(1)}s, server=${this.serverConfirmedFurthest.toFixed(1)}s, localCont=${this.localContinuousPosition.toFixed(1)}s`, details);

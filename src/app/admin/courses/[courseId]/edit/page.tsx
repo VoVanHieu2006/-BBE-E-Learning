@@ -212,7 +212,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
         title: assessData.title || `Bài kiểm tra: ${lesson.title}`,
         description: assessData.description || '',
         questionCount: assessData?.questionCount || 1,
-        durationMinutes: assessData?.durationMinutes || 30,
+        durationMinutes: assessData ? (assessData.durationMinutes ?? 0) : 30,
         questions: assessData.questions.map((q: any, idx: number) => ({
           questionText: q.questionText || q.question_text || `Câu hỏi ${idx + 1}`,
           // Loại Đúng/Sai đã ngừng dùng: quy về 1 đáp án để form không lỗi khi đọc dữ liệu cũ
@@ -232,7 +232,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
         title: `Bài kiểm tra: ${lesson.title}`,
         description: 'Vui lòng hoàn thành bài kiểm tra để tiếp tục bài học tiếp theo.',
         questionCount: assessData?.questionCount || 1,
-        durationMinutes: assessData?.durationMinutes || 30,
+        durationMinutes: assessData ? (assessData.durationMinutes ?? 0) : 30,
         questions: [
           {
             questionText: 'Câu hỏi 1: Nội dung bài học này nói về điều gì?',
@@ -278,7 +278,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
         title: assessData?.title || 'Bài thi cuối khóa',
         description: assessData?.description || 'Đạt tối thiểu 85% để hoàn thành khóa học.',
         questionCount: assessData?.questionCount || 1,
-        durationMinutes: assessData?.durationMinutes || 30,
+        durationMinutes: assessData ? (assessData.durationMinutes ?? 0) : 30,
         questions: [],
     });
     setAssessmentLoading(false);
@@ -1348,6 +1348,8 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
 
     if (res.ok) {
       clearApiCache(endpoint);
+      clearApiCache(`/api/v1/courses/${params.courseId}`);
+      clearApiCache('/api/v1/assessments');
       showToast('success', activeAssessmentMode === 'COURSE_FINAL' ? 'Đã lưu cấu hình bài thi cuối khóa.' : `Đã lưu thành công bài kiểm tra (${assessmentForm.questions.length} câu hỏi)!`);
       setShowAssessmentModal(false);
       setAssessment(res.data);

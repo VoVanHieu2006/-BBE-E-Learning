@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { canAccessChapterPermission, resolveSingleManagedChapter } from '@/lib/authorization'
-import { listChapterMembers } from '@/lib/chapter-members'
+import { listChapterLearners } from '@/lib/chapter-members'
 import { countCompletedLessonsByCourse } from '@/lib/progress/completed-lesson-counts'
 import { getActiveMetricChapterIds } from '@/lib/active-chapters'
 
@@ -37,7 +37,7 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
   const skip = (page - 1) * limit
 
   // Get active student members in this chapter (EXCLUDING BĐHU and Admin)
-  const chapterMembers = await listChapterMembers(chapterId, { roles: ['MEMBER'], status: 'ACTIVE' })
+  const chapterMembers = await listChapterLearners(chapterId)
   const memberUserIds = chapterMembers.map((member) => member.userId)
   const totalMembers = memberUserIds.length
 

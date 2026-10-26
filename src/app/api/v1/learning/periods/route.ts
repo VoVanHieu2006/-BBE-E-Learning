@@ -3,6 +3,9 @@ import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getLearningManagerKind } from '@/lib/manager-learning-access'
 import { listAccessibleChapterIds, listManagedOrganizationUnits } from '@/lib/authorization'
+import { currentLearningAffiliation } from '@/lib/affiliation-access'
+import { readLearningReadiness } from '@/lib/learning-readiness'
+import { readinessForReason } from '@/lib/learning-readiness-rules'
 
 export async function GET(request: NextRequest) {
   const auth = await authenticate(request).catch(() => ({ ok: false as const }))
@@ -23,7 +26,6 @@ export async function GET(request: NextRequest) {
     allowedGroups = ['MEMBER', 'LT']
     isGlobal = false
     chapterFilter = await listAccessibleChapterIds(context, 'VIEW_MEMBER_PROGRESS')
-    if (!chapterFilter.length && context.chapterId) chapterFilter = [context.chapterId]
   } else if (managerKind === 'LEAD_DNA') {
     allowedGroups = ['DNA']
     isGlobal = false
@@ -31,29 +33,16 @@ export async function GET(request: NextRequest) {
     dnaUnitFilter = units.filter((unit) => unit.type === 'DNA' || unit.type === 'DNA_GROUP').map((unit) => unit.id)
   } else if (context?.role === 'MEMBER') {
     // Normal member: identify whether they belong to Chapter or DNA
-    const now = new Date()
-    const [chapterRow, dnaRow] = await Promise.all([
-      prisma.chapterMember.findUnique({ where: { user_id: context.userId }, select: { chapter_id: true } }),
-      prisma.organizationMembership.findFirst({
-        where: {
-          user_id: context.userId,
-          status: 'ACTIVE',
-          unit: { type: { in: ['DNA', 'DNA_GROUP'] } },
-          starts_at: { lte: now },
-          OR: [{ ends_at: null }, { ends_at: { gt: now } }],
-        },
-        select: { unit_id: true },
-      }),
-    ])
+    const affiliation = await currentLearningAffiliation(context.userId)
 
-    if (dnaRow && !chapterRow) {
+    if (affiliation.dnaUnitIds.length) {
       allowedGroups = ['DNA']
       isGlobal = false
-      dnaUnitFilter = [dnaRow.unit_id]
+      dnaUnitFilter = affiliation.dnaUnitIds
     } else {
       allowedGroups = ['MEMBER', 'LT']
       isGlobal = false
-      const cid = chapterRow?.chapter_id || context.chapterId
+      const cid = affiliation.chapterId
       chapterFilter = cid ? [cid] : []
     }
   }
@@ -88,7 +77,17 @@ export async function GET(request: NextRequest) {
     ? []
     : await prisma.transferSeason.findMany({ orderBy: { starts_at: 'desc' }, take: 30 })
 
+  const now = new Date()
+  const base = await readLearningReadiness(prisma, now)
+  const periodReadiness = {
+    month: readinessForReason(months.some(month => month.starts_at <= now && month.ends_at > now) ? 'READY' : 'MONTH_NOT_CONFIGURED'),
+    term: readinessForReason(terms.some(term => term.starts_at <= now && (!term.ends_at || term.ends_at > now)) ? 'READY' : 'TERM_NOT_CONFIGURED'),
+    season: readinessForReason(seasons.some(season => season.starts_at <= now && season.ends_at > now) ? 'READY' : 'SEASON_NOT_CONFIGURED'),
+  }
+  const readiness = !base.ready ? base : !periodReadiness.month.ready ? { ...base, ...periodReadiness.month } : base
+
   return NextResponse.json({
+    readiness: { ...readiness, periods: periodReadiness },
     months: monthsWithStatus,
     terms: terms.map((term) => ({ ...term, chapterName: chapters.find((chapter) => chapter.id === term.chapter_id)?.name || 'Chapter' })),
     seasons,

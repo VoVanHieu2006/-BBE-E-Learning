@@ -33,8 +33,8 @@ export default function OrganizationHistory({ params }: { params: { userId: stri
       </div>
       <div className="overflow-x-auto rounded-xl border bg-white">
         <table className="w-full text-left text-sm"><caption className="p-3 text-left font-semibold">Đơn vị / Ban / DNA</caption>
-          <thead><tr><th className="p-3">Đơn vị</th><th>Trạng thái</th><th>Từ</th><th>Đến</th></tr></thead>
-          <tbody>{data.memberships.map((row: any) => <tr key={row.id} className="border-t"><td className="p-3">{row.unit.name}</td><td>{row.status === 'ENDED' || (row.ends_at && new Date(row.ends_at) <= new Date()) ? 'Đã kết thúc' : 'Đang hoạt động'}</td><td>{date(row.starts_at)}</td><td>{date(row.ends_at)}</td></tr>)}</tbody>
+          <thead><tr><th className="p-3">Đơn vị</th><th>Loại đơn vị</th><th>Trạng thái</th><th>Từ</th><th>Đến</th></tr></thead>
+          <tbody>{data.memberships.map((row: any) => <tr key={row.id} className="border-t"><td className="p-3">{row.unit.name}</td><td>{row.unit.type === 'DEPARTMENT' ? 'Ban (DEPARTMENT)' : row.unit.type === 'DNA_GROUP' ? 'Nhóm DNA (DNA_GROUP)' : row.unit.type}</td><td>{row.status === 'ENDED' || (row.ends_at && new Date(row.ends_at) <= new Date()) ? 'Đã kết thúc' : new Date(row.starts_at) > new Date() ? 'Chưa có hiệu lực' : 'Đang hoạt động'}</td><td>{date(row.starts_at)}</td><td>{date(row.ends_at)}</td></tr>)}</tbody>
         </table>
       </div>
       <div className="overflow-x-auto rounded-xl border bg-white">

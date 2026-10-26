@@ -30,7 +30,7 @@ export default function AdminInvitationsPage() {
   });
 
   useEffect(() => {
-    const cached = getCachedApiData<any>('/api/v1/invitations');
+    const cached = getCachedApiData<any>('/api/v1/invitations?kind=LEAD');
     if (cached?.items) {
       setItems(cached.items);
       setLoading(false);
@@ -39,7 +39,7 @@ export default function AdminInvitationsPage() {
   }, []);
 
   async function loadInvitations() {
-    const res = await apiFetch('/api/v1/invitations');
+    const res = await apiFetch('/api/v1/invitations?kind=LEAD');
     if (res.ok && res.data) {
       setItems(res.data.items || []);
     }
@@ -186,7 +186,7 @@ export default function AdminInvitationsPage() {
                         <td className="px-6 py-4 font-semibold text-[#172554]">{inv.email}</td>
                         <td className="px-6 py-4">
                           <span className="whitespace-nowrap inline-flex items-center text-xs font-bold px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-700">
-                            {inv.role === 'DNA_LEAD' ? 'Lead DNA' : 'Lead Chapter'}
+                            {inv.role === 'DNA_LEAD' ? 'Lead DNA' : inv.role === 'CHAPTER_LEADER' ? 'Lead Chapter' : inv.role === 'MEMBER' ? 'Thành viên' : inv.role}
                           </span>
                         </td>
                         <td className="px-6 py-4 text-[#434655]">{inv.chapterName || '—'}</td>

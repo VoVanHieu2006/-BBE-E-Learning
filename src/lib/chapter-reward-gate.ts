@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client'
+import { evaluateChapterTransferEligibility } from './chapter-term-rules'
 
 /** Most recent April/October boundary, exactly midnight in Ho Chi Minh City. */
 export function chapterRewardBoundary(at: Date) {
@@ -22,14 +23,71 @@ export async function chapterRewardState(tx: Prisma.TransactionClient, userId: s
   if (!policy?.cutover_at || !policy.mapping_approved_at || at < policy.cutover_at) return { paused: false, reason: null }
   const dna = await tx.organizationMembership.count({ where: { user_id: userId, status: 'ACTIVE', starts_at: { lte: at }, OR: [{ ends_at: null }, { ends_at: { gt: at } }], unit: { type: { in: ['DNA', 'DNA_GROUP'] } } } })
   if (dna) return { paused: false, reason: null }
-  const chapter = await tx.chapterMember.findUnique({ where: { user_id: userId } })
+  const member = await tx.chapterMember.findUnique({ where: { user_id: userId } })
+  if (!member) return { paused: false, reason: null }
+  const chapter = await tx.chapter.findUnique({ where: { id: member.chapter_id } })
   if (!chapter) return { paused: false, reason: null }
+
   const boundary = chapterRewardBoundary(at)
-  const candidateSeasons = await tx.transferSeason.findMany({ where: { reward_boundary_at: { gte: boundary, lte: dnaSeasonEnd(boundary) }, starts_at: { lte: at } }, select: { id: true } })
-  const successful = await tx.chapterReorganization.findFirst({ where: { chapter_id: chapter.chapter_id, transfer_season_id: { in: candidateSeasons.map((row) => row.id) }, status: 'APPLIED', applied_at: { lte: at } }, orderBy: { applied_at: 'desc' }, select: { transfer_season_id: true } })
-  if (successful) return { paused: false, reason: null, boundary, seasonId: successful.transfer_season_id }
   const season = await tx.transferSeason.findUnique({ where: { reward_boundary_at: boundary } })
-  if (!season) return { paused: true, reason: 'TRANSFER_SEASON_NOT_CONFIGURED', boundary }
-  const applied = await tx.chapterReorganization.findFirst({ where: { chapter_id: chapter.chapter_id, transfer_season_id: season.id, status: 'APPLIED', applied_at: { lte: at } }, select: { applied_at: true } })
-  return { paused: isChapterRewardPaused(at, boundary, applied?.applied_at || null), reason: applied ? null : 'CHAPTER_TRANSFER_OVERDUE', boundary, seasonId: season.id }
+
+  // Check if chapter has any past APPLIED reorganization (i.e. not in initial term)
+  const priorApplied = await tx.chapterReorganization.findFirst({
+    where: {
+      chapter_id: chapter.id,
+      status: 'APPLIED',
+      applied_at: { lte: at },
+      ...(season ? { transfer_season_id: { not: season.id } } : {}),
+    },
+    select: { id: true },
+  })
+
+  const appliedThisSeason = season
+    ? await tx.chapterReorganization.findFirst({
+        where: { chapter_id: chapter.id, transfer_season_id: season.id, status: 'APPLIED', applied_at: { lte: at } },
+        select: { applied_at: true },
+      })
+    : null
+
+  const scheduledThisSeason = season
+    ? await tx.chapterReorganization.findFirst({
+        where: { chapter_id: chapter.id, transfer_season_id: season.id, status: 'SCHEDULED' },
+        select: { effective_at: true },
+      })
+    : null
+
+  if (!season) {
+    if (!priorApplied) {
+      const eligibility = evaluateChapterTransferEligibility({
+        chapterId: chapter.id,
+        chapterCreatedAt: chapter.created_at,
+        at,
+        candidateSeason: null,
+        hasPriorAppliedReorg: false,
+        appliedReorgThisSeason: null,
+        scheduledReorgThisSeason: null,
+      })
+      if (!eligibility.paused) return { paused: false, reason: null, boundary }
+    }
+    return { paused: true, reason: 'TRANSFER_SEASON_NOT_CONFIGURED', boundary }
+  }
+
+  const eligibility = evaluateChapterTransferEligibility({
+    chapterId: chapter.id,
+    chapterCreatedAt: chapter.created_at,
+    at,
+    candidateSeason: season,
+    hasPriorAppliedReorg: Boolean(priorApplied),
+    appliedReorgThisSeason: appliedThisSeason,
+    scheduledReorgThisSeason: scheduledThisSeason,
+  })
+
+  return {
+    paused: eligibility.paused,
+    reason: eligibility.reason,
+    boundary,
+    seasonId: season.id,
+    status: eligibility.status,
+  }
 }
+

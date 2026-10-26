@@ -72,7 +72,7 @@ export default function ChapterManagerMembersPage() {
       }
 
       // Read cache immediately on client mount
-      const url = `/api/v1/chapters/${currentChapter}/dashboard/members?search=${encodeURIComponent(search)}&includeInactive=1&page=1&limit=10`;
+      const url = `/api/v1/chapters/${currentChapter}/dashboard/members?search=${encodeURIComponent(search)}&page=1&limit=10`;
       const cached = getCachedApiData<any>(url);
       if (cached?.items) {
         setMembers(cached.items);

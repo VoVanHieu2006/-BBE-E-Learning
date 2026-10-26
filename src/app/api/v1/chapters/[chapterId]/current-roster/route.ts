@@ -3,7 +3,7 @@ import { authenticate } from '@/lib/auth'
 import { canAccessChapterPermission } from '@/lib/authorization'
 import { prisma } from '@/lib/prisma'
 import { EXACT_7_BANS, ORDERED_CHAPTER_ROSTER, CHAPTER_ROSTER_COLUMNS } from '@/lib/departments'
-import { listChapterMembers } from '@/lib/chapter-members'
+import { listChapterLearners } from '@/lib/chapter-members'
 import { getActiveMetricChapterIds } from '@/lib/active-chapters'
 import { applyDueChapterReorganizations } from '@/lib/chapter-reorganizations'
 import { ensureChapterStandardDepartments } from '@/lib/chapter-departments'
@@ -40,6 +40,7 @@ export async function GET(
   // Ensure all 7 standard departments exist for this chapter
   await ensureChapterStandardDepartments(chapter.organization_unit_id)
 
+  const asOf = new Date()
   const [departments, allChapterMembers, scheduledBatchRecord, presidentAssignments] = await Promise.all([
     prisma.organizationUnit.findMany({
       where: {
@@ -50,6 +51,7 @@ export async function GET(
         memberships: {
           where: {
             status: 'ACTIVE',
+            starts_at: { lte: asOf },
             OR: [{ ends_at: null }, { ends_at: { gt: new Date() } }],
           },
           include: {
@@ -66,6 +68,7 @@ export async function GET(
         },
         positions: {
           where: {
+            starts_at: { lte: asOf },
             OR: [{ ends_at: null }, { ends_at: { gt: new Date() } }],
           },
           include: {
@@ -74,7 +77,7 @@ export async function GET(
         },
       },
     }),
-    listChapterMembers(params.chapterId, { roles: ['MEMBER'], status: 'ACTIVE' }),
+    listChapterLearners(params.chapterId, { asOf }),
     prisma.chapterReorganization.findFirst({
       where: { chapter_id: params.chapterId, status: 'SCHEDULED' },
       include: { items: true },
@@ -85,10 +88,11 @@ export async function GET(
 
   const deptMap = new Map(departments.map((d) => [d.name, d]))
   const assignedUserIds = new Set<string>()
+  const learnerById = new Map(allChapterMembers.map(member => [member.userId, member]))
 
   const roster = ORDERED_CHAPTER_ROSTER.map((banName) => {
     if (banName === 'Chủ Tịch' && (presidentAssignments.length || !departments.some((department) => department.name === 'Chủ Tịch' && department.memberships.length))) {
-      const members = presidentAssignments.map((assignment) => {
+      const members = presidentAssignments.filter(assignment => learnerById.get(assignment.user_id)?.isLead).map((assignment) => {
         assignedUserIds.add(assignment.user_id)
         return { userId: assignment.user_id, email: assignment.user.email, displayName: assignment.user.display_name || 'Chủ tịch', role: assignment.user.role, status: assignment.user.status, isLead: true }
       })
@@ -107,15 +111,13 @@ export async function GET(
 
     const leadPositions = dept.positions.filter(
       (p) =>
-        p.position.code === 'DEPARTMENT_LEAD' ||
-        p.position.code === 'CHAPTER_MANAGER' ||
-        p.position.is_manager
+        p.position.scope === 'DEPARTMENT' && ['DEPARTMENT_LEAD', 'DEPARTMENT_LEADER'].includes(p.position.code)
     )
     const leadUserIds = new Set(leadPositions.map((p) => p.user_id))
 
     // Tách thành viên và lead (loại bỏ Lead Chapter và Admin)
     const memberItems = dept.memberships
-      .filter((m) => m.user && m.user.status === 'ACTIVE' && m.user.role === 'MEMBER' && m.user.email !== 'chapter.lead.demo@bbe.vn')
+      .filter((m) => learnerById.get(m.user_id)?.department?.id === dept.id && !assignedUserIds.has(m.user_id))
       .map((m) => {
         assignedUserIds.add(m.user.id)
         const isLead = leadUserIds.has(m.user.id) || (banName === 'Chủ Tịch' && m.user.role === 'MEMBER' && leadUserIds.has(m.user.id))
@@ -136,7 +138,7 @@ export async function GET(
       return a.displayName.localeCompare(b.displayName, 'vi')
     })
 
-    const lead = memberItems.find((m) => m.isLead) || memberItems[0] || null
+    const lead = memberItems.find((m) => m.isLead) || null
 
     return {
       id: dept.id,
@@ -149,7 +151,7 @@ export async function GET(
 
   // Các thành viên Chapter chưa có ban (chỉ lấy MEMBER)
   const unassignedMembers = allChapterMembers
-    .filter((m) => !assignedUserIds.has(m.userId) && m.role === 'MEMBER' && m.email !== 'chapter.lead.demo@bbe.vn')
+    .filter((m) => !assignedUserIds.has(m.userId))
     .map((m) => ({
       userId: m.userId,
       email: m.email,

@@ -1,7 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
+import { capVideoProgress } from '../../lib/video-progress-rules';
 
 // Test the actual React component and CSS; only the external YouTube API is mocked.
-async function setup(page: Page, options: { theater?: boolean; noPopover?: boolean; reject?: boolean } = {}) {
+async function setup(page: Page, options: { theater?: boolean; noPopover?: boolean; reject?: boolean; url?: string; duration?: number } = {}) {
   await page.addInitScript(options => {
     const win = window as any;
     if (options.theater) {
@@ -45,14 +46,14 @@ async function setup(page: Page, options: { theater?: boolean; noPopover?: boole
         setPlaybackRate(rate: number) { this.rate = rate; win.__playerMock.rates.push(rate); }
         getPlaybackRate() { return this.rate; }
         getCurrentTime() { return this.time; }
-        getDuration() { return 596; }
+        getDuration() { return options.duration || 596; }
         getPlayerState() { return this.state; }
         unloadModule() {}
         destroy() { win.__playerMock.destroys++; this.frame.remove(); }
       },
     };
   }, options);
-  await page.goto('/lessons/player-ui-regression');
+  await page.goto(options.url || '/lessons/player-ui-regression');
   await expect(page.locator('[data-video-controls]')).toBeVisible();
   await expect.poll(() => page.evaluate(() => (window as any).__playerMock.frameLoads)).toBeGreaterThan(0);
   await page.clock.install();
@@ -62,6 +63,180 @@ const wrapper = (page: Page) => page.locator('[data-video-player]');
 const bar = (page: Page) => page.locator('[data-video-controls]');
 const play = (page: Page) => bar(page).locator('button').first();
 const fullscreen = (page: Page) => bar(page).locator('button').last();
+
+for (const rate of [1, 1.5, 2]) {
+  test(`P0: preserves pre-seek playback and three new-content heartbeats after 100 DOM seeks at ${rate}x`, async ({ page, isMobile }) => {
+    test.setTimeout(120000);
+    let furthest = 100;
+    let lastAt = 0;
+    const events: any[] = [];
+    await page.addInitScript(() => {
+      const originalFetch = window.fetch;
+      window.fetch = (input, init) => {
+        const headers = new Headers(init?.headers);
+        headers.set('x-synthetic-sent-at', String(Date.now()));
+        return originalFetch(input, { ...init, headers });
+      };
+    });
+    await page.route('**/api/v1/lessons/player-ui-regression/progress', async route => {
+      const data = route.request().postDataJSON();
+      const now = Number(route.request().headers()['x-synthetic-sent-at']);
+      const elapsed = lastAt ? Math.min(30, Math.max(0, (now - lastAt) / 1000)) : 0;
+      furthest = capVideoProgress(furthest, data.positionSeconds, data.furthestWatchedPositionSeconds, elapsed, data.playbackRate).furthestWatchedPositionSeconds;
+      lastAt = now;
+      events.push({ ...data, accepted: furthest });
+      await route.fulfill({ json: { lessonId: 'player-ui-regression', viewSessionId: data.viewSessionId, furthestWatchedPositionSeconds: furthest } });
+    });
+    await setup(page);
+    await page.locator('input').first().fill('synthetic-ui-token');
+    await page.locator('input').nth(1).fill('p0-test-video');
+    await page.clock.runFor(100);
+    await page.evaluate(() => { (window as any).__playerMock.current.time = 100; });
+    if (rate !== 1) {
+      if (isMobile) {
+        for (let i = 0; i < (rate === 1.5 ? 2 : 4); i++) await bar(page).locator('button[title^="Đổi tốc độ"]').click();
+      } else await bar(page).getByRole('button', { name: `${rate}x`, exact: true }).click();
+    }
+    await start(page);
+    await expect.poll(() => events.length).toBeGreaterThan(0);
+    const frame = await wrapper(page).locator('iframe').elementHandle();
+    const advance = async (to: number) => {
+      for (let ticks = 0; ticks < 200 && await page.evaluate(() => (window as any).__playerMock.current.time) < to; ticks++) {
+        await page.evaluate(({ to, rate }) => {
+          const player = (window as any).__playerMock.current;
+          player.time += Math.min(.5 * rate, to - player.time);
+        }, { to, rate });
+        await page.clock.runFor(500);
+      }
+      expect(await page.evaluate(() => (window as any).__playerMock.current.time)).toBeGreaterThanOrEqual(to);
+    };
+    await advance(108);
+    for (let i = 0; i < 100; i++) {
+      await reveal(page);
+      if (i % 3 === 0) {
+        const forward = bar(page).locator('button').nth(2);
+        await (await forward.isEnabled() ? forward : bar(page).locator('button').nth(1)).click();
+      }
+      else if (i % 3 === 1) await page.keyboard.press(i % 2 ? 'ArrowRight' : 'ArrowLeft');
+      else {
+        const box = (await page.locator('[data-video-timeline]').boundingBox())!;
+        await page.mouse.move(box.x + box.width * .15, box.y + 5);
+        await page.mouse.down();
+        await page.mouse.move(box.x + box.width * (108 / 596), box.y + 5, { steps: 5 });
+        await page.mouse.up();
+      }
+      await page.clock.runFor(50);
+      if (i === 0) await expect.poll(() => events.some(e => e.positionSeconds === 108 && e.accepted >= 108)).toBe(true);
+    }
+    expect(events.some(e => e.positionSeconds === 108 && e.accepted >= 108)).toBe(true);
+    // Return to the watched boundary through the actual timeline.
+    await reveal(page);
+    const box = (await page.locator('[data-video-timeline]').boundingBox())!;
+    await page.locator('[data-video-timeline]').click({ position: { x: box.width * (108 / 596), y: 5 } });
+    await page.clock.runFor(50);
+    const before = events.length;
+    await advance(108 + 30 * rate);
+    const freshHeartbeats = () => events.slice(before).filter(e => e.event === 'HEARTBEAT' && e.positionSeconds > 108.01);
+    await expect.poll(() => freshHeartbeats().length).toBeGreaterThanOrEqual(3);
+    const fresh = freshHeartbeats();
+    expect(fresh.every(e => e.accepted >= e.positionSeconds - .01)).toBe(true);
+    for (let i = 1; i < fresh.length; i++) expect(fresh[i].accepted).toBeGreaterThan(fresh[i - 1].accepted);
+    console.log('P0 synthetic acceptance', { rate, seeks: 100, furthest, newContentHeartbeats: fresh.length });
+    expect(await frame!.evaluate(el => el === document.querySelector('[data-video-player] iframe'))).toBe(true);
+  });
+}
+
+test('P0: duplicate PLAYING events do not enqueue requests or postpone heartbeat', async ({ page }) => {
+  const events: any[] = [];
+  await page.route('**/api/v1/lessons/player-ui-regression/progress', async route => {
+    events.push(route.request().postDataJSON());
+    await route.fulfill({ json: { furthestWatchedPositionSeconds: 100 } });
+  });
+  await setup(page);
+  await page.locator('input').first().fill('synthetic-ui-token');
+  await page.locator('input').nth(1).fill('p0-playing-test');
+  await page.clock.runFor(100);
+  await page.evaluate(() => { (window as any).__playerMock.current.time = 100; });
+  await start(page);
+  await expect.poll(() => events.length).toBeGreaterThan(0);
+  const playsBefore = events.filter(e => e.event === 'PLAY').length;
+  for (let i = 0; i < 24; i++) {
+    await page.evaluate(() => (window as any).__playerMock.current.emit(1));
+    await page.clock.runFor(500);
+  }
+  await expect.poll(() => events.filter(e => e.event === 'HEARTBEAT').length).toBeGreaterThanOrEqual(1);
+  expect(events.filter(e => e.event === 'PLAY').length - playsBefore).toBe(0);
+});
+
+test('P0: switching during ENDED retry delay never sends old completion into new session', async ({ page }) => {
+  const ended: any[] = [];
+  await page.route('**/api/v1/lessons/player-ui-regression/progress', async route => {
+    const payload = route.request().postDataJSON();
+    if (payload.event === 'ENDED') ended.push(payload);
+    await route.fulfill({ json: { furthestWatchedPositionSeconds: 100, completed: false } });
+  });
+  await setup(page);
+  await page.locator('input').first().fill('synthetic-ui-token');
+  await page.locator('input').nth(1).fill('p0-ended-a');
+  await page.clock.runFor(100);
+  await start(page);
+  await page.evaluate(() => (window as any).__playerMock.current.emit(0));
+  await expect.poll(() => ended.length).toBe(1);
+  await page.waitForTimeout(100);
+  await page.clock.runFor(100);
+  await page.locator('input').nth(1).fill('p0-ended-b');
+  await page.clock.runFor(2500);
+  await page.waitForTimeout(100);
+  expect(ended).toHaveLength(1);
+});
+
+test('P0: MEMBER page uses DB video identity, rejects wrong-video completion, and restores synthetic progress on refresh', async ({ page }) => {
+  let watched = 100;
+  let patches = 0;
+  await page.addInitScript(() => {
+    localStorage.setItem('accessToken', 'synthetic-member-token');
+    localStorage.setItem('user', JSON.stringify({ id: 'synthetic-member', role: 'MEMBER', display_name: 'Synthetic member' }));
+  });
+  await page.route('**/api/v1/**', async route => {
+    const url = new URL(route.request().url());
+    const progress = {
+      lessonId: 'p0-member', videoId: 'db-video-uuid', completed: false, videoCompleted: false,
+      watchedUntil: watched, furthestWatchedPositionSeconds: watched, lastPosition: watched,
+      progressPercentage: watched / 713 * 100,
+      lifetime: { completed: false, furthestWatchedPositionSeconds: watched },
+    };
+    if (url.pathname === '/api/v1/lessons/p0-member/progress') {
+      if (route.request().method() === 'PATCH') {
+        const payload = route.request().postDataJSON();
+        patches++;
+        if (patches === 1) return route.fulfill({ json: { ...progress, videoId: 'wrong-db-video', viewSessionId: payload.viewSessionId, completed: true, videoCompleted: true, furthestWatchedPositionSeconds: 713, progressPercentage: 100, lifetime: { completed: true, furthestWatchedPositionSeconds: 713 } } });
+        watched = payload.positionSeconds;
+        return route.fulfill({ json: { ...progress, watchedUntil: watched, furthestWatchedPositionSeconds: watched, lastPositionSeconds: watched, viewSessionId: payload.viewSessionId, lifetime: { completed: false, furthestWatchedPositionSeconds: watched } } });
+      }
+      return route.fulfill({ json: progress });
+    }
+    if (url.pathname === '/api/v1/lessons/p0-member') return route.fulfill({ json: {
+      id: 'p0-member', title: 'Synthetic lesson', description: '',
+      session: { courseId: 'p0-course', title: 'Synthetic session' },
+      video: { id: 'db-video-uuid', videoId: 'db-video-uuid', youtubeVideoId: 'different-youtube-id', durationSeconds: 713 }, documents: [],
+    } });
+    if (url.pathname === '/api/v1/courses/p0-course') return route.fulfill({ json: {
+      id: 'p0-course', title: 'Synthetic course', sessions: [{ id: 'p0-session', title: 'Synthetic session', lessons: [{ id: 'p0-member', title: 'Synthetic lesson' }] }],
+    } });
+    return route.fulfill({ json: { items: [], sessions: [], user: { id: 'synthetic-member', role: 'MEMBER' }, balance: 0 } });
+  });
+  await setup(page, { url: '/student/learning/p0-member', duration: 713 });
+  await start(page);
+  await expect.poll(() => patches).toBe(1);
+  await expect(page.getByText(/100\/713s/)).toBeVisible();
+  for (let i = 0; i < 20; i++) {
+    await page.evaluate(() => { (window as any).__playerMock.current.time += .5; });
+    await page.clock.runFor(500);
+  }
+  await expect(page.getByText(/110\/713s/)).toBeVisible();
+  await page.reload();
+  await expect(page.getByText(/110\/713s/)).toBeVisible();
+});
 async function reveal(page: Page) {
   const rect = (await wrapper(page).boundingBox())!;
   await page.mouse.move(rect.x + rect.width * .5, rect.y + rect.height * .5);

@@ -1,7 +1,26 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { getParentChapterId } from './active-chapters'
 
 type Db = Prisma.TransactionClient | typeof prisma
+
+/** Current organization evidence takes precedence over the transitional Chapter index. */
+export async function currentLearningAffiliation(userId: string, at = new Date()) {
+  const [memberships, legacy, intervals] = await Promise.all([
+    prisma.organizationMembership.findMany({ where: { user_id: userId, unit: { type: { in: ['CHAPTER', 'DEPARTMENT', 'DNA', 'DNA_GROUP'] } } }, include: { unit: { select: { type: true, status: true } } } }),
+    prisma.chapterMember.findUnique({ where: { user_id: userId } }),
+    prisma.chapterAffiliationInterval.findMany({ where: { user_id: userId } }),
+  ])
+  const effective = (row: { starts_at: Date; ends_at: Date | null }) => row.starts_at <= at && (!row.ends_at || row.ends_at > at)
+  const current = memberships.filter(row => row.status === 'ACTIVE' && row.unit.status === 'ACTIVE' && effective(row))
+  const dnaUnitIds = current.filter(row => ['DNA', 'DNA_GROUP'].includes(row.unit.type)).map(row => row.unit_id)
+  if (dnaUnitIds.length) return { chapterId: null, dnaUnitIds }
+  const chapterIds = Array.from(new Set((await Promise.all(current.map(row => getParentChapterId(row.unit_id)))).filter((id): id is string => Boolean(id))))
+  if (chapterIds.length) return { chapterId: chapterIds.length === 1 ? chapterIds[0] : null, dnaUnitIds: [] }
+  const validLegacy = legacy && legacy.joined_at <= at && !memberships.length &&
+    (!intervals.length || intervals.some(row => row.chapter_id === legacy.chapter_id && effective(row)))
+  return { chapterId: validLegacy ? legacy.chapter_id : null, dnaUnitIds: [] }
+}
 
 /**
  * Admin status is the global switch. Learners and managers may sign in while

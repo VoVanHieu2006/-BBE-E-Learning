@@ -1,0 +1,6 @@
+.sandbox/
+fixtures/*.private.json
+fixtures/*.private.env
+results/*/
+!results/.gitkeep
+reports/VERCEL_ESTIMATE_*.json

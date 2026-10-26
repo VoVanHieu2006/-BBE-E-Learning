@@ -3,8 +3,7 @@ import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getPublishedSystemData, calculateBatchUsersProgress } from '@/lib/progress/calculator'
 import { canAccessChapterPermission, resolveSingleManagedChapter } from '@/lib/authorization'
-import { listChapterMembers } from '@/lib/chapter-members'
-import { canViewInactiveChapterMember } from '@/lib/inactive-member-access'
+import { listChapterLearners } from '@/lib/chapter-members'
 import { getActiveMetricChapterIds } from '@/lib/active-chapters'
 import { applyDueChapterReorganizations } from '@/lib/chapter-reorganizations'
 
@@ -41,9 +40,7 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
   const search = url.searchParams.get('search') || ''
   const departmentParam = url.searchParams.get('department') || ''
   const roleTypeParam = url.searchParams.get('roleType') || ''
-  const includeInactive = url.searchParams.get('includeInactive') === '1'
-  const mayViewInactive = await canViewInactiveChapterMember(auth.context!, chapterId)
-  if (includeInactive && !mayViewInactive) return NextResponse.json({ error: { code: 'AccessDenied', message: 'Only Admin or this Chapter lead may view inactive accounts' } }, { status: 403 })
+  const asOf = new Date()
   const page = Math.max(parseInt(url.searchParams.get('page') || '1', 10), 1)
   const limit = Math.min(Math.max(parseInt(url.searchParams.get('limit') || '20', 10), 1), 250)
   const skip = (page - 1) * limit
@@ -51,27 +48,14 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
   const [sys, chapter, rawMembers] = await Promise.all([
     getPublishedSystemData(),
     prisma.chapter.findUnique({ where: { id: chapterId }, select: { organization_unit_id: true } }),
-    listChapterMembers(chapterId, {
-      roles: ['MEMBER', 'CHAPTER_LEADER'],
-      status: includeInactive ? undefined : 'ACTIVE',
-      search,
-    }),
+    listChapterLearners(chapterId, { asOf }),
   ])
 
-  const leadAssignments = chapter?.organization_unit_id
-    ? await prisma.positionAssignment.findMany({
-        where: {
-          position: { code: { in: ['DEPARTMENT_LEAD', 'CHAPTER_MANAGER'] } },
-          starts_at: { lte: new Date() },
-          OR: [{ ends_at: null }, { ends_at: { gt: new Date() } }],
-        },
-        select: { user_id: true },
-      })
-    : []
-  const leadUserIds = new Set(leadAssignments.map((a) => a.user_id))
+  const leadUserIds = new Set(rawMembers.filter(member => member.isLead).map(member => member.userId))
 
   // Lọc theo Ban và Chức vụ
   const filteredMembers = rawMembers.filter((m) => {
+    if (search && !`${m.email} ${m.displayName || ''}`.toLowerCase().includes(search.trim().toLowerCase())) return false
     if (departmentParam) {
       if (departmentParam === 'unassigned') {
         if (m.department?.name) return false
@@ -152,6 +136,7 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
   })
 
   return NextResponse.json({
+    rosterAsOf: asOf,
     items,
     summary,
     totalItems,

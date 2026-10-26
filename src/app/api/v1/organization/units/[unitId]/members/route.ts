@@ -9,7 +9,7 @@ import { authenticate, invalidateUserAuthCache } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { canAccessOrganizationUnitPermission, memberManagementPermission } from '@/lib/authorization'
 import { getOrganizationUnitTreeIds, reconcileLearningAssignmentsForUser } from '@/lib/learning-assignments'
-import { listChapterMembers } from '@/lib/chapter-members'
+import { listChapterLearners } from '@/lib/chapter-members'
 import { isOrganizationId, normalizeOrganizationPagination, normalizeOrganizationSearch } from '@/lib/organization-admin-rules'
 import { calculateBatchUsersProgress, getPublishedSystemData } from '@/lib/progress/calculator'
 import { canViewInactiveChapterMember } from '@/lib/inactive-member-access'
@@ -54,19 +54,13 @@ export async function GET(request: NextRequest, { params }: { params: { unitId: 
 
   const paramsUrl = new URL(request.url).searchParams
   const search = normalizeOrganizationSearch(paramsUrl.get('search'))
-  const includeInactive = paramsUrl.get('includeInactive') === '1'
-  if (includeInactive && !(auth.context!.role === 'ADMIN' || (parentChapterId && await canViewInactiveChapterMember(auth.context!, parentChapterId)))) {
-    return NextResponse.json({ error: { code: 'AccessDenied' } }, { status: 403 })
-  }
   const now = new Date()
   let members: Array<{ userId: string; email: string; role: string; status: string; joinedAt: Date }> = []
 
-  if (unit.chapter) {
-    const chapterRows = await listChapterMembers(unit.chapter.id, {
-      roles: ['MEMBER'],
-      status: includeInactive ? undefined : 'ACTIVE',
-      search,
-    })
+  if (parentChapterId) {
+    const chapterRows = (await listChapterLearners(parentChapterId, { asOf: now })).filter(row =>
+      (unit.type === 'CHAPTER' || row.department?.id === unit.id) &&
+      (!search || `${row.email} ${row.displayName || ''}`.toLowerCase().includes(search.toLowerCase())))
     members = chapterRows.map((row) => ({
       userId: row.userId,
       email: row.email,
@@ -85,7 +79,7 @@ export async function GET(request: NextRequest, { params }: { params: { unitId: 
         user: {
           role: 'MEMBER',
           position_assignments: { none: { position: { code: 'DNA_LEAD' }, starts_at: { lte: now }, OR: [{ ends_at: null }, { ends_at: { gt: now } }] } },
-          ...(includeInactive ? {} : { status: 'ACTIVE' }),
+          status: 'ACTIVE',
           ...(search ? { email: { contains: search, mode: 'insensitive' } } : {}),
         },
       },
@@ -152,6 +146,7 @@ export async function GET(request: NextRequest, { params }: { params: { unitId: 
   })
 
   return NextResponse.json({
+    rosterAsOf: now,
     unit: { id: unit.id, name: unit.name, type: unit.type },
     canManageMembers,
     items,

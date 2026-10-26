@@ -9,6 +9,8 @@
     "lint": "next lint",
     "test:business-rules": "ts-node -P tsconfig.test.json src/test/business-rules.test.ts",
     "test:video-guard": "ts-node -P tsconfig.test.json src/test/video-playback-guard.test.ts",
+    "test:video-progress-session": "ts-node -P tsconfig.test.json src/test/video-progress-session.test.ts",
+    "test:fb-fixes": "node scripts/test-fb-fixes.cjs",
     "test:video-controls": "ts-node -P tsconfig.test.json src/test/video-fullscreen-controls.test.ts",
     "test:video-youtube-ux": "ts-node -P tsconfig.test.json src/test/video-controls-youtube-ux.test.ts",
     "test:video-switching-leak": "ts-node -P tsconfig.test.json src/test/video-switching-leak.test.ts",

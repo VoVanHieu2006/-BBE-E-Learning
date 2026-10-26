@@ -11,6 +11,23 @@ export interface ChapterStageResult extends ChapterStage {
   stageScore: number | null
 }
 
+export interface ChapterEligibilityCondition {
+  kind: 'MEMBER_COUNT' | 'CORE_COMPLETION' | 'KPI'
+  value: number | string | null
+  threshold: number | string[]
+  operator: 'GT' | 'GTE' | 'IN'
+  state: 'PASS' | 'FAIL' | 'MISSING_DATA'
+  reasonCode: string | null
+}
+
+function chapterConditions(count: number, rate: number | null, kpi: string | null, completionReason: string | null): ChapterEligibilityCondition[] {
+  return [
+    { kind: 'MEMBER_COUNT', value: count, threshold: 20, operator: 'GT', state: count > 20 ? 'PASS' : 'FAIL', reasonCode: count > 20 ? null : count === 0 ? 'ROSTER_ZERO' : 'MEMBER_COUNT_NOT_ABOVE_20' },
+    { kind: 'CORE_COMPLETION', value: rate, threshold: 0.5, operator: 'GTE', state: rate === null ? 'MISSING_DATA' : rate >= 0.5 ? 'PASS' : 'FAIL', reasonCode: rate === null ? completionReason : rate >= 0.5 ? null : 'CORE_COMPLETION_BELOW_50_PERCENT' },
+    { kind: 'KPI', value: kpi, threshold: ['YELLOW', 'GREEN'], operator: 'IN', state: !kpi ? 'MISSING_DATA' : ['YELLOW', 'GREEN'].includes(kpi) ? 'PASS' : 'FAIL', reasonCode: !kpi ? 'WAITING_KPI' : ['YELLOW', 'GREEN'].includes(kpi) ? null : 'KPI_NOT_ELIGIBLE' },
+  ]
+}
+
 /**
  * Official Chapter Competition Score:
  * - Normal month (no transfer, 1 stage):
@@ -40,6 +57,7 @@ export function chapterCompetitionScore(
       exclusionReasons: ['ROSTER_ZERO'],
       dataError: 'ROSTER_ZERO',
       stageResults: [],
+      conditions: chapterConditions(0, null, kpi, 'ROSTER_ZERO'),
     }
   }
 
@@ -75,7 +93,7 @@ export function chapterCompetitionScore(
   }
 
   let finalScore: number | null = null
-  let averageMemberCount = 0
+  const averageMemberCount = elapsed > 0 ? personTime / elapsed : 0
   let at70Rate = 0
 
   if (!hasZeroRoster && !dataError) {
@@ -83,12 +101,10 @@ export function chapterCompetitionScore(
       // Normal month: S_m = A_m / N_m
       const single = stages[0]
       finalScore = single.stars / single.memberCount
-      averageMemberCount = single.memberCount
       at70Rate = single.memberCount > 0 ? single.qualifiedCount / single.memberCount : 0
     } else {
       // Transfer month: S_m = A_1 / N_1 + A_2 / N_2 + ...
       finalScore = stages.reduce((sum, s) => sum + (s.stars / s.memberCount), 0)
-      averageMemberCount = elapsed > 0 ? personTime / elapsed : 0
       at70Rate = personTime > 0 ? qualifiedTime / personTime : 0
     }
   }
@@ -119,6 +135,7 @@ export function chapterCompetitionScore(
     eligible: exclusionReasons.length === 0 && !dataError,
     exclusionReasons,
     stageResults,
+    conditions: chapterConditions(averageMemberCount, dataError ? null : at70Rate, kpi, dataError),
     ...(dataError ? { dataError } : {}),
   }
 }

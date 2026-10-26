@@ -16,7 +16,7 @@ const PREFETCH_URLS = [
   '/api/v1/courses',
   '/api/v1/leaderboard/chapters',
   '/api/v1/users?page=1&limit=20',
-  '/api/v1/invitations',
+  '/api/v1/invitations?kind=LEAD',
   '/api/v1/chapters',
   '/api/v1/admin/organization',
   '/api/v1/admin/learning-rules',

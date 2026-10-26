@@ -13,6 +13,8 @@ import { syncCourseAssignmentCompletion } from './learning-assignments'
 import { persistLearningUnlocks } from './learning-unlocks'
 import { checkLessonProgression } from './progression'
 import { chapterRewardState } from './chapter-reward-gate'
+import { readLearningReadiness } from './learning-readiness'
+import { readinessForReason } from './learning-readiness-rules'
 
 export type VideoHeartbeatEvent = 'PLAY' | 'HEARTBEAT' | 'PAUSE' | 'ENDED'
 
@@ -221,6 +223,8 @@ export async function recordVideoHeartbeat(
         },
         update: { furthest_seconds: finalCycleFurthest, completed_at: cycleCompletedAt },
       })
+    } else {
+      rewardComplete = trainingVideoComplete
     }
 
     // A reward is only paid when the backend has accepted enough fresh viewing
@@ -228,9 +232,14 @@ export async function recordVideoHeartbeat(
     let amount = 0
     let rewardKey: string | null = null
     let rewardBalance: number | null = null
+    let rewardReason = context ? 'REPLAY_INCOMPLETE' : (await readLearningReadiness(tx, now)).reasonCode
+    let rewardSuppressed = Boolean(replay?.reward_suppressed_at)
     if (rewardComplete && context) {
       const rewardState = await chapterRewardState(tx, userId, now)
+      rewardReason = rewardSuppressed ? 'SUPPRESSED' : 'REWARD_NOT_ELIGIBLE'
       if (rewardState.paused) {
+        rewardReason = rewardSuppressed ? 'SUPPRESSED' : rewardState.reason || 'REWARD_NOT_ELIGIBLE'
+        rewardSuppressed = true
         if (!replay?.reward_suppressed_at) {
           await tx.monthlyVideoReplay.update({
             where: { user_id_video_id_competition_month_id_learning_cycle_id: replayKey! },
@@ -259,6 +268,7 @@ export async function recordVideoHeartbeat(
           skipDuplicates: true,
         })
         amount = entry.count ? stars : 0
+        rewardReason = entry.count ? 'AWARDED' : 'ALREADY_AWARDED'
         if (amount > 0) rewardKey = candidateKey
       }
     } else if (rewardComplete) {
@@ -312,6 +322,14 @@ export async function recordVideoHeartbeat(
       id: lessonId,
       videoId: lesson.video.id,
       viewSessionId,
+      progressContext: {
+        learningCycleId: context?.cycle.id || null,
+        competitionMonthId: context?.month.id || null,
+        monthlyReplayRequired: Boolean(context),
+      },
+      lifetime: { completed: updated.completed, completedAt: updated.completed_at, furthestWatchedPositionSeconds: updated.furthest_watched_position_seconds },
+      cycleProgress: context ? { learningCycleId: context.cycle.id, completed: cycleCompleted, videoCompleted: cycleVideoComplete, completedAt: cycleCompletedAt, furthestWatchedPositionSeconds: Math.floor(finalCycleFurthest) } : null,
+      rewardStatus: readinessForReason(rewardReason),
       videoCompleted: effectiveVideoCompleted,
       completed: context ? cycleCompleted : updated.completed,
       completedAt: context ? cycleCompletedAt : updated.completed_at,
@@ -326,15 +344,17 @@ export async function recordVideoHeartbeat(
         videoCompleted: effectiveVideoCompleted,
         completed: context ? cycleCompleted : updated.completed,
         completedAt: context ? cycleCompletedAt : updated.completed_at,
-        furthestWatchedPositionSeconds: Math.floor(finalTrainingFurthest),
+        furthestWatchedPositionSeconds: Math.floor(context ? finalCycleFurthest : finalTrainingFurthest),
         progressPercentage,
       },
       replay: context
         ? {
             competitionMonth: context.month.key,
+            competitionMonthId: context.month.id,
+            learningCycleId: context.cycle.id,
             watchedSeconds: Math.floor(rewardComplete && safeDuration > 0 ? safeDuration : replayFurthest),
             completed: rewardComplete,
-            suppressed: Boolean(replay?.reward_suppressed_at),
+            suppressed: rewardSuppressed,
           }
         : null,
       starReward: {
@@ -342,15 +362,16 @@ export async function recordVideoHeartbeat(
         amount,
         rewardKey,
         balance: rewardBalance,
+        reasonCode: rewardReason,
       },
     }
   }, { timeout: 60_000 })
 }
 
-export async function getVideoReplayState(userId: string, lessonId: string) {
+export async function getVideoReplayState(userId: string, lessonId: string, at = new Date()) {
   const [cycle, month, video] = await Promise.all([
-    prisma.learningCycle.findFirst({ where: { user_id: userId, ends_at: null } }),
-    prisma.competitionMonth.findFirst({ where: { starts_at: { lte: new Date() }, ends_at: { gt: new Date() } } }),
+    prisma.learningCycle.findFirst({ where: { user_id: userId, starts_at: { lte: at }, ends_at: null } }),
+    prisma.competitionMonth.findFirst({ where: { starts_at: { lte: at }, ends_at: { gt: at } } }),
     prisma.video.findUnique({ where: { lesson_id: lessonId }, select: { id: true } }),
   ])
   if (!cycle || !month || !video) return null
@@ -366,6 +387,8 @@ export async function getVideoReplayState(userId: string, lessonId: string) {
   })
   return {
     competitionMonth: month.key,
+    competitionMonthId: month.id,
+    learningCycleId: cycle.id,
     watchedSeconds: replay?.furthest_seconds || 0,
     completed: Boolean(replay?.completed_at),
     suppressed: Boolean(replay?.reward_suppressed_at),

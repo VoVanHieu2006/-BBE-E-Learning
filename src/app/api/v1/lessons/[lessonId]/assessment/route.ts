@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { authenticate } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { invalidateCoursesServerCache } from '@/lib/server-cache';
+import { invalidateSystemDataCache } from '@/lib/progress/calculator';
 import { assertFinalExamBankCapacity, finalExamBankError, lockCourseExamBank } from '@/lib/final-exam-bank';
 
 export const dynamic = 'force-dynamic';
@@ -95,7 +97,7 @@ export async function GET(
     },
     {
       headers: {
-        'Cache-Control': 'private, max-age=5, stale-while-revalidate=30',
+        'Cache-Control': 'no-store',
       },
     }
   );
@@ -142,7 +144,7 @@ export async function POST(
     const body = await request.json().catch(() => ({}));
     const { title, description, questions, pools } = body || {};
     const questionCount = Number(body?.questionCount ?? questions?.length);
-    const durationMinutes = Number(body?.durationMinutes ?? 30);
+    const durationMinutes = Number(body?.durationMinutes);
 
     if (
       !title ||
@@ -312,6 +314,8 @@ export async function POST(
       }
     );
 
+    invalidateCoursesServerCache(lesson.session.course_id);
+    invalidateSystemDataCache();
     return NextResponse.json(
       {
         assessmentId,
@@ -320,6 +324,7 @@ export async function POST(
         title: title.trim(),
         description: description?.trim() || null,
         questionCount: preparedQuestions.length,
+        durationMinutes,
         pools: preparedPools.map((pool) => ({ poolId: pool.id, name: pool.name, sortOrder: pool.sort_order })),
         questions: preparedQuestions.map(({ question: q, options: opts }) => ({
           questionId: q.id,

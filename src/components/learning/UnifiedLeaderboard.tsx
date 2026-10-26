@@ -5,6 +5,7 @@ import Link from 'next/link'
 import Card from '@/components/ui/Card'
 import Modal from '@/components/ui/Modal'
 import LearnerProfileView from '@/components/learner/LearnerProfileView'
+import ChapterConditions from './ChapterConditions'
 import { apiFetch, clearApiCache, getCachedApiData } from '@/lib/api/client'
 
 export interface UnifiedLeaderboardProps {
@@ -69,6 +70,7 @@ export default function UnifiedLeaderboard({
   const [items, setItems] = useState<LeaderboardItem[]>([])
   const [excludedChapters, setExcludedChapters] = useState<any[]>([])
   const [leaderboardState, setLeaderboardState] = useState<string>('')
+  const [readinessMessage, setReadinessMessage] = useState('')
   const [accessError, setAccessError] = useState<string>('')
   const [periodId, setPeriodId] = useState('')
   const [periodCatalog, setPeriodCatalog] = useState<{ months: any[]; terms: any[]; seasons: any[] }>({ months: [], terms: [], seasons: [] })
@@ -218,6 +220,7 @@ export default function UnifiedLeaderboard({
 
       const data = res.data || {}
       setLeaderboardState(data.state || '')
+      setReadinessMessage(data.message || data.readiness?.message || '')
       setExcludedChapters(data.excluded || [])
       const list: LeaderboardItem[] = (data.items || []).map((item: any, idx: number) => ({
         ...item,
@@ -512,13 +515,13 @@ export default function UnifiedLeaderboard({
         <Card className="p-12 text-center text-sm text-slate-600 rounded-3xl space-y-2">
           <div className="text-4xl">⏳</div>
           <h3 className="text-base font-bold text-[#172554]">Kỳ chưa được kích hoạt</h3>
-          <p className="text-xs text-slate-500">Bảng xếp hạng đang chờ Quản trị viên kích hoạt chu kỳ học tập.</p>
+          <p className="text-xs text-slate-500">{readinessMessage || 'Bảng xếp hạng đang chờ Quản trị viên kích hoạt chu kỳ học tập.'}</p>
         </Card>
       ) : leaderboardState === 'PERIOD_UNAVAILABLE' ? (
         <Card className="p-12 text-center text-sm text-slate-600 rounded-3xl space-y-2">
           <div className="text-4xl">🔍</div>
           <h3 className="text-base font-bold text-[#172554]">Kỳ xếp hạng chưa mở</h3>
-          <p className="text-xs text-slate-500">Chưa có thông tin kỳ thi đua hoặc kỳ được chọn chưa diễn ra.</p>
+          <p className="text-xs text-slate-500">{readinessMessage || 'Chưa có thông tin kỳ thi đua hoặc kỳ được chọn chưa diễn ra.'}</p>
         </Card>
       ) : leaderboardState === 'AWAITING_SNAPSHOT' ? (
         <Card className="p-12 text-center text-sm text-slate-600 rounded-3xl space-y-2">
@@ -537,7 +540,7 @@ export default function UnifiedLeaderboard({
           <div className="w-10 h-10 border-4 border-[#2563EB] border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
           <p className="text-xs font-medium">Đang tải bảng xếp hạng…</p>
         </Card>
-      ) : items.length === 0 ? (
+      ) : items.length === 0 && excludedChapters.length === 0 ? (
         <Card className="p-16 text-center text-[#737686] space-y-2 rounded-3xl">
           <div className="text-5xl">⭐</div>
           <h3 className="text-base font-bold text-[#172554]">Chưa có dữ liệu xếp hạng</h3>
@@ -789,9 +792,7 @@ export default function UnifiedLeaderboard({
                         {/* Ban / Đơn vị / Quy mô */}
                         <td className="py-4 px-6">
                           {group === 'CHAPTER' ? (
-                            <span className="inline-block px-2.5 py-1 rounded-full bg-blue-50 text-[#2563EB] text-xs font-bold">
-                              {item.memberCount || 0} học viên
-                            </span>
+                            <ChapterConditions chapter={item} />
                           ) : (
                             <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">
                               {item.departmentName || (group === 'DNA' ? (item.dnaUnitName || 'Khối DNA') : '—')}
@@ -881,13 +882,7 @@ export default function UnifiedLeaderboard({
                 {excludedChapters.map((ch: any) => (
                   <div key={ch.chapterId || ch.id} className="p-3 bg-white border border-amber-200 rounded-2xl text-xs space-y-1">
                     <p className="font-bold text-[#172554]">{ch.name}</p>
-                    <div className="flex flex-col gap-0.5 text-slate-600">
-                      {(ch.reasons || []).map((r: string, rIdx: number) => (
-                        <span key={rIdx} className="text-amber-800 font-medium">
-                          • {r === 'MEMBER_COUNT_NOT_ABOVE_20' || r === 'MINIMUM_MEMBERS' ? `Chưa có trên 20 thành viên (${ch.memberCount ?? ch.averageMemberCount ?? 0})` : r === 'CORE_COMPLETION_BELOW_50_PERCENT' || r === 'COMPLETION_THRESHOLD' ? `Chưa đạt 50% thành viên ≥70% bài lõi` : r === 'KPI_NOT_ELIGIBLE' ? 'KPI không phải Vàng/Xanh' : r}
-                        </span>
-                      ))}
-                    </div>
+                    <ChapterConditions chapter={ch} />
                   </div>
                 ))}
               </div>

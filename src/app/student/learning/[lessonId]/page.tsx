@@ -5,6 +5,7 @@ import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Toast, { ToastMessage } from '@/components/ui/Toast';
 import YouTubePlayer from '@/components/YouTubePlayer';
+import type { VideoProgressPayload } from '@/lib/video-progress-session';
 import LessonComments from '@/components/lesson/LessonComments';
 import StarRewardCelebration from '@/components/StarRewardCelebration';
 import { apiFetch, ApiResponse, clearApiCache } from '@/lib/api/client';
@@ -293,36 +294,12 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
     window.setTimeout(() => setStarReward(null), 3600);
   }
 
-  async function handleProgress(event: {
-    currentTime: number;
-    furthest: number;
-    viewSessionId: string;
-    playbackRate: number;
-    event: 'PLAY' | 'HEARTBEAT' | 'PAUSE' | 'ENDED';
-    playerDurationSeconds?: number;
-    lessonId?: string;
-    videoId?: string;
-  }) {
-    if (!token) return null; // Guests don't track progress
-    const targetLessonId = event.lessonId || currentLessonId;
-    const reqId = switchReqIdRef.current;
-    const res = await apiFetch(`/api/v1/lessons/${targetLessonId}/progress`, {
-      method: 'PATCH',
-      body: JSON.stringify({
-        positionSeconds: event.currentTime,
-        furthestWatchedPositionSeconds: event.furthest,
-        playerDurationSeconds: event.playerDurationSeconds,
-        playbackRate: event.playbackRate,
-        event: event.event,
-        viewSessionId: event.viewSessionId,
-      }),
-    });
-    if (!res.ok || !res.data) return null;
-
-    const data = res.data;
+  function handleProgressApplied(data: any, event: VideoProgressPayload) {
+    if (!token || pendingLessonIdRef.current) return;
+    const targetLessonId = event.lessonId;
 
     // Strict isolation: Only update local active state if response is for the currently viewed lesson
-    if (targetLessonId === currentLessonId && targetLessonId === currentLessonIdRef.current && reqId === switchReqIdRef.current) {
+    if (targetLessonId === currentLessonId && targetLessonId === currentLessonIdRef.current) {
       setProgress((prev: any) => {
         if (prev?.lessonId && prev.lessonId !== targetLessonId) return prev;
         return {
@@ -331,6 +308,11 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
           videoCompleted: Boolean(data.videoCompleted),
           completed: Boolean(data.completed),
           replay: data.replay,
+          progressContext: data.progressContext,
+          lifetime: data.lifetime,
+          cycleProgress: data.cycleProgress,
+          rewardStatus: data.rewardStatus,
+          lessonCompleted: Boolean(data.completed),
           progressPercentage: data.progressPercentage,
           watchedUntil: data.furthestWatchedPositionSeconds ?? event.furthest,
           lastPosition: data.lastPositionSeconds ?? prev?.lastPosition,
@@ -388,11 +370,6 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
       }
     }
 
-    // Do not return data if user switched away to another lesson
-    if (targetLessonId !== currentLessonIdRef.current) {
-      return null;
-    }
-    return data;
   }
 
   async function handleDownload(documentId: string, fileName: string) {
@@ -472,9 +449,10 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
     return idx >= 0 && idx < names.length ? `${names[idx]}/${year}` : monthKey;
   };
   const historyRows: any[] = progress?.replayHistory || [];
-  const cycleVideoFull = Boolean(progress?.videoCompleted);
+  const hasCycle = Boolean(progress?.progressContext?.learningCycleId);
+  const cycleVideoFull = hasCycle && Boolean(progress?.cycleProgress?.videoCompleted ?? progress?.videoCompleted);
   const cycleVideoPercent = Number(progress?.progressPercentage ?? 0);
-  const cycleLessonFull = Boolean(progress?.lessonCompleted);
+  const cycleLessonFull = hasCycle && Boolean(progress?.cycleProgress?.completed ?? progress?.lessonCompleted);
 
   const totalLessonsCount = allCourseLessons.length || 1;
   const completedLessonsCount = courseProgress?.completedLessons ?? (progress?.completed ? 1 : 0);
@@ -632,6 +610,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
               <YouTubePlayer
                 key={`${currentLessonId}:${lesson.video.youtubeVideoId}`}
                 lessonId={currentLessonId}
+                videoId={lesson.video.videoId || lesson.video.id}
                 youtubeVideoId={lesson.video.youtubeVideoId}
                 accessToken={token}
                 allowFreeSeek={allowFreeSeek}
@@ -647,7 +626,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                     : 0
                 }
                 durationSeconds={lesson.video.durationSeconds || 0}
-                onProgress={handleProgress}
+                onProgressApplied={handleProgressApplied}
                 onComplete={handleLessonComplete}
               />
             ) : (
@@ -679,13 +658,13 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3">
                 <div className={`rounded-xl border px-3 py-2 text-xs ${cycleVideoFull ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-[#cbdbf5] bg-[#f8f9ff] text-[#172554]'}`}>
-                  <p className="font-bold">{cycleVideoFull ? '✓ Đã xem đủ video (chu kỳ này)' : `Đang xem: ${cycleVideoPercent}% video`}</p>
+                  <p className="font-bold">{!hasCycle ? 'Chưa có chu kỳ học' : cycleVideoFull ? '✓ Đã xem đủ video (chu kỳ này)' : `Đang xem: ${cycleVideoPercent}% video`}</p>
                   <p className="text-[10px] opacity-80 mt-0.5">
-                    Tiến độ backend ghi nhận: {Math.round(progress?.watchedUntil || 0)}/{lesson?.video?.durationSeconds || 0}s
+                    Tiến độ lịch sử: {Math.round(progress?.lifetime?.furthestWatchedPositionSeconds ?? progress?.furthestWatchedPositionSeconds ?? 0)}/{lesson?.video?.durationSeconds || 0}s
                   </p>
                 </div>
                 <div className={`rounded-xl border px-3 py-2 text-xs ${cycleLessonFull ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-[#cbdbf5] bg-[#f8f9ff] text-[#172554]'}`}>
-                  <p className="font-bold">{cycleLessonFull ? '✓ Bài học hoàn thành' : hasQuiz ? 'Bài học: còn cần quiz đạt' : 'Bài học: chưa hoàn thành'}</p>
+                  <p className="font-bold">{!hasCycle ? 'Chưa ghi nhận hoàn thành chu kỳ' : cycleLessonFull ? '✓ Bài học hoàn thành' : hasQuiz ? 'Bài học: còn cần quiz đạt' : 'Bài học: chưa hoàn thành'}</p>
                   <p className="text-[10px] opacity-80 mt-0.5">
                     {hasQuiz ? 'Video + quiz đều đạt mới tính xong bài của chu kỳ.' : 'Chu kỳ này chưa có bài kiểm tra đi kèm.'}
                   </p>
@@ -697,9 +676,9 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                       : 'Tháng này chưa nhận sao video'}
                   </p>
                   <p className="text-[10px] opacity-80 mt-0.5">
-                    {(progress?.videoStarsThisMonth?.awardedStars || 0) > 0 || progress?.videoStarsThisMonth?.completed
+                    {progress?.rewardStatus?.message || ((progress?.videoStarsThisMonth?.awardedStars || 0) > 0 || progress?.videoStarsThisMonth?.completed
                       ? 'Đủ lượt xem nhận thưởng trong tháng hiện tại.'
-                      : 'Xem lại toàn bộ video trong tháng để nhận sao.'}
+                      : 'Xem lại toàn bộ video trong tháng để nhận sao.')}
                   </p>
                 </div>
               </div>

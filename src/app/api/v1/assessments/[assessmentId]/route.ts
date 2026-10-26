@@ -50,7 +50,7 @@ export async function GET(request: NextRequest, { params }: { params: { assessme
     lessonId: assessment.lesson_id,
     title: assessment.title,
     description: assessment.description,
-    durationMinutes: assessment.duration_minutes || 30,
+    durationMinutes: assessment.duration_minutes,
     questionCount: assessment.questions.length,
     pools: assessment.question_pools.map((pool) => ({ poolId: pool.id, name: pool.name, sortOrder: pool.sort_order })),
     questions: assessment.questions.map((q) => ({

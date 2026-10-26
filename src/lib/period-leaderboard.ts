@@ -5,6 +5,16 @@ import { historicalChapterMonthRows, individualPeriodRows, chapterSeasonRows, co
 import { dnaSeasonEnd } from './chapter-reward-gate'
 import { getLearningManagerKind } from './manager-learning-access'
 import { listAccessibleChapterIds, listManagedOrganizationUnits } from './authorization'
+import { listChapterLearners } from './chapter-members'
+import { currentLearningAffiliation } from './affiliation-access'
+import { readLearningReadiness } from './learning-readiness'
+import { readinessForReason } from './learning-readiness-rules'
+
+async function currentChapterMetadata(chapterIds: string[], asOf: Date) {
+  return new Map(await Promise.all(chapterIds.map(async id => [id, {
+    currentRosterCount: (await listChapterLearners(id, { asOf })).length, rosterAsOf: asOf, dataAsOf: asOf,
+  }] as const)))
+}
 
 type Group = 'MEMBER' | 'LT' | 'DNA' | 'CHAPTER'
 type PeriodType = 'MONTH' | 'TERM'
@@ -46,7 +56,6 @@ export async function periodLeaderboard(request: NextRequest) {
     chapterId = requestedChapterId || null
   } else if (managerKind === 'LEAD_CHAPTER') {
     managedChapterIds = await listAccessibleChapterIds(context!, 'VIEW_MEMBER_PROGRESS')
-    if (!managedChapterIds.length && ownChapterId) managedChapterIds = [ownChapterId]
     if (!['MEMBER', 'LT'].includes(group)) return unauthorized('Lead Chapter chỉ được xem bảng Thành viên và LT trong Chapter mình quản lý.')
     if (!managedChapterIds.length) return unauthorized('Tài khoản chưa được gán Chapter quản lý.')
     if (requestedChapterId && !managedChapterIds.includes(requestedChapterId)) return unauthorized()
@@ -58,40 +67,26 @@ export async function periodLeaderboard(request: NextRequest) {
     if (!managedDnaUnitIds.length) return unauthorized('Tài khoản chưa được gán đơn vị DNA quản lý.')
   } else if (context?.role === 'MEMBER') {
     // Authenticated regular member
-    const now = new Date()
-    const [chapterRow, dnaRow] = await Promise.all([
-      prisma.chapterMember.findUnique({ where: { user_id: context.userId }, select: { chapter_id: true } }),
-      prisma.organizationMembership.findFirst({
-        where: {
-          user_id: context.userId,
-          status: 'ACTIVE',
-          unit: { type: { in: ['DNA', 'DNA_GROUP'] } },
-          starts_at: { lte: now },
-          OR: [{ ends_at: null }, { ends_at: { gt: now } }],
-        },
-        select: { unit_id: true },
-      }),
-    ])
+    const affiliation = await currentLearningAffiliation(context.userId)
 
-    if (dnaRow && !chapterRow) {
+    if (affiliation.dnaUnitIds.length) {
       if (group !== 'DNA') return unauthorized('Thành viên Khối DNA chỉ được xem bảng xếp hạng Khối DNA.')
-      managedDnaUnitIds = [dnaRow.unit_id]
+      managedDnaUnitIds = affiliation.dnaUnitIds
     } else {
       if (!['MEMBER', 'LT'].includes(group)) return unauthorized('Thành viên Chapter chỉ được xem bảng Thành viên và LT trong Chapter của mình.')
-      const memberChapterId = chapterRow?.chapter_id || ownChapterId
+      const memberChapterId = affiliation.chapterId
       if (!memberChapterId) return unauthorized('Tài khoản thành viên chưa thuộc Chapter nào.')
       if (requestedChapterId && requestedChapterId !== memberChapterId) return unauthorized('Bạn chỉ được xem bảng xếp hạng của Chapter mình thuộc.')
       chapterId = memberChapterId
     }
   }
 
-  const policy = await prisma.learningPolicy.findUnique({ where: { id: 'default' } })
   const now = new Date()
+  const readiness = await readLearningReadiness(prisma, now)
+  const policy = readiness.policy
   // A public board may still be viewed before cutover (it will simply be empty);
   // authenticated managers get an explicit state instead of a misleading zero.
-  if (!policy?.cutover_at || policy.cutover_at > now || !policy.mapping_approved_at) {
-    if (!isGuest) return NextResponse.json({ items: [], state: 'AWAITING_CUTOVER', group, periodType })
-  }
+  if (!readiness.ready) return NextResponse.json({ items: [], state: 'AWAITING_CUTOVER', group, periodType, readiness, reasonCode: readiness.reasonCode, message: readiness.message })
 
   const periodId = query.get('periodId')
   if (periodId && (periodType === 'MONTH' ? !/^\d{4}-(0[1-9]|1[0-2])$/.test(periodId) : !/^[0-9a-f-]{36}$/i.test(periodId))) {
@@ -141,7 +136,10 @@ export async function periodLeaderboard(request: NextRequest) {
       }
     : null
   const period = month || term || (group === 'DNA' ? dnaPeriod : season) || (group === 'CHAPTER' ? season : null)
-  if (!period) return NextResponse.json({ items: [], state: 'PERIOD_UNAVAILABLE', group, periodType, formula: group === 'CHAPTER' ? CHAPTER_FORMULA : INDIVIDUAL_FORMULA })
+  if (!period) {
+    const missing = readinessForReason(periodType === 'MONTH' ? 'MONTH_NOT_CONFIGURED' : useSeason || useGlobalIndividualTerm ? 'SEASON_NOT_CONFIGURED' : 'TERM_NOT_CONFIGURED')
+    return NextResponse.json({ items: [], state: 'PERIOD_UNAVAILABLE', group, periodType, ...missing, readiness: missing, formula: group === 'CHAPTER' ? CHAPTER_FORMULA : INDIVIDUAL_FORMULA })
+  }
 
   const snapshot = await prisma.learningSnapshot.findUnique({ where: { key: `ranking:${group}:${period.id}` } })
   if (snapshot) {
@@ -167,7 +165,7 @@ export async function periodLeaderboard(request: NextRequest) {
     return NextResponse.json(await hydrateRanking(payload, isGuest), { headers: { 'Cache-Control': 'no-store' } })
   }
   if (period.ends_at && period.ends_at <= now) {
-    return NextResponse.json({ items: [], state: 'AWAITING_SNAPSHOT', group, periodType, period, formula: group === 'CHAPTER' ? CHAPTER_FORMULA : INDIVIDUAL_FORMULA })
+    return NextResponse.json({ items: [], state: 'AWAITING_SNAPSHOT', ...readinessForReason('SNAPSHOT_MISSING'), group, periodType, period, formula: group === 'CHAPTER' ? CHAPTER_FORMULA : INDIVIDUAL_FORMULA })
   }
 
   // Closed snapshots returned above remain immutable. Live affiliation-sensitive
@@ -182,7 +180,11 @@ export async function periodLeaderboard(request: NextRequest) {
         })
         if (liveMonth) {
           const liveRows = await historicalChapterMonthRows(prisma, liveMonth, now)
+          const metadata = await currentChapterMetadata(liveRows.map(row => row.chapterId), now)
           const liveItems = liveRows.map((row) => ({
+            ...metadata.get(row.chapterId),
+            conditions: row.conditions,
+            averageMemberCount: row.averageMemberCount,
             id: row.chapterId,
             chapterId: row.chapterId,
             name: row.chapterName,
@@ -229,7 +231,11 @@ export async function periodLeaderboard(request: NextRequest) {
       return NextResponse.json({ items: [], state: 'PERIOD_UNAVAILABLE', group, periodType, formula: CHAPTER_FORMULA })
     }
     const rows = await historicalChapterMonthRows(prisma, month, now)
+    const metadata = await currentChapterMetadata(rows.map(row => row.chapterId), now)
     const formulaRows = rows.map((row) => ({
+      ...metadata.get(row.chapterId),
+      conditions: row.conditions,
+      averageMemberCount: row.averageMemberCount,
       chapterId: row.chapterId,
       id: row.chapterId,
       name: row.chapterName,
