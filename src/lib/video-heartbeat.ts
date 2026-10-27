@@ -201,7 +201,7 @@ export async function recordVideoHeartbeat(
           )
         : 0
       rewardComplete = alreadyReplayComplete || hasCompletedVideoAtEnd(replayFurthest, safeDuration, event)
-      const finalReplayFurthest = rewardComplete && safeDuration > 0 ? safeDuration : replayFurthest
+      const finalReplayFurthest = rewardComplete && safeDuration > 0 ? safeDuration : Math.floor(replayFurthest)
       const replayCompletedAt = replay?.completed_at || (rewardComplete ? now : null)
       const replayData = {
         view_session_id: viewSessionId,
@@ -218,10 +218,10 @@ export async function recordVideoHeartbeat(
         where: { user_id_lesson_id_learning_cycle_id: cycleProgressKey! },
         create: {
           ...cycleProgressKey!,
-          furthest_seconds: finalCycleFurthest,
+          furthest_seconds: Math.floor(finalCycleFurthest),
           completed_at: cycleCompletedAt,
         },
-        update: { furthest_seconds: finalCycleFurthest, completed_at: cycleCompletedAt },
+        update: { furthest_seconds: Math.floor(finalCycleFurthest), completed_at: cycleCompletedAt },
       })
     } else {
       rewardComplete = trainingVideoComplete
@@ -314,7 +314,7 @@ export async function recordVideoHeartbeat(
     }
     const effectiveVideoCompleted = context ? cycleVideoComplete : trainingVideoComplete
     const progressPercentage = safeDuration > 0
-      ? (effectiveVideoCompleted ? 100 : Math.min(100, Math.max(0, (context ? finalCycleFurthest : finalTrainingFurthest) / safeDuration * 100)))
+      ? (effectiveVideoCompleted ? 100 : Math.min(100, Math.max(0, Math.round((context ? finalCycleFurthest : finalTrainingFurthest) / safeDuration * 100))))
       : 0
 
     return {

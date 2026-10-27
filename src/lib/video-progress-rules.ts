@@ -101,8 +101,8 @@ export function capVideoProgress(
   const rate = Math.min(MAX_VIDEO_PLAYBACK_RATE, nonNegative(maxPlaybackRate))
   const grace = Math.min(10, nonNegative(graceSeconds))
 
-  // Allow a small jitter buffer (2.0s) for audio clock drift and timer sampling
-  const jitterTolerance = Math.max(2.0, rate * 1.2)
+  // Allow a jitter buffer (4.0s - 6.0s) for audio clock drift, mobile timer throttling and network latency
+  const jitterTolerance = Math.max(4.0, rate * 2.0)
   const maxAdvance = elapsed * rate + grace + jitterTolerance
   const continuousCeiling = current + maxAdvance
 
@@ -122,6 +122,17 @@ export function capVideoProgress(
     }
   }
 
+  // Handle minor network/queue jitter (within 10.0s beyond continuousCeiling) by crediting
+  // the continuous forward progress up to continuousCeiling instead of dropping to zero.
+  // This prevents cascading lockout where one delayed heartbeat permanently freezes progress.
+  const remoteJumpThreshold = 10.0
+  if (position <= continuousCeiling + remoteJumpThreshold) {
+    return {
+      furthestWatchedPositionSeconds: Math.min(position, continuousCeiling),
+      lastPositionSeconds: position,
+    }
+  }
+
   // Unauthorized forward jump / seek into unverified territory!
   // The player is at a remote position (position > continuousCeiling).
   // This cannot be accepted as proof of continuous watch time from current.
@@ -130,3 +141,4 @@ export function capVideoProgress(
     lastPositionSeconds: current,
   }
 }
+

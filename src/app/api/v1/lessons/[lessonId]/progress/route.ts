@@ -119,7 +119,7 @@ async function getLessonVideoHistory(userId: string, videoId: string | null, rep
       competitionMonth: month.key,
       competitionMonthId: month.id,
       learningCycleId: replayRecord?.learning_cycle_id || null,
-      watchedSeconds: replayRecord?.furthest_seconds || 0,
+      watchedSeconds: Math.round(replayRecord?.furthest_seconds || 0),
       completed: Boolean(replayRecord?.completed_at),
       completedAt: replayRecord?.completed_at || null,
       lastHeartbeatAt: replayRecord?.last_heartbeat_at || null,

@@ -347,7 +347,12 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
         setStarBalance(data.starReward.balance);
       }
 
-      if (data.completed) {
+      if (data.completed || data.videoCompleted) {
+        clearApiCache(`/api/v1/lessons/${targetLessonId}/progress`);
+        void revalidateProgress();
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('bbe-progress-updated', { detail: { lessonId: targetLessonId } }));
+        }
         setCourseProgress((prev: any) => {
           if (!prev) return prev;
           let wasDone = false;
@@ -658,7 +663,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3">
                 <div className={`rounded-xl border px-3 py-2 text-xs ${cycleVideoFull ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-[#cbdbf5] bg-[#f8f9ff] text-[#172554]'}`}>
-                  <p className="font-bold">{!hasCycle ? 'Chưa có chu kỳ học' : cycleVideoFull ? '✓ Đã xem đủ video (chu kỳ này)' : `Đang xem: ${cycleVideoPercent}% video`}</p>
+                  <p className="font-bold">{!hasCycle ? 'Chưa có chu kỳ học' : cycleVideoFull ? '✓ Đã xem đủ video (chu kỳ này)' : `Đang xem: ${Math.round(cycleVideoPercent)}% video`}</p>
                   <p className="text-[10px] opacity-80 mt-0.5">
                     Tiến độ lịch sử: {Math.round(progress?.lifetime?.furthestWatchedPositionSeconds ?? progress?.furthestWatchedPositionSeconds ?? 0)}/{lesson?.video?.durationSeconds || 0}s
                   </p>
@@ -1026,20 +1031,24 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                               key={lId}
                               type="button"
                               disabled={isLocked}
-                              title={isLocked ? learningState?.lockReason : undefined}
+                              title={isLocked ? (learningState?.lockReason === 'PreviousLessonIncomplete' ? 'Cần hoàn thành bài học trước đó để mở khóa' : 'Bài học đang bị khóa') : undefined}
                               onClick={() => switchLesson(lId)}
                               className={`w-full text-left px-4 py-3.5 flex items-start gap-3 text-xs transition ${
                                 isCurrent
                                   ? 'bg-[#eff4ff] text-[#172554] border-l-4 border-[#2563EB] font-bold'
-                                  : 'text-[#434655] hover:bg-[#f8f9ff] hover:text-[#172554]'
+                                  : isLocked
+                                    ? 'opacity-60 cursor-not-allowed text-slate-400 bg-slate-50/50'
+                                    : 'text-[#434655] hover:bg-[#f8f9ff] hover:text-[#172554]'
                               }`}
                             >
                               {/* Status Icon */}
-                              <span className="mt-0.5 shrink-0 text-sm" title={isLessonDone ? 'Đã hoàn thành' : undefined}>
+                              <span className="mt-0.5 shrink-0 text-sm" title={isLocked ? 'Bài học đang bị khóa' : isLessonDone ? 'Đã hoàn thành' : undefined}>
                                 {isCurrent ? (
                                   <span className={`font-bold ${isLessonDone ? 'text-emerald-600' : 'text-[#2563EB]'}`}>▶</span>
                                 ) : isLessonDone ? (
                                   <span className="w-4 h-4 rounded-full bg-emerald-500 text-white text-[10px] font-bold flex items-center justify-center">✓</span>
+                                ) : isLocked ? (
+                                  <span className="text-slate-400 text-xs inline-flex items-center justify-center" title="Bài học đang bị khóa">🔒</span>
                                 ) : (
                                   <span className="text-slate-300">○</span>
                                 )}
