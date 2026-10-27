@@ -6,7 +6,14 @@ import {
   evaluateChapterTransferEligibility,
   getVietnamParts,
 } from '../lib/chapter-term-rules'
-import { prisma } from '../lib/prisma'
+// Guard before loading Prisma: this suite creates/deletes fixture records.
+const target = process.env.TEST_DATABASE_URL
+if (!target) throw new Error('Explicit disposable TEST_DATABASE_URL required')
+const testUrl = new URL(target)
+if (!['127.0.0.1', 'localhost'].includes(testUrl.hostname) || testUrl.pathname !== '/bbe_test_learning_cycles') throw new Error('Only local bbe_test_learning_cycles is allowed')
+process.env.DATABASE_URL = target
+process.env.DIRECT_URL = target
+const { prisma } = require('../lib/prisma') as typeof import('../lib/prisma')
 import { starsForVideoDuration } from '../lib/reward-rules'
 
 describe('BBE Chapter 6-Month Transfer & Initial Term Suite', () => {
@@ -138,7 +145,7 @@ describe('BBE Chapter 6-Month Transfer & Initial Term Suite', () => {
       scheduledReorgThisSeason: null,
     })
     assert.equal(afterDeadline.status, 'TRANSFER_OVERDUE')
-    assert.equal(afterDeadline.paused, true)
+    assert.equal(afterDeadline.paused, false)
   })
 
   // =========================================================================
@@ -311,7 +318,7 @@ describe('BBE Chapter 6-Month Transfer & Initial Term Suite', () => {
   // T14: Chapter mới thành lập, đến mùa bắt buộc đầu tiên, chưa chuyển giao trước deadline:
   // Tạm dừng thưởng sao theo đúng quy định như Chapter cũ
   // =========================================================================
-  it('T14: First mandatory season overdue -> paused = true', () => {
+  it('T14: First mandatory season overdue -> initial rewards continue', () => {
     const founded = new Date('2026-01-01T00:00:00+07:00') // 6 months reached on 01/07/2026
     const seasonStart = new Date('2026-09-01T00:00:00+07:00')
     const deadline = new Date('2026-10-31T23:59:59+07:00')
@@ -330,7 +337,7 @@ describe('BBE Chapter 6-Month Transfer & Initial Term Suite', () => {
       scheduledReorgThisSeason: null,
     })
     assert.equal(overdueResult.status, 'TRANSFER_OVERDUE')
-    assert.equal(overdueResult.paused, true)
+    assert.equal(overdueResult.paused, false)
   })
 
   // =========================================================================

@@ -3,6 +3,7 @@ import { authenticate } from '@/lib/auth'
 import { recordVideoHeartbeat, getVideoReplayState } from '@/lib/video-heartbeat'
 import { prisma } from '@/lib/prisma'
 import { awardStars, canEarnStarsForCourse, starsForVideoDuration } from '@/lib/stars'
+import { readCourseLearningStates } from '@/lib/lesson-learning-state'
 import { checkLessonProgression } from '@/lib/progression'
 import { capVideoProgress, hasWatchedFullVideo, endedCompletionToleranceSeconds } from '@/lib/video-progress-rules'
 import { isLearningManager } from '@/lib/manager-learning-access'
@@ -145,7 +146,7 @@ export async function GET(request: NextRequest, { params }: { params: { lessonId
   const userId = (auth as any).context!.userId
 
   const asOf = new Date()
-  const [cycle, progress, replay, video, readiness, month] = await Promise.all([
+  const [cycle, progress, replay, lessonInfo, readiness, month] = await Promise.all([
     prisma.learningCycle.findFirst({ where: { user_id: userId, starts_at: { lte: asOf }, ends_at: null }, select: { id: true } }),
     prisma.lessonProgress.findUnique({
       where: { user_id_lesson_id: { user_id: userId, lesson_id: params.lessonId } },
@@ -164,10 +165,12 @@ export async function GET(request: NextRequest, { params }: { params: { lessonId
       },
     }),
     getVideoReplayState(userId, params.lessonId, asOf),
-    prisma.video.findUnique({ where: { lesson_id: params.lessonId }, select: { id: true, duration_seconds: true, lesson: { select: { session: { select: { course_id: true } } } } } }),
+    prisma.lesson.findUnique({ where: { id: params.lessonId }, select: { video: { select: { id: true, duration_seconds: true } }, session: { select: { course_id: true } } } }),
     readLearningReadiness(prisma, asOf),
     prisma.competitionMonth.findFirst({ where: { starts_at: { lte: asOf }, ends_at: { gt: asOf } }, select: { id: true } }),
   ])
+  const video = lessonInfo?.video || null
+  const learningState = lessonInfo ? (await readCourseLearningStates(prisma, userId, lessonInfo.session.course_id))[params.lessonId] : null
 
   const cycleProgress = cycle
     ? await prisma.cycleLessonProgress.findUnique({
@@ -187,7 +190,7 @@ export async function GET(request: NextRequest, { params }: { params: { lessonId
   const completedAt = cycle ? (cycleProgress?.completed_at || null) : (progress?.completed_at || null)
   const furthest = cycle ? (cycleProgress?.furthest_seconds || 0) : (progress?.furthest_watched_position_seconds || 0)
   const tolerance = endedCompletionToleranceSeconds(duration)
-  const videoCompleted = isLessonCompleted || (duration > 0 && (hasWatchedFullVideo(furthest, duration) || furthest >= duration - tolerance))
+  const videoCompleted = learningState?.videoCompleted ?? (isLessonCompleted || (duration > 0 && (hasWatchedFullVideo(furthest, duration) || furthest >= duration - tolerance)))
   const progressPercentage = duration > 0 ? (videoCompleted ? 100 : Math.min(100, Math.max(0, Math.round((furthest / duration) * 100)))) : 0
 
   // ---- Per-video learning history (LearningCycle + MonthlyVideoReplay + StarLedger) ----
@@ -201,6 +204,8 @@ export async function GET(request: NextRequest, { params }: { params: { lessonId
   }
 
   return NextResponse.json({
+    ...learningState,
+    learningCycleId: cycle?.id || null,
     lessonId: params.lessonId,
     progressContext: { learningCycleId: cycle?.id || null, competitionMonthId: month?.id || null, monthlyReplayRequired: readiness.ready && Boolean(cycle && month) },
     lifetime: { completed: Boolean(progress?.completed), completedAt: progress?.completed_at || null, furthestWatchedPositionSeconds: progress?.furthest_watched_position_seconds || 0 },

@@ -55,6 +55,7 @@ export interface ProgramCourseTreeProps {
     completedLessonIds: Set<string>
     inProgressLessonIds: Set<string>
     unlockedLessonIds: Set<string>
+    lessonStates: Record<string, { canView: boolean }>
   }) => void
 }
 
@@ -63,6 +64,7 @@ export default function ProgramCourseTree({ refreshTrigger, onDataLoaded }: Prog
   const [completedLessonIds, setCompletedLessonIds] = useState<Set<string>>(new Set())
   const [inProgressLessonIds, setInProgressLessonIds] = useState<Set<string>>(new Set())
   const [unlockedLessonIds, setUnlockedLessonIds] = useState<Set<string>>(new Set())
+  const [lessonStates, setLessonStates] = useState<Record<string, { canView: boolean }>>({})
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [openPrograms, setOpenPrograms] = useState<Record<string, boolean>>({})
@@ -87,11 +89,13 @@ export default function ProgramCourseTree({ refreshTrigger, onDataLoaded }: Prog
         // learner ALWAYS follows progression, even on PUBLIC courses — visibility
         // only governs whom the course is showable to, never sequential learning.
         setUnlockedLessonIds(unlockedSet)
+        setLessonStates(res.data.lessonStates || {})
         onDataLoaded?.({
           programs: progList,
           completedLessonIds: completedSet,
           inProgressLessonIds: inProgressSet,
           unlockedLessonIds: unlockedSet,
+          lessonStates: res.data.lessonStates || {},
         })
         // Programs open by default, but every course starts collapsed. This
         // keeps long curricula scannable and avoids resetting any playing video.
@@ -245,12 +249,6 @@ export default function ProgramCourseTree({ refreshTrigger, onDataLoaded }: Prog
                       course.sessions?.forEach((session: any) => {
                         session.lessons?.forEach((lesson: any) => flatLessons.push(lesson))
                       })
-                      // Progression is mandatory for signed-in learners: a lesson is
-                      // open when the server committed its unlock (or it is the
-                      // first incomplete lesson the server will unlock next).
-                      // PUBLIC visibility never skips progression here.
-                      const firstIncompleteIndex = flatLessons.findIndex((lesson) => !completedLessonIds.has(lesson.id))
-                      const unlockedThroughIndex = firstIncompleteIndex < 0 ? flatLessons.length - 1 : firstIncompleteIndex
                       const isCourseOpen = openCourses[course.id] ?? false
                       const doneInCourse = flatLessons.filter((lesson) => completedLessonIds.has(lesson.id)).length
                       const coursePercent = flatLessons.length ? Math.round((doneInCourse / flatLessons.length) * 100) : 0
@@ -292,10 +290,9 @@ export default function ProgramCourseTree({ refreshTrigger, onDataLoaded }: Prog
                                   </div>
                                   <div className="space-y-1">
                                     {session.lessons?.map((lesson: any) => {
-                                      const lessonIndex = flatLessons.findIndex((item) => item.id === lesson.id)
                                       const isDone = completedLessonIds.has(lesson.id)
                                       const isInProgress = inProgressLessonIds.has(lesson.id) && !isDone
-                                      const isOpen = unlockedLessonIds.has(lesson.id) || lessonIndex <= unlockedThroughIndex
+                                      const isOpen = lessonStates[lesson.id]?.canView === true
                                       const status = isDone ? 'done' : !isOpen ? 'locked' : isInProgress ? 'progress' : 'open'
 
                                       return (

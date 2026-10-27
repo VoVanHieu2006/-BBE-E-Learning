@@ -163,7 +163,6 @@ export default function CourseDetailPage({ params }: { params: { courseId: strin
             </h2>
 
             {(() => {
-              let hasEncounteredIncomplete = false;
               return course.sessions?.map((session: any, sIdx: number) => {
                 const progSession = progressData?.sessions?.find((ps: any) => ps.sessionId === (session.sessionId || session.id));
                 return (
@@ -183,11 +182,7 @@ export default function CourseDetailPage({ params }: { params: { courseId: strin
                         const lessonProg = progSession?.lessons?.find((pl: any) => pl.lessonId === (lesson.lessonId || lesson.id));
                         const isPublicGuest = !user && course?.visibility === 'PUBLIC';
                         const isCompleted = Boolean(!isPublicGuest && (isLeaderOrAdmin || lessonProg?.completed));
-                        const isLocked = !isLeaderOrAdmin && !isPublicGuest && hasEncounteredIncomplete;
-
-                        if (!isCompleted && !isPublicGuest) {
-                          hasEncounteredIncomplete = true;
-                        }
+                        const isLocked = !isLeaderOrAdmin && !isPublicGuest && lessonProg?.canView !== true;
 
                         if (isLocked) {
                           return (

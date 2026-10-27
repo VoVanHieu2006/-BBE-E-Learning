@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { captureChapterActualTerm } from './chapter-actual-terms'
 import { learningContext, lockLearningUser, enqueueAssignmentSync, activeLearningPolicy } from './learning-periods'
 
 /** Applies scheduled Chapter department/LT changes atomically, then rebuilds learning paths. */
@@ -13,6 +14,7 @@ export async function applyDueChapterReorganizations(now = new Date(), batchId?:
   for (const batch of due) {
     try {
     const result = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM chapters WHERE id = ${batch.chapter_id}::uuid FOR UPDATE`
       await tx.$queryRaw`SELECT id FROM chapter_reorganizations WHERE id = ${batch.id}::uuid FOR UPDATE`
       const fresh = await tx.chapterReorganization.findUnique({ where: { id: batch.id }, include: { items: true } })
       if (fresh?.status !== 'SCHEDULED') return false
@@ -33,7 +35,9 @@ export async function applyDueChapterReorganizations(now = new Date(), batchId?:
       if (policy) {
         const seasons = await tx.transferSeason.findMany({ where: { ...(seasonId ? { id: seasonId } : {}), starts_at: { lte: fresh.effective_at }, ends_at: { gt: fresh.effective_at } } })
         if (seasons.length !== 1) throw new Error('TransferSeasonNotConfigured')
+        if (appliedAt < seasons[0].starts_at || appliedAt >= seasons[0].ends_at) throw new Error('TransferOutsideSeasonWindow')
         seasonId = seasons[0].id
+        if (await tx.chapterReorganization.count({ where: { chapter_id: batch.chapter_id, transfer_season_id: seasonId, status: 'APPLIED', id: { not: batch.id } } })) throw new Error('TransferSeasonAlreadyApplied')
       }
       const snapshot = {
         scheduledAt: fresh.effective_at.toISOString(), appliedAt: appliedAt.toISOString(),
@@ -44,6 +48,7 @@ export async function applyDueChapterReorganizations(now = new Date(), batchId?:
       await tx.learningSnapshot.create({ data: { key: `transfer:${batch.id}`, kind: 'BEFORE_TRANSFER', captured_at: appliedAt, payload: JSON.parse(JSON.stringify(snapshot)) } })
       await tx.chapterReorganization.update({ where: { id: batch.id }, data: { status: 'APPLIED', applied_at: appliedAt, transfer_season_id: seasonId, last_error: null, apply_attempts: { increment: 1 } } })
       if (policy) {
+        await captureChapterActualTerm(tx, batch.chapter_id, appliedAt)
         await tx.chapterCompetitionTerm.updateMany({ where: { chapter_id: batch.chapter_id, ends_at: null }, data: { ends_at: appliedAt } })
         await tx.chapterCompetitionTerm.create({ data: { chapter_id: batch.chapter_id, season_id: seasonId, starts_at: appliedAt } })
         for (const userId of rosterIds) {

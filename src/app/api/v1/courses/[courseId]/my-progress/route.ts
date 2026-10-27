@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { readCourseLearningStates } from '@/lib/lesson-learning-state'
 import { currentCycleAttemptFilter } from '@/lib/learning-periods'
 
 export async function GET(request: NextRequest, { params }: { params: { courseId: string } }) {
@@ -36,13 +37,13 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
         },
       },
       sessions: {
-        orderBy: { sort_order: 'asc' },
+        orderBy: [{ sort_order: 'asc' }, { id: 'asc' }],
         select: {
           id: true,
           title: true,
           sort_order: true,
           lessons: {
-            orderBy: { sort_order: 'asc' },
+            orderBy: [{ sort_order: 'asc' }, { id: 'asc' }],
             select: {
               id: true,
               title: true,
@@ -69,25 +70,7 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
     return NextResponse.json({ error: { code: 'AccessDenied', message: 'Khóa học chưa publish' } }, { status: 403 })
   }
 
-  const allLessonIds = course.sessions.flatMap((s) => s.lessons.map((l) => l.id))
-  let cycleProgressMap = new Map<string, { completed: boolean; furthest: number }>()
-  if (cycle && allLessonIds.length) {
-    const cycleRows = await prisma.cycleLessonProgress.findMany({
-      where: {
-        user_id: userId,
-        learning_cycle_id: cycle.id,
-        lesson_id: { in: allLessonIds },
-      },
-      select: {
-        lesson_id: true,
-        completed_at: true,
-        furthest_seconds: true,
-      },
-    })
-    cycleProgressMap = new Map(
-      cycleRows.map((r) => [r.lesson_id, { completed: Boolean(r.completed_at), furthest: r.furthest_seconds || 0 }])
-    )
-  }
+  const learningStates = await readCourseLearningStates(prisma, userId, courseId)
 
   let totalLessons = 0
   let completedLessons = 0
@@ -100,14 +83,16 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
       lessons: s.lessons.map((l) => {
         totalLessons++
         const prog = l.progress && l.progress.length > 0 ? l.progress[0] : null
-        const isCycleCompleted = cycle ? Boolean(cycleProgressMap.get(l.id)?.completed) : Boolean(prog?.completed)
+        const state = learningStates[l.id]
+        const isCycleCompleted = state.lessonCompleted
         if (isCycleCompleted) completedLessons++
         return {
           lessonId: l.id,
           id: l.id,
           title: l.title,
+          ...state,
           completed: isCycleCompleted,
-          furthestWatchedPositionSeconds: cycle ? (cycleProgressMap.get(l.id)?.furthest ?? null) : (prog?.furthest_watched_position_seconds || null),
+          furthestWatchedPositionSeconds: state.furthestWatchedPositionSeconds,
           lastPositionSeconds: prog?.last_position_seconds || null,
         }
       }),
@@ -120,6 +105,7 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
   return NextResponse.json(
     {
       courseId,
+      learningCycleId: cycle?.id || null,
       id: courseId,
       progressPercentage,
       percentage: progressPercentage,
@@ -133,7 +119,7 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
     },
     {
       headers: {
-        'Cache-Control': 'private, max-age=5, stale-while-revalidate=15',
+        'Cache-Control': 'no-store',
       },
     }
   )

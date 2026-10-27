@@ -228,6 +228,8 @@ export async function GET(
       sourceUrl: scheduledBatchRecord.source_url,
       totalItems: newTerm.reduce((sum, department) => sum + department.total, 0),
       status: scheduledBatchRecord.status,
+      lastError: scheduledBatchRecord.last_error,
+      applyAttempts: scheduledBatchRecord.apply_attempts,
       newTerm,
       unmatchedCurrentMembers,
     }

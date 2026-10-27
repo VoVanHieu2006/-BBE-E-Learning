@@ -37,9 +37,10 @@ export async function chapterRewardState(tx: Prisma.TransactionClient, userId: s
       chapter_id: chapter.id,
       status: 'APPLIED',
       applied_at: { lte: at },
-      ...(season ? { transfer_season_id: { not: season.id } } : {}),
+      ...(season ? { OR: [{ transfer_season_id: { not: season.id } }, { transfer_season_id: null }] } : {}),
     },
-    select: { id: true },
+    select: { id: true, applied_at: true },
+    orderBy: { applied_at: 'desc' },
   })
 
   const appliedThisSeason = season
@@ -55,6 +56,13 @@ export async function chapterRewardState(tx: Prisma.TransactionClient, userId: s
         select: { effective_at: true },
       })
     : null
+
+  // A successful early transfer opens its new actual term immediately, even
+  // while the latest elapsed boundary still belongs to the previous season.
+  // At the next boundary its own season's APPLIED evidence takes over below.
+  if (priorApplied?.applied_at && priorApplied.applied_at >= boundary) {
+    return { paused: false, reason: null, boundary, seasonId: season?.id, status: 'TRANSFER_APPLIED' }
+  }
 
   if (!season) {
     if (!priorApplied) {

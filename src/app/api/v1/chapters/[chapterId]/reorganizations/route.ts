@@ -184,7 +184,12 @@ export async function POST(request: NextRequest, { params }: { params: { chapter
   }
   const isImmediate = effectiveAt.getTime() <= Date.now() + 60000
 
-  const batch = await prisma.chapterReorganization.create({
+  const creation = await prisma.$transaction(async tx => {
+    await tx.$queryRaw`SELECT id FROM chapters WHERE id = ${params.chapterId}::uuid FOR UPDATE`
+    const queued = await tx.chapterReorganization.findFirst({ where: { chapter_id: params.chapterId, status: 'SCHEDULED' } })
+    if (queued) return { conflict: 'ScheduledReorganizationExists' as const }
+    if (transferSeasonId && await tx.chapterReorganization.count({ where: { chapter_id: params.chapterId, transfer_season_id: transferSeasonId, status: 'APPLIED' } })) return { conflict: 'TransferSeasonAlreadyApplied' as const }
+    return tx.chapterReorganization.create({
     data: {
       chapter_id: params.chapterId,
       transfer_season_id: transferSeasonId,
@@ -206,11 +211,16 @@ export async function POST(request: NextRequest, { params }: { params: { chapter
     },
     include: { items: true },
   })
+  })
+  if ('conflict' in creation) return NextResponse.json({ error: { code: creation.conflict, message: 'Đợt chuyển giao đã thay đổi. Hãy tải lại trạng thái.' } }, { status: 409 })
+  const batch = creation
+
 
   if (isImmediate) {
     await applyDueChapterReorganizations(new Date(), batch.id, true)
   }
 
   const saved = await prisma.chapterReorganization.findUnique({ where: { id: batch.id }, include: { items: true } })
+  if (isImmediate && saved?.status !== 'APPLIED') return NextResponse.json({ item: saved, appliedImmediately: false, error: { code: 'TransferApplyFailed', message: saved?.last_error || 'Đã lưu đợt chuyển giao nhưng chưa áp dụng thành công. Hãy tải lại và thử lại.' } }, { status: 409 })
   return NextResponse.json({ item: saved, appliedImmediately: saved?.status === 'APPLIED' }, { status: 201 })
 }

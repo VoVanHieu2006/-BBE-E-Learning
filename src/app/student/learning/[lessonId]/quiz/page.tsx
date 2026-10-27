@@ -130,7 +130,7 @@ export default function LessonQuizPage({ params }: { params: { lessonId: string 
   // Video watch status check. Backend also verifies this before creating an attempt.
   const videoDuration = lesson?.video?.durationSeconds || lesson?.video?.duration_seconds || 0;
   const watchedPercent = progress?.progressPercentage ?? 0;
-  const canAccessQuiz = Boolean(progress?.completed) || Boolean(progress?.videoCompleted) || watchedPercent >= 100 || videoDuration === 0;
+  const canAccessQuiz = progress?.canAssess ?? (Boolean(progress?.completed) || Boolean(progress?.videoCompleted) || watchedPercent >= 100 || videoDuration === 0);
 
   // Lịch sử bài làm: CHỈ tính bài đã nộp thành công
   const submittedAttempts = attempts.filter((a) => a.status === 'SUBMITTED' || a.status === 'AUTO_SUBMITTED');

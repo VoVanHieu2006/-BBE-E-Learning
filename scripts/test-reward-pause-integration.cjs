@@ -26,6 +26,9 @@ async function main() {
   const user = await db.user.create({ data: { email: `pause-${key}@example.invalid`, password_hash: '-', role: 'MEMBER', created_at: new Date(now.getTime() - 86400000) } })
   const unit = await db.organizationUnit.create({ data: { name: key, type: 'CHAPTER' } })
   const chapter = await db.chapter.create({ data: { name: key, organization_unit_id: unit.id } })
+  // This fixture represents a previously transferred Chapter. Initial Chapters
+  // keep earning until their first real application and are covered separately.
+  await db.chapterReorganization.create({ data: { chapter_id: chapter.id, created_by_user_id: admin.id, status: 'APPLIED', effective_at: new Date(boundary.getTime() - 86400000), applied_at: new Date(boundary.getTime() - 86400000) } })
   await db.chapterMember.create({ data: { user_id: user.id, chapter_id: chapter.id } })
   await db.organizationMembership.create({ data: { user_id: user.id, unit_id: unit.id } })
   const program = await db.learningProgram.findUniqueOrThrow({ where: { code: 'CORE_MEMBER' } })

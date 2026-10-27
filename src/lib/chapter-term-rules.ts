@@ -212,8 +212,10 @@ export function evaluateChapterTransferEligibility(
   if (isPastBoundary) {
     return {
       status: 'TRANSFER_OVERDUE',
-      paused: true,
-      reason: 'CHAPTER_TRANSFER_OVERDUE',
+      // The first transfer is due, but its initial learning/reward term continues
+      // until application succeeds. Only subsequent terms may pause awards.
+      paused: false,
+      reason: null,
       firstEligibleAt,
       eligibleForSeason: true,
       seasonId,

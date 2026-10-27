@@ -3,6 +3,8 @@ import { prisma } from './prisma'
 import { competitionGroup, chapterCompetitionScore, ChapterStage } from './competition-ranking-rules'
 import { firstReachedFinalBalance } from './learning-cycle-rules'
 import { lockLearningUser } from './learning-periods'
+import { addCalendarMonthsVietnam } from './chapter-term-rules'
+import { readChapterTermResult } from './chapter-term-results'
 import { dnaSeasonEnd } from './chapter-reward-gate'
 
 type Tx = Prisma.TransactionClient
@@ -385,143 +387,30 @@ export function rankChapters<T extends {
 }
 
 export async function chapterSeasonRows(tx: Tx, seasonId: string, at: Date) {
-  const [chapters, terms] = await Promise.all([
-    tx.chapter.findMany({ where: { status: 'ACTIVE' }, select: { id: true, name: true } }),
-    tx.chapterCompetitionTerm.findMany({ where: { season_id: seasonId } }),
+  const [chapters, terms, season] = await Promise.all([
+    tx.chapter.findMany({ where: { status: 'ACTIVE' }, select: { id: true, name: true, created_at: true } }),
+    tx.chapterCompetitionTerm.findMany({ where: { OR: [{ season_id: seasonId }, { season_id: null }] } }),
+    tx.transferSeason.findUnique({ where: { id: seasonId } }),
   ])
-  let waitingKpi = false
-  let missingTerm = false
+  let missing = false, waitingKpi = false
   const items = []
   for (const chapter of chapters) {
-    const term = terms.find((row) => row.chapter_id === chapter.id)
-    if (!term) {
-      missingTerm = true
-      items.push({
-        chapterId: chapter.id,
-        chapterName: chapter.name,
-        score: 0,
-        eligible: false,
-        exclusionReasons: ['TERM_NOT_STARTED'],
-        months: [],
-        qualifiedMonthCount: 0,
-      })
+    const term = terms.find(t => t.chapter_id === chapter.id && t.season_id === seasonId)
+      || terms.find(t => t.chapter_id === chapter.id && t.season_id === null)
+    if (!term || !season?.reward_boundary_at) {
+      items.push({ chapterId: chapter.id, chapterName: chapter.name, score: 0, totalStars: 0, eligible: false, exclusionReasons: [!term ? 'TERM_NOT_STARTED' : 'SEASON_BOUNDARY_MISSING'], months: [], qualifiedMonthCount: 0, provisionalScore: 0, provisionalStars: 0 })
       continue
     }
-
-    const termEnd = term.ends_at ? new Date(Math.min(term.ends_at.getTime(), at.getTime())) : at
-    const months = await tx.competitionMonth.findMany({
-      where: { starts_at: { lt: termEnd }, ends_at: { gt: term.starts_at } },
-      orderBy: { starts_at: 'asc' },
-    })
-
-    const results = []
-    let totalTermScore = 0
-    let qualifiedMonthCount = 0
-
-    for (const month of months) {
-      const saved = await tx.learningSnapshot.findUnique({ where: { key: `ranking:CHAPTER:${month.id}` } })
-      let monthItem: any = null
-      let isWaitingKpi = false
-
-      if (saved) {
-        const payload = saved?.payload as any
-        if (payload?.state === 'WAITING_KPI') isWaitingKpi = true
-        monthItem = payload?.items?.find((row: any) => row.chapterId === chapter.id)
-      } else if (month.ends_at <= at) {
-        isWaitingKpi = true
-      } else {
-        const liveRows = await historicalChapterMonthRows(tx, month, at)
-        monthItem = liveRows.find((row) => row.chapterId === chapter.id)
-      }
-
-      if (isWaitingKpi) waitingKpi = true
-
-      if (!monthItem) {
-        results.push({
-          monthId: month.id,
-          month: month.key,
-          score: 0,
-          allocatedScore: 0,
-          eligible: false,
-          exclusionReasons: ['NO_RECORD'],
-          hasContributedStage: false,
-        })
-        continue
-      }
-
-      const stages = (monthItem.stages && monthItem.stages.length ? monthItem.stages : [{
-        startsAt: month.starts_at,
-        endsAt: month.ends_at,
-        memberCount: monthItem.averageMemberCount,
-        qualifiedCount: 0,
-        stars: monthItem.totalStars || 0,
-        stageScore: monthItem.score,
-      }]).map((s: any) => ({
-        ...s,
-        startsAt: new Date(s.startsAt),
-        endsAt: new Date(s.endsAt),
-      }))
-
-      let allocatedScore = 0
-      let hasContributedStage = false
-
-      for (const stage of stages) {
-        const midpoint = new Date((stage.startsAt.getTime() + stage.endsAt.getTime()) / 2)
-        if (midpoint >= term.starts_at && midpoint < termEnd) {
-          hasContributedStage = true
-          if (monthItem.eligible) {
-            const sScore = stage.stageScore !== undefined && stage.stageScore !== null
-              ? stage.stageScore
-              : (stage.memberCount > 0 ? stage.stars / stage.memberCount : 0)
-            allocatedScore += sScore
-          }
-        }
-      }
-
-      if (!stages.length && month.starts_at >= term.starts_at && month.ends_at <= termEnd) {
-        hasContributedStage = true
-        if (monthItem.eligible && monthItem.score) allocatedScore = monthItem.score
-      }
-
-      if (monthItem.eligible && hasContributedStage) {
-        totalTermScore += allocatedScore
-        qualifiedMonthCount++
-      }
-
-      results.push({
-        monthId: month.id,
-        month: month.key,
-        score: monthItem.score,
-        allocatedScore,
-        eligible: monthItem.eligible && hasContributedStage,
-        exclusionReasons: monthItem.exclusionReasons || [],
-        hasContributedStage,
-      })
-    }
-
-    const eligible = results.some((row) => row.eligible && row.hasContributedStage)
-    items.push({
-      chapterId: chapter.id,
-      chapterName: chapter.name,
-      termId: term.id,
-      termStartsAt: term.starts_at,
-      termEndsAt: term.ends_at,
-      score: totalTermScore,
-      eligible,
-      exclusionReasons: eligible ? [] : ['NO_ELIGIBLE_CLOSED_MONTH'],
-      months: results,
-      qualifiedMonthCount,
-    })
+    const initial = term.season_id === null
+    const startsAt = initial ? new Date(Math.max(term.starts_at.getTime(), chapter.created_at.getTime(), season.reward_boundary_at.getTime())) : term.starts_at
+    const endsAt = new Date(Math.min(term.ends_at?.getTime() ?? Infinity, addCalendarMonthsVietnam(season.reward_boundary_at, 6).getTime()))
+    const result = await readChapterTermResult(tx, chapter.id, startsAt, endsAt, at, historicalChapterMonthRows, initial)
+    missing ||= result.missing
+    waitingKpi ||= result.waitingKpi
+    items.push({ chapterId: chapter.id, chapterName: chapter.name, termId: term.id, termStartsAt: startsAt, termEndsAt: endsAt, ...result })
   }
-
-  return {
-    items: rankChapters(items, { isTerm: true }),
-    state: waitingKpi
-      ? 'WAITING_KPI'
-      : !missingTerm && terms.length && terms.every((term) => term.ends_at && term.ends_at <= at)
-      ? 'FINALIZED'
-      : 'OPEN',
-  }
+  const closed = Boolean(season?.reward_boundary_at && addCalendarMonthsVietnam(season.reward_boundary_at, 6) <= at)
+  return { items: rankChapters(items, { isTerm: true }), state: missing ? 'AWAITING_SNAPSHOT' : waitingKpi ? 'WAITING_KPI' : closed ? 'FINALIZED' : 'OPEN' }
 }
 
 async function saveSnapshot(tx: Tx, key: string, payload: unknown, now: Date) {
@@ -600,7 +489,8 @@ export async function closeCompetitionTerms() {
       captured++
     }, { timeout: 60_000 })
   }
-  for (const period of [...terms, ...seasons]) await prisma.$transaction(async (tx) => {
+  const resultSeasons = seasons.filter(s => s.reward_boundary_at && addCalendarMonthsVietnam(s.reward_boundary_at, 6) <= now).map(s => ({ ...s, ends_at: addCalendarMonthsVietnam(s.reward_boundary_at!, 6) }))
+  for (const period of [...terms, ...resultSeasons]) await prisma.$transaction(async (tx) => {
     const users = await tx.user.findMany({ select: { id: true }, orderBy: { id: 'asc' } })
     for (const user of users) await lockLearningUser(tx, user.id)
     const chapterId = 'chapter_id' in period ? period.chapter_id : undefined
@@ -614,100 +504,16 @@ export async function closeCompetitionTerms() {
       const key = `ranking:CHAPTER:${period.id}`
       const existing = await tx.learningSnapshot.findUnique({ where: { key } })
       if ((existing?.payload as any)?.state === 'FINALIZED') return
-      const result = await chapterSeasonRows(tx, period.id, now)
+      const result = await chapterSeasonRows(tx, period.id, period.ends_at!)
+      if (result.state === 'AWAITING_SNAPSHOT') return
       const payload = { ...result, group: 'CHAPTER', periodType: 'TERM', period }
       if (existing) await tx.learningSnapshot.update({ where: { id: existing.id }, data: { payload: JSON.parse(JSON.stringify(payload)) } })
       else await saveSnapshot(tx, key, payload, now)
       return
     }
-    const key = `ranking:CHAPTER:${period.id}`
-    const existing = await tx.learningSnapshot.findUnique({ where: { key } })
-    if ((existing?.payload as any)?.state === 'FINALIZED') return
-    // Chapter term months with stage-split logic
-    const months = await tx.competitionMonth.findMany({
-      where: { starts_at: { lt: period.ends_at! }, ends_at: { gt: period.starts_at } },
-      orderBy: { starts_at: 'asc' },
-    })
-    const results = []
-    let waiting = false
-    let totalScore = 0
-    let qualifiedMonthCount = 0
-
-    for (const month of months) {
-      const saved = await tx.learningSnapshot.findUnique({ where: { key: `ranking:CHAPTER:${month.id}` } })
-      const payload = saved?.payload as any
-      if (!payload || payload.state !== 'FINALIZED') waiting = true
-      const item = payload?.items.find((row: any) => row.chapterId === chapterId)
-      if (item) {
-        const stages = (item.stages && item.stages.length ? item.stages : [{
-          startsAt: month.starts_at,
-          endsAt: month.ends_at,
-          memberCount: item.averageMemberCount,
-          qualifiedCount: 0,
-          stars: item.totalStars || 0,
-          stageScore: item.score,
-        }]).map((s: any) => ({
-          ...s,
-          startsAt: new Date(s.startsAt),
-          endsAt: new Date(s.endsAt),
-        }))
-
-        let allocatedScore = 0
-        let hasContributedStage = false
-
-        for (const stage of stages) {
-          const midpoint = new Date((stage.startsAt.getTime() + stage.endsAt.getTime()) / 2)
-          if (midpoint >= period.starts_at && midpoint < period.ends_at!) {
-            hasContributedStage = true
-            if (item.eligible) {
-              const sScore = stage.stageScore !== undefined && stage.stageScore !== null
-                ? stage.stageScore
-                : (stage.memberCount > 0 ? stage.stars / stage.memberCount : 0)
-              allocatedScore += sScore
-            }
-          }
-        }
-
-        if (!stages.length && month.starts_at >= period.starts_at && month.ends_at <= period.ends_at!) {
-          hasContributedStage = true
-          if (item.eligible && item.score) allocatedScore = item.score
-        }
-
-        if (item.eligible && hasContributedStage) {
-          totalScore += allocatedScore
-          qualifiedMonthCount++
-        }
-
-        results.push({
-          monthId: month.id,
-          month: month.key,
-          score: item.score,
-          allocatedScore,
-          eligible: item.eligible && hasContributedStage,
-          exclusionReasons: item.exclusionReasons || [],
-          hasContributedStage,
-        })
-      }
-    }
-    const chapter = await tx.chapter.findUnique({ where: { id: chapterId }, select: { name: true } })
-    const eligible = results.some((row) => row.eligible && row.hasContributedStage)
-    const payload = {
-      group: 'CHAPTER',
-      periodType: 'TERM',
-      period,
-      state: waiting ? 'WAITING_KPI' : 'FINALIZED',
-      items: [{
-        chapterId,
-        chapterName: chapter?.name || 'Chapter',
-        score: totalScore,
-        qualifiedMonthCount,
-        months: results,
-        rank: 1,
-        eligible,
-      }],
-    }
-    if (existing) await tx.learningSnapshot.update({ where: { id: existing.id }, data: { payload: JSON.parse(JSON.stringify(payload)) } })
-    else await saveSnapshot(tx, key, payload, now)
+    // Actual Chapter terms may cross competition intervals. Their statistics
+    // are captured atomically at application; never synthesize a ranked board
+    // or reconstruct a missing historical snapshot here.
   }, { timeout: 60_000 })
   return captured
 }

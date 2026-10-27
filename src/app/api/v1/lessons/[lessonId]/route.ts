@@ -111,7 +111,7 @@ export async function GET(request: NextRequest, { params }: { params: { lessonId
     headers: {
       'Cache-Control': !context && course.visibility === 'PUBLIC'
         ? 'public, max-age=15, s-maxage=30, stale-while-revalidate=60'
-        : 'private, max-age=5, stale-while-revalidate=30',
+        : 'no-store',
     },
   })
 }

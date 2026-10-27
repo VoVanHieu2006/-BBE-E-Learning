@@ -48,6 +48,8 @@ interface LeaderboardItem {
   atLeast70Percent?: number | null
   reasons?: string[]
   eligible?: boolean
+  provisionalScore?: number
+  provisionalStars?: number
 }
 
 export default function UnifiedLeaderboard({
@@ -59,7 +61,8 @@ export default function UnifiedLeaderboard({
 }: UnifiedLeaderboardProps) {
   const [currentUser, setCurrentUser] = useState<any>(null)
   const [group, setGroup] = useState<'MEMBER' | 'LT' | 'DNA' | 'CHAPTER'>(initialGroup)
-  const [periodType, setPeriodType] = useState<'MONTH' | 'TERM'>(initialPeriodType)
+  const [periodType, setPeriodType] = useState<'MONTH' | 'TERM' | 'ACTUAL_TERM'>(initialPeriodType)
+  useEffect(() => { if (group !== 'CHAPTER' && periodType === 'ACTUAL_TERM') setPeriodType('TERM') }, [group, periodType])
   const [selectedChapterId, setSelectedChapterId] = useState<string>(propChapterId || '')
   const [chapterList, setChapterList] = useState<Array<{ id: string; name: string }>>([])
 
@@ -73,7 +76,7 @@ export default function UnifiedLeaderboard({
   const [readinessMessage, setReadinessMessage] = useState('')
   const [accessError, setAccessError] = useState<string>('')
   const [periodId, setPeriodId] = useState('')
-  const [periodCatalog, setPeriodCatalog] = useState<{ months: any[]; terms: any[]; seasons: any[] }>({ months: [], terms: [], seasons: [] })
+  const [periodCatalog, setPeriodCatalog] = useState<{ months: any[]; terms: any[]; seasons: any[]; actualTerms: any[] }>({ months: [], terms: [], seasons: [], actualTerms: [] })
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [showRulesModal, setShowRulesModal] = useState(false)
@@ -132,7 +135,7 @@ export default function UnifiedLeaderboard({
       const p = sp.get('periodType') as any
       const c = sp.get('chapterId')
       if (['MEMBER', 'LT', 'DNA', 'CHAPTER'].includes(g)) setGroup(g)
-      if (['MONTH', 'TERM'].includes(p)) setPeriodType(p)
+      if (['MONTH', 'TERM', 'ACTUAL_TERM'].includes(p)) setPeriodType(p)
       if (c) setSelectedChapterId(c)
     }
 
@@ -157,6 +160,7 @@ export default function UnifiedLeaderboard({
           months: res.data.months || [],
           terms: res.data.terms || [],
           seasons: res.data.seasons || [],
+          actualTerms: res.data.actualTerms || [],
         })
 
         // Tự động chuyển tab nếu tab hiện tại nằm ngoài danh mục được phép
@@ -199,7 +203,7 @@ export default function UnifiedLeaderboard({
       // Bảng tổng toàn hệ thống không âm thầm gán chapterId từ user
       const activeChapId = isGlobal ? (selectedChapterId || '') : (selectedChapterId || currentUser?.chapterId || propChapterId || '')
       const params = new URLSearchParams({ group, periodType })
-      if ((group === 'MEMBER' || group === 'LT') && activeChapId) {
+      if ((group === 'MEMBER' || group === 'LT' || periodType === 'ACTUAL_TERM') && activeChapId) {
         params.set('chapterId', activeChapId)
       }
       if (periodId) {
@@ -224,7 +228,7 @@ export default function UnifiedLeaderboard({
       setExcludedChapters(data.excluded || [])
       const list: LeaderboardItem[] = (data.items || []).map((item: any, idx: number) => ({
         ...item,
-        rank: item.rank ?? idx + 1,
+        rank: periodType === 'ACTUAL_TERM' ? null : item.rank,
         chapterId: item.chapterId || item.id,
         displayName: item.displayName || item.name || (item.email ? item.email.split('@')[0] : 'Thành viên'),
         name: item.name || item.displayName,
@@ -271,9 +275,10 @@ export default function UnifiedLeaderboard({
     )
   }
 
-  const topThree = items.slice(0, 3)
+  const topThree = periodType === 'ACTUAL_TERM' ? [] : items.filter(item => item.rank != null).slice(0, 3)
 
-  const getMedalBadge = (rank: number) => {
+  const getMedalBadge = (rank: number | null | undefined) => {
+    if (rank == null) return <span>—</span>
     if (rank === 1) return <span className="text-2xl">🥇</span>
     if (rank === 2) return <span className="text-2xl">🥈</span>
     if (rank === 3) return <span className="text-2xl">🥉</span>
@@ -411,6 +416,7 @@ export default function UnifiedLeaderboard({
             >
               🎯 Theo Nhiệm kỳ
             </button>
+            {group === 'CHAPTER' && <button type="button" onClick={() => setPeriodType('ACTUAL_TERM')} className="px-3.5 py-1.5 rounded-xl text-xs font-bold text-slate-700">Thống kê nhiệm kỳ thực tế</button>}
           </div>
         </div>
 
@@ -430,7 +436,7 @@ export default function UnifiedLeaderboard({
                       Tháng {month.key} {month.hasData ? '• 🟢 [Có dữ liệu]' : '• ⚪ [Chưa có dữ liệu]'}
                     </option>
                   ))
-                : (group === 'CHAPTER' || group === 'DNA' || !selectedChapterId
+                : (periodType === 'ACTUAL_TERM' ? periodCatalog.actualTerms : group === 'CHAPTER' || group === 'DNA' || !selectedChapterId
                     ? periodCatalog.seasons
                     : periodCatalog.terms.filter((term) => !selectedChapterId || term.chapter_id === selectedChapterId)
                   ).map((term: any) => (
@@ -523,13 +529,13 @@ export default function UnifiedLeaderboard({
           <h3 className="text-base font-bold text-[#172554]">Kỳ xếp hạng chưa mở</h3>
           <p className="text-xs text-slate-500">{readinessMessage || 'Chưa có thông tin kỳ thi đua hoặc kỳ được chọn chưa diễn ra.'}</p>
         </Card>
-      ) : leaderboardState === 'AWAITING_SNAPSHOT' ? (
+      ) : leaderboardState === 'AWAITING_SNAPSHOT' && items.length === 0 && excludedChapters.length === 0 ? (
         <Card className="p-12 text-center text-sm text-slate-600 rounded-3xl space-y-2">
           <div className="text-4xl">📸</div>
           <h3 className="text-base font-bold text-[#172554]">Đang chờ chốt bảng xếp hạng</h3>
           <p className="text-xs text-slate-500">Kỳ đã kết thúc và đang trong tiến trình chốt snapshot thành tích chính thức.</p>
         </Card>
-      ) : leaderboardState === 'WAITING_KPI' ? (
+      ) : leaderboardState === 'WAITING_KPI' && items.length === 0 && excludedChapters.length === 0 ? (
         <Card className="p-12 text-center text-sm text-slate-600 rounded-3xl space-y-2">
           <div className="text-4xl">📊</div>
           <h3 className="text-base font-bold text-[#172554]">Đang chờ cập nhật KPI</h3>
@@ -539,6 +545,19 @@ export default function UnifiedLeaderboard({
         <Card className="p-16 text-center text-[#737686] rounded-3xl">
           <div className="w-10 h-10 border-4 border-[#2563EB] border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
           <p className="text-xs font-medium">Đang tải bảng xếp hạng…</p>
+        </Card>
+      ) : periodType === 'ACTUAL_TERM' ? (
+        <Card className="p-6 space-y-4">
+          <h2 className="font-bold">Thống kê nhiệm kỳ thực tế</h2>
+          <p className="text-sm text-slate-600">Từ ngày thành lập hoặc chuyển giao thành công gần nhất. Tổng này có thể xuyên đợt thi đua và không dùng để xếp hạng.</p>
+          {items.map((item: any) => <div key={item.chapterId} className="border-t py-3">
+            <strong>{item.name}</strong>
+            <p>{new Date(item.startsAt).toLocaleDateString('vi-VN')} – {item.endsAt ? new Date(item.endsAt).toLocaleDateString('vi-VN') : 'Hiện tại'}</p>
+            {item.state === 'AWAITING_SNAPSHOT'
+              ? <p role="status" className="text-amber-800">Thiếu snapshot thống kê đã chốt. Chưa có số sao xác minh cho nhiệm kỳ này.</p>
+              : <p>{item.totalStars} sao</p>}
+            {item.unallocatedEntryCount > 0 && <p className="text-amber-700">Sao chưa phân bổ được vào tháng: {item.unallocatedLegacyStars} ({item.unallocatedEntryCount} bản ghi).</p>}
+          </div>)}
         </Card>
       ) : items.length === 0 && excludedChapters.length === 0 ? (
         <Card className="p-16 text-center text-[#737686] space-y-2 rounded-3xl">
@@ -550,6 +569,11 @@ export default function UnifiedLeaderboard({
         </Card>
       ) : (
         <>
+          {['AWAITING_SNAPSHOT', 'WAITING_KPI'].includes(leaderboardState) && <p role="status" className="text-amber-800">Kết quả còn thiếu snapshot hoặc KPI. Các số liệu hiện có được giữ để đối chiếu; kỳ thiếu dữ liệu chưa được xếp hạng.</p>}
+          {group === 'CHAPTER' && periodType === 'TERM' && <Card className="p-4 text-sm space-y-2">
+            <strong>Tháng đang mở — tạm tính riêng</strong>
+            {[...items, ...excludedChapters].map((item: any) => <p key={item.chapterId}>{item.name || item.chapterName}: {formatChapterScore(item.provisionalScore ?? 0)} điểm · {item.provisionalStars ?? 0} sao</p>)}
+          </Card>}
           {/* Top 3 Podium Cards */}
           {topThree.length > 0 && (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-5 pt-3 items-end">
@@ -710,7 +734,7 @@ export default function UnifiedLeaderboard({
                 </thead>
                 <tbody className="divide-y divide-[#eff4ff]">
                   {items.map((item, idx) => {
-                    const rank = item.rank ?? idx + 1
+                    const rank = item.rank
                     const isYou = isCurrentUserItem(item)
 
                     return (
@@ -882,6 +906,8 @@ export default function UnifiedLeaderboard({
                 {excludedChapters.map((ch: any) => (
                   <div key={ch.chapterId || ch.id} className="p-3 bg-white border border-amber-200 rounded-2xl text-xs space-y-1">
                     <p className="font-bold text-[#172554]">{ch.name}</p>
+                    <p>{ch.totalStars ?? 0} sao · Điểm đã chốt: {formatChapterScore(ch.score)}</p>
+                    {(ch.exclusionReasons || []).length > 0 && <p>{ch.exclusionReasons.join(', ')}</p>}
                     <ChapterConditions chapter={ch} />
                   </div>
                 ))}

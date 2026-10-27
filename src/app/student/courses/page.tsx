@@ -42,6 +42,7 @@ export default function StudentCoursesPage() {
     completedLessonIds: Set<string>;
     inProgressLessonIds: Set<string>;
     unlockedLessonIds: Set<string>;
+    lessonStates: Record<string, { canView: boolean }>;
   } | null>(null);
 
   // Clock tick every 1 second for live zero-lag countdown
@@ -203,7 +204,7 @@ export default function StudentCoursesPage() {
       status: 'done' | 'locked' | 'progress' | 'open';
     }[] = [];
 
-    const { programs, completedLessonIds, inProgressLessonIds, unlockedLessonIds } = treeLearningData;
+    const { programs, completedLessonIds, inProgressLessonIds, lessonStates } = treeLearningData;
 
     for (const prog of programs) {
       for (const course of prog.courses || []) {
@@ -211,15 +212,13 @@ export default function StudentCoursesPage() {
         course.sessions?.forEach((s: any) => {
           s.lessons?.forEach((l: any) => flatLessons.push(l));
         });
-        const firstIncompleteIndex = flatLessons.findIndex((l) => !completedLessonIds.has(l.id));
-        const unlockedThroughIndex = firstIncompleteIndex < 0 ? flatLessons.length - 1 : firstIncompleteIndex;
 
         course.sessions?.forEach((session: any, sIdx: number) => {
           session.lessons?.forEach((lesson: any) => {
             const lIdxInCourse = flatLessons.findIndex((item) => item.id === lesson.id);
             const isDone = completedLessonIds.has(lesson.id);
             const isInProgress = inProgressLessonIds.has(lesson.id) && !isDone;
-            const isOpen = unlockedLessonIds.has(lesson.id) || lIdxInCourse <= unlockedThroughIndex;
+            const isOpen = lessonStates[lesson.id]?.canView === true;
             const status: 'done' | 'locked' | 'progress' | 'open' = isDone
               ? 'done'
               : !isOpen

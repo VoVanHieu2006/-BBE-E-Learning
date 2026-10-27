@@ -91,6 +91,8 @@ export async function GET(request: NextRequest) {
     months: monthsWithStatus,
     terms: terms.map((term) => ({ ...term, chapterName: chapters.find((chapter) => chapter.id === term.chapter_id)?.name || 'Chapter' })),
     seasons,
+    actualTerms: allowedGroups.includes('CHAPTER') ? terms.map(term => ({ ...term, chapterName: chapters.find(chapter => chapter.id === term.chapter_id)?.name || 'Chapter' })) : [],
+    periodTypes: allowedGroups.includes('CHAPTER') ? ['MONTH', 'TERM', 'ACTUAL_TERM'] : ['MONTH', 'TERM'],
     scope: {
       role: isGuest ? 'GUEST' : context.role,
       managerKind,

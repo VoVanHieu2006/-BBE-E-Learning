@@ -933,7 +933,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                         : 'Hoàn thành bài kiểm tra (đạt từ 85%) để vượt qua bài học. Trang làm bài sẽ tách riêng để bạn tập trung.'}
                     </p>
                   </div>
-                  {isAdmin || Boolean(progress?.completed) || (progress?.progressPercentage ?? 0) >= 100 || !(lesson?.video?.durationSeconds || lesson?.video?.duration_seconds) ? (
+                  {isAdmin || progress?.canAssess === true ? (
                     <Link href={`/student/learning/${currentLessonId}/quiz`} className="shrink-0">
                       <Button variant="primary">
                         {progress?.completed ? 'Xem bài kiểm tra →' : 'Vào làm bài kiểm tra →'}
@@ -1010,6 +1010,8 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                         {session.lessons?.map((l: any, lIdx: number) => {
                           const lId = l.lessonId || l.id;
                           const isCurrent = lId === currentLessonId;
+                          const learningState = courseProgress?.sessions?.find((ps: any) => ps.sessionId === sId)?.lessons?.find((pl: any) => pl.lessonId === lId);
+                          const isLocked = !isLeaderOrAdmin && Boolean(token) && learningState?.canView === false;
                           const isLessonDone =
                             isLeaderOrAdmin ||
                             Boolean(
@@ -1023,6 +1025,8 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                             <button
                               key={lId}
                               type="button"
+                              disabled={isLocked}
+                              title={isLocked ? learningState?.lockReason : undefined}
                               onClick={() => switchLesson(lId)}
                               className={`w-full text-left px-4 py-3.5 flex items-start gap-3 text-xs transition ${
                                 isCurrent

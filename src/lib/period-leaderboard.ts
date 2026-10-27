@@ -1,3 +1,5 @@
+import { chapterActualTermRows } from './chapter-actual-terms'
+import { addCalendarMonthsVietnam } from './chapter-term-rules'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from './prisma'
 import { authenticate } from './auth'
@@ -17,10 +19,10 @@ async function currentChapterMetadata(chapterIds: string[], asOf: Date) {
 }
 
 type Group = 'MEMBER' | 'LT' | 'DNA' | 'CHAPTER'
-type PeriodType = 'MONTH' | 'TERM'
+type PeriodType = 'MONTH' | 'TERM' | 'ACTUAL_TERM'
 
 const GROUPS: Group[] = ['MEMBER', 'LT', 'DNA', 'CHAPTER']
-const PERIOD_TYPES: PeriodType[] = ['MONTH', 'TERM']
+const PERIOD_TYPES: PeriodType[] = ['MONTH', 'TERM', 'ACTUAL_TERM']
 
 const CHAPTER_FORMULA = 'Tháng thường: S_m = A_m / N_m · Tháng chuyển giao: S_m = A_1 / N_1 + A_2 / N_2 · Điều kiện: KPI Vàng/Xanh, quân số >20, ≥50% thành viên đạt ≥70% bài lõi.'
 const INDIVIDUAL_FORMULA = 'Tổng sao phát sinh trong kỳ; phá hòa theo thời điểm đạt tổng sao cuối (đến giây), bằng nhau đồng hạng.'
@@ -38,6 +40,8 @@ export async function periodLeaderboard(request: NextRequest) {
   if (!GROUPS.includes(group) || !PERIOD_TYPES.includes(periodType)) {
     return NextResponse.json({ error: { code: 'ValidationError' } }, { status: 400 })
   }
+
+  if (periodType === 'ACTUAL_TERM' && group !== 'CHAPTER') return NextResponse.json({ error: { code: 'InvalidPeriodType' } }, { status: 400 })
 
   const context = auth.ok ? (auth as any).context! : null
   const isGuest = !context
@@ -81,6 +85,13 @@ export async function periodLeaderboard(request: NextRequest) {
     }
   }
 
+  if (periodType === 'ACTUAL_TERM') {
+    const termId = query.get('periodId')
+    if (termId && !/^[0-9a-f-]{36}$/i.test(termId)) return NextResponse.json({ error: { code: 'InvalidPeriod' } }, { status: 400 })
+    const items = await chapterActualTermRows(prisma, new Date(), chapterId, termId)
+    return NextResponse.json({ group, periodType, state: 'STATISTICS_ONLY', items, excluded: [], formula: 'Thống kê sao nhiệm kỳ thực tế; không xếp hạng. Sao thiếu tháng được báo cáo riêng.' }, { headers: { 'Cache-Control': 'no-store' } })
+  }
+
   const now = new Date()
   const readiness = await readLearningReadiness(prisma, now)
   const policy = readiness.policy
@@ -96,7 +107,7 @@ export async function periodLeaderboard(request: NextRequest) {
   const month = periodType === 'MONTH'
     ? await prisma.competitionMonth.findFirst({ where: periodId ? { key: periodId } : { starts_at: { lte: now }, ends_at: { gt: now } } })
     : null
-  const useSeason = group === 'DNA' || (group === 'CHAPTER' && !chapterId)
+  const useSeason = group === 'DNA' || group === 'CHAPTER'
   const useGlobalIndividualTerm = periodType === 'TERM' && !chapterId && (group === 'MEMBER' || group === 'LT')
   const term = periodType === 'TERM' && !useSeason && !useGlobalIndividualTerm
     ? await prisma.chapterCompetitionTerm.findFirst({
@@ -122,9 +133,9 @@ export async function periodLeaderboard(request: NextRequest) {
     ? await prisma.transferSeason.findFirst({
         where: periodId
           ? { id: periodId }
-          : group === 'DNA'
+          : group === 'DNA' || group === 'CHAPTER'
             ? { reward_boundary_at: { lte: now } }
-            : { starts_at: { lte: now }, ends_at: { gt: now } },
+            : { starts_at: { lte: now } },
         orderBy: { reward_boundary_at: 'desc' },
       })
     : null
@@ -135,7 +146,8 @@ export async function periodLeaderboard(request: NextRequest) {
         ends_at: dnaSeasonEnd(season.reward_boundary_at),
       }
     : null
-  const period = month || term || (group === 'DNA' ? dnaPeriod : season) || (group === 'CHAPTER' ? season : null)
+  const chapterPeriod = group === 'CHAPTER' && season?.reward_boundary_at ? { ...season, starts_at: season.starts_at, ends_at: addCalendarMonthsVietnam(season.reward_boundary_at, 6), transferWindow: { startsAt: season.starts_at, endsAt: season.ends_at }, competitionStartsAt: season.reward_boundary_at } : null
+  const period = month || term || chapterPeriod || (group === 'DNA' ? dnaPeriod : season) || (group === 'CHAPTER' ? season : null)
   if (!period) {
     const missing = readinessForReason(periodType === 'MONTH' ? 'MONTH_NOT_CONFIGURED' : useSeason || useGlobalIndividualTerm ? 'SEASON_NOT_CONFIGURED' : 'TERM_NOT_CONFIGURED')
     return NextResponse.json({ items: [], state: 'PERIOD_UNAVAILABLE', group, periodType, ...missing, readiness: missing, formula: group === 'CHAPTER' ? CHAPTER_FORMULA : INDIVIDUAL_FORMULA })
@@ -144,6 +156,12 @@ export async function periodLeaderboard(request: NextRequest) {
   const snapshot = await prisma.learningSnapshot.findUnique({ where: { key: `ranking:${group}:${period.id}` } })
   if (snapshot) {
     let payload = snapshot.payload as any
+    if (group === 'CHAPTER' && (!Array.isArray(payload?.items) || payload.items.some((row: any) =>
+      !row || typeof row.eligible !== 'boolean' || !('score' in row)
+      || (periodType === 'TERM' && (!Number.isFinite(row.qualifiedMonthCount) || !Array.isArray(row.months)
+        || row.months.some((month: any) => !month || !Number.isFinite(month.allocatedScore) || typeof month.eligible !== 'boolean')))))) {
+      return NextResponse.json({ items: [], excluded: [], state: 'AWAITING_SNAPSHOT', group, periodType, period, reasonCode: 'SNAPSHOT_DATA_MISSING', message: 'Snapshot đã lưu thiếu dữ liệu phân bổ hoặc điều kiện xếp hạng.' }, { headers: { 'Cache-Control': 'no-store' } })
+    }
     if ((group === 'MEMBER' || group === 'LT') && chapterId) {
       payload = { ...payload, items: (payload.items || []).filter((row: any) => row.chapterId === chapterId) }
     }
@@ -154,7 +172,7 @@ export async function periodLeaderboard(request: NextRequest) {
     if (group === 'CHAPTER' && payload.items) {
       payload = {
         ...payload,
-        items: payload.items.map((row: any) => ({
+        items: payload.items.filter((row: any) => (!chapterId || row.chapterId === chapterId) && row.eligible !== false).map((row: any) => ({
           ...row,
           name: row.name || row.chapterName,
           id: row.id || row.chapterId,
@@ -162,6 +180,7 @@ export async function periodLeaderboard(request: NextRequest) {
         })),
       }
     }
+    if (group === 'CHAPTER') payload = { ...payload, excluded: (snapshot.payload as any).items?.filter((row: any) => row.eligible === false && (!chapterId || row.chapterId === chapterId)) || [] }
     return NextResponse.json(await hydrateRanking(payload, isGuest), { headers: { 'Cache-Control': 'no-store' } })
   }
   if (period.ends_at && period.ends_at <= now) {
@@ -172,46 +191,8 @@ export async function periodLeaderboard(request: NextRequest) {
   // rankings are read fresh, including changes committed by another server.
   if (group === 'CHAPTER') {
     if (season) {
-      // The current season has no closed month yet. Show a clearly labelled
-      // live term-to-date board instead of an empty WAITING_KPI table.
-      if ((!season.ends_at || season.ends_at > now) && season.starts_at <= now) {
-        const liveMonth = await prisma.competitionMonth.findFirst({
-          where: { starts_at: { lte: now }, ends_at: { gt: now } },
-        })
-        if (liveMonth) {
-          const liveRows = await historicalChapterMonthRows(prisma, liveMonth, now)
-          const metadata = await currentChapterMetadata(liveRows.map(row => row.chapterId), now)
-          const liveItems = liveRows.map((row) => ({
-            ...metadata.get(row.chapterId),
-            conditions: row.conditions,
-            averageMemberCount: row.averageMemberCount,
-            id: row.chapterId,
-            chapterId: row.chapterId,
-            name: row.chapterName,
-            memberCount: Math.round(row.averageMemberCount * 10) / 10,
-            totalStars: (row as any).totalStars || 0,
-            score: row.score,
-            atLeast70Percent: Math.round(row.at70Rate * 1000) / 10,
-            kpiStatus: row.kpiStatus,
-            rank: row.rank,
-            eligible: row.eligible,
-            exclusionReasons: row.exclusionReasons,
-            qualifiedMonthCount: (row as any).qualifiedMonthCount ?? null,
-          }))
-          const payload = {
-            group,
-            periodType,
-            period: { ...season, currentMonth: liveMonth },
-            state: 'OPEN',
-            formula: `${CHAPTER_FORMULA} (tạm tính tháng ${liveMonth.key}; nhiệm kỳ chưa chốt)`,
-            items: liveItems.filter((row) => row.eligible),
-            excluded: liveItems.filter((row) => !row.eligible),
-          }
-          return NextResponse.json(payload, { headers: { 'Cache-Control': 'no-store' } })
-        }
-      }
       const result = await chapterSeasonRows(prisma, season.id, now)
-      const seasonItems = result.items.map((item) => ({
+      const seasonItems = result.items.filter(item => !chapterId || item.chapterId === chapterId).map((item) => ({
         ...item,
         id: item.chapterId,
         name: item.chapterName,

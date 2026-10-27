@@ -26,6 +26,7 @@ const CACHE_TTL_MS = 30000 // 30s in-memory cache
 // Permissions and current affiliations must be revalidated after another Admin's
 // changes, including when this tab still has an old sessionStorage response.
 function currentOrganizationView(path: string): boolean {
+  if (/^\/api\/v1\/(learning\/me|lessons\/[^/?]+(?:\/progress)?|courses\/[^/?]+\/my-progress)([/?]|$)/.test(path)) return true
   return /^\/api\/v1\/(auth\/me|users|chapters|organization\/(managed-units|units)|admin\/organization)([/?]|$)/.test(path)
 }
 
