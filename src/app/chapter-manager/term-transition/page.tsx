@@ -1,12 +1,14 @@
 'use client';
 
-import { useState, useEffect, useCallback, FormEvent, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useCallback, FormEvent, useRef } from 'react';
 import Link from 'next/link';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
 import Toast, { ToastMessage } from '@/components/ui/Toast';
-import { apiFetch, clearApiCache } from '@/lib/api/client';
+import { apiFetch, clearApiCache, getCachedApiData, getApiSessionKey, getApiUpdatedAt, getKnownTransferDeadline, getTabSnapshot, invalidateApiQueries, saveTabSnapshot } from '@/lib/api/client';
+import { transitionDraftStore } from '@/lib/api/transition-draft-store';
+import pilot from '../pilot.module.css';
 import { ORDERED_CHAPTER_ROSTER, CHAPTER_ROSTER_COLUMNS } from '@/lib/departments';
 
 const SAMPLE_SHEET_URL =
@@ -94,9 +96,14 @@ function TermTransitionCountdown({
       setTimeLeft({ days, hours, minutes, seconds, isDue: false });
     }
 
-    calculate();
-    const interval = setInterval(calculate, 1000);
-    return () => clearInterval(interval);
+    let interval: ReturnType<typeof setInterval> | undefined;
+    const visibility = () => {
+      if(interval)clearInterval(interval);
+      if(document.visibilityState==='visible'){calculate();interval=setInterval(calculate,1000);}
+    };
+    visibility();
+    document.addEventListener('visibilitychange',visibility);
+    return () => { if(interval)clearInterval(interval);document.removeEventListener('visibilitychange',visibility); };
   }, [targetDate, onExpire]);
 
   if (!timeLeft) return null;
@@ -127,7 +134,16 @@ export default function ChapterManagerTermTransitionPage() {
   const [mounted, setMounted] = useState(false);
 
   // Chế độ xem: 'current' (Nhiệm kỳ hiện tại) | 'history' (Lịch sử)
-  const [viewMode, setViewMode] = useState<'current' | 'history'>('current');
+  const [viewMode, setViewMode] = useState<'current' | 'history'>(() => getTabSnapshot<'current' | 'history'>('term-transition:view') || 'current');
+  const viewModeRef = useRef(viewMode);
+  viewModeRef.current = viewMode;
+  const [draftError, setDraftError] = useState<string | null>(null);
+  const [viewError, setViewError] = useState<string | null>(null);
+  const [refreshingView, setRefreshingView] = useState(false);
+  const [syncTimes, setSyncTimes] = useState<{current?:number;history?:number}>({});
+  const scopeRef = useRef(getApiSessionKey());
+  const deadlineRetryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const historyDueAttemptRef = useRef<number | null>(null);
 
   // Dữ liệu sơ đồ hiện tại & Ban
   const [rosterData, setRosterData] = useState<any[]>([]);
@@ -200,12 +216,67 @@ export default function ChapterManagerTermTransitionPage() {
     setMessage(null);
     setToast({ type: 'info', message: 'Đã đến thời gian hiệu lực. Đang tải trạng thái xử lý chuyển giao.' });
     loadCurrentRoster(user.chapterId, true);
-    setTimeout(() => {
-      if (user?.chapterId) {
+    deadlineRetryRef.current = setTimeout(() => {
+      if (user?.chapterId && document.visibilityState==='visible') {
         loadCurrentRoster(user.chapterId, true);
       }
     }, 2500);
   }, [user?.chapterId]);
+  useEffect(() => () => { if (deadlineRetryRef.current) clearTimeout(deadlineRetryRef.current); }, [viewMode]);
+  useEffect(() => { saveTabSnapshot('term-transition:view',viewMode); },[viewMode]);
+  useEffect(() => {
+    if(viewMode!=='history' || !user?.chapterId)return;
+    let timer:ReturnType<typeof setTimeout> | undefined;
+    const arm=()=>{
+      if(timer)clearTimeout(timer);
+      if(document.visibilityState!=='visible')return;
+      const deadline=getKnownTransferDeadline(user.chapterId);
+      if(deadline===null){historyDueAttemptRef.current=null;return;}
+      const delay=deadline-Date.now();
+      if(delay<=0){
+        if(historyDueAttemptRef.current===deadline)return;
+        historyDueAttemptRef.current=deadline;
+        invalidateChapterViews();void loadHistory(user.chapterId,true);return;
+      }
+      timer=setTimeout(arm,Math.min(delay,2147483647));
+    };
+    arm();document.addEventListener('visibilitychange',arm);
+    return()=>{if(timer)clearTimeout(timer);document.removeEventListener('visibilitychange',arm);};
+  },[viewMode,user?.chapterId,historyList]);
+
+  // Owner data is updated in memory at commit time; persistence is debounced and flushed on departure.
+  useLayoutEffect(() => {
+    if (!user?.id || !user?.chapterId || scopeRef.current !== getApiSessionKey()) return;
+    transitionDraftStore.update(user.id,user.chapterId,{sheetUrl:rosterUrl,parsedResult,effectiveAt,termNumber:selectedTermNumber});
+    const flush = () => { const error=transitionDraftStore.flush(user.id,user.chapterId); setDraftError(error); return error; };
+    const timer=setTimeout(flush,300);
+    return () => clearTimeout(timer);
+  },[user?.id,user?.chapterId,rosterUrl,parsedResult,effectiveAt,selectedTermNumber]);
+  useEffect(() => {
+    if(!user?.id || !user?.chapterId)return;
+    const flush = () => { const error=transitionDraftStore.flush(user.id,user.chapterId);setDraftError(error);return error; };
+    const leave = (event:BeforeUnloadEvent) => { if(flush()){event.preventDefault();event.returnValue='';} };
+    const hidden = () => { if(document.visibilityState==='hidden')flush(); };
+    window.addEventListener('pagehide',flush);
+    window.addEventListener('beforeunload',leave);
+    document.addEventListener('visibilitychange',hidden);
+    return () => {flush();window.removeEventListener('pagehide',flush);window.removeEventListener('beforeunload',leave);document.removeEventListener('visibilitychange',hidden); };
+  },[user?.id,user?.chapterId]);
+
+  function invalidateChapterViews(applied = false, membersChanged = false) {
+    if(!user?.chapterId)return;
+    const base=`/api/v1/chapters/${user.chapterId}`;
+    const paths=[`${base}/current-roster`,`${base}/reorganizations`];
+    if(applied||membersChanged)paths.push(`${base}/dashboard/members`,`${base}/dashboard/courses`);
+    invalidateApiQueries(paths);
+    if(applied){clearApiCache('/api/v1/learning/me');clearApiCache('/api/v1/courses');clearApiCache('/api/v1/leaderboard');}
+  }
+  function reconcileVisibleTransfer() {
+    if(!user?.chapterId || scopeRef.current!==getApiSessionKey())return;
+    invalidateChapterViews();
+    if(viewModeRef.current==='current')void loadCurrentRoster(user.chapterId,true);
+    else void loadHistory(user.chapterId,true);
+  }
 
   useEffect(() => {
     setMounted(true);
@@ -220,57 +291,57 @@ export default function ChapterManagerTermTransitionPage() {
       } catch {}
     }
     if (currentUser?.chapterId) {
-      loadCurrentRoster(currentUser.chapterId);
+      if (viewMode === 'history') loadHistory(currentUser.chapterId);
+      else loadCurrentRoster(currentUser.chapterId);
       // Khôi phục bản nháp sheet đã import nếu có
       try {
-        const savedDraft = localStorage.getItem(`bbe_term_transition_draft_${currentUser.chapterId}`);
+        const savedDraft = transitionDraftStore.read(currentUser.id,currentUser.chapterId);
         if (savedDraft) {
-          setParsedResult(JSON.parse(savedDraft));
+          setParsedResult(savedDraft.parsedResult);
+          setRosterUrl(savedDraft.sheetUrl);
+          setEffectiveAt(savedDraft.effectiveAt);
+          setSelectedTermNumber(savedDraft.termNumber);
         }
-      } catch {}
+      } catch { setDraftError('Không đọc được bản nháp trên thiết bị. Vui lòng kiểm tra quyền lưu trữ.'); }
     }
   }, []);
 
   async function loadCurrentRoster(chapterId: string, force = false) {
-    setRosterLoading(true);
-    if (force) {
-      clearApiCache('/api/v1/chapters');
-    }
+    const url=`/api/v1/chapters/${chapterId}/current-roster`;
+    if (!getCachedApiData(url) && rosterData.length===0) setRosterLoading(true);
+    if(force)setRefreshingView(true);
     const res = await apiFetch(`/api/v1/chapters/${chapterId}/current-roster`, { noCache: force });
+    if(scopeRef.current!==getApiSessionKey())return;
     if (res.ok && res.data) {
       setRosterData(res.data.roster || []);
       setUnassignedMembers(res.data.unassignedMembers || []);
       setAvailableDepartments(res.data.departments || []);
       setScheduledBatch(res.data.scheduledBatch || null);
       setCurrentTermNumber(res.data.currentTermNumber ?? null);
+      setSyncTimes(times=>({...times,current:getApiUpdatedAt(url) || Date.now()}));
+      setViewError(null);
     }
-    // Nếu force refresh, đồng bộ lại thông tin user session từ server nếu chức vụ hoặc quyền đã thay đổi
-    if (force) {
-      try {
-        const meRes = await apiFetch('/api/v1/auth/me', { noCache: true });
-        if (meRes.ok && meRes.data?.user) {
-          const updated = { ...user, ...meRes.data.user };
-          localStorage.setItem('user', JSON.stringify(updated));
-          setUser(updated);
-        }
-      } catch {}
-    }
+    if(!res.ok && res.error?.code!=='STALE_REQUEST')setViewError(res.error?.message || 'Chưa cập nhật được sơ đồ. Vui lòng thử lại.');
     setRosterLoading(false);
+    setRefreshingView(false);
   }
 
   // Tự động gợi ý và ràng buộc số thứ tự nhiệm kỳ tiếp theo
   useEffect(() => {
+    // Restore the owner's draft and resolve the roster before suggesting a
+    // default. A mount-time closure must never overwrite a restored selection.
+    if (!mounted || rosterLoading) return;
     if (currentTermNumber) {
       setSelectedTermNumber((prev) => {
-        if (!prev || typeof prev !== 'number' || prev <= currentTermNumber) {
+        if (!prev || typeof prev !== 'number') {
           return currentTermNumber + 1;
         }
         return prev;
       });
-    } else if (selectedTermNumber === '') {
-      setSelectedTermNumber(1);
+    } else {
+      setSelectedTermNumber(prev => prev === '' ? 1 : prev);
     }
-  }, [currentTermNumber]);
+  }, [currentTermNumber, rosterLoading, mounted]);
 
   // Xác định số nhiệm kỳ hiển thị cho Sơ đồ 7 Ban
   // Nếu chưa có currentTermNumber mà đã có scheduledBatch thì suy luận nhiệm kỳ hiện tại = scheduledBatch.termNumber - 1
@@ -293,15 +364,19 @@ export default function ChapterManagerTermTransitionPage() {
   })();
 
   async function loadHistory(chapterId: string, force = false) {
-    setHistoryLoading(true);
-    if (force) {
-      clearApiCache('/api/v1/chapters');
-    }
+    const url=`/api/v1/chapters/${chapterId}/reorganizations`;
+    if(!getCachedApiData(url) && historyList.length===0)setHistoryLoading(true);
+    if(force)setRefreshingView(true);
     const res = await apiFetch(`/api/v1/chapters/${chapterId}/reorganizations`, { noCache: force });
+    if(scopeRef.current!==getApiSessionKey())return;
     if (res.ok && res.data) {
       setHistoryList(res.data.items || []);
+      setSyncTimes(times=>({...times,history:getApiUpdatedAt(url) || Date.now()}));
+      setViewError(null);
     }
     setHistoryLoading(false);
+    setRefreshingView(false);
+    if(!res.ok && res.error?.code!=='STALE_REQUEST')setViewError(res.error?.message || 'Chưa cập nhật được lịch sử. Vui lòng thử lại.');
   }
 
   const handleOpenHistory = () => {
@@ -342,9 +417,6 @@ export default function ChapterManagerTermTransitionPage() {
     }
 
     setParsedResult(res.data);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(`bbe_term_transition_draft_${user.chapterId}`, JSON.stringify(res.data));
-    }
     notify(
       'success',
       `Đã phân tích thành công Google Sheet: ${res.data.summary?.matchedInChapter || 0} thành viên hợp lệ trong Chapter!`
@@ -354,9 +426,6 @@ export default function ChapterManagerTermTransitionPage() {
   // Xóa bản nháp sheet đang xem
   const handleClearDraft = () => {
     setParsedResult(null);
-    if (user?.chapterId && typeof window !== 'undefined') {
-      localStorage.removeItem(`bbe_term_transition_draft_${user.chapterId}`);
-    }
     notify('success', 'Đã xóa bản xem trước của Google Sheet.');
   };
 
@@ -480,7 +549,7 @@ export default function ChapterManagerTermTransitionPage() {
         });
       }
 
-      clearApiCache('/api/v1/chapters');
+      invalidateChapterViews(false,true);
       loadCurrentRoster(user.chapterId);
     } else {
       notify('error', res.error?.message || 'Lỗi cập nhật ban cho thành viên.');
@@ -528,7 +597,7 @@ export default function ChapterManagerTermTransitionPage() {
         })
       );
 
-      clearApiCache('/api/v1/chapters');
+      invalidateChapterViews(false,true);
       loadCurrentRoster(user.chapterId);
     } else {
       notify('error', res.error?.message || 'Lỗi bổ nhiệm Trưởng ban.');
@@ -567,8 +636,7 @@ export default function ChapterManagerTermTransitionPage() {
       }));
     }
 
-    clearApiCache('/api/v1/chapters');
-    clearApiCache('/api/v1/users');
+    invalidateChapterViews(false,true);
     loadCurrentRoster(user.chapterId);
   };
 
@@ -601,8 +669,7 @@ export default function ChapterManagerTermTransitionPage() {
       `Đã vô hiệu hóa thành công ${userIds.length} thành viên chưa có Ban!`
     );
 
-    clearApiCache('/api/v1/chapters');
-    clearApiCache('/api/v1/users');
+    invalidateChapterViews(false,true);
     loadCurrentRoster(user.chapterId);
   };
 
@@ -640,8 +707,7 @@ export default function ChapterManagerTermTransitionPage() {
       unmatchedCurrentMembers: [],
     }));
 
-    clearApiCache('/api/v1/chapters');
-    clearApiCache('/api/v1/users');
+    invalidateChapterViews(false,true);
     loadCurrentRoster(user.chapterId);
   };
 
@@ -661,7 +727,7 @@ export default function ChapterManagerTermTransitionPage() {
       setShowApplyBatchModal(false);
       if (res.ok) {
         notify('success', 'Chuyển giao nhiệm kỳ thành công! Sơ đồ 7 Ban đã được cập nhật ngay lập tức.');
-        clearApiCache('/api/v1/chapters');
+        invalidateChapterViews(res.data?.success === true || res.data?.appliedImmediately === true || res.data?.item?.status === 'APPLIED');
       } else {
         notify('error', res.error?.message || 'Lỗi áp dụng chuyển giao nhiệm kỳ.');
       }
@@ -671,10 +737,7 @@ export default function ChapterManagerTermTransitionPage() {
       setApplyingBatch(false);
       setActionLoading(null);
       transferActionRef.current = false;
-      clearApiCache('/api/v1/learning/me');
-      clearApiCache('/api/v1/courses');
-      void loadCurrentRoster(user.chapterId, true);
-      void loadHistory(user.chapterId, true);
+      reconcileVisibleTransfer();
     }
   };
 
@@ -693,7 +756,7 @@ export default function ChapterManagerTermTransitionPage() {
       setShowCancelBatchModal(false);
       if (res.ok) {
         notify('success', 'Đã hủy đợt chuyển giao nhiệm kỳ đã lên lịch.');
-        clearApiCache('/api/v1/chapters');
+        invalidateChapterViews();
       } else {
         notify('error', res.error?.message || 'Lỗi hủy đợt chuyển giao.');
       }
@@ -703,10 +766,7 @@ export default function ChapterManagerTermTransitionPage() {
       setCancelingBatch(false);
       setActionLoading(null);
       transferActionRef.current = false;
-      clearApiCache('/api/v1/learning/me');
-      clearApiCache('/api/v1/courses');
-      void loadCurrentRoster(user.chapterId, true);
-      void loadHistory(user.chapterId, true);
+      reconcileVisibleTransfer();
     }
   };
 
@@ -715,6 +775,10 @@ export default function ChapterManagerTermTransitionPage() {
     if (!user?.chapterId || !parsedResult?.items || !effectiveAt) return;
     if (!selectedTermNumber) {
       notify('error', 'Vui lòng chọn số thứ tự nhiệm kỳ chuyển giao trước khi xác nhận.');
+      return;
+    }
+    if(currentTermNumber && Number(selectedTermNumber)<=currentTermNumber){
+      notify('error','Nhiệm kỳ hiện tại đã thay đổi. Hãy chọn nhiệm kỳ lớn hơn trước khi xác nhận; bản nháp của bạn vẫn được giữ.');
       return;
     }
     if (transferActionRef.current) return;
@@ -746,7 +810,7 @@ export default function ChapterManagerTermTransitionPage() {
       }
 
       if (typeof window !== 'undefined') {
-        localStorage.removeItem(`bbe_term_transition_draft_${user.chapterId}`);
+        // The owner-scoped empty draft is persisted by the draft effect. Legacy data stays untouched.
       }
       setParsedResult(null);
       notify(
@@ -756,21 +820,18 @@ export default function ChapterManagerTermTransitionPage() {
           : 'Đã lên lịch chuyển giao nhiệm kỳ thành công! Đợt chuyển giao đã được lưu bên dưới và sẽ tự động áp dụng khi đến ngày hiệu lực.'
       );
 
-      clearApiCache('/api/v1/chapters');
+      invalidateChapterViews(res.data?.appliedImmediately === true || res.data?.item?.status === 'APPLIED');
     } catch {
       notify('error', 'Không xác nhận được kết quả; hãy tải lại trạng thái trước khi thử lại.');
     } finally {
       setScheduling(false);
       transferActionRef.current = false;
-      clearApiCache('/api/v1/learning/me');
-      clearApiCache('/api/v1/courses');
-      void loadCurrentRoster(user.chapterId, true);
-      void loadHistory(user.chapterId, true);
+      reconcileVisibleTransfer();
     }
   };
 
   return (
-    <div className="space-y-8 max-w-7xl pb-20">
+    <div className={`${pilot.pilot} space-y-8 max-w-7xl pb-20`}>
       <Toast toast={toast} onClose={() => setToast(null)} />
 
       {/* Header */}
@@ -789,6 +850,11 @@ export default function ChapterManagerTermTransitionPage() {
 
         {/* Action Buttons */}
         <div className="flex flex-wrap items-center gap-2.5">
+          <Button variant="outline" size="sm" loading={refreshingView} disabled={refreshingView} onClick={() => {
+            if(!user?.chapterId)return;
+            if(viewMode==='current')void loadCurrentRoster(user.chapterId,true);
+            else void loadHistory(user.chapterId,true);
+          }}>Làm mới</Button>
           <Button
             variant={viewMode === 'current' ? 'primary' : 'outline'}
             onClick={handleOpenCurrent}
@@ -820,6 +886,9 @@ export default function ChapterManagerTermTransitionPage() {
         </div>
       </div>
 
+      {draftError && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">{draftError}<button type="button" className="ml-3 underline" onClick={()=>setDraftError(transitionDraftStore.flush(user.id,user.chapterId))}>Thử lưu lại</button></div>}
+      {viewError && <p role="alert" className="text-sm text-red-700">{viewError} Dữ liệu đã tải được giữ lại.</p>}
+      {syncTimes[viewMode] && <p className="text-xs text-[#596174]">Đồng bộ {viewMode==='current'?'sơ đồ':'lịch sử'}: {new Intl.DateTimeFormat('vi-VN',{hour:'2-digit',minute:'2-digit',second:'2-digit'}).format(syncTimes[viewMode])}</p>}
       {/* VIEW MODE: Nhiệm kỳ hiện tại (8 Cột rộng rãi + Cuộn ngang) */}
       {viewMode === 'current' && (
         <div className="space-y-6">
@@ -850,9 +919,9 @@ export default function ChapterManagerTermTransitionPage() {
                   notify('success', 'Đang tải lại sơ đồ và đồng bộ trạng thái mới nhất...');
                 }
               }}
-              loading={rosterLoading}
+              loading={rosterLoading || refreshingView}
               loadingText="Đang tải lại sơ đồ..."
-              disabled={rosterLoading}
+              disabled={rosterLoading || refreshingView}
             >
               🔄 Tải lại sơ đồ
             </Button>
@@ -1349,16 +1418,18 @@ export default function ChapterManagerTermTransitionPage() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-xl">
                   <div>
-                    <label className="block text-xs font-bold text-[#172554] mb-1">
+                    <label htmlFor="transition-term-number" className="block text-xs font-bold text-[#172554] mb-1">
                       Nhiệm kỳ chuyển giao *
                     </label>
                     <select
+                      id="transition-term-number"
                       required
                       value={selectedTermNumber}
                       onChange={(e) => setSelectedTermNumber(e.target.value ? Number(e.target.value) : '')}
                       className="w-full rounded-xl border border-[#cbdbf5] px-3.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB] bg-white font-medium text-[#172554]"
                     >
                       <option value="">-- Chọn số thứ tự nhiệm kỳ --</option>
+                      {selectedTermNumber!=='' && currentTermNumber && selectedTermNumber<=currentTermNumber && <option value={selectedTermNumber} disabled>{formatTermBadge(selectedTermNumber)} — cần chọn lại</option>}
                       {termOptions.map((opt) => (
                         <option key={opt.value} value={opt.value}>
                           {opt.label}
@@ -1622,7 +1693,7 @@ export default function ChapterManagerTermTransitionPage() {
                       onClick={() => {
                         setParsedResult(null);
                         if (typeof window !== 'undefined' && user?.chapterId) {
-                          localStorage.removeItem(`bbe_term_transition_draft_${user.chapterId}`);
+                          // Legacy drafts have unknown ownership and must remain untouched.
                         }
                       }}
                       className="text-slate-600 hover:text-red-600"
@@ -1665,9 +1736,9 @@ export default function ChapterManagerTermTransitionPage() {
                   notify('success', 'Đang tải lại lịch sử chuyển giao nhiệm kỳ...');
                 }
               }}
-              loading={historyLoading}
+              loading={historyLoading || refreshingView}
               loadingText="Đang tải lại..."
-              disabled={historyLoading}
+              disabled={historyLoading || refreshingView}
             >
               🔄 Tải lại
             </Button>
@@ -1749,6 +1820,7 @@ export default function ChapterManagerTermTransitionPage() {
       {/* MODAL CHI TIẾT LỊCH SỬ MỘT NHIỆM KỲ */}
       {selectedHistoryTerm && (
         <Modal
+          motion
           isOpen={Boolean(selectedHistoryTerm)}
           onClose={() => setSelectedHistoryTerm(null)}
           maxWidth="max-w-6xl"
@@ -1839,6 +1911,7 @@ export default function ChapterManagerTermTransitionPage() {
       {/* MODAL ĐỔI BAN CHO THÀNH VIÊN */}
       {changeDeptModal && (
         <Modal
+          motion
           isOpen={Boolean(changeDeptModal)}
           onClose={() => {
             if (!savingDept) {
@@ -1959,6 +2032,7 @@ export default function ChapterManagerTermTransitionPage() {
       {/* MODAL CẢNH BÁO XÁC NHẬN VÔ HIỆU HÓA TẤT CẢ (TRONG SHEET DỰ KIẾN) */}
       {showConfirmDeactivate && (
         <Modal
+          motion
           isOpen={showConfirmDeactivate}
           onClose={() => {
             setShowConfirmDeactivate(false);
@@ -2038,6 +2112,7 @@ export default function ChapterManagerTermTransitionPage() {
       {/* MODAL CẢNH BÁO XÁC NHẬN VÔ HIỆU HÓA 1 THÀNH VIÊN RIÊNG LẺ */}
       {singleDeactivateModal && (
         <Modal
+          motion
           isOpen={Boolean(singleDeactivateModal)}
           onClose={() => {
             setSingleDeactivateModal(null);
@@ -2123,6 +2198,7 @@ export default function ChapterManagerTermTransitionPage() {
       {/* MODAL CẢNH BÁO XÁC NHẬN VÔ HIỆU HÓA TẤT CẢ THÀNH VIÊN CHƯA CÓ BAN */}
       {showBulkUnassignedModal && (
         <Modal
+          motion
           isOpen={showBulkUnassignedModal}
           onClose={() => {
             setShowBulkUnassignedModal(false);
@@ -2203,6 +2279,7 @@ export default function ChapterManagerTermTransitionPage() {
       {/* MODAL CẢNH BÁO XÁC NHẬN ÁP DỤNG NGAY CHUYỂN GIAO ĐÃ LÊN LỊCH */}
       {showApplyBatchModal && scheduledBatch && (
         <Modal
+          motion
           isOpen={showApplyBatchModal}
           onClose={() => setShowApplyBatchModal(false)}
           maxWidth="max-w-md"
@@ -2259,6 +2336,7 @@ export default function ChapterManagerTermTransitionPage() {
       {/* MODAL CẢNH BÁO XÁC NHẬN HỦY ĐỢT CHUYỂN GIAO ĐÃ LÊN LỊCH */}
       {showCancelBatchModal && scheduledBatch && (
         <Modal
+          motion
           isOpen={showCancelBatchModal}
           onClose={() => setShowCancelBatchModal(false)}
           maxWidth="max-w-md"

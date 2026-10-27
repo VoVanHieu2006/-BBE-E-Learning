@@ -1,6 +1,8 @@
 'use client';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useContext, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import motionStyle from './ModalMotion.module.css';
+import { PilotVisibility } from '@/components/layout/PilotVisibility';
 
 // Shared scroll-lock state across ALL Modal instances (module-level) so nested
 // modals never restore a stale body overflow when closing in any order.
@@ -53,6 +55,7 @@ interface ModalProps {
   maxWidth?: string;
   className?: string;
   closeOnBackdrop?: boolean;
+  motion?: boolean;
 }
 
 export default function Modal({
@@ -62,8 +65,13 @@ export default function Modal({
   maxWidth = 'max-w-3xl',
   className = '',
   closeOnBackdrop = true,
+  motion = false,
 }: ModalProps) {
   const [mounted, setMounted] = useState(false);
+  const portalVisible = useContext(PilotVisibility);
+  const visibleRef = useRef(portalVisible);
+  visibleRef.current = portalVisible;
+  const lastInsideFocus = useRef<HTMLElement | null>(null);
   const onCloseRef = useRef(onClose);
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
@@ -75,6 +83,9 @@ export default function Modal({
   useEffect(() => {
     setMounted(true);
   }, []);
+  useEffect(() => {
+    if(portalVisible && isOpen && mounted && lastInsideFocus.current?.isConnected)lastInsideFocus.current.focus();
+  },[portalVisible,isOpen,mounted]);
 
   // Lock body scroll while any modal is open; only the first open captures the
   // original overflow and only the last close restores it (nested-modal safe).
@@ -99,6 +110,7 @@ export default function Modal({
     focusables[0]?.focus();
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (!visibleRef.current) return;
       if (e.key === 'Escape') {
         const top = modalStack[modalStack.length - 1];
         if (top && top.id === id) top.close();
@@ -128,7 +140,8 @@ export default function Modal({
 
   const content = (
     <div
-      ref={dialogRef}
+      ref={node=>{dialogRef.current=node;if(node)node.inert=!portalVisible;}}
+      onFocusCapture={event=>{lastInsideFocus.current=event.target as HTMLElement;}}
       className="fixed inset-0 z-[9999] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto"
       onClick={(e) => {
         if (closeOnBackdrop && e.target === e.currentTarget) {
@@ -136,10 +149,12 @@ export default function Modal({
         }
       }}
       aria-modal="true"
+      aria-hidden={!portalVisible}
+      style={portalVisible ? undefined : {visibility:'hidden',pointerEvents:'none'}}
       role="dialog"
     >
       <div
-        className={`w-full ${maxWidth} bg-white rounded-3xl shadow-2xl overflow-hidden my-auto ${className}`}
+        className={`w-full ${maxWidth} bg-white rounded-3xl shadow-2xl overflow-hidden my-auto ${motion ? motionStyle.enter : ''} ${className}`}
         onClick={(e) => e.stopPropagation()}
       >
         {children}

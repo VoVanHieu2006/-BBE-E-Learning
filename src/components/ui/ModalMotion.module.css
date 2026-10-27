@@ -1,0 +1,4 @@
+.enter { animation:dialog-enter 180ms ease-out both; border-radius:12px; }
+/* Opacity preserves the containing block and iframe/fullscreen geometry. */
+@keyframes dialog-enter { from { opacity:.88; } to { opacity:1; } }
+@media (prefers-reduced-motion:reduce) { .enter { animation:none; } }

@@ -1,0 +1,26 @@
+{
+  "environment": "Next dev, mocked APIs, Edge desktop 1440x900; not backend proof; timings include auth and development rendering",
+  "cases": [
+    {
+      "id": "RUN",
+      "status": "FAIL",
+      "error": "locator.waitFor: Timeout 90000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByText('Đồng bộ thành công cả hai nguồn').first() to be visible\u001b[22m\n\n    at stable (C:\\Users\\Acer\\Desktop\\E-learning\\docs\\ui-cache-checkpoints\\verify-runtime.cjs:44:54)\n    at C:\\Users\\Acer\\Desktop\\E-learning\\docs\\ui-cache-checkpoints\\verify-runtime.cjs:52:62",
+      "debug": {
+        "url": "/chapter-manager/dashboard",
+        "visible": "visible",
+        "userId": "A"
+      }
+    }
+  ],
+  "errors": [],
+  "navigationMs": [],
+  "layoutChecks": [],
+  "performanceSample": {
+    "cls": 0,
+    "longTasks": 1,
+    "longTaskMs": 244,
+    "heapUsedBytes": 27738206
+  },
+  "counts": {},
+  "requests": []
+}

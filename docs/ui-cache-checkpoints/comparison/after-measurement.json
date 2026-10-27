@@ -1,0 +1,181 @@
+{
+  "label": "after",
+  "base": "working-tree Pilot",
+  "browser": "156.0.4314.42",
+  "fixture": "same BBE Chapter / 12 members / 2 courses / 65% / 240 Stars",
+  "rounds": 10,
+  "businessGET": 0,
+  "authRequests": 20,
+  "navigation": [
+    {
+      "route": "courses",
+      "ms": 592
+    },
+    {
+      "route": "dashboard",
+      "ms": 128
+    },
+    {
+      "route": "courses",
+      "ms": 354
+    },
+    {
+      "route": "dashboard",
+      "ms": 125
+    },
+    {
+      "route": "courses",
+      "ms": 199
+    },
+    {
+      "route": "dashboard",
+      "ms": 265
+    },
+    {
+      "route": "courses",
+      "ms": 132
+    },
+    {
+      "route": "dashboard",
+      "ms": 171
+    },
+    {
+      "route": "courses",
+      "ms": 205
+    },
+    {
+      "route": "dashboard",
+      "ms": 186
+    },
+    {
+      "route": "courses",
+      "ms": 239
+    },
+    {
+      "route": "dashboard",
+      "ms": 158
+    },
+    {
+      "route": "courses",
+      "ms": 180
+    },
+    {
+      "route": "dashboard",
+      "ms": 173
+    },
+    {
+      "route": "courses",
+      "ms": 187
+    },
+    {
+      "route": "dashboard",
+      "ms": 184
+    },
+    {
+      "route": "courses",
+      "ms": 183
+    },
+    {
+      "route": "dashboard",
+      "ms": 225
+    },
+    {
+      "route": "courses",
+      "ms": 285
+    },
+    {
+      "route": "dashboard",
+      "ms": 229
+    },
+    {
+      "route": "courses",
+      "ms": 201
+    },
+    {
+      "route": "dashboard",
+      "ms": 201
+    }
+  ],
+  "requests": [
+    {
+      "kind": "auth",
+      "endpoint": "/api/v1/auth/me"
+    },
+    {
+      "kind": "auth",
+      "endpoint": "/api/v1/auth/me"
+    },
+    {
+      "kind": "auth",
+      "endpoint": "/api/v1/auth/me"
+    },
+    {
+      "kind": "auth",
+      "endpoint": "/api/v1/auth/me"
+    },
+    {
+      "kind": "auth",
+      "endpoint": "/api/v1/auth/me"
+    },
+    {
+      "kind": "auth",
+      "endpoint": "/api/v1/auth/me"
+    },
+    {
+      "kind": "auth",
+      "endpoint": "/api/v1/auth/me"
+    },
+    {
+      "kind": "auth",
+      "endpoint": "/api/v1/auth/me"
+    },
+    {
+      "kind": "auth",
+      "endpoint": "/api/v1/auth/me"
+    },
+    {
+      "kind": "auth",
+      "endpoint": "/api/v1/auth/me"
+    },
+    {
+      "kind": "auth",
+      "endpoint": "/api/v1/auth/me"
+    },
+    {
+      "kind": "auth",
+      "endpoint": "/api/v1/auth/me"
+    },
+    {
+      "kind": "auth",
+      "endpoint": "/api/v1/auth/me"
+    },
+    {
+      "kind": "auth",
+      "endpoint": "/api/v1/auth/me"
+    },
+    {
+      "kind": "auth",
+      "endpoint": "/api/v1/auth/me"
+    },
+    {
+      "kind": "auth",
+      "endpoint": "/api/v1/auth/me"
+    },
+    {
+      "kind": "auth",
+      "endpoint": "/api/v1/auth/me"
+    },
+    {
+      "kind": "auth",
+      "endpoint": "/api/v1/auth/me"
+    },
+    {
+      "kind": "auth",
+      "endpoint": "/api/v1/auth/me"
+    },
+    {
+      "kind": "auth",
+      "endpoint": "/api/v1/auth/me"
+    }
+  ]
+}

@@ -1,0 +1,210 @@
++<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f8f9ff">
+  <title>BBE — Mẫu duyệt Lead Chapter</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; }
+    .bbe-pilot { --navy:#172554; --blue:#2563eb; --orange:#f97316; --line:#dce3f0; --muted:#596174; margin:0; color:#434655; background:#f8f9ff; font:14px/1.6 Inter,sans-serif; }
+    .bbe-pilot :is(button,input,select) { font:inherit; color:inherit; }
+    .bbe-pilot :is(a,button,input,select):focus-visible { outline:3px solid #2563eb; outline-offset:3px; }
+    .bbe-pilot ::selection { background:#dbeafe; color:#172554; }
+    .bbe-pilot a { color:var(--blue); text-underline-offset:4px; }
+    .bbe-pilot button { min-height:36px; padding:6px 14px; border:1px solid var(--line); border-radius:8px; background:white; cursor:pointer; touch-action:manipulation; transition:background-color 180ms,color 180ms; }
+    .bbe-pilot button:hover { background:#eff4ff; color:var(--navy); }
+    .bbe-pilot button:disabled { cursor:wait; color:var(--muted); }
+    .bbe-pilot .primary { color:white; background:var(--blue); border-color:var(--blue); }
+    .bbe-pilot .primary:hover { background:#1d4ed8; }
+    .bbe-pilot h1,.bbe-pilot h2,.bbe-pilot h3 { font-family:'Be Vietnam Pro',sans-serif; color:var(--navy); margin:0; text-wrap:balance; }
+    .bbe-pilot h1 { font-size:24px; line-height:32px; font-weight:700; }
+    .bbe-pilot h2 { font-size:16px; line-height:24px; font-weight:600; }
+    .bbe-pilot h3 { font-size:14px; }
+    .bbe-pilot p { margin:8px 0 0; }
+    .bbe-pilot .muted { color:var(--muted); }
+    .bbe-pilot .skip { position:fixed; top:-100px; left:16px; background:white; padding:12px; z-index:10; }
+    .bbe-pilot .skip:focus { top:12px; }
+    .bbe-pilot aside { position:fixed; inset:0 auto 0 0; width:256px; overflow-y:auto; background:white; border-right:1px solid var(--line); padding:24px 16px; display:flex; flex-direction:column; gap:24px; }
+    .bbe-pilot aside > * { flex-shrink:0; }
+    .bbe-pilot .brand { display:flex; align-items:center; gap:12px; padding:0 8px; color:var(--navy); }
+    .bbe-pilot .brand img { object-fit:contain; width:76px; height:44px; }
+    .bbe-pilot .brand strong { border-left:1px solid var(--line); padding-left:12px; font-family:'Be Vietnam Pro',sans-serif; font-size:13px; line-height:20px; }
+    .bbe-pilot .scope { padding:0 12px; }
+    .bbe-pilot .scope strong { color:var(--navy); display:block; }
+    .bbe-pilot nav { display:grid; gap:8px; }
+    .bbe-pilot nav button { text-align:left; border:0; padding:10px 12px; background:transparent; line-height:22px; }
+    .bbe-pilot nav button[aria-current=page] { color:var(--navy); background:#eff4ff; font-weight:600; }
+    .bbe-pilot .account { margin-top:auto; padding:16px 12px 0; border-top:1px solid var(--line); }
+    .bbe-pilot main { margin-left:256px; padding:32px; min-width:0; }
+    /* 1440 = sidebar 256 + gutters 64 + canvas 1120. No fixed canvas width. */
+    .bbe-pilot .review { display:flex; flex-wrap:wrap; align-items:center; gap:12px; padding:12px 16px; margin-bottom:24px; background:#eff4ff; border-radius:8px; color:var(--navy); }
+    .bbe-pilot .review label { margin-left:auto; }
+    .bbe-pilot select { background:white; border:1px solid var(--line); border-radius:8px; padding:6px 8px; min-height:36px; }
+    .bbe-pilot header { display:flex; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; gap:16px; margin-bottom:24px; }
+    .bbe-pilot header p { max-width:72ch; }
+    .bbe-pilot .sync { font-size:13px; margin-top:8px; color:var(--muted); }
+    .bbe-pilot .metrics { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); background:white; border:1px solid var(--line); border-radius:12px; margin-bottom:24px; }
+    .bbe-pilot .metric { padding:20px 16px; min-width:0; }
+    .bbe-pilot .metric + .metric { border-left:1px solid var(--line); }
+    .bbe-pilot .metric dt { color:var(--muted); line-height:22px; min-height:44px; }
+    .bbe-pilot .metric dd { margin:8px 0 0; font-size:28px; line-height:36px; color:var(--navy); font-weight:600; font-variant-numeric:tabular-nums; }
+    .bbe-pilot .metric small { display:block; font-size:13px; color:var(--muted); }
+    .bbe-pilot .metric .progress { color:var(--blue); }
+    .bbe-pilot .metric .stars { color:#9a4510; }
+    .bbe-pilot .destinations { display:grid; grid-template-columns:1fr 1fr; gap:24px; }
+    .bbe-pilot .panel { padding:24px; background:white; border:1px solid var(--line); border-radius:12px; }
+    .bbe-pilot .panel p { margin-bottom:20px; max-width:65ch; }
+    .bbe-pilot .panel button { margin-top:4px; }
+    .bbe-pilot .toolbar { display:flex; gap:16px; flex-wrap:wrap; justify-content:space-between; align-items:end; margin:24px 0 16px; }
+    .bbe-pilot label { display:block; color:var(--navy); font-weight:500; }
+    .bbe-pilot input { display:block; width:100%; min-height:36px; padding:7px 12px; border:1px solid var(--line); border-radius:8px; background:white; caret-color:var(--blue); }
+    .bbe-pilot .search { width:min(100%,320px); }
+    .bbe-pilot .table-wrap { overflow:auto; background:white; border:1px solid var(--line); border-radius:12px; }
+    .bbe-pilot table { border-collapse:collapse; width:100%; min-width:640px; }
+    .bbe-pilot caption { text-align:left; padding:16px 20px 8px; color:var(--muted); }
+    .bbe-pilot th { text-align:left; font-weight:500; color:var(--muted); padding:12px 20px; }
+    .bbe-pilot td { padding:20px; border-top:1px solid var(--line); vertical-align:middle; }
+    .bbe-pilot td:first-child { color:var(--navy); font-weight:500; max-width:340px; overflow-wrap:anywhere; }
+    .bbe-pilot .numeric { text-align:right; font-variant-numeric:tabular-nums; }
+    .bbe-pilot .bar { background:#e7efff; height:4px; margin-top:8px; border-radius:4px; overflow:hidden; }
+    .bbe-pilot .bar span { display:block; height:100%; background:var(--blue); }
+    .bbe-pilot .tabs { display:flex; overflow:auto; gap:20px; border-bottom:1px solid var(--line); margin-bottom:24px; }
+    .bbe-pilot .tabs button { white-space:nowrap; border:0; border-bottom:2px solid transparent; border-radius:0; background:transparent; padding:10px 0; }
+    .bbe-pilot .tabs button[aria-pressed=true] { color:var(--navy); font-weight:600; border-bottom-color:var(--blue); }
+    .bbe-pilot .form-grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; max-width:760px; }
+    .bbe-pilot .wide { grid-column:1/-1; }
+    .bbe-pilot .notice { padding:16px; margin:16px 0; border-radius:8px; background:#eff4ff; color:var(--navy); }
+    .bbe-pilot .error { background:#fff1f0; color:#9f2420; }
+    .bbe-pilot .empty { padding:40px 24px; text-align:center; background:white; border:1px solid var(--line); border-radius:12px; }
+    .bbe-pilot .skeleton { height:180px; border-radius:12px; border:1px solid var(--line); background:#e8edf6; animation:pulse 1.1s ease-in-out infinite alternate; }
+    .bbe-pilot dialog { width:min(560px,calc(100% - 32px)); border:0; border-radius:12px; padding:24px; color:#434655; background:white; box-shadow:0 16px 48px #17255426; overscroll-behavior:contain; }
+    .bbe-pilot dialog::backdrop { background:#17255466; }
+    .bbe-pilot dialog button { margin-top:20px; }
+    .bbe-pilot .mobile { display:none; }
+    .bbe-pilot .status { min-height:24px; }
+    .bbe-pilot #content { animation:screen-enter 180ms ease-out both; }
+    .bbe-pilot dialog[open] { animation:screen-enter 180ms ease-out both; }
+    .bbe-pilot details { margin-top:20px; border:1px solid var(--line); border-radius:8px; padding:12px 16px; }
+    .bbe-pilot summary { cursor:pointer; color:var(--navy); font-weight:500; min-height:24px; }
+    .bbe-pilot details[open] > p { animation:screen-enter 180ms ease-out both; }
+    @keyframes screen-enter { from { opacity:.88; } to { opacity:1; } }
+    [hidden] { display:none !important; }
+    @keyframes pulse { from { opacity:.6; } to { opacity:1; } }
+    @media(max-width:1100px) { .bbe-pilot .metrics { grid-template-columns:repeat(2,minmax(0,1fr)); } .bbe-pilot .metric + .metric { border-left:0; } .bbe-pilot .metric { border-bottom:1px solid var(--line); } .bbe-pilot .metric:last-child { grid-column:1/-1; border-bottom:0; } .bbe-pilot .metric dt { min-height:0; } }
+    @media(max-width:767px) {
+      .bbe-pilot aside { display:none; }
+      .bbe-pilot .mobile { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; background:white; border-bottom:1px solid var(--line); color:var(--navy); }
+      .bbe-pilot main { margin-left:0; padding:20px 16px max(32px,env(safe-area-inset-bottom)); }
+      .bbe-pilot :is(button,input,select) { min-height:44px; }
+      .bbe-pilot .review { gap:8px; padding:12px; }
+      .bbe-pilot .review label { margin-left:0; width:100%; }
+      .bbe-pilot .review select { width:100%; }
+      .bbe-pilot header { gap:12px; }
+      .bbe-pilot header > div { width:100%; }
+      .bbe-pilot .metrics { display:block; }
+      .bbe-pilot .metric { padding:16px; display:grid; grid-template-columns:1fr auto; gap:0 12px; }
+      .bbe-pilot .metric dt { grid-column:1; }
+      .bbe-pilot .metric dd { grid-column:2; grid-row:1/3; margin:0; align-self:center; font-size:24px; }
+      .bbe-pilot .destinations,.bbe-pilot .form-grid { grid-template-columns:1fr; gap:16px; }
+      .bbe-pilot .panel { padding:20px; }
+      .bbe-pilot .wide { grid-column:auto; }
+      .bbe-pilot .table-wrap { margin-top:12px; }
+      .bbe-pilot h1 { overflow-wrap:anywhere; }
+      .bbe-pilot .toolbar { gap:12px; }
+    }
+    @media(prefers-reduced-motion:reduce) { .bbe-pilot *, .bbe-pilot *::before, .bbe-pilot *::after { animation:none !important; transition:none !important; scroll-behavior:auto !important; } }
+  </style>
+</head>
+<body class="bbe-pilot">
+  <a class="skip" href="#main">Đến nội dung chính</a>
+  <div class="mobile"><strong>BBE E-Learning</strong><button id="open-menu" type="button">Menu</button></div>
+  <aside aria-label="Thanh điều hướng">
+    <div class="brand"><img src="../../public/images/logo-transparent.png" alt="BBE" width="76" height="44"><strong>E-Learning<br>Learning Hub</strong></div>
+    <div class="scope"><strong>Chapter minh họa</strong><span class="muted">Lead Chapter</span></div>
+    <nav aria-label="Điều hướng chính" id="desktop-nav"></nav>
+    <div class="account"><strong>Lead Chapter</strong><br><span class="muted">Mẫu duyệt giao diện</span></div>
+  </aside>
+  <main id="main" tabindex="-1">
+    <div class="review"><span><strong>Mẫu thiết kế</strong> · Dữ liệu minh họa, không kết nối hệ thống</span><label for="state">Trạng thái mẫu</label><select id="state"><option value="success">Có dữ liệu</option><option value="loading">Đang tải</option><option value="empty">Chưa có dữ liệu</option><option value="error">Lỗi khi làm mới</option><option value="partial">Lỗi một phần</option></select></div>
+    <header><div><h1 id="title">Dashboard Lead Chapter</h1><p id="description">Theo dõi tiến độ học tập và quản lý học viên trong Chapter trực thuộc.</p><p class="muted">Chapter minh họa</p><div class="sync" id="sync">Chưa có lần đồng bộ với hệ thống</div></div><button type="button" id="refresh">Làm mới</button></header>
+    <div class="status" id="status" role="status" aria-live="polite"></div>
+    <section id="content" aria-labelledby="title"></section>
+  </main>
+  <dialog id="menu" aria-label="Điều hướng BBE"><nav id="mobile-nav" aria-label="Điều hướng trên điện thoại"></nav><button type="button" data-close>Đóng menu</button></dialog>
+  <dialog id="details" aria-labelledby="dialog-title"><h2 id="dialog-title">Nội dung khóa học</h2><p>Mẫu bố cục cửa sổ nội dung. Video và Quiz tiếp tục dùng quyền truy cập và trình phát hiện hành trong ứng dụng.</p><details open><summary>Buổi học minh họa</summary><p>Các bài học hiện hành được giữ nguyên. Đóng/mở phần này để xem chuyển động 180ms.</p></details><p class="muted">Mẫu này không tải video hoặc nội dung học tập.</p><button type="button" data-close>Đóng</button></dialog>
+  <script>
+    // Presentation-only fixtures: values mirror API fields, not a new business formula.
+    const fixture = {
+      summary: { totalMembers:12, avgChapterProgress:65, totalStars:240, membersOver70:6 },
+      totalCourses:2,
+      courses:[{title:'Kỹ năng giao tiếp',members:12,completed:6,rate:50},{title:'Làm việc cùng đội ngũ',members:12,completed:3,rate:25}],
+      departments:['Ban Chủ nhiệm','Ban Đào tạo','Ban Nhân sự','Ban Truyền thông','Ban Sự kiện','Ban Đối ngoại','Ban Hậu cần']
+    };
+    const labels = [['dashboard','Tổng quan'],['members','Thành viên & Tiến trình'],['leaderboard','Bảng xếp hạng'],['courses','Khóa học'],['invitations','Mời thành viên'],['transition','Chuyển giao nhiệm kỳ']];
+    let screen = 'dashboard', view = 'current', state = 'success', lastFocus, refreshTimer;
+    const draft = {url:'',term:'',date:''};
+    const content = document.querySelector('#content');
+    const fmt = n => new Intl.NumberFormat('vi-VN').format(n);
+    const esc = s => String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    for (const id of ['desktop-nav','mobile-nav']) document.getElementById(id).innerHTML = labels.map(([key,label])=>`<button type="button" data-screen="${key}" ${key===screen?'aria-current="page"':''}>${label}</button>`).join('');
+    function openDialog(dialog,trigger) { lastFocus=trigger || document.activeElement; dialog.showModal(); document.body.style.overflow='hidden'; }
+    for (const dialog of document.querySelectorAll('dialog')) dialog.addEventListener('close',()=>{document.body.style.overflow='';lastFocus?.focus();});
+    document.querySelector('#open-menu').onclick=event=>openDialog(document.querySelector('#menu'),event.currentTarget);
+    document.addEventListener('click',e=>{
+      const close=e.target.closest('[data-close]'); if(close)close.closest('dialog').close();
+      const nav=e.target.closest('[data-screen]');
+      if(nav){
+        const target=nav.dataset.screen;
+        if(!['dashboard','courses','transition'].includes(target)){
+          document.querySelector('#status').textContent='Mẫu duyệt gồm Tổng quan, Khóa học và Chuyển giao nhiệm kỳ.';
+          if(document.querySelector('#menu').open)document.querySelector('#menu').close();
+          return;
+        }
+        screen=target;
+        document.querySelectorAll('[data-screen]').forEach(b=>{if(b.dataset.screen===screen)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
+        if(document.querySelector('#menu').open)document.querySelector('#menu').close();
+        document.querySelector('#status').textContent=''; render();
+      }
+      const tab=e.target.closest('[data-view]'); if(tab){view=tab.dataset.view;render();document.querySelector(`[data-view="${view}"]`).focus();}
+      if(e.target.closest('[data-content]')) {document.querySelector('#dialog-title').textContent=e.target.closest('[data-content]').dataset.content;openDialog(document.querySelector('#details'),e.target.closest('[data-content]'));}
+    });
+    document.querySelector('#state').onchange=e=>{state=e.target.value;render();};
+    document.querySelector('#refresh').onclick=()=>{
+      const button=document.querySelector('#refresh');button.disabled=true;button.textContent='Đang làm mới…';
+      clearTimeout(refreshTimer);refreshTimer=setTimeout(()=>{button.disabled=false;button.textContent='Làm mới';document.querySelector('#status').textContent='Đã xem lại mẫu. Không gửi yêu cầu tới hệ thống.';},500);
+    };
+    function table(caption,heads,rows) {return `<div class="table-wrap" role="region" aria-label="${caption}" tabindex="0"><table><caption>${caption}</caption><thead><tr>${heads.map(h=>`<th scope="col">${h}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div>`;}
+    function render() {
+      document.querySelector('#title').textContent={dashboard:'Dashboard Lead Chapter',courses:'Khóa học',transition:'Chuyển giao nhiệm kỳ'}[screen];
+      document.querySelector('#description').textContent={dashboard:'Theo dõi tiến độ học tập và quản lý học viên trong Chapter trực thuộc.',courses:'Theo dõi tiến độ từng khóa học đã xuất bản trong Chapter.',transition:'Quản lý sơ đồ hiện tại, lịch sử và chuẩn bị nhiệm kỳ tiếp theo.'}[screen];
+      content.setAttribute('aria-busy',String(state==='loading'));
+      if(state==='loading'){content.innerHTML='<div class="skeleton" aria-label="Đang tải dữ liệu mẫu"></div>';return;}
+      if(state==='empty'){content.innerHTML='<div class="empty"><h2>Chưa có dữ liệu để hiển thị</h2><p>Chọn “Có dữ liệu” để xem bố cục mẫu của Chapter.</p></div>';return;}
+      let markup='';
+      if(state==='error'||state==='partial')markup+=`<div class="notice error" role="alert">${state==='partial'?'Chưa cập nhật được khóa học. Các chỉ số thành viên vẫn được giữ.':'Chưa thể làm mới. Dữ liệu đang hiển thị được giữ lại.'} Vui lòng thử lại.</div>`;
+      if(screen==='dashboard') {
+        const s=fixture.summary;
+        markup+='<dl class="metrics">'+[['Thành viên Chapter',fmt(s.totalMembers),'Toàn bộ Chapter',''],['Khóa học Published',fmt(fixture.totalCourses),'Chương trình đào tạo',''],['Tiến độ TB Chapter',fmt(s.avgChapterProgress)+'%','Tất cả các khóa học','progress'],['Tổng Star Chapter',fmt(s.totalStars),'Học tập & Quiz tích lũy','stars'],['Đạt tiến độ ≥ 70%',fmt(s.membersOver70)+' / '+fmt(s.totalMembers),'50% thành viên','']].map(([label,value,note,cls])=>`<div class="metric"><dt>${label}</dt><dd class="${cls}">${value}</dd><small>${note}</small></div>`).join('')+'</dl>';
+        markup+='<div class="destinations"><article class="panel"><h2>Quản lý thành viên & Tiến trình</h2><p>Mời thành viên mới vào Chapter, theo dõi tiến độ từng học viên, khóa hoặc mở khóa tài khoản.</p><button type="button" data-screen="members">Xem thành viên</button></article><article class="panel"><h2>Thống kê khóa học</h2><p>Xem tỷ lệ hoàn thành từng khóa học của các học viên trong Chapter.</p><button type="button" data-screen="courses">Xem khóa học</button></article></div>';
+      } else if(screen==='courses') {
+        markup+='<div class="toolbar"><label class="search" for="search">Tìm khóa học<input id="search" type="search" name="course-search" autocomplete="off" placeholder="Nhập tên khóa học…"></label><span class="muted" id="course-count">2 khóa học minh họa</span></div>';
+        markup+=table('Khóa học đã xuất bản — dữ liệu minh họa',['Khóa học','Học viên','Hoàn thành','Tỷ lệ','Nội dung'],fixture.courses.map(c=>`<tr data-course="${esc(c.title.toLocaleLowerCase('vi'))}"><td>${c.title}</td><td class="numeric">${c.members}</td><td class="numeric">${c.completed}</td><td class="numeric">${c.rate}%<div class="bar" aria-hidden="true"><span style="width:${c.rate}%"></span></div></td><td><button type="button" data-content="${c.title}">Xem nội dung</button></td></tr>`).join(''));
+      } else {
+        markup+='<div class="tabs" role="group" aria-label="Nội dung chuyển giao">'+[['current','Sơ đồ hiện tại'],['history','Lịch sử'],['draft','Chuẩn bị chuyển giao']].map(([key,label])=>`<button type="button" data-view="${key}" aria-pressed="${view===key}">${label}</button>`).join('')+'</div>';
+        if(view==='current')markup+='<div class="notice">Chưa có đợt chuyển giao được lên lịch trong dữ liệu minh họa.</div>'+table('Sơ đồ phân ban — mẫu bố cục',['Ban','Người phụ trách','Thành viên'],fixture.departments.map(d=>`<tr><td>${d}</td><td class="muted">Chưa có dữ liệu</td><td class="numeric">—</td></tr>`).join(''));
+        if(view==='history')markup+='<div class="empty"><h2>Chưa có lịch sử chuyển giao</h2><p>Các đợt chuyển giao đã ghi nhận sẽ xuất hiện tại đây.</p></div>';
+        if(view==='draft')markup+=`<section class="panel"><h2>Chuẩn bị nhiệm kỳ tiếp theo</h2><p>Nhập thông tin để xem bố cục biểu mẫu. Mẫu này không lưu bản nháp hay gửi dữ liệu.</p><form class="form-grid" onsubmit="return false"><label class="wide" for="sheet">Đường dẫn Google Sheet<input id="sheet" name="sheet" type="url" autocomplete="off" placeholder="https://docs.google.com/spreadsheets/…" value="${esc(draft.url)}"></label><label for="term">Nhiệm kỳ<input id="term" name="term" type="number" min="1" inputmode="numeric" value="${esc(draft.term)}"></label><label for="date">Ngày giờ hiệu lực (giờ thiết bị)<input id="date" name="effective-date" type="datetime-local" value="${esc(draft.date)}"></label><p class="wide muted">Nội dung đang nhập được giữ khi chuyển giữa các màn hình trong mẫu. Tải lại trang sẽ xóa dữ liệu mẫu.</p></form></section>`;
+      }
+      content.innerHTML=markup;
+      if(!matchMedia('(prefers-reduced-motion: reduce)').matches)content.animate([{opacity:.88},{opacity:1}],{duration:180,easing:'ease-out'});
+      const search=document.querySelector('#search');if(search)search.oninput=()=>{let count=0;document.querySelectorAll('[data-course]').forEach(row=>{row.hidden=!row.dataset.course.includes(search.value.toLocaleLowerCase('vi'));if(!row.hidden)count++;});document.querySelector('#course-count').textContent=count+' khóa học minh họa';};
+      for(const [id,key] of [['sheet','url'],['term','term'],['date','date']]){const el=document.getElementById(id);if(el)el.oninput=()=>{draft[key]=el.value;};}
+    }
+    render();
+  </script>
+</body>
+</html>

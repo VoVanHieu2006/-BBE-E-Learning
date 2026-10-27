@@ -1,170 +1,99 @@
 'use client';
 import Sidebar from '@/components/layout/Sidebar';
 import ContentTransition from '@/components/layout/ContentTransition';
-import { apiFetch } from '@/lib/api/client';
-import { useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { consumePilotNavigation, deactivatePilotScope, getApiSessionKey, getTabSnapshot, getVerifiedPilotUser, revokeApiSession, saveTabSnapshot, verifyPilotSession } from '@/lib/api/client';
+import { useEffect, useLayoutEffect, useState } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
+import pilot from './pilot.module.css';
+import { PilotVisibility } from '@/components/layout/PilotVisibility';
 
-function applyPreferredChapter(user: any, preferredChapterId?: string | null) {
-  const chapters = user?.managedChapters || [];
-  const selected = chapters.find((chapter: any) => chapter.id === preferredChapterId)
-    || chapters.find((chapter: any) => chapter.id === user?.chapterId)
-    || chapters[0];
-  return selected ? { ...user, chapterId: selected.id, chapterName: selected.name, canManageMembers: selected.canManageMembers } : user;
-}
-
-/**
- * Layout dùng chung cho các trang BĐHU: Sidebar cố định (không remount khi chuyển tab)
- * + bảo vệ quyền truy cập vai trò BĐHU + idle prefetch dữ liệu.
- */
-function ChapterManagerLayoutInner({ children }: { children: React.ReactNode }) {
+export default function ChapterManagerLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const [user, setUser] = useState<any>(() => {
-    if (typeof window === 'undefined') return null;
-    try {
-      return JSON.parse(localStorage.getItem('user') || 'null');
-    } catch {
-      return null;
-    }
-  });
-
-  const [isAuthorized, setIsAuthorized] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false;
-    const token = localStorage.getItem('accessToken');
-    const uRaw = localStorage.getItem('user');
-    if (!token || !uRaw) return false;
-    try {
-      const u = JSON.parse(uRaw);
-      return u.role === 'CHAPTER_LEADER' || u.role === 'ADMIN';
-    } catch {
-      return false;
-    }
-  });
-
-  const prefetched = useRef(false);
-
-  // Client-side authentication and role authorization guard
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const token = localStorage.getItem('accessToken');
-      const uRaw = localStorage.getItem('user');
-      let u: any = null;
-      if (uRaw) {
-        try {
-          u = JSON.parse(uRaw);
-          setUser(u);
-        } catch {}
+  const pathname = usePathname();
+  const [user, setUser] = useState<any>(null);
+  const [authorized, setAuthorized] = useState(false);
+  const [scopeKey, setScopeKey] = useState('');
+  const [authorizedPath,setAuthorizedPath] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [retry, setRetry] = useState(0);
+  useEffect(() => () => deactivatePilotScope(), []);
+  useLayoutEffect(() => {
+    let live = true;
+    let checking = false;
+    let checkAgain = false;
+    const verify = async () => {
+      if (checking) { checkAgain = true; return; }
+      checking = true;
+      setAuthorized(false);
+      setError(null);
+      const result = await verifyPilotSession();
+      checking = false;
+      if (!live) return;
+      if(checkAgain){checkAgain=false;void verify();return;}
+      if (result.ok) {
+        setUser(result.data.user);
+        setScopeKey(getApiSessionKey());
+        setAuthorizedPath(pathname);
+        setAuthorized(true);
+      } else if (result.status === 401 || result.status === 403) {
+        setUser(null);
+        router.replace('/login?callbackUrl=' + encodeURIComponent(pathname));
+      } else {
+        setError('Chưa xác minh được phiên. Vui lòng kiểm tra kết nối và thử lại.');
       }
-
-      if (!token || !u) {
-        fetch('/api/v1/auth/refresh', { method: 'POST' })
-          .then((res) => res.json())
-          .then(async (data) => {
-            if (data?.accessToken && data?.user) {
-              localStorage.setItem('accessToken', data.accessToken);
-              localStorage.setItem('user', JSON.stringify(data.user));
-              setUser(data.user);
-              if (data.user.role === 'CHAPTER_LEADER' || data.user.role === 'ADMIN') {
-                setIsAuthorized(true);
-                return;
-              }
-              const effective = await apiFetch('/api/v1/auth/me', { noCache: true });
-              if (effective.ok && effective.data?.user?.isChapterManager) {
-                const scopedUser = applyPreferredChapter(effective.data.user, u?.chapterId);
-                localStorage.setItem('user', JSON.stringify(scopedUser));
-                setUser(scopedUser);
-                setIsAuthorized(true);
-                return;
-              }
-            }
-            router.replace('/login?callbackUrl=' + encodeURIComponent(window.location.pathname));
-          })
-          .catch(() => {
-            router.replace('/login?callbackUrl=' + encodeURIComponent(window.location.pathname));
-          });
-        return;
-      }
-
-      if (u.role === 'CHAPTER_LEADER' || u.role === 'ADMIN') {
-        setIsAuthorized(true);
-        return;
-      }
-
-      // A manager can be appointed through PositionAssignment without changing
-      // the legacy role on the User record. Ask the server for that effective scope.
-      apiFetch('/api/v1/auth/me', { noCache: true })
-        .then((result) => {
-          const effectiveUser = result.data?.user
-          if (result.ok && effectiveUser?.isChapterManager) {
-            const scopedUser = applyPreferredChapter(effectiveUser, u?.chapterId);
-            localStorage.setItem('user', JSON.stringify(scopedUser));
-            setUser(scopedUser);
-            setIsAuthorized(true);
-            return;
-          }
-          router.replace('/student/dashboard');
-        })
-        .catch(() => router.replace('/student/dashboard'));
-    }
-  }, [router]);
-
-  // Idle-time prefetch: sau khi xác thực hợp lệ, lấy sẵn dữ liệu các tab khác
-  useEffect(() => {
-    if (!isAuthorized || prefetched.current || !user?.chapterId) return;
-    prefetched.current = true;
-
-    const chapterId = user.chapterId;
-    const PREFETCH_URLS = [
-      `/api/v1/chapters/${chapterId}/dashboard/members`,
-      `/api/v1/chapters/${chapterId}/dashboard/members?search=`,
-      `/api/v1/chapters/${chapterId}/dashboard/courses`,
-      `/api/v1/invitations?chapterId=${chapterId}`,
-    ];
-
-    const prefetchAll = () => {
-      PREFETCH_URLS.forEach((url) => {
-        apiFetch(url).catch(() => {});
-      });
     };
-
-    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-      (window as any).requestIdleCallback(prefetchAll, { timeout: 3000 });
-    } else {
-      setTimeout(prefetchAll, 1500);
-    }
-  }, [isAuthorized, user?.chapterId]);
-
-
-
+    const foreground = () => { if (document.visibilityState === 'visible') void verify(); };
+    const revoked = () => { setAuthorized(false); setUser(null); setError('Phiên hoặc quyền truy cập đã thay đổi. Vui lòng xác minh lại.'); };
+    const scopeChanged = () => { setAuthorized(false);setUser(null);void verify(); };
+    const storage = (event: StorageEvent) => {
+      if (!event.key || ['accessToken','user','refreshToken'].includes(event.key)) { revokeApiSession(); void verify(); }
+    };
+    if(consumePilotNavigation(pathname)){
+      setUser(getVerifiedPilotUser());setScopeKey(getApiSessionKey());setAuthorizedPath(pathname);setAuthorized(true);setError(null);
+    }else void verify();
+    document.addEventListener('visibilitychange', foreground);
+    window.addEventListener('pageshow', foreground);
+    window.addEventListener('storage', storage);
+    window.addEventListener('bbe:session-revoked', revoked);
+    window.addEventListener('bbe:scope-changed',scopeChanged);
+    return () => {
+      live = false;
+      document.removeEventListener('visibilitychange', foreground);
+      window.removeEventListener('pageshow', foreground);
+      window.removeEventListener('storage', storage);
+      window.removeEventListener('bbe:session-revoked', revoked);
+      window.removeEventListener('bbe:scope-changed',scopeChanged);
+    };
+  }, [pathname, router, retry]);
+  useEffect(() => {
+    if (!authorized) return;
+    const scope = getApiSessionKey();
+    const snapshot = getTabSnapshot<{scroll:number}>(`scroll:${pathname}`);
+    const frame = requestAnimationFrame(() => { if (snapshot) window.scrollTo(0,snapshot.scroll); });
+    const save = () => { if (scope === getApiSessionKey()) saveTabSnapshot(`scroll:${pathname}`,{scroll:window.scrollY}); };
+    window.addEventListener('scroll',save,{passive:true});
+    return () => { cancelAnimationFrame(frame); window.removeEventListener('scroll',save); save(); };
+  },[authorized,pathname]);
   return (
     <div className="min-h-screen bg-[#f8f9ff] flex">
-      <Sidebar role="CHAPTER_LEADER" user={{ email: user?.email, chapterName: user?.chapterName, canManageMembers: user?.canManageMembers }} />
-      <main className="md:ml-64 flex-1 px-4 pb-8 pt-20 md:px-8 md:py-10 w-full min-w-0">
-        {user?.managedChapters?.length > 1 && (
+      <Sidebar role="CHAPTER_LEADER" user={{ email:user?.email, chapterName:user?.chapterName, canManageMembers:user?.canManageMembers }} />
+      <main className="relative md:ml-64 flex-1 px-4 pb-8 pt-20 md:px-8 md:py-10 w-full min-w-0">
+        {authorized && user?.managedChapters?.length > 1 && (
           <div className="mb-5 flex flex-wrap items-center justify-end gap-2">
             <label htmlFor="managed-chapter" className="text-xs font-semibold text-[#596174]">Đang quản lý Chapter</label>
-            <select
-              id="managed-chapter"
-              value={user.chapterId || ''}
-              onChange={(event) => {
-                const chapter = user.managedChapters.find((item: any) => item.id === event.target.value);
-                if (!chapter) return;
-                const scopedUser = { ...user, chapterId: chapter.id, chapterName: chapter.name, canManageMembers: chapter.canManageMembers };
-                localStorage.setItem('user', JSON.stringify(scopedUser));
-                window.location.reload();
-              }}
-              className="rounded-lg border border-[#cbdbf5] bg-white px-3 py-2 text-sm font-semibold text-[#172554]"
-            >
+            <select id="managed-chapter" value={user.chapterId || ''} onChange={(event) => {
+              const chapter = user.managedChapters.find((item: any) => item.id === event.target.value);
+              if (!chapter) return;
+              localStorage.setItem('user',JSON.stringify({...user,chapterId:chapter.id,chapterName:chapter.name,canManageMembers:chapter.canManageMembers}));
+              window.location.reload();
+            }} className="rounded-lg border border-[#cbdbf5] bg-white px-3 py-2 text-sm font-semibold text-[#172554]">
               {user.managedChapters.map((chapter: any) => <option key={chapter.id} value={chapter.id}>{chapter.name}</option>)}
             </select>
           </div>
         )}
-        <ContentTransition>{children}</ContentTransition>
+        {user && authorizedPath===pathname && <PilotVisibility.Provider value={authorized}><div ref={node=>{if(node)node.inert=!authorized;}} style={{visibility:authorized?'visible':'hidden'}} aria-hidden={!authorized}><ContentTransition key={scopeKey} className={pilot.route}>{children}</ContentTransition></div></PilotVisibility.Provider>}
+        {(!authorized || authorizedPath!==pathname) && <div role="status" className="absolute inset-x-4 top-20 z-10 min-h-48 rounded-xl border border-[#cbdbf5] bg-white p-6 text-[#172554] md:inset-x-8 md:top-10">{error || 'Đang xác minh phiên…'}{error && <button type="button" onClick={()=>setRetry(value=>value+1)} className="ml-3 rounded-lg border px-3 py-2">Thử lại</button>}</div>}
       </main>
     </div>
   );
-}
-
-export default function ChapterManagerLayout({ children }: { children: React.ReactNode }) {
-  return <ChapterManagerLayoutInner>{children}</ChapterManagerLayoutInner>;
 }

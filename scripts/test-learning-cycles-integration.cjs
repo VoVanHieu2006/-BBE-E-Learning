@@ -5,7 +5,9 @@ const { randomUUID } = require('node:crypto')
 const target = process.env.TEST_DATABASE_URL
 if (!target) throw new Error('TEST_DATABASE_URL is required; never falls back to the application database.')
 const url = new URL(target)
-if (url.protocol !== 'postgresql:' || !['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname) || url.pathname !== '/bbe_test_learning_cycles') {
+const developmentTarget = require('./development-integration-target.cjs')
+const devTarget = developmentTarget.loadDevelopmentTarget(target,'learning_cycles')
+if (!devTarget && (url.protocol !== 'postgresql:' || !['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname) || url.pathname !== '/bbe_test_learning_cycles')) {
   throw new Error('Only loopback database bbe_test_learning_cycles is allowed.')
 }
 process.env.DATABASE_URL = target
@@ -29,6 +31,7 @@ const { initializeLearningCutover } = require('../src/lib/learning-cutover')
 const { chapterRewardBoundary } = require('../src/lib/chapter-reward-gate')
 
 async function main() {
+  if(devTarget){await developmentTarget.assertPrismaIsolation(prisma,devTarget);console.log(`Development isolation verified: ${devTarget.projectRef}/${devTarget.database}, schema ${devTarget.schema}`)}
   // A repeated run uses unique fixtures. Policy is test-only and explicitly reset.
   // Expired artificial periods from an interrupted run are not acceptance fixtures.
   await prisma.competitionMonth.updateMany({ where: { state: 'OPEN', ends_at: { lt: new Date() } }, data: { state: 'CLOSED' } })

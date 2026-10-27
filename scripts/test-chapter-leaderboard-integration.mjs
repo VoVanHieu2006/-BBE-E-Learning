@@ -2,15 +2,17 @@ import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import nextEnv from '@next/env'
 import { SignJWT } from 'jose'
+import developmentTarget from './development-integration-target.cjs'
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL
 if (!testDatabaseUrl) throw new Error('TEST_DATABASE_URL is required; this test never falls back to DATABASE_URL.')
 
 const databaseUrl = new URL(testDatabaseUrl)
-if (databaseUrl.protocol !== 'postgresql:' || !['127.0.0.1', 'localhost', '::1'].includes(databaseUrl.hostname)) {
+const devTarget = developmentTarget.loadDevelopmentTarget(testDatabaseUrl, 'leaderboard')
+if (!devTarget && (databaseUrl.protocol !== 'postgresql:' || !['127.0.0.1', 'localhost', '::1'].includes(databaseUrl.hostname))) {
   throw new Error('TEST_DATABASE_URL must point to a local PostgreSQL test database (loopback only).')
 }
-if (databaseUrl.pathname !== '/bbe_test_leaderboard') {
+if (!devTarget && databaseUrl.pathname !== '/bbe_test_leaderboard') {
   throw new Error('The test database name must be bbe_test_leaderboard.')
 }
 
@@ -78,10 +80,15 @@ async function cleanupFixtures() {
 }
 
 try {
+  if (devTarget) {
+    await developmentTarget.assertPrismaIsolation(prisma,devTarget)
+    developmentTarget.assertServerAttestation(devTarget,appUrl)
+    console.log(`Development isolation verified: ${devTarget.projectRef}/${devTarget.database}, schema ${devTarget.schema}`)
+  }
   const [databaseInfo] = await prisma.$queryRaw`SELECT current_database() AS name, inet_server_addr()::text AS address`
-  assert.equal(databaseInfo.name, 'bbe_test_leaderboard', 'Prisma must be connected to the dedicated test database')
+  if (!devTarget) assert.equal(databaseInfo.name, 'bbe_test_leaderboard', 'Prisma must be connected to the dedicated test database')
   const databaseAddress = databaseInfo.address ? databaseInfo.address.split('/')[0] : null
-  assert.ok(['127.0.0.1', '::1', null].includes(databaseAddress), 'PostgreSQL must be bound to loopback')
+  if (!devTarget) assert.ok(['127.0.0.1', '::1', null].includes(databaseAddress), 'PostgreSQL must be bound to loopback')
 
   const appResponse = await fetch(`${appUrl.origin}/`, { cache: 'no-store' })
   assert.ok(appResponse.ok, `local test app must be running at ${appUrl.origin}`)
@@ -216,14 +223,15 @@ try {
   assert.equal(red.items.length, 0, 'RED KPI Chapters must not enter the ranking')
   assert.ok(red.excluded.find((item) => item.chapterId === chapter.id)?.reasons.includes('KPI_RED'))
 
-  console.log('Chapter leaderboard integration passed: local DB isolation, membership union/dedupe, mandatory video+quiz completion, KPI authorization/validation/month, cache invalidation, and RED exclusion.')
+  console.log('Chapter leaderboard integration passed: guarded database isolation, membership union/dedupe, mandatory video+quiz completion, KPI authorization/validation/month, cache invalidation, and RED exclusion.')
 } catch (error) {
-  console.error('Chapter leaderboard integration failed. Fixture data is local-only and will be cleaned up.')
+  console.error('Chapter leaderboard integration failed. Fixture data stays within the guarded target; development namespaces are retained.')
   console.error(error instanceof Error ? error.stack : 'Unknown test error')
   process.exitCode = 1
 } finally {
   try {
-    await cleanupFixtures()
+    if(devTarget)console.log(`Fixture namespace retained for inspection: ${devTarget.schema}; prefix ${emailPrefix}`)
+    else await cleanupFixtures()
   } catch {
     console.error('Fixture cleanup failed. Delete only records with this test email prefix from bbe_test_leaderboard before rerunning.')
     process.exitCode = 1

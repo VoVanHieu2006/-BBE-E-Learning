@@ -16,7 +16,9 @@ export default function PageTransition({ children }: { children: React.ReactNode
       if (target.origin === window.location.origin && target.pathname !== window.location.pathname) setNavigating(true)
     }
     document.addEventListener('click', handleClick, true)
-    return () => document.removeEventListener('click', handleClick, true)
+    const cancel=()=>setNavigating(false)
+    window.addEventListener('bbe:navigation-cancelled',cancel)
+    return () => {document.removeEventListener('click', handleClick, true);window.removeEventListener('bbe:navigation-cancelled',cancel)}
   }, [])
   return <>
     <div aria-hidden className={`route-progress ${navigating ? 'route-progress--active' : ''}`} />

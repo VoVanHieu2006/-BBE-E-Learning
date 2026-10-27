@@ -406,13 +406,14 @@ test('touch seek ends outside and compatibility click does not seek a second tim
 });
 
 for (const legacy of [false, true]) {
-  test(`theater escapes clipped/transformed ancestors, preserves iframe, rotates and exits (${legacy ? 'legacy CSS' : 'top layer'})`, async ({ page }, testInfo) => {
+  test(`theater escapes clipped/transformed ancestors, preserves iframe, rotates and exits (${legacy ? 'popover unavailable' : 'popover available'})`, async ({ page }, testInfo) => {
     await setup(page, { theater: true, noPopover: legacy });
     await start(page);
     await wrapper(page).evaluate(el => {
       const parent = el.parentElement!;
       parent.style.cssText += ';transform:translateZ(0);filter:opacity(1);overflow:hidden;max-width:500px;position:relative;z-index:1';
       (window as any).__originalFrame = el.querySelector('iframe');
+      (window as any).__originalPlayerParent = el.parentElement;
       (window as any).__beforeFullscreen = { ...((window as any).__playerMock), state: history.state };
     });
     await fullscreen(page).click();
@@ -420,7 +421,12 @@ for (const legacy of [false, true]) {
     await expect(wrapper(page)).toHaveAttribute('data-fullscreen-mode', 'THEATER');
     expect(await page.evaluate(() => document.fullscreenElement === null)).toBe(true);
     await expect.poll(() => page.evaluate(() => history.state?.bbeTheater)).toBeTruthy();
-    if (!legacy) await expect(wrapper(page)).toHaveJSProperty('popover', 'manual');
+    // Theater deliberately uses fixed CSS without moving/reloading the iframe.
+    // Popover availability must not prescribe an unused implementation strategy.
+    await expect.poll(() => wrapper(page).evaluate(el =>
+      el.parentElement === (window as any).__originalPlayerParent &&
+      el.querySelector('iframe') === (window as any).__originalFrame
+    )).toBe(true);
     await hiddenAfterIdle(page);
     await page.screenshot({ path: `scratch/player-${testInfo.project.name}-${legacy ? 'legacy' : 'theater'}-hidden.png` });
     const portrait = page.viewportSize()!;

@@ -1,0 +1,188 @@
+  ▲ Next.js 14.2.35
+
+   Creating an optimized production build ...
+ ⚠ Compiled with warnings
+
+../../../../Desktop/E-learning/node_modules/jose/dist/webapi/lib/deflate.js
+A Node.js API is used (CompressionStream at line: 18) which is not supported in the Edge Runtime.
+Learn more: https://nextjs.org/docs/api-reference/edge-runtime
+
+Import trace for requested module:
+../../../../Desktop/E-learning/node_modules/jose/dist/webapi/lib/deflate.js
+../../../../Desktop/E-learning/node_modules/jose/dist/webapi/lib/jwe_encrypt.js
+../../../../Desktop/E-learning/node_modules/jose/dist/webapi/jwt/encrypt.js
+../../../../Desktop/E-learning/node_modules/jose/dist/webapi/index.js
+
+../../../../Desktop/E-learning/node_modules/jose/dist/webapi/lib/deflate.js
+A Node.js API is used (DecompressionStream at line: 34) which is not supported in the Edge Runtime.
+Learn more: https://nextjs.org/docs/api-reference/edge-runtime
+
+Import trace for requested module:
+../../../../Desktop/E-learning/node_modules/jose/dist/webapi/lib/deflate.js
+../../../../Desktop/E-learning/node_modules/jose/dist/webapi/lib/jwe_encrypt.js
+../../../../Desktop/E-learning/node_modules/jose/dist/webapi/jwt/encrypt.js
+../../../../Desktop/E-learning/node_modules/jose/dist/webapi/index.js
+
+ ✓ Compiled successfully
+   Linting and checking validity of types ...
+   Collecting page data ...
+   Generating static pages (0/74) ...
+   Generating static pages (18/74) 
+   Generating static pages (36/74) 
+   Generating static pages (55/74) 
+ ✓ Generating static pages (74/74)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                                                        Size     First Load JS
+┌ ○ /                                                              5.37 kB         101 kB
+├ ○ /_not-found                                                    876 B          88.2 kB
+├ ○ /accept-invitation                                             179 B           101 kB
+├ ○ /admin/chapters                                                10.7 kB         113 kB
+├ ○ /admin/courses                                                 7.63 kB         104 kB
+├ ƒ /admin/courses/[courseId]/edit                                 20 kB           116 kB
+├ ○ /admin/courses/mandatory                                       6.5 kB          103 kB
+├ ○ /admin/courses/new                                             4.59 kB         101 kB
+├ ○ /admin/dashboard                                               3.9 kB         99.9 kB
+├ ○ /admin/invitations                                             6.63 kB        93.9 kB
+├ ○ /admin/learning-policy                                         4.1 kB          100 kB
+├ ○ /admin/organization                                            158 B          87.5 kB
+├ ○ /admin/users                                                   9.8 kB          112 kB
+├ ƒ /admin/users/[userId]/organization-history                     2.82 kB        98.8 kB
+├ ƒ /api/internal/attempts/auto-submit                             0 B                0 B
+├ ƒ /api/internal/learning/deadlines/enforce                       0 B                0 B
+├ ƒ /api/internal/organization/reorganizations/apply               0 B                0 B
+├ ƒ /api/v1/admin/learning-policy                                  0 B                0 B
+├ ƒ /api/v1/admin/learning-rules                                   0 B                0 B
+├ ƒ /api/v1/admin/learning-rules/[ruleId]                          0 B                0 B
+├ ƒ /api/v1/admin/learning-rules/[ruleId]/materialize              0 B                0 B
+├ ƒ /api/v1/admin/mandatory-matrix                                 0 B                0 B
+├ ƒ /api/v1/admin/organization                                     0 B                0 B
+├ ƒ /api/v1/admin/organization/history                             0 B                0 B
+├ ƒ /api/v1/admin/overview                                         0 B                0 B
+├ ƒ /api/v1/admin/restrictions                                     0 B                0 B
+├ ƒ /api/v1/admin/users/[userId]/extend-deadline                   0 B                0 B
+├ ƒ /api/v1/assessments/[assessmentId]                             0 B                0 B
+├ ƒ /api/v1/assessments/[assessmentId]/attempts                    0 B                0 B
+├ ƒ /api/v1/assessments/[assessmentId]/attempts/me                 0 B                0 B
+├ ƒ /api/v1/assessments/[assessmentId]/pools                       0 B                0 B
+├ ƒ /api/v1/attempts/[attemptId]                                   0 B                0 B
+├ ƒ /api/v1/attempts/[attemptId]/answers                           0 B                0 B
+├ ƒ /api/v1/attempts/[attemptId]/answers/[questionId]              0 B                0 B
+├ ƒ /api/v1/attempts/[attemptId]/cancel                            0 B                0 B
+├ ƒ /api/v1/attempts/[attemptId]/submit                            0 B                0 B
+├ ƒ /api/v1/attempts/auto-submit                                   0 B                0 B
+├ ƒ /api/v1/auth/login                                             0 B                0 B
+├ ƒ /api/v1/auth/logout                                            0 B                0 B
+├ ƒ /api/v1/auth/me                                                0 B                0 B
+├ ƒ /api/v1/auth/password-reset/confirm                            0 B                0 B
+├ ƒ /api/v1/auth/password-reset/request                            0 B                0 B
+├ ƒ /api/v1/auth/refresh                                           0 B                0 B
+├ ƒ /api/v1/chapters                                               0 B                0 B
+├ ƒ /api/v1/chapters/[chapterId]/current-roster                    0 B                0 B
+├ ƒ /api/v1/chapters/[chapterId]/dashboard/courses                 0 B                0 B
+├ ƒ /api/v1/chapters/[chapterId]/dashboard/members                 0 B                0 B
+├ ƒ /api/v1/chapters/[chapterId]/kpi                               0 B                0 B
+├ ƒ /api/v1/chapters/[chapterId]/members                           0 B                0 B
+├ ƒ /api/v1/chapters/[chapterId]/members/[userId]                  0 B                0 B
+├ ƒ /api/v1/chapters/[chapterId]/members/[userId]/course-progress  0 B                0 B
+├ ƒ /api/v1/chapters/[chapterId]/members/[userId]/department       0 B                0 B
+├ ƒ /api/v1/chapters/[chapterId]/members/bulk-deactivate           0 B                0 B
+├ ƒ /api/v1/chapters/[chapterId]/reorganizations                   0 B                0 B
+├ ƒ /api/v1/chapters/[chapterId]/reorganizations/[batchId]         0 B                0 B
+├ ƒ /api/v1/chapters/[chapterId]/reorganizations/parse-sheet       0 B                0 B
+├ ƒ /api/v1/courses                                                0 B                0 B
+├ ƒ /api/v1/courses/[courseId]                                     0 B                0 B
+├ ƒ /api/v1/courses/[courseId]/assessment                          0 B                0 B
+├ ƒ /api/v1/courses/[courseId]/cover                               0 B                0 B
+├ ƒ /api/v1/courses/[courseId]/draft                               0 B                0 B
+├ ƒ /api/v1/courses/[courseId]/draft/publish                       0 B                0 B
+├ ƒ /api/v1/courses/[courseId]/final-assessment                    0 B                0 B
+├ ƒ /api/v1/courses/[courseId]/my-progress                         0 B                0 B
+├ ƒ /api/v1/courses/[courseId]/publish                             0 B                0 B
+├ ƒ /api/v1/courses/[courseId]/sessions                            0 B                0 B
+├ ƒ /api/v1/courses/[courseId]/sessions/reorder                    0 B                0 B
+├ ƒ /api/v1/courses/[courseId]/students                            0 B                0 B
+├ ƒ /api/v1/courses/[courseId]/unpublish                           0 B                0 B
+├ ƒ /api/v1/documents/[documentId]                                 0 B                0 B
+├ ƒ /api/v1/documents/[documentId]/download                        0 B                0 B
+├ ƒ /api/v1/health                                                 0 B                0 B
+├ ƒ /api/v1/invitations                                            0 B                0 B
+├ ƒ /api/v1/invitations/[id]                                       0 B                0 B
+├ ƒ /api/v1/invitations/[id]/resend                                0 B                0 B
+├ ƒ /api/v1/invitations/accept                                     0 B                0 B
+├ ƒ /api/v1/invitations/chapter-leader                             0 B                0 B
+├ ƒ /api/v1/invitations/dna-leader                                 0 B                0 B
+├ ƒ /api/v1/invitations/member                                     0 B                0 B
+├ ƒ /api/v1/invitations/validate                                   0 B                0 B
+├ ƒ /api/v1/leaderboard                                            0 B                0 B
+├ ƒ /api/v1/leaderboard/chapters                                   0 B                0 B
+├ ƒ /api/v1/leaderboard/chapters/[chapterId]                       0 B                0 B
+├ ƒ /api/v1/learning/me                                            0 B                0 B
+├ ƒ /api/v1/learning/periods                                       0 B                0 B
+├ ƒ /api/v1/lessons/[lessonId]                                     0 B                0 B
+├ ƒ /api/v1/lessons/[lessonId]/assessment                          0 B                0 B
+├ ƒ /api/v1/lessons/[lessonId]/comments                            0 B                0 B
+├ ƒ /api/v1/lessons/[lessonId]/comments/[commentId]                0 B                0 B
+├ ƒ /api/v1/lessons/[lessonId]/documents/confirm                   0 B                0 B
+├ ƒ /api/v1/lessons/[lessonId]/documents/presign                   0 B                0 B
+├ ƒ /api/v1/lessons/[lessonId]/documents/upload                    0 B                0 B
+├ ƒ /api/v1/lessons/[lessonId]/progress                            0 B                0 B
+├ ƒ /api/v1/members/me/courses                                     0 B                0 B
+├ ƒ /api/v1/members/me/deadlines                                   0 B                0 B
+├ ƒ /api/v1/organization/dna-leaderboard                           0 B                0 B
+├ ƒ /api/v1/organization/managed-units                             0 B                0 B
+├ ƒ /api/v1/organization/units/[unitId]/members                    0 B                0 B
+├ ƒ /api/v1/organization/units/[unitId]/members/[userId]/progress  0 B                0 B
+├ ƒ /api/v1/quiz/parse-sheet                                       0 B                0 B
+├ ƒ /api/v1/sessions/[sessionId]                                   0 B                0 B
+├ ƒ /api/v1/sessions/[sessionId]/lessons                           0 B                0 B
+├ ƒ /api/v1/stars/me                                               0 B                0 B
+├ ƒ /api/v1/streak                                                 0 B                0 B
+├ ƒ /api/v1/users                                                  0 B                0 B
+├ ƒ /api/v1/users/[userId]                                         0 B                0 B
+├ ƒ /api/v1/users/[userId]/password-reset                          0 B                0 B
+├ ƒ /api/v1/users/[userId]/profile                                 0 B                0 B
+├ ƒ /api/v1/users/me                                               0 B                0 B
+├ ƒ /api/v1/youtube/info                                           0 B                0 B
+├ ○ /chapter-manager/courses                                       7.05 kB         118 kB
+├ ○ /chapter-manager/dashboard                                     3.73 kB        99.8 kB
+├ ○ /chapter-manager/invitations                                   6.45 kB        93.8 kB
+├ ○ /chapter-manager/leaderboard                                   358 B           104 kB
+├ ○ /chapter-manager/members                                       7.46 kB         110 kB
+├ ƒ /chapter-manager/members/[userId]                              3.89 kB         106 kB
+├ ○ /chapter-manager/term-transition                               16.6 kB         113 kB
+├ ○ /final-quiz-result                                             4.13 kB         100 kB
+├ ○ /forgot-password                                               1.58 kB        97.6 kB
+├ ○ /invitations/accept                                            178 B           101 kB
+├ ○ /leaderboard                                                   1.53 kB         117 kB
+├ ƒ /lessons/[lessonId]                                            1.43 kB         104 kB
+├ ○ /login                                                         3.26 kB        99.3 kB
+├ ○ /organization-manager                                          7.4 kB          103 kB
+├ ○ /organization-manager/courses                                  2.48 kB        89.8 kB
+├ ○ /organization-manager/dashboard                                2.65 kB          90 kB
+├ ○ /organization-manager/invitations                              3.41 kB        90.7 kB
+├ ○ /organization-manager/leaderboard                              355 B           104 kB
+├ ƒ /organization-manager/units/[unitId]/members/[userId]          3.56 kB        99.6 kB
+├ ○ /reset-password                                                2.81 kB        98.8 kB
+├ ○ /student/courses                                               14.1 kB         110 kB
+├ ƒ /student/courses/[courseId]                                    6.26 kB         102 kB
+├ ƒ /student/courses/[courseId]/quiz                               2.84 kB         109 kB
+├ ○ /student/dashboard                                             4.5 kB          101 kB
+├ ○ /student/leaderboard                                           359 B           104 kB
+├ ƒ /student/learning/[lessonId]                                   14.6 kB         125 kB
+├ ƒ /student/learning/[lessonId]/quiz                              5.07 kB         111 kB
+├ ○ /student/profile                                               5.22 kB        92.5 kB
+├ ○ /student/progress                                              607 B          87.9 kB
+└ ○ /student/stars                                                 4.97 kB        92.3 kB
++ First Load JS shared by all                                      87.3 kB
+  ├ chunks/8237-504bfa1b95efc151.js                                31.7 kB
+  ├ chunks/ff04153f-c06ce3996030b3ba.js                            53.6 kB
+  └ other shared chunks (total)                                    1.96 kB
+
+
+ƒ Middleware                                                       33.2 kB
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+

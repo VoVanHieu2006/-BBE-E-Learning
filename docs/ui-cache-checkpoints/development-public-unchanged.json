@@ -1,0 +1,13 @@
+{
+  "checkedAt": "2026-10-27T10:25:25.646Z",
+  "projectRef": "rieqrjxatzoiqubxyhlw",
+  "database": "postgres",
+  "status": "PASS",
+  "scope": "All public table rows and backed-up schema metadata; read-only",
+  "publicUnchanged": true,
+  "tables": 60,
+  "rows": 2711,
+  "backupSha256": "0bd9fc2d9c31605ca1f55ede46de1e679deb3c9a21b45aeff64210f01bb93f73",
+  "currentSha256": "0bd9fc2d9c31605ca1f55ede46de1e679deb3c9a21b45aeff64210f01bb93f73",
+  "systemSchemas": "No test path writes auth/storage; their row contents were not read or backed up"
+}

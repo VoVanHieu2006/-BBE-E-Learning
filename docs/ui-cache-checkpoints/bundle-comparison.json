@@ -1,0 +1,41 @@
+{
+  "environment": "Next14.2.35 production builds, same installed dependencies and isolated DB; gzip bytes of route+root+Chapter layout JS union",
+  "routes": [
+    {
+      "route": "/chapter-manager/dashboard",
+      "before": {
+        "chunks": 9,
+        "gzipBytes": 107102
+      },
+      "after": {
+        "chunks": 10,
+        "gzipBytes": 110754
+      },
+      "deltaGzipBytes": 3652
+    },
+    {
+      "route": "/chapter-manager/courses",
+      "before": {
+        "chunks": 10,
+        "gzipBytes": 125334
+      },
+      "after": {
+        "chunks": 11,
+        "gzipBytes": 129572
+      },
+      "deltaGzipBytes": 4238
+    },
+    {
+      "route": "/chapter-manager/term-transition",
+      "before": {
+        "chunks": 9,
+        "gzipBytes": 120036
+      },
+      "after": {
+        "chunks": 10,
+        "gzipBytes": 124922
+      },
+      "deltaGzipBytes": 4886
+    }
+  ]
+}

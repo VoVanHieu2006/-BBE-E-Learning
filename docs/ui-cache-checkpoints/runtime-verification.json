@@ -1,0 +1,432 @@
+{
+  "environment": "Next dev, mocked APIs, Edge desktop 1440x900; not backend proof; timings include auth and development rendering",
+  "cases": [
+    {
+      "id": "C01",
+      "status": "PASS",
+      "rounds": 10,
+      "businessGET": 0,
+      "auth": 20
+    },
+    {
+      "id": "C02",
+      "status": "PASS",
+      "rounds": 10,
+      "businessGET": 0
+    },
+    {
+      "id": "C03",
+      "status": "PASS",
+      "dashboardGET": 2,
+      "historyGET": 1
+    },
+    {
+      "id": "C04",
+      "status": "PASS",
+      "idleMs": 3500,
+      "businessGET": 0
+    },
+    {
+      "id": "C05",
+      "status": "PASS",
+      "scenario": "partial failure keeps loaded member data"
+    },
+    {
+      "id": "C06",
+      "status": "PASS",
+      "scenario": "owner draft survives navigation, refresh and F5"
+    },
+    {
+      "id": "C06-storage",
+      "status": "PASS",
+      "scenario": "quota failure visible; draft retained; retry succeeds"
+    },
+    {
+      "id": "C07",
+      "status": "PASS",
+      "scenario": "cross-tab A→B, no A draft, legacy untouched, no API storage"
+    },
+    {
+      "id": "C08",
+      "status": "PASS",
+      "scenario": "revoked scope on BFCache-style pageshow withholds protected content"
+    },
+    {
+      "id": "C09",
+      "status": "NOT VERIFIED",
+      "scenario": "real database due schedule, apply/cancel/reset semantics; no DB exercised"
+    },
+    {
+      "id": "C10",
+      "status": "NOT VERIFIED",
+      "scenario": "physical devices, real video/Quiz/fullscreen and long-running memory measurements"
+    }
+  ],
+  "errors": [],
+  "navigationMs": [
+    {
+      "route": "courses",
+      "ms": 624
+    },
+    {
+      "route": "dashboard",
+      "ms": 111
+    },
+    {
+      "route": "courses",
+      "ms": 218
+    },
+    {
+      "route": "dashboard",
+      "ms": 136
+    },
+    {
+      "route": "courses",
+      "ms": 213
+    },
+    {
+      "route": "dashboard",
+      "ms": 175
+    },
+    {
+      "route": "courses",
+      "ms": 179
+    },
+    {
+      "route": "dashboard",
+      "ms": 132
+    },
+    {
+      "route": "courses",
+      "ms": 194
+    },
+    {
+      "route": "dashboard",
+      "ms": 174
+    },
+    {
+      "route": "courses",
+      "ms": 204
+    },
+    {
+      "route": "dashboard",
+      "ms": 125
+    },
+    {
+      "route": "courses",
+      "ms": 208
+    },
+    {
+      "route": "dashboard",
+      "ms": 128
+    },
+    {
+      "route": "courses",
+      "ms": 169
+    },
+    {
+      "route": "dashboard",
+      "ms": 157
+    },
+    {
+      "route": "courses",
+      "ms": 209
+    },
+    {
+      "route": "dashboard",
+      "ms": 141
+    },
+    {
+      "route": "courses",
+      "ms": 196
+    },
+    {
+      "route": "dashboard",
+      "ms": 164
+    },
+    {
+      "route": "term-transition",
+      "ms": 913
+    },
+    {
+      "route": "dashboard",
+      "ms": 205
+    },
+    {
+      "route": "term-transition",
+      "ms": 160
+    },
+    {
+      "route": "courses",
+      "ms": 167
+    },
+    {
+      "route": "term-transition",
+      "ms": 215
+    }
+  ],
+  "layoutChecks": [
+    {
+      "width": 360,
+      "height": 844,
+      "rootOverflow": "PASS"
+    },
+    {
+      "width": 390,
+      "height": 844,
+      "rootOverflow": "PASS"
+    },
+    {
+      "width": 430,
+      "height": 932,
+      "rootOverflow": "PASS"
+    },
+    {
+      "width": 768,
+      "height": 1024,
+      "rootOverflow": "PASS"
+    },
+    {
+      "width": 1024,
+      "height": 768,
+      "rootOverflow": "PASS"
+    },
+    {
+      "width": 1440,
+      "height": 900,
+      "rootOverflow": "PASS"
+    },
+    {
+      "width": 844,
+      "height": 390,
+      "rootOverflow": "PASS"
+    }
+  ],
+  "performanceSample": {
+    "cls": 0,
+    "longTasks": 1,
+    "longTaskMs": 127,
+    "heapUsedBytes": 39793368
+  },
+  "counts": {
+    "auth": 31,
+    "business": 12
+  },
+  "requests": [
+    {
+      "kind": "auth",
+      "method": "GET",
+      "endpoint": "/api/v1/auth/me"
+    },
+    {
+      "kind": "auth",
+      "method": "GET",
+      "endpoint": "/api/v1/auth/me"
+    },
+    {
+      "kind": "business",
+      "method": "GET",
+      "endpoint": "/api/v1/chapters/C/dashboard/members"
+    },
+    {
+      "kind": "business",
+      "method": "GET",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses"
+    },
+    {
+      "kind": "auth",
+      "method": "GET",
+      "endpoint": "/api/v1/auth/me"
+    },
+    {
+      "kind": "auth",
+      "method": "GET",
+      "endpoint": "/api/v1/auth/me"
+    },
+    {
+      "kind": "auth",
+      "method": "GET",
+      "endpoint": "/api/v1/auth/me"
+    },
+    {
+      "kind": "auth",
+      "method": "GET",
+      "endpoint": "/api/v1/auth/me"
+    },
+    {
+      "kind": "auth",
+      "method": "GET",
+      "endpoint": "/api/v1/auth/me"
+    },
+    {
+      "kind": "auth",
+      "method": "GET",
+      "endpoint": "/api/v1/auth/me"
+    },
+    {
+      "kind": "auth",
+      "method": "GET",
+      "endpoint": "/api/v1/auth/me"
+    },
+    {
+      "kind": "auth",
+      "method": "GET",
+      "endpoint": "/api/v1/auth/me"
+    },
+    {
+      "kind": "auth",
+      "method": "GET",
+      "endpoint": "/api/v1/auth/me"
+    },
+    {
+      "kind": "auth",
+      "method": "GET",
+      "endpoint": "/api/v1/auth/me"
+    },
+    {
+      "kind": "auth",
+      "method": "GET",
+      "endpoint": "/api/v1/auth/me"
+    },
+    {
+      "kind": "auth",
+      "method": "GET",
+      "endpoint": "/api/v1/auth/me"
+    },
+    {
+      "kind": "auth",
+      "method": "GET",
+      "endpoint": "/api/v1/auth/me"
+    },
+    {
+      "kind": "auth",
+      "method": "GET",
+      "endpoint": "/api/v1/auth/me"
+    },
+    {
+      "kind": "auth",
+      "method": "GET",
+      "endpoint": "/api/v1/auth/me"
+    },
+    {
+      "kind": "auth",
+      "method": "GET",
+      "endpoint": "/api/v1/auth/me"
+    },
+    {
+      "kind": "auth",
+      "method": "GET",
+      "endpoint": "/api/v1/auth/me"
+    },
+    {
+      "kind": "auth",
+      "method": "GET",
+      "endpoint": "/api/v1/auth/me"
+    },
+    {
+      "kind": "auth",
+      "method": "GET",
+      "endpoint": "/api/v1/auth/me"
+    },
+    {
+      "kind": "auth",
+      "method": "GET",
+      "endpoint": "/api/v1/auth/me"
+    },
+    {
+      "kind": "auth",
+      "method": "GET",
+      "endpoint": "/api/v1/auth/me"
+    },
+    {
+      "kind": "business",
+      "method": "GET",
+      "endpoint": "/api/v1/chapters/C/current-roster"
+    },
+    {
+      "kind": "business",
+      "method": "GET",
+      "endpoint": "/api/v1/chapters/C/reorganizations"
+    },
+    {
+      "kind": "business",
+      "method": "GET",
+      "endpoint": "/api/v1/chapters/C/reorganizations"
+    },
+    {
+      "kind": "auth",
+      "method": "GET",
+      "endpoint": "/api/v1/auth/me"
+    },
+    {
+      "kind": "business",
+      "method": "GET",
+      "endpoint": "/api/v1/chapters/C/dashboard/members"
+    },
+    {
+      "kind": "business",
+      "method": "GET",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses"
+    },
+    {
+      "kind": "business",
+      "method": "GET",
+      "endpoint": "/api/v1/chapters/C/dashboard/members"
+    },
+    {
+      "kind": "business",
+      "method": "GET",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses"
+    },
+    {
+      "kind": "auth",
+      "method": "GET",
+      "endpoint": "/api/v1/auth/me"
+    },
+    {
+      "kind": "auth",
+      "method": "GET",
+      "endpoint": "/api/v1/auth/me"
+    },
+    {
+      "kind": "auth",
+      "method": "GET",
+      "endpoint": "/api/v1/auth/me"
+    },
+    {
+      "kind": "business",
+      "method": "GET",
+      "endpoint": "/api/v1/chapters/C/current-roster"
+    },
+    {
+      "kind": "auth",
+      "method": "GET",
+      "endpoint": "/api/v1/auth/me"
+    },
+    {
+      "kind": "business",
+      "method": "GET",
+      "endpoint": "/api/v1/chapters/C/current-roster"
+    },
+    {
+      "kind": "auth",
+      "method": "GET",
+      "endpoint": "/api/v1/auth/me"
+    },
+    {
+      "kind": "auth",
+      "method": "GET",
+      "endpoint": "/api/v1/auth/me"
+    },
+    {
+      "kind": "business",
+      "method": "GET",
+      "endpoint": "/api/v1/chapters/C/current-roster"
+    },
+    {
+      "kind": "auth",
+      "method": "GET",
+      "endpoint": "/api/v1/auth/me"
+    }
+  ]
+}

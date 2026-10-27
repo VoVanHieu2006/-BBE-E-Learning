@@ -6,7 +6,9 @@ import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
 import YouTubePlayer from '@/components/YouTubePlayer';
-import { apiFetch, clearApiCache, getCachedApiData } from '@/lib/api/client';
+import { apiFetch, getCachedApiData, getVerifiedPilotUser } from '@/lib/api/client';
+import { useApiQuery } from '@/lib/api/use-api-query';
+import pilot from '../pilot.module.css';
 
 const STATE_META: Record<string, { label: string; badge: string; bar: string }> = {
   COMPLETED: { label: '✓ Đã hoàn thành', badge: 'bg-green-100 text-green-700', bar: 'bg-green-500' },
@@ -15,10 +17,11 @@ const STATE_META: Record<string, { label: string; badge: string; bar: string }> 
 };
 
 export default function ChapterManagerCoursesPage() {
-  const [user, setUser] = useState<any>(null);
-  const [courses, setCourses] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const [user, setUser] = useState<any>(()=>getVerifiedPilotUser());
+  const courseQuery = useApiQuery(user?.chapterId ? `/api/v1/chapters/${user.chapterId}/dashboard/courses` : null);
+  const courses: any[] = courseQuery.data?.items || [];
+  const loading = !user || courseQuery.status === 'loading';
+  const refreshing = courseQuery.refreshing;
 
   // Modal: Học viên của khóa
   const [studentsModal, setStudentsModal] = useState<any | null>(null);
@@ -40,55 +43,17 @@ export default function ChapterManagerCoursesPage() {
   const [quizSearch, setQuizSearch] = useState('');
 
   useEffect(() => {
-    let currentChapter = 'me';
     if (typeof window !== 'undefined') {
       const u = localStorage.getItem('user');
       if (u) {
         try {
           const parsed = JSON.parse(u);
           setUser(parsed);
-          currentChapter = parsed.chapterId || 'me';
         } catch {}
       }
 
-      // Read cache immediately on client mount
-      const url = `/api/v1/chapters/${currentChapter}/dashboard/courses`;
-      const cached = getCachedApiData<any>(url);
-      if (cached?.items) {
-        setCourses(cached.items);
-        setLoading(false);
-      }
     }
-    loadCourses();
   }, []);
-
-  async function loadCourses(noCache = false) {
-    const targetChapter = user?.chapterId || (typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user') || 'null')?.chapterId : null) || 'me';
-    const url = `/api/v1/chapters/${targetChapter}/dashboard/courses`;
-
-    if (noCache) {
-      setRefreshing(true);
-      clearApiCache('/api/v1/chapters');
-      clearApiCache('/api/v1/courses');
-    } else {
-      const cached = getCachedApiData<any>(url);
-      if (cached?.items) {
-        setCourses(cached.items);
-      } else {
-        setLoading(true);
-      }
-    }
-
-    try {
-      const res = await apiFetch(url, { noCache });
-      if (res.ok && res.data) {
-        setCourses(res.data.items || []);
-      }
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }
 
   // ─── Modal 1: Học viên trong khóa ─────────────────────────────────────────────
   const openStudents = async (course: any) => {
@@ -206,8 +171,8 @@ export default function ChapterManagerCoursesPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f8f9ff]">
-      <main className="max-w-5xl mx-auto px-8 py-10">
+    <div className={`${pilot.pilot} min-h-screen bg-[#f8f9ff]`}>
+      <main className="max-w-5xl mx-auto px-0 py-0">
         <div className="flex justify-between items-center mb-6">
           <div>
             <h1 className="text-3xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
@@ -218,7 +183,7 @@ export default function ChapterManagerCoursesPage() {
           <button
             type="button"
             disabled={refreshing}
-            onClick={() => loadCourses(true)}
+            onClick={() => void courseQuery.refresh()}
             className="px-4 py-2 bg-white border border-[#cbdbf5] hover:bg-[#eff4ff] active:scale-95 text-[#172554] text-sm font-semibold rounded-xl shadow-xs transition flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
             title="Làm mới danh sách khóa học và tiến độ hoàn thành"
           >
@@ -227,6 +192,8 @@ export default function ChapterManagerCoursesPage() {
           </button>
         </div>
 
+        {courseQuery.error && <p role="alert" className="mb-4 text-sm text-red-700">Chưa làm mới được khóa học. Dữ liệu đã tải được giữ lại. Vui lòng thử lại.</p>}
+        {courseQuery.updatedAt && <p className="mb-4 text-xs text-[#596174]">Đồng bộ khóa học: {new Intl.DateTimeFormat('vi-VN',{hour:'2-digit',minute:'2-digit',second:'2-digit'}).format(courseQuery.updatedAt)}</p>}
         {loading && courses.length === 0 ? (
           <div className="text-center py-12 text-[#737686]">Đang tải dữ liệu...</div>
         ) : courses.length === 0 ? (
@@ -277,6 +244,7 @@ export default function ChapterManagerCoursesPage() {
 
         {/* Modal: Học viên trong khóa */}
         <Modal
+          motion
           isOpen={!!studentsModal}
           onClose={() => setStudentsModal(null)}
           maxWidth="max-w-2xl"
@@ -320,7 +288,9 @@ export default function ChapterManagerCoursesPage() {
 
         {/* Modal: Nội dung khóa học (outline only; media is progression-gated) */}
         <Modal
+          motion
           isOpen={!!contentModal}
+          className={pilot.contentFrame}
           onClose={() => setContentModal(null)}
           maxWidth="max-w-2xl"
         >
@@ -349,13 +319,14 @@ export default function ChapterManagerCoursesPage() {
             ) : (
               <div className="space-y-4">
                 {contentModal.sessions.map((session: any, sIdx: number) => (
-                  <div key={session.sessionId || session.id} className="border border-[#eff4ff] rounded-2xl overflow-hidden">
-                    <div className="px-4 py-2.5 bg-[#f8f9ff] border-b border-[#eff4ff] flex items-center gap-2">
+                  <details key={session.sessionId || session.id} open className={pilot.session} data-pilot-accordion>
+                    <summary>
                       <span className="w-6 h-6 bg-[#2563EB] text-white rounded-lg flex items-center justify-center font-bold text-[11px]">
                         {sIdx + 1}
                       </span>
-                      <h4 className="font-bold text-sm text-[#172554]">{session.title}</h4>
-                    </div>
+                      <span className="font-bold text-sm text-[#172554]">{session.title}</span>
+                    </summary>
+                    <div className={pilot.sessionBody}>
                     {!session.lessons || session.lessons.length === 0 ? (
                       <p className="px-4 py-3 text-xs text-[#737686]">Chưa có bài học.</p>
                     ) : (
@@ -401,7 +372,8 @@ export default function ChapterManagerCoursesPage() {
                         })}
                       </div>
                     )}
-                  </div>
+                    </div>
+                  </details>
                 ))}
                 {contentModal.finalAssessment && (
                   <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm">
@@ -438,6 +410,7 @@ export default function ChapterManagerCoursesPage() {
 
         {/* Modal: Xem video (có thể tua) */}
         <Modal
+          motion
           isOpen={!!videoModal}
           onClose={() => setVideoModal(null)}
           maxWidth="max-w-3xl"
@@ -494,6 +467,7 @@ export default function ChapterManagerCoursesPage() {
 
         {/* Modal: Xem toàn bộ câu hỏi và kết quả quiz */}
         <Modal
+          motion
           isOpen={!!quizModal}
           onClose={() => setQuizModal(null)}
           maxWidth="max-w-3xl"

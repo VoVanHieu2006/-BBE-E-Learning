@@ -2,15 +2,17 @@ import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import nextEnv from '@next/env'
 import { SignJWT } from 'jose'
+import developmentTarget from './development-integration-target.cjs'
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL
 if (!testDatabaseUrl) throw new Error('TEST_DATABASE_URL is required; this test never falls back to DATABASE_URL.')
 
 const databaseUrl = new URL(testDatabaseUrl)
-if (databaseUrl.protocol !== 'postgresql:' || !['127.0.0.1', 'localhost', '::1'].includes(databaseUrl.hostname)) {
+const devTarget = developmentTarget.loadDevelopmentTarget(testDatabaseUrl,'learning_flow')
+if (!devTarget && (databaseUrl.protocol !== 'postgresql:' || !['127.0.0.1', 'localhost', '::1'].includes(databaseUrl.hostname))) {
   throw new Error('TEST_DATABASE_URL must point to a local PostgreSQL test database (loopback only).')
 }
-if (databaseUrl.pathname !== '/bbe_test_learning_flow') {
+if (!devTarget && databaseUrl.pathname !== '/bbe_test_learning_flow') {
   throw new Error('The test database name must be bbe_test_learning_flow.')
 }
 
@@ -161,10 +163,15 @@ async function cleanupFixtures() {
 }
 
 try {
+  if(devTarget){
+    await developmentTarget.assertPrismaIsolation(prisma,devTarget)
+    developmentTarget.assertServerAttestation(devTarget,appUrl)
+    console.log(`Development isolation verified: ${devTarget.projectRef}/${devTarget.database}, schema ${devTarget.schema}`)
+  }
   const [databaseInfo] = await prisma.$queryRaw`SELECT current_database() AS name, inet_server_addr()::text AS address`
-  assert.equal(databaseInfo.name, 'bbe_test_learning_flow', 'Prisma must be connected to the dedicated learning-flow test database')
+  if (!devTarget) assert.equal(databaseInfo.name, 'bbe_test_learning_flow', 'Prisma must be connected to the dedicated learning-flow test database')
   const databaseAddress = databaseInfo.address ? databaseInfo.address.split('/')[0] : null
-  assert.ok(['127.0.0.1', '::1', null].includes(databaseAddress), 'PostgreSQL must be bound to loopback')
+  if (!devTarget) assert.ok(['127.0.0.1', '::1', null].includes(databaseAddress), 'PostgreSQL must be bound to loopback')
 
   const appResponse = await fetch(`${appUrl.origin}/`, { cache: 'no-store' })
   assert.ok(appResponse.ok, `local test app must be running at ${appUrl.origin}`)
@@ -175,6 +182,7 @@ try {
   const chapterLeaderId = await createUser('CHAPTER_LEADER', 'chapter-leader')
   const chapterOutsiderId = await createUser('CHAPTER_LEADER', 'chapter-outsider')
   const dnaManagerId = await createUser('MEMBER', 'dna-manager')
+  const dnaLearnerId = await createUser('MEMBER', 'dna-learner')
   const dnaOutsiderId = await createUser('MEMBER', 'dna-outsider')
   const deadlineUserId = await createUser('MEMBER', 'deadline-user')
   const adminToken = await issueAccessToken(adminId, 'ADMIN')
@@ -209,7 +217,8 @@ try {
   units.push(dnaA.id, dnaB.id)
   await prisma.organizationMembership.createMany({ data: [
     { user_id: dnaManagerId, unit_id: dnaA.id, status: 'ACTIVE' },
-    { user_id: learnerId, unit_id: dnaA.id, status: 'ACTIVE' },
+    // Current integrity rules prohibit simultaneous Chapter/DNA affiliation.
+    { user_id: dnaLearnerId, unit_id: dnaA.id, status: 'ACTIVE' },
     { user_id: dnaOutsiderId, unit_id: dnaB.id, status: 'ACTIVE' },
   ] })
   const existingProgressPermission = await prisma.permission.findUnique({ where: { code: 'VIEW_MEMBER_PROGRESS' }, select: { id: true } })
@@ -245,7 +254,7 @@ try {
 
   const lessonQuizBodies = lessons.map((lesson, index) => callApi(`/api/v1/lessons/${lesson.id}/assessment`, {
     method: 'POST', token: adminToken,
-    body: { title: `${prefix}-lesson-quiz-${index + 1}`, questions: [{
+    body: { title: `${prefix}-lesson-quiz-${index + 1}`, durationMinutes: 10, questions: [{
       questionText: `Question ${index + 1}`,
       points: 10,
       options: [{ optionText: 'Correct', isCorrect: true }, { optionText: 'Incorrect', isCorrect: false }],
@@ -466,7 +475,7 @@ try {
   assert.equal(chapterOwnScope.status, 200, 'Chapter manager can inspect a member inside the managed Chapter')
   const chapterCrossScope = await callApi(`/api/v1/chapters/${chapterB.id}/members/${chapterOutsiderId}/course-progress`, { token: chapterLeaderToken })
   assert.equal(chapterCrossScope.status, 403, 'Chapter manager cannot inspect a different Chapter')
-  const dnaOwnScope = await callApi(`/api/v1/organization/units/${dnaA.id}/members/${learnerId}/progress`, { token: dnaManagerToken })
+  const dnaOwnScope = await callApi(`/api/v1/organization/units/${dnaA.id}/members/${dnaLearnerId}/progress`, { token: dnaManagerToken })
   assert.equal(dnaOwnScope.status, 200, 'an active DNA position permission grants progress visibility within its unit')
   const dnaCrossScope = await callApi(`/api/v1/organization/units/${dnaB.id}/members/${dnaOutsiderId}/progress`, { token: dnaManagerToken })
   assert.equal(dnaCrossScope.status, 403, 'DNA manager cannot inspect a peer DNA unit')
@@ -542,14 +551,15 @@ try {
   const deadlineAuditAfterLift = await prisma.accessRestriction.findUnique({ where: { id: deadlineRestriction.id }, select: { lifted_at: true, lifted_by_user_id: true } })
   assert.ok(deadlineAuditAfterLift.lifted_at && deadlineAuditAfterLift.lifted_by_user_id === adminId, 'deadline audit records Admin lift actor and time')
 
-  console.log('Learning-flow API integration passed: local DB isolation; Admin-only exam authoring and cover-upload validation; 100% video and anti-seek cap; sequential video and quiz gates; answer validation/reset; immutable submit, grading, retry cooldown/numbering/results; lesson/final Stars idempotency; course completion; view-only assignment; Chapter/DNA scope enforcement; Admin-only direct, Chapter-cascade, and deadline lock/unlock with overlapping-cause audit.')
+  console.log('Learning-flow API integration passed: guarded database isolation; Admin-only exam authoring and cover-upload validation; 100% video and anti-seek cap; sequential video and quiz gates; answer validation/reset; immutable submit, grading, retry cooldown/numbering/results; lesson/final Stars idempotency; course completion; view-only assignment; Chapter/DNA scope enforcement; Admin-only direct, Chapter-cascade, and deadline lock/unlock with overlapping-cause audit.')
 } catch (error) {
-  console.error('Learning-flow integration failed. Only disposable local fixtures are used and will be cleaned up.')
+  console.error('Learning-flow integration failed. Only guarded fixture data is used; development namespaces are retained.')
   console.error(error instanceof Error ? error.stack || error.message : 'Unknown test error')
   process.exitCode = 1
 } finally {
   try {
-    await cleanupFixtures()
+    if(devTarget)console.log(`Fixture namespace retained for inspection: ${devTarget.schema}; prefix ${prefix}`)
+    else await cleanupFixtures()
   } catch (error) {
     console.error(`Fixture cleanup failed for prefix ${prefix}; inspect only bbe_test_learning_flow records with this prefix before rerunning.`)
     console.error(error instanceof Error ? error.message : 'Unknown cleanup error')

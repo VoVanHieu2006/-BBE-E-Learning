@@ -4,7 +4,9 @@ const path = require('node:path')
 const assert = require('node:assert/strict')
 const { randomUUID } = require('node:crypto')
 const url = process.env.ORGANIZATION_TEST_DATABASE_URL
-if (!url || !['127.0.0.1', 'localhost'].includes(new URL(url).hostname) || !new URL(url).pathname.startsWith('/org_integrity')) {
+const developmentTarget = require('./development-integration-target.cjs')
+const devTarget = developmentTarget.loadDevelopmentTarget(url,'organization')
+if (!devTarget && (!url || !['127.0.0.1', 'localhost'].includes(new URL(url).hostname) || !new URL(url).pathname.startsWith('/org_integrity'))) {
   throw new Error('An explicit isolated localhost org_integrity* database is required; never uses DATABASE_URL as a fallback.')
 }
 process.env.DATABASE_URL = url
@@ -14,7 +16,9 @@ require('ts-node').register({ project: 'tsconfig.test.json' })
 const Module = require('node:module')
 const resolve = Module._resolveFilename
 Module._resolveFilename = function (request, ...args) { return resolve.call(this, request.startsWith('@/') ? path.resolve('src', request.slice(2)) : request, ...args) }
-globalThis.prisma = new (require('@prisma/client').PrismaClient)({ log: [] })
+// Remote fixture transactions need a bounded latency allowance; default local
+// behavior and the raw-import isolation/lock assertions remain unchanged.
+globalThis.prisma = new (require('@prisma/client').PrismaClient)({ log: [], ...(devTarget ? { transactionOptions: { maxWait: 15_000, timeout: 30_000 } } : {}) })
 const { prisma } = require('../src/lib/prisma')
 const results = []
 async function check(name, fn) {
@@ -35,15 +39,31 @@ async function fixture(role = 'MEMBER') {
 }
 const appoint = f => prisma.positionAssignment.create({ data: { user_id: f.user.id, unit_id: f.unit.id, position_id: f.position.id } })
 async function rawTransaction(fn, isolation = 'READ COMMITTED') {
-  const client = new Client({ connectionString: url })
+  const client = devTarget ? require('./development-db-inspect.cjs').createVerifiedClient(url) : new Client({ connectionString: url })
   await client.connect()
-  try { await client.query("SET TIME ZONE 'UTC'"); await client.query(`BEGIN ISOLATION LEVEL ${isolation}`); const value = await fn(client); await client.query('COMMIT'); return { ok: true, value } }
+  try {
+    await client.query("SET TIME ZONE 'UTC'");await client.query(`BEGIN ISOLATION LEVEL ${isolation}`)
+    if(devTarget){
+      await client.query(`SET LOCAL search_path TO "${devTarget.schema}",pg_catalog`)
+      await client.query("SET LOCAL lock_timeout='5s'")
+      assert.equal((await client.query('SELECT current_schema() AS schema')).rows[0].schema,devTarget.schema)
+    }
+    const value = await fn(client);await client.query('COMMIT');return {ok:true,value}
+  }
   catch (error) { await client.query('ROLLBACK'); return { ok: false, code: error.code, message: error.message } }
   finally { await client.end() }
 }
 (async () => {
-  const db = new Client({ connectionString: url }); await db.connect()
+  if(devTarget)await developmentTarget.assertPrismaIsolation(prisma,devTarget)
+  const db = devTarget ? require('./development-db-inspect.cjs').createVerifiedClient(url) : new Client({ connectionString: url }); await db.connect()
   try {
+    if(devTarget){
+      const guards=await db.query("SELECT count(*)::int AS count FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname=$1 AND (p.proname='record_learning_chapter_affiliation' OR (p.proname='assert_organization_integrity' AND p.prosrc LIKE '%LeadChapterCannotJoinDna%'))",[devTarget.schema])
+      assert.equal(guards.rows[0].count,2,'Isolated schema must already contain the reviewed guard functions; no automatic migrations in development mode')
+      const triggers=await db.query("SELECT count(*)::int AS count FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=$1 AND NOT t.tgisinternal",[devTarget.schema])
+      assert.equal(triggers.rows[0].count,devTarget.descriptor.triggers.length)
+      console.log(`Development isolation verified: ${devTarget.projectRef}/${devTarget.database}, schema ${devTarget.schema}`)
+    }else{
     const installed = await db.query("SELECT 1 FROM pg_proc WHERE proname='assert_organization_integrity'")
     if (!installed.rowCount) {
       const legacy = await db.query("SELECT 1 FROM pg_proc WHERE proname='record_learning_chapter_affiliation'")
@@ -52,6 +72,7 @@ async function rawTransaction(fn, isolation = 'READ COMMITTED') {
     }
     const dnaGuard = await db.query("SELECT 1 FROM pg_proc WHERE proname='assert_organization_integrity' AND prosrc LIKE '%LeadChapterCannotJoinDna%'")
     if (!dnaGuard.rowCount) await db.query(await fs.readFile('prisma/migrations/20261025_lead_binding_guards/migration.sql', 'utf8'))
+    }
   } finally { await db.end() }
   await check('first Lead succeeds; second Chapter rejected at database', async () => {
     const f = await fixture(); await appoint(f)

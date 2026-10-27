@@ -1,0 +1,766 @@
+{
+  "checkedAt": "2026-10-27T10:26:16.981Z",
+  "projectRef": "rieqrjxatzoiqubxyhlw",
+  "database": "postgres",
+  "backup": {
+    "tables": 60,
+    "rows": 2711,
+    "roundTripVerified": true,
+    "dpapiRestoreVerified": true,
+    "encryption": "AES-256-GCM + Windows DPAPI CurrentUser wrapped key"
+  },
+  "results": [
+    {
+      "receipt": "bbe_ui_it_leaderboard_0a9aac96-result.json",
+      "suite": "leaderboard",
+      "status": "FAIL",
+      "exitCode": 1,
+      "projectRef": "rieqrjxatzoiqubxyhlw",
+      "database": "postgres",
+      "schema": "bbe_ui_it_leaderboard_0a9aac96",
+      "finishedAt": "2026-10-27T10:04:08.645Z",
+      "scope": "Isolated fixture schema in authorized development database",
+      "fixtureInventory": [
+        {
+          "table": "users",
+          "rows": 22
+        },
+        {
+          "table": "chapters",
+          "rows": 1
+        },
+        {
+          "table": "chapter_members",
+          "rows": 11
+        },
+        {
+          "table": "courses",
+          "rows": 1
+        },
+        {
+          "table": "sessions",
+          "rows": 1
+        },
+        {
+          "table": "lessons",
+          "rows": 2
+        },
+        {
+          "table": "lesson_progress",
+          "rows": 40
+        },
+        {
+          "table": "assessments",
+          "rows": 3
+        },
+        {
+          "table": "attempts",
+          "rows": 30
+        },
+        {
+          "table": "organization_units",
+          "rows": 3
+        },
+        {
+          "table": "organization_memberships",
+          "rows": 11
+        },
+        {
+          "table": "user_learning_assignments",
+          "rows": 20
+        },
+        {
+          "table": "star_ledger",
+          "rows": 20
+        },
+        {
+          "table": "chapter_monthly_kpis",
+          "rows": 1
+        },
+        {
+          "table": "learning_snapshots",
+          "rows": 1
+        },
+        {
+          "table": "account_state_intervals",
+          "rows": 22
+        },
+        {
+          "table": "chapter_affiliation_intervals",
+          "rows": 11
+        },
+        {
+          "table": "course_publication_events",
+          "rows": 1
+        }
+      ],
+      "cleanup": "Fixtures retained; no DROP SCHEMA; no public/auth/storage cleanup performed"
+    },
+    {
+      "receipt": "bbe_ui_it_leaderboard_edcd81f8-v8-result.json",
+      "suite": "leaderboard",
+      "status": "PASS",
+      "exitCode": 0,
+      "projectRef": "rieqrjxatzoiqubxyhlw",
+      "database": "postgres",
+      "schema": "bbe_ui_it_leaderboard_edcd81f8",
+      "finishedAt": "2026-10-27T10:15:40.304Z",
+      "scope": "Isolated fixture schema in authorized development database",
+      "fixtureInventory": [
+        {
+          "table": "users",
+          "rows": 29
+        },
+        {
+          "table": "chapters",
+          "rows": 1
+        },
+        {
+          "table": "chapter_members",
+          "rows": 28
+        },
+        {
+          "table": "courses",
+          "rows": 1
+        },
+        {
+          "table": "sessions",
+          "rows": 1
+        },
+        {
+          "table": "lessons",
+          "rows": 1
+        },
+        {
+          "table": "organization_units",
+          "rows": 2
+        },
+        {
+          "table": "organization_memberships",
+          "rows": 56
+        },
+        {
+          "table": "star_ledger",
+          "rows": 1
+        },
+        {
+          "table": "chapter_monthly_kpis",
+          "rows": 1
+        },
+        {
+          "table": "competition_months",
+          "rows": 1
+        },
+        {
+          "table": "learning_cycles",
+          "rows": 28
+        },
+        {
+          "table": "cycle_lesson_progress",
+          "rows": 20
+        },
+        {
+          "table": "learning_snapshots",
+          "rows": 3
+        },
+        {
+          "table": "learning_programs",
+          "rows": 1
+        },
+        {
+          "table": "account_state_intervals",
+          "rows": 29
+        },
+        {
+          "table": "chapter_affiliation_intervals",
+          "rows": 28
+        },
+        {
+          "table": "course_publication_events",
+          "rows": 1
+        }
+      ],
+      "cleanup": "Fixtures retained; no DROP SCHEMA; no public/auth/storage cleanup performed"
+    },
+    {
+      "receipt": "bbe_ui_it_learning_cycles_99abc201-result.json",
+      "suite": "learning_cycles",
+      "status": "FAIL",
+      "exitCode": 1,
+      "projectRef": "rieqrjxatzoiqubxyhlw",
+      "database": "postgres",
+      "schema": "bbe_ui_it_learning_cycles_99abc201",
+      "finishedAt": "2026-10-27T10:13:28.490Z",
+      "scope": "Isolated fixture schema in authorized development database",
+      "fixtureInventory": [
+        {
+          "table": "users",
+          "rows": 3
+        },
+        {
+          "table": "chapters",
+          "rows": 1
+        },
+        {
+          "table": "chapter_members",
+          "rows": 2
+        },
+        {
+          "table": "courses",
+          "rows": 1
+        },
+        {
+          "table": "sessions",
+          "rows": 1
+        },
+        {
+          "table": "lessons",
+          "rows": 1
+        },
+        {
+          "table": "videos",
+          "rows": 1
+        },
+        {
+          "table": "lesson_progress",
+          "rows": 1
+        },
+        {
+          "table": "assessments",
+          "rows": 1
+        },
+        {
+          "table": "questions",
+          "rows": 2
+        },
+        {
+          "table": "question_options",
+          "rows": 4
+        },
+        {
+          "table": "attempts",
+          "rows": 2
+        },
+        {
+          "table": "attempt_questions",
+          "rows": 4
+        },
+        {
+          "table": "attempt_answers",
+          "rows": 4
+        },
+        {
+          "table": "organization_units",
+          "rows": 4
+        },
+        {
+          "table": "organization_memberships",
+          "rows": 4
+        },
+        {
+          "table": "learning_rules",
+          "rows": 1
+        },
+        {
+          "table": "user_learning_assignments",
+          "rows": 1
+        },
+        {
+          "table": "star_ledger",
+          "rows": 2
+        },
+        {
+          "table": "chapter_reorganizations",
+          "rows": 1
+        },
+        {
+          "table": "learning_policy",
+          "rows": 1
+        },
+        {
+          "table": "competition_months",
+          "rows": 1
+        },
+        {
+          "table": "transfer_seasons",
+          "rows": 1
+        },
+        {
+          "table": "learning_cycles",
+          "rows": 1
+        },
+        {
+          "table": "cycle_lesson_progress",
+          "rows": 1
+        },
+        {
+          "table": "quiz_reward_high_water_marks",
+          "rows": 1
+        },
+        {
+          "table": "learning_paths",
+          "rows": 1
+        },
+        {
+          "table": "learning_path_changes",
+          "rows": 1
+        },
+        {
+          "table": "learning_outbox",
+          "rows": 1
+        },
+        {
+          "table": "learning_programs",
+          "rows": 1
+        },
+        {
+          "table": "course_requirement_versions",
+          "rows": 1
+        },
+        {
+          "table": "account_state_intervals",
+          "rows": 3
+        },
+        {
+          "table": "chapter_affiliation_intervals",
+          "rows": 2
+        },
+        {
+          "table": "course_publication_events",
+          "rows": 1
+        }
+      ],
+      "cleanup": "Fixtures retained; no DROP SCHEMA; no public/auth/storage cleanup performed"
+    },
+    {
+      "receipt": "bbe_ui_it_learning_flow_41239833-first-result.json",
+      "suite": "learning_flow",
+      "status": "FAIL",
+      "exitCode": 1,
+      "projectRef": "rieqrjxatzoiqubxyhlw",
+      "database": "postgres",
+      "schema": "bbe_ui_it_learning_flow_41239833",
+      "finishedAt": "2026-10-27T10:17:07.287Z",
+      "scope": "Isolated fixture schema in authorized development database",
+      "fixtureInventory": [
+        {
+          "table": "users",
+          "rows": 8
+        },
+        {
+          "table": "chapters",
+          "rows": 2
+        },
+        {
+          "table": "chapter_members",
+          "rows": 4
+        },
+        {
+          "table": "organization_units",
+          "rows": 5
+        },
+        {
+          "table": "account_state_intervals",
+          "rows": 8
+        },
+        {
+          "table": "chapter_affiliation_intervals",
+          "rows": 4
+        }
+      ],
+      "cleanup": "Fixtures retained; no DROP SCHEMA; no public/auth/storage cleanup performed"
+    },
+    {
+      "receipt": "bbe_ui_it_learning_flow_41239833-result.json",
+      "suite": "learning_flow",
+      "status": "FAIL",
+      "exitCode": 1,
+      "projectRef": "rieqrjxatzoiqubxyhlw",
+      "database": "postgres",
+      "schema": "bbe_ui_it_learning_flow_41239833",
+      "finishedAt": "2026-10-27T10:24:37.717Z",
+      "scope": "Isolated fixture schema in authorized development database",
+      "fixtureInventory": [
+        {
+          "table": "users",
+          "rows": 26
+        },
+        {
+          "table": "chapters",
+          "rows": 6
+        },
+        {
+          "table": "chapter_members",
+          "rows": 12
+        },
+        {
+          "table": "courses",
+          "rows": 3
+        },
+        {
+          "table": "sessions",
+          "rows": 2
+        },
+        {
+          "table": "lessons",
+          "rows": 4
+        },
+        {
+          "table": "videos",
+          "rows": 4
+        },
+        {
+          "table": "lesson_progress",
+          "rows": 1
+        },
+        {
+          "table": "assessments",
+          "rows": 3
+        },
+        {
+          "table": "final_exam_versions",
+          "rows": 1
+        },
+        {
+          "table": "questions",
+          "rows": 4
+        },
+        {
+          "table": "question_options",
+          "rows": 8
+        },
+        {
+          "table": "organization_units",
+          "rows": 15
+        },
+        {
+          "table": "organization_memberships",
+          "rows": 6
+        },
+        {
+          "table": "positions",
+          "rows": 2
+        },
+        {
+          "table": "permissions",
+          "rows": 1
+        },
+        {
+          "table": "position_permissions",
+          "rows": 2
+        },
+        {
+          "table": "position_assignments",
+          "rows": 2
+        },
+        {
+          "table": "user_learning_assignments",
+          "rows": 4
+        },
+        {
+          "table": "star_ledger",
+          "rows": 1
+        },
+        {
+          "table": "account_state_intervals",
+          "rows": 26
+        },
+        {
+          "table": "chapter_affiliation_intervals",
+          "rows": 12
+        },
+        {
+          "table": "course_publication_events",
+          "rows": 3
+        }
+      ],
+      "cleanup": "Fixtures retained; no DROP SCHEMA; no public/auth/storage cleanup performed"
+    },
+    {
+      "receipt": "bbe_ui_it_learning_flow_41239833-second-result.json",
+      "suite": "learning_flow",
+      "status": "FAIL",
+      "exitCode": 1,
+      "projectRef": "rieqrjxatzoiqubxyhlw",
+      "database": "postgres",
+      "schema": "bbe_ui_it_learning_flow_41239833",
+      "finishedAt": "2026-10-27T10:22:39.556Z",
+      "scope": "Isolated fixture schema in authorized development database",
+      "fixtureInventory": [
+        {
+          "table": "users",
+          "rows": 17
+        },
+        {
+          "table": "chapters",
+          "rows": 4
+        },
+        {
+          "table": "chapter_members",
+          "rows": 8
+        },
+        {
+          "table": "courses",
+          "rows": 1
+        },
+        {
+          "table": "sessions",
+          "rows": 1
+        },
+        {
+          "table": "lessons",
+          "rows": 2
+        },
+        {
+          "table": "videos",
+          "rows": 2
+        },
+        {
+          "table": "organization_units",
+          "rows": 10
+        },
+        {
+          "table": "organization_memberships",
+          "rows": 3
+        },
+        {
+          "table": "positions",
+          "rows": 1
+        },
+        {
+          "table": "permissions",
+          "rows": 1
+        },
+        {
+          "table": "position_permissions",
+          "rows": 1
+        },
+        {
+          "table": "position_assignments",
+          "rows": 1
+        },
+        {
+          "table": "user_learning_assignments",
+          "rows": 2
+        },
+        {
+          "table": "account_state_intervals",
+          "rows": 17
+        },
+        {
+          "table": "chapter_affiliation_intervals",
+          "rows": 8
+        },
+        {
+          "table": "course_publication_events",
+          "rows": 1
+        }
+      ],
+      "cleanup": "Fixtures retained; no DROP SCHEMA; no public/auth/storage cleanup performed"
+    },
+    {
+      "receipt": "bbe_ui_it_organization_eea3c5d4-first-result.json",
+      "suite": "organization",
+      "status": "FAIL",
+      "exitCode": 1,
+      "projectRef": "rieqrjxatzoiqubxyhlw",
+      "database": "postgres",
+      "schema": "bbe_ui_it_organization_eea3c5d4",
+      "finishedAt": "2026-10-27T10:09:29.769Z",
+      "scope": "Isolated fixture schema in authorized development database",
+      "fixtureInventory": [
+        {
+          "table": "users",
+          "rows": 25
+        },
+        {
+          "table": "chapters",
+          "rows": 48
+        },
+        {
+          "table": "chapter_members",
+          "rows": 6
+        },
+        {
+          "table": "chapter_lead_bindings",
+          "rows": 12
+        },
+        {
+          "table": "courses",
+          "rows": 1
+        },
+        {
+          "table": "sessions",
+          "rows": 1
+        },
+        {
+          "table": "lessons",
+          "rows": 1
+        },
+        {
+          "table": "lesson_progress",
+          "rows": 1
+        },
+        {
+          "table": "audit_logs",
+          "rows": 1
+        },
+        {
+          "table": "organization_units",
+          "rows": 96
+        },
+        {
+          "table": "organization_memberships",
+          "rows": 7
+        },
+        {
+          "table": "positions",
+          "rows": 2
+        },
+        {
+          "table": "permissions",
+          "rows": 2
+        },
+        {
+          "table": "position_permissions",
+          "rows": 2
+        },
+        {
+          "table": "position_assignments",
+          "rows": 17
+        },
+        {
+          "table": "star_ledger",
+          "rows": 5
+        },
+        {
+          "table": "competition_months",
+          "rows": 2
+        },
+        {
+          "table": "learning_outbox",
+          "rows": 1
+        },
+        {
+          "table": "learning_snapshots",
+          "rows": 1
+        },
+        {
+          "table": "account_state_intervals",
+          "rows": 25
+        },
+        {
+          "table": "chapter_affiliation_intervals",
+          "rows": 8
+        },
+        {
+          "table": "course_publication_events",
+          "rows": 1
+        }
+      ],
+      "cleanup": "Fixtures retained; no DROP SCHEMA; no public/auth/storage cleanup performed"
+    },
+    {
+      "receipt": "bbe_ui_it_organization_eea3c5d4-result.json",
+      "suite": "organization",
+      "status": "PASS",
+      "exitCode": 0,
+      "projectRef": "rieqrjxatzoiqubxyhlw",
+      "database": "postgres",
+      "schema": "bbe_ui_it_organization_eea3c5d4",
+      "finishedAt": "2026-10-27T10:21:15.344Z",
+      "scope": "Isolated fixture schema in authorized development database",
+      "fixtureInventory": [
+        {
+          "table": "users",
+          "rows": 50
+        },
+        {
+          "table": "chapters",
+          "rows": 96
+        },
+        {
+          "table": "chapter_members",
+          "rows": 10
+        },
+        {
+          "table": "chapter_lead_bindings",
+          "rows": 25
+        },
+        {
+          "table": "courses",
+          "rows": 2
+        },
+        {
+          "table": "sessions",
+          "rows": 2
+        },
+        {
+          "table": "lessons",
+          "rows": 2
+        },
+        {
+          "table": "lesson_progress",
+          "rows": 2
+        },
+        {
+          "table": "audit_logs",
+          "rows": 7
+        },
+        {
+          "table": "organization_units",
+          "rows": 192
+        },
+        {
+          "table": "organization_memberships",
+          "rows": 16
+        },
+        {
+          "table": "positions",
+          "rows": 2
+        },
+        {
+          "table": "permissions",
+          "rows": 2
+        },
+        {
+          "table": "position_permissions",
+          "rows": 2
+        },
+        {
+          "table": "position_assignments",
+          "rows": 35
+        },
+        {
+          "table": "star_ledger",
+          "rows": 10
+        },
+        {
+          "table": "competition_months",
+          "rows": 2
+        },
+        {
+          "table": "learning_outbox",
+          "rows": 5
+        },
+        {
+          "table": "learning_snapshots",
+          "rows": 2
+        },
+        {
+          "table": "account_state_intervals",
+          "rows": 50
+        },
+        {
+          "table": "chapter_affiliation_intervals",
+          "rows": 16
+        },
+        {
+          "table": "course_publication_events",
+          "rows": 2
+        }
+      ],
+      "cleanup": "Fixtures retained; no DROP SCHEMA; no public/auth/storage cleanup performed"
+    }
+  ]
+}

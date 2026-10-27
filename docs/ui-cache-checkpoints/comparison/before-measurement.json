@@ -1,0 +1,461 @@
+{
+  "label": "before",
+  "base": "cf88238",
+  "browser": "156.0.4314.42",
+  "fixture": "same BBE Chapter / 12 members / 2 courses / 65% / 240 Stars",
+  "rounds": 10,
+  "businessGET": 90,
+  "authRequests": 0,
+  "navigation": [
+    {
+      "route": "courses",
+      "ms": 409
+    },
+    {
+      "route": "dashboard",
+      "ms": 104
+    },
+    {
+      "route": "courses",
+      "ms": 149
+    },
+    {
+      "route": "dashboard",
+      "ms": 155
+    },
+    {
+      "route": "courses",
+      "ms": 164
+    },
+    {
+      "route": "dashboard",
+      "ms": 144
+    },
+    {
+      "route": "courses",
+      "ms": 126
+    },
+    {
+      "route": "dashboard",
+      "ms": 144
+    },
+    {
+      "route": "courses",
+      "ms": 148
+    },
+    {
+      "route": "dashboard",
+      "ms": 143
+    },
+    {
+      "route": "courses",
+      "ms": 124
+    },
+    {
+      "route": "dashboard",
+      "ms": 129
+    },
+    {
+      "route": "courses",
+      "ms": 138
+    },
+    {
+      "route": "dashboard",
+      "ms": 140
+    },
+    {
+      "route": "courses",
+      "ms": 140
+    },
+    {
+      "route": "dashboard",
+      "ms": 139
+    },
+    {
+      "route": "courses",
+      "ms": 115
+    },
+    {
+      "route": "dashboard",
+      "ms": 131
+    },
+    {
+      "route": "courses",
+      "ms": 112
+    },
+    {
+      "route": "dashboard",
+      "ms": 128
+    },
+    {
+      "route": "courses",
+      "ms": 126
+    },
+    {
+      "route": "dashboard",
+      "ms": 130
+    }
+  ],
+  "requests": [
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091202568"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091202584"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091202585"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/members?_t=1793091202719"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091202720"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/members?_t=1793091202736"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091202737"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/members?_t=1793091202738"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091202738"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091202879"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091202893"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091202895"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/members?_t=1793091203039"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091203039"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/members?_t=1793091203056"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091203056"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/members?_t=1793091203057"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091203057"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091203170"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091203181"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091203183"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/members?_t=1793091203301"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091203302"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/members?_t=1793091203326"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091203327"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/members?_t=1793091203328"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091203328"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091203435"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091203448"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091203448"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/members?_t=1793091203607"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091203608"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/members?_t=1793091203624"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091203625"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/members?_t=1793091203625"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091203626"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091203733"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091203745"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091203746"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/members?_t=1793091203850"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091203851"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/members?_t=1793091203867"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091203868"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/members?_t=1793091203869"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091203869"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091203996"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091204003"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091204004"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/members?_t=1793091204121"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091204122"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/members?_t=1793091204138"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091204139"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/members?_t=1793091204140"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091204140"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091204278"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091204291"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091204292"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/members?_t=1793091204413"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091204414"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/members?_t=1793091204430"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091204431"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/members?_t=1793091204432"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091204432"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091204538"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091204547"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091204548"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/members?_t=1793091204650"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091204651"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/members?_t=1793091204664"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091204665"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/members?_t=1793091204666"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091204666"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091204782"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091204792"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091204793"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/members?_t=1793091204893"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091204894"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/members?_t=1793091204904"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091204905"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/members?_t=1793091204906"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091204906"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091205037"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091205045"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091205046"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/members?_t=1793091205157"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091205157"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/members?_t=1793091205170"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091205171"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/members?_t=1793091205172"
+    },
+    {
+      "kind": "business",
+      "endpoint": "/api/v1/chapters/C/dashboard/courses?_t=1793091205172"
+    }
+  ]
+}

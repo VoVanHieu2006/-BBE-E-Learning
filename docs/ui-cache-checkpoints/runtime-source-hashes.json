@@ -1,0 +1,62 @@
+[
+  {
+    "file": "src/lib/api/client.ts",
+    "sha256": "b1ad215a2b3c66eae79285e4c7fea6524d7d20dbe2986cddafa5f4deeb5041ea"
+  },
+  {
+    "file": "src/lib/api/tab-query-cache.ts",
+    "sha256": "ddf4cba54d57b4ca839343072d7180c1eb45510384ad4feb83e94570f76e509e"
+  },
+  {
+    "file": "src/lib/api/use-api-query.ts",
+    "sha256": "dc67eaa8031c08029f03175c43b96ffda4d296c92e482cb9d294abb0f53440e2"
+  },
+  {
+    "file": "src/lib/api/transition-draft-store.ts",
+    "sha256": "b1a46b7bae36d635fc77c509b278890c0d21a1e46d4bb013fe73c01400085724"
+  },
+  {
+    "file": "src/app/chapter-manager/layout.tsx",
+    "sha256": "6275aba7aea5efc6393e70676cfa6e4ffb9c12f12d4a155be84a88c06a1407e9"
+  },
+  {
+    "file": "src/app/chapter-manager/pilot.module.css",
+    "sha256": "bb37636852930eac45ae272596592283b3817b944e2fec2d414e91e9a73a314f"
+  },
+  {
+    "file": "src/app/chapter-manager/dashboard/page.tsx",
+    "sha256": "80b7a2a85b48a5af1fff40da5286278245050c66485bca58bad48a5353162f6e"
+  },
+  {
+    "file": "src/app/chapter-manager/courses/page.tsx",
+    "sha256": "b14309ebadcb9faa632cf26ee7efe3bfc0587c6d01556199efc05edf22fcf740"
+  },
+  {
+    "file": "src/app/chapter-manager/term-transition/page.tsx",
+    "sha256": "f2b2c952772dac4f4562883c493da3cae7113dc044a24c77399a5ef051ef6940"
+  },
+  {
+    "file": "src/components/layout/Sidebar.tsx",
+    "sha256": "8416c9df8292eec8ffcd352e30911ecae97f623a30e87eaf902daca5fbf54e5a"
+  },
+  {
+    "file": "src/components/layout/PageTransition.tsx",
+    "sha256": "cf16ef331ac2cc04cdb4a4193020ad7e41634302f86390417dfa92fe8cfb1a37"
+  },
+  {
+    "file": "src/components/layout/ContentTransition.tsx",
+    "sha256": "e606ef6bfc4cb9fd4b133972cf2714c6662c62cc5795c3bc3abb55f67501c40d"
+  },
+  {
+    "file": "src/components/layout/PilotVisibility.tsx",
+    "sha256": "3436aa6122e71c899952642233ca79697a09d32333dc5753e5215bc29eb231d0"
+  },
+  {
+    "file": "src/components/ui/Modal.tsx",
+    "sha256": "896646f519348e46ac39c9bbcffa09b4fe44c89175b4fc30bf2c0d011b1d42c1"
+  },
+  {
+    "file": "src/components/ui/ModalMotion.module.css",
+    "sha256": "73387130f5c746985a1950033d3325163570b7e92749f2f9d71c7646a74306a6"
+  }
+]

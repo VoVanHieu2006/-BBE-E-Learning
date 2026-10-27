@@ -1,0 +1,94 @@
+[
+  {
+    "engine": "Edge",
+    "width": 1440,
+    "status": "PASS",
+    "navigation": {
+      "frames": 125,
+      "blankFrames": 0,
+      "verificationGateFrames": 0,
+      "cls": 0.00037799639917695475
+    },
+    "warmBusinessGET": 0,
+    "modalAnimation": {
+      "duration": "0.18s",
+      "transform": "none",
+      "filter": "none"
+    },
+    "accordionGET": 0,
+    "portalsWithheldWhileVerifying": true,
+    "portalsWithheldOnVerificationFailure": true,
+    "playerStableAfterVerification": true,
+    "reducedMotion": "none",
+    "consoleErrors": []
+  },
+  {
+    "engine": "Edge",
+    "width": 390,
+    "status": "PASS",
+    "navigation": {
+      "frames": 147,
+      "blankFrames": 0,
+      "verificationGateFrames": 0,
+      "cls": 0.000565309532288699
+    },
+    "warmBusinessGET": 0,
+    "modalAnimation": {
+      "duration": "0.18s",
+      "transform": "none",
+      "filter": "none"
+    },
+    "accordionGET": 0,
+    "portalsWithheldWhileVerifying": true,
+    "portalsWithheldOnVerificationFailure": true,
+    "playerStableAfterVerification": true,
+    "reducedMotion": "none",
+    "consoleErrors": []
+  },
+  {
+    "engine": "WebKit",
+    "width": 1440,
+    "status": "PASS",
+    "navigation": {
+      "frames": 95,
+      "blankFrames": 0,
+      "verificationGateFrames": 0,
+      "cls": 0
+    },
+    "warmBusinessGET": 0,
+    "modalAnimation": {
+      "duration": "0.18s",
+      "transform": "none",
+      "filter": "none"
+    },
+    "accordionGET": 0,
+    "portalsWithheldWhileVerifying": true,
+    "portalsWithheldOnVerificationFailure": true,
+    "playerStableAfterVerification": true,
+    "reducedMotion": "none",
+    "consoleErrors": []
+  },
+  {
+    "engine": "WebKit",
+    "width": 390,
+    "status": "PASS",
+    "navigation": {
+      "frames": 235,
+      "blankFrames": 0,
+      "verificationGateFrames": 0,
+      "cls": 0
+    },
+    "warmBusinessGET": 0,
+    "modalAnimation": {
+      "duration": "0.18s",
+      "transform": "none",
+      "filter": "none"
+    },
+    "accordionGET": 0,
+    "portalsWithheldWhileVerifying": true,
+    "portalsWithheldOnVerificationFailure": true,
+    "playerStableAfterVerification": true,
+    "reducedMotion": "none",
+    "consoleErrors": []
+  }
+]

@@ -1,0 +1,100 @@
+[
+  {
+    "file": "src/test/tab-query-cache.test.ts",
+    "status": "PASS",
+    "tests": 6,
+    "pass": 6,
+    "fail": 0
+  },
+  {
+    "file": "src/test/pilot-api-client.test.ts",
+    "status": "PASS",
+    "tests": 7,
+    "pass": 7,
+    "fail": 0
+  },
+  {
+    "file": "src/test/transition-draft.test.ts",
+    "status": "PASS",
+    "tests": 2,
+    "pass": 2,
+    "fail": 0
+  },
+  {
+    "file": "src/test/business-rules.test.ts",
+    "status": "PASS",
+    "tests": 66,
+    "pass": 66,
+    "fail": 0
+  },
+  {
+    "file": "src/test/learning-cycles.test.ts",
+    "status": "PASS",
+    "tests": 24,
+    "pass": 24,
+    "fail": 0
+  },
+  {
+    "file": "src/test/phase3-leaderboard-oracle.test.ts",
+    "status": "PASS",
+    "tests": 13,
+    "pass": 13,
+    "fail": 0
+  },
+  {
+    "file": "src/test/shared-learning-path.test.ts",
+    "status": "PASS",
+    "tests": 8,
+    "pass": 8,
+    "fail": 0
+  },
+  {
+    "file": "src/test/video-playback-guard.test.ts",
+    "status": "PASS",
+    "tests": 15,
+    "pass": 15,
+    "fail": 0
+  },
+  {
+    "file": "src/test/video-progress-session.test.ts",
+    "status": "PASS",
+    "tests": 22,
+    "pass": 22,
+    "fail": 0
+  },
+  {
+    "file": "src/test/video-fullscreen-controls.test.ts",
+    "status": "PASS",
+    "tests": 11,
+    "pass": 11,
+    "fail": 0
+  },
+  {
+    "file": "src/test/video-switching-leak.test.ts",
+    "status": "PASS",
+    "tests": 9,
+    "pass": 9,
+    "fail": 0
+  },
+  {
+    "file": "src/test/video-controls-youtube-ux.test.ts",
+    "status": "PASS",
+    "tests": 23,
+    "pass": 23,
+    "fail": 0
+  },
+  {
+    "file": "src/test/video-player-ui.test.ts",
+    "status": "PASS",
+    "tests": 23,
+    "pass": 23,
+    "fail": 0
+  },
+  {
+    "file": "src/test/video-continuity-security.test.ts",
+    "status": "PASS",
+    "tests": 10,
+    "pass": 10,
+    "fail": 0
+  }
+]

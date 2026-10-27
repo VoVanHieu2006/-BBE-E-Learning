@@ -1,0 +1,457 @@
+
+src/test/tab-query-cache.test.ts
+✔ session queries survive time and concurrent refreshes share ownership (3.0983ms)
+✔ mutation invalidation rejects old success and old finally cannot clear a newer request (0.4706ms)
+✔ account scope change aborts requests and suppresses late results (0.3606ms)
+✔ failed refresh preserves data and success timestamp (1.0836ms)
+✔ a disconnected network preserves the last successful query (1.5775ms)
+✔ LRU and payload budget are hard bounds; active queries are not evicted (0.6862ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 57.8991
+
+src/test/pilot-api-client.test.ts
+✔ verified Pilot shares dashboard-courses resource, refresh deduplicates, and writes no response storage (27.0407ms)
+✔ logout while token refresh is pending cannot restore credentials (1.7388ms)
+✔ a known scheduled history expires at its deadline without relying on a roster read (2.3601ms)
+✔ aborting one GET subscriber does not abort another subscriber’s shared transport (1.4351ms)
+✔ confirmed automatic application invalidates warmed dashboard aggregates (2.7143ms)
+✔ invalidating a read while its body is pending suppresses deadline side effects (1.1123ms)
+✔ an explicit token from the previous account cannot start a request for the new account (0.7228ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 96.8482
+
+src/test/transition-draft.test.ts
+✔ draft is owner scoped, survives durable restore and never touches legacy (1.306ms)
+✔ quota failure is explicit and keeps memory; retry succeeds (0.5285ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 31.245
+
+src/test/business-rules.test.ts
+▶ Account restriction rules
+  ✔ includes legacy members, current organization members, and active position holders once (1.0325ms)
+  ✔ does not reactivate an account while any direct or cascade restriction remains (0.1313ms)
+  ✔ never lets automatic course deadlines disable Admin accounts (0.0795ms)
+✔ Account restriction rules (1.9207ms)
+▶ Course-final assessment progression
+  ✔ blocks the final exam until every video is watched completely (0.1929ms)
+  ✔ blocks until all configured per-lesson quizzes are passed (0.1278ms)
+  ✔ does not consider an empty course ready for a final assessment (0.0849ms)
+✔ Course-final assessment progression (0.5548ms)
+▶ Course-final version question selection
+  ✔ rejects a version with fewer questions than configured instead of shrinking the exam (0.1779ms)
+  ✔ draws the exact count across lessons and redistributes when one lesson runs out (0.2078ms)
+✔ Course-final version question selection (0.5353ms)
+▶ Course-final Star rewards
+  ✔ rewards passing once at a predictable, capped rate (0.1498ms)
+✔ Course-final Star rewards (0.2056ms)
+▶ Organization-scoped authorization rules
+  ✔ derives legacy Chapter scope from current membership rather than a stale token claim (0.1397ms)
+  ✔ grants a parent position downward but never sideways or upward (0.0892ms)
+  ✔ limits legacy Chapter Leader compatibility to the two transitional permissions (0.0522ms)
+  ✔ limits comment deletion to the author or Admin, never a global legacy Chapter Leader role (0.0539ms)
+✔ Organization-scoped authorization rules (0.4118ms)
+▶ Organization admin list query rules
+  ✔ caps page size and clamps page numbers to available results (0.2619ms)
+  ✔ uses safe defaults for malformed numeric filters and bounds search text (0.1009ms)
+  ✔ fails closed to ALL for unknown status filter values (0.0864ms)
+  ✔ accepts UUID identifiers and rejects arbitrary query/body values (0.1568ms)
+✔ Organization admin list query rules (0.7046ms)
+▶ Learning rule input validation
+  ✔ normalizes a valid targeted rule and defaults Stars off for viewer-only rules (0.8729ms)
+  ✔ rejects malformed IDs, dates, deadlines and contradictory view/assessment/reward flags (0.1626ms)
+✔ Learning rule input validation (1.0974ms)
+▶ Star history pagination
+  ✔ uses safe defaults and caps the requested page size (0.1275ms)
+  ✔ rejects malformed values, clamps pages to available results, and handles an empty ledger (0.0912ms)
+✔ Star history pagination (0.2689ms)
+▶ Quiz attempt grading
+  ✔ counts only options belonging to the answered question and treats missing answers as incorrect (0.2674ms)
+  ✔ calculates weighted scores and passes exactly at the configured threshold (0.0889ms)
+  ✔ defaults non-positive question points and clamps invalid passing thresholds (0.0655ms)
+✔ Quiz attempt grading (0.4848ms)
+▶ Quiz answer selection validation
+  ✔ accepts only a selected option belonging to a question in the attempt (0.1561ms)
+  ✔ rejects answers for questions outside the attempt and cross-question options (0.0738ms)
+  ✔ rejects malformed option values and skips intentionally blank selections (0.0557ms)
+✔ Quiz answer selection validation (0.4015ms)
+▶ Chapter membership projection
+  ✔ deduplicates legacy and organization memberships while preserving the earliest Chapter join date (0.2552ms)
+✔ Chapter membership projection (0.2976ms)
+▶ strict video progress
+  ✔ requires the full known duration, with no percentage or seconds tolerance (0.1133ms)
+  ✔ does not treat missing, invalid, or non-finite duration as completion (0.071ms)
+  ✔ limits reported progress to elapsed time at 2x, retaining prior progress and rejecting discontinuous seeks (0.1469ms)
+  ✔ safely handles malformed client numbers without making progress (0.0597ms)
+  ✔ accepts a continuously watched 10-minute video at 1x and at 2x (0.231ms)
+  ✔ allows only a small explicit ENDED allowance, never an instant seek (0.1055ms)
+  ✔ bounds the ENDED reach allowance to grace + 2, capped at 6 seconds (0.0614ms)
+  ✔ scales the ENDED completion tolerance and never exceeds 10% of the duration (0.0657ms)
+  ✔ relaxes the completion threshold only for an explicit ENDED event (0.0773ms)
+  ✔ completes continuously watched videos of every supported length and rate (1.0397ms)
+  ✔ never lets an instant seek-to-end ENDED reward progress (0.095ms)
+  ✔ keeps short videos from freezing before their first scheduled heartbeat (0.0619ms)
+✔ strict video progress (2.3052ms)
+▶ Star reward rules
+  ✔ rewards completed videos by full-minute duration with a one-Star minimum (0.0818ms)
+  ✔ rewards passing quizzes once per score band and caps the perfect-score reward (0.0949ms)
+✔ Star reward rules (0.218ms)
+▶ Chapter leaderboard scoring
+  ✔ scales size influence until 51 members and caps it afterwards (0.3642ms)
+  ✔ penalizes uneven learning instead of letting a few high performers carry the Chapter (0.1239ms)
+  ✔ applies member, completion-distribution, and red-KPI eligibility gates (0.0881ms)
+  ✔ uses uncapped average Stars and awards only the green KPI bonus (0.1147ms)
+✔ Chapter leaderboard scoring (0.7611ms)
+▶ Chapter leaderboard mandatory completion
+  ✔ counts required videos, lesson quizzes, and the course-final quiz as separate milestones (0.2257ms)
+  ✔ does not require assessments the assignment does not allow the learner to take (0.0558ms)
+  ✔ keeps missing assignments at zero and deduplicates overlapping assignment requirements (0.0713ms)
+  ✔ ignores assignments whose content is not visible to the learner (0.047ms)
+✔ Chapter leaderboard mandatory completion (0.4652ms)
+▶ Chapter KPI month input
+  ✔ normalizes an HTML month value to the UTC first day of that month (0.2504ms)
+  ✔ rejects missing, malformed, out-of-range months and invalid or oversized KPI fields (0.1152ms)
+✔ Chapter KPI month input (0.4098ms)
+▶ Chapter leaderboard cache
+  ✔ expires after its TTL and clears immediately after a KPI update (0.1279ms)
+✔ Chapter leaderboard cache (0.1569ms)
+▶ learning rule position scope
+  ✔ does not grant a Chapter A rule from a same-position tenure in Chapter B (0.089ms)
+  ✔ allows a tenure in the target unit subtree and position-only rules globally (0.0489ms)
+  ✔ does not constrain rules that target an organization only (0.0329ms)
+✔ learning rule position scope (0.2204ms)
+▶ position assignment unit scope
+  ✔ only permits appointments at the matching organization level (0.0746ms)
+✔ position assignment unit scope (0.1586ms)
+▶ organization hierarchy changes
+  ✔ finds a subtree and allows moving it under another existing unit (0.2275ms)
+  ✔ rejects self/descendant cycles, unknown units, and parenting a ROOT (0.1187ms)
+  ✔ renders a stable nested order and remains finite for corrupt legacy cycles (20.0575ms)
+✔ organization hierarchy changes (20.4886ms)
+▶ quiz question pools
+  ✔ selects the requested question count evenly from every pool (0.3599ms)
+  ✔ supports a variable number of pools and rejects more than twenty (0.1411ms)
+  ✔ rejects exceeding Q_max according to Plan B and rejects empty or unassigned pools (0.2069ms)
+  ✔ preserves all-question behavior only for genuinely legacy assessments (0.0736ms)
+✔ quiz question pools (0.8722ms)
+▶ quiz pool admin assignment validation
+  ✔ accepts a complete mapping with at least one question in each pool (0.1766ms)
+  ✔ rejects missing, duplicate, unknown, out-of-range, and incomplete assignments (0.1799ms)
+✔ quiz pool admin assignment validation (0.3992ms)
+ℹ tests 66
+ℹ suites 22
+ℹ pass 66
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 40.7573
+
+src/test/learning-cycles.test.ts
+▶ Chapter overdue transfer reward pause
+  ✔ changes the season exactly at October midnight in Vietnam (1.7105ms)
+  ✔ handles April and the previous October in January (0.1293ms)
+  ✔ does not pause an early successfully applied transfer (0.1187ms)
+  ✔ pauses an overdue Chapter at the exact boundary (0.0767ms)
+  ✔ opens at the actual successful application timestamp (0.0907ms)
+  ✔ does not pause before the boundary even without a transfer (0.0618ms)
+✔ Chapter overdue transfer reward pause (2.9485ms)
+▶ Vietnam competition months
+  ✔ uses the actual cutover for the first shortened official month (0.2452ms)
+  ✔ changes months exactly at midnight UTC+7, including December (0.1145ms)
+✔ Vietnam competition months (0.4952ms)
+▶ Shared deadlines
+  ✔ day 25: A10+B20 -> A10+C5 stays at day 30 (0.9759ms)
+  ✔ day 20: A10+B10 -> A10+C11 extends to day 31 (0.2927ms)
+  ✔ day 3: A10+B10 -> A10+C11 ends at day 21 (0.1256ms)
+  ✔ subtracts even a completed removed course, with three days of grace (0.0781ms)
+  ✔ does not award new study time for a valid completed course (0.0636ms)
+  ✔ keeps the original start across completely different sets and returns (0.0741ms)
+  ✔ does not enforce an empty or entirely completed set (0.0583ms)
+  ✔ gives unfinished work three days when Admin reduces a budget (0.0709ms)
+  ✔ fingerprints ignore rule order and completion, but detect actual budget changes (7.5463ms)
+✔ Shared deadlines (9.6343ms)
+▶ Reward integrity
+  ✔ pays only improvements to the high water mark (0.1539ms)
+  ✔ a disconnected player can recover a short gap, but a long absence earns no watch time (0.0952ms)
+  ✔ finds the first time reaching the final balance after negative adjustments (0.1997ms)
+  ✔ groups same-timestamp adjustments and gives zero totals zero elapsed (0.0558ms)
+✔ Reward integrity (0.6296ms)
+▶ Competition Chapter stages and role groups
+  ✔ uses S_m = A_1 / N_1 + A_2 / N_2 for transfer month, while keeping time-weighted roster for size eligibility (0.3649ms)
+  ✔ requires strictly more than 20 members and waits for KPI (0.1168ms)
+  ✔ places Presidents in LT, excludes TT and management accounts (0.0929ms)
+✔ Competition Chapter stages and role groups (0.6463ms)
+ℹ tests 24
+ℹ suites 5
+ℹ pass 24
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 19.3331
+
+src/test/phase3-leaderboard-oracle.test.ts
+▶ Phase 3 Leaderboard Oracle Suite - Independent Business Verification
+  ✔ Oracle 01: Normal month formula S_m = A_m / N_m without time weighting or bonuses (33.8904ms)
+  ✔ Oracle 02: Transfer month formula S_m = A_1 / N_1 + A_2 / N_2 (User mandatory requirement) (0.324ms)
+  ✔ Oracle 03: Scale condition - Roster threshold strictly > 20 members (20 disqualified, 21 eligible) (0.3604ms)
+  ✔ Oracle 04: Progress condition - Threshold >= 50% qualified (49.99% disqualified, 50% eligible) (0.1368ms)
+  ✔ Oracle 05: Transfer month conditions use time-weighted N_avg and R (0.1313ms)
+  ✔ Oracle 06: Data errors - Zero roster or missing core lessons must return dataError, not score 0 (0.1288ms)
+  ✔ Oracle 07: Term score split - Stage 1 goes to Old Term, Stage 2 goes to New Term (0.1428ms)
+  ✔ Oracle 08: High-precision comparison - A = 10.123456789 beats B = 10.123456788 even though UI shows 10,123 for both (47.4669ms)
+  ✔ Oracle 09: Chapter Month tie-breaking - Same score, earlier lastStarAwardedAt (seconds) wins (0.474ms)
+  ✔ Oracle 10: Chapter Month true tie - Same score and same second of last star -> identical rank (1.8034ms)
+  ✔ Oracle 11: Chapter Term tie-breaking - Total score first; if equal, more qualified months wins (User Prompt Example) (0.3755ms)
+  ✔ Oracle 12: Chapter Term true tie - Equal score and equal qualified months -> identical rank (0.2096ms)
+  ✔ Oracle 13: Individual ranking - Same stars, reached earlier in cycle (seconds) wins; equal = true tie (1.0023ms)
+✔ Phase 3 Leaderboard Oracle Suite - Independent Business Verification (88.1412ms)
+ℹ tests 13
+ℹ suites 1
+ℹ pass 13
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 115.9727
+
+src/test/shared-learning-path.test.ts
+✔ role replacement at day 5 persists the agreed shared deadline day 21 (12.4463ms)
+✔ role replacement at day 20 persists the agreed shared deadline day 31 (0.4413ms)
+✔ late role expansion gives the full new-course budget from the change timestamp (0.3575ms)
+✔ a changed required set does not retain the removed course budget as a third formula term (0.3985ms)
+✔ a role that only removes obligations uses the remaining set and change instant (0.2837ms)
+✔ an unchanged required set keeps a manually extended deadline and writes no change event (0.1891ms)
+✔ Admin shortening still applies its separate three-day safety floor (0.2248ms)
+✔ an empty or completed required set enforces no deadline (0.411ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 8
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 20.1947
+
+src/test/video-playback-guard.test.ts
+▶ PHASE A — Reproduction & Proof of Previous Buggy Guard Logic
+  ✔ Reproduces Scenario A (1x): Video pulls back at second 3.5 because heartbeat interval is 10s (0.6053ms)
+  ✔ Reproduces Scenario B (2x): Video pulls back at second 1.75s of real time (0.1313ms)
+  ✔ Reproduces Scenario D: Out-of-order response overwrites serverConfirmedFurthest with older value (0.1113ms)
+✔ PHASE A — Reproduction & Proof of Previous Buggy Guard Logic (1.6317ms)
+▶ PHASE B & C — VideoPlaybackGuard Robust Architecture Verification
+  ✔ Scenario A (1x continuous playback): Plays 30 seconds smoothly with 0 seek-backs (1.8288ms)
+  ✔ Scenario B (2x continuous playback): Plays at 2x smoothly with 0 seek-backs (0.253ms)
+  ✔ Scenario B2 (All supported rates: 1.25x, 1.5x, 1.75x): Play smoothly (0.3052ms)
+  ✔ Scenario C: Slow heartbeat response (delayed 5 seconds) does not interrupt playback (0.2271ms)
+  ✔ Scenario D: Out-of-order heartbeat responses do not downgrade furthest or seek back (0.1894ms)
+  ✔ Scenario E: Unauthorized forward jump (cheat attempt) is blocked and corrected (0.1849ms)
+  ✔ Scenario F: Backward seek and re-watching within watched segment is fully permitted (0.2633ms)
+  ✔ Scenario G: Free seek accounts (Admin / Guest / Completed) can seek anywhere without blockage (0.1836ms)
+  ✔ Scenario H: Manual seek UI clamp respects allowed boundaries (0.1384ms)
+  ✔ Scenario I: Pause and Buffering transitions do not allow fake time leaps (0.1428ms)
+✔ PHASE B & C — VideoPlaybackGuard Robust Architecture Verification (4.1057ms)
+▶ SECTION 6 — MANDATORY ACCEPTANCE TESTS (Test mới quan trọng nhất)
+  ✔ TEST 1: Continuous playback from 20s with delayed heartbeat does NOT seek back to 20s (0.1711ms)
+  ✔ TEST 2: Active seek from 20s to 90s when server confirmed is 20s is strictly blocked (0.1251ms)
+✔ SECTION 6 — MANDATORY ACCEPTANCE TESTS (Test mới quan trọng nhất) (0.3828ms)
+ℹ tests 15
+ℹ suites 3
+ℹ pass 15
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 43.4627
+
+src/test/video-progress-session.test.ts
+✔ FB07 complete training never coalesces an unacknowledged monthly replay checkpoint (3.8514ms)
+✔ FB07 failed in-flight checkpoint cannot authorize discarding queued playback proof (0.6358ms)
+✔ FB07 completed cycle with fresh replay retains checkpoint 108 and advances 118/128/138 (0.9428ms)
+✔ FB07 learningCycleId change resets confirmed compaction floor (0.6363ms)
+✔ FB07 competitionMonthId change resets confirmed compaction floor (0.4456ms)
+✔ actual checkpoint plus unchanged server cap survives 100 seeks and three heartbeats at 1x (4.0296ms)
+✔ actual checkpoint plus unchanged server cap survives 100 seeks and three heartbeats at 1.5x (3.297ms)
+✔ actual checkpoint plus unchanged server cap survives 100 seeks and three heartbeats at 2x (18.9643ms)
+✔ serial transport retains unacknowledged heartbeats and seek/rate/state boundaries (0.6832ms)
+✔ 100 rapid authorized seeks under latency do not consume the next three playback windows (2.3478ms)
+✔ a newly confirmed checkpoint also collapses already queued PAUSE markers (0.7967ms)
+✔ http: pending request ends and subsequent session progress still works (0.4321ms)
+✔ rejection: pending request ends and subsequent session progress still works (0.3112ms)
+✔ timeout: pending request ends and subsequent session progress still works (6.0232ms)
+✔ abort: pending request ends and subsequent session progress still works (0.8669ms)
+✔ rejects lessonId mismatch before invoking any UI/reward callback (1.1564ms)
+✔ rejects videoId mismatch before invoking any UI/reward callback (0.275ms)
+✔ rejects viewSessionId mismatch before invoking any UI/reward callback (0.3531ms)
+✔ A to B to A cannot apply a response from the earlier A session (0.9875ms)
+✔ a timed-out response arriving after a newer response cannot complete the active video (5.5068ms)
+✔ dispose aborts the in-flight request, resolves queued callers, and ignores late results (0.7824ms)
+✔ probe playback logs remain bounded during seek stress (1.9601ms)
+ℹ tests 22
+ℹ suites 0
+ℹ pass 22
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 77.5857
+
+src/test/video-fullscreen-controls.test.ts
+▶ PHASE A — High-Contrast Video Controls & WCAG Accessibility
+  ✔ White text #FFFFFF against dark scrim #0f172a achieves WCAG AAA (> 7.0:1) (0.6697ms)
+  ✔ White text #FFFFFF against button background #1e293b achieves WCAG AAA (> 7.0:1) (0.266ms)
+  ✔ Secondary text #E2E8F0 against control bar background #0f172a achieves WCAG AAA (> 7.0:1) (0.1039ms)
+  ✔ BBE Blue #2563EB against control bar background #0f172a meets WCAG 2.1 Non-text contrast (>= 3.0:1) (0.0925ms)
+  ✔ Scrubber thumb #FFFFFF against track #334155 achieves high visibility (> 7.0:1) (0.0994ms)
+✔ PHASE A — High-Contrast Video Controls & WCAG Accessibility (2.1597ms)
+▶ PHASE B — Tiered Mobile Fullscreen Architecture
+  ✔ Detection correctly identifies Android Chrome / Desktop with native requestFullscreen (0.2925ms)
+  ✔ Detection correctly identifies iPhone Safari (div lacks requestFullscreen) and triggers Fallback (0.1015ms)
+  ✔ Viewport Theater Mode locks body scroll and adds bbe-fullscreen-locked class (0.1351ms)
+  ✔ Android Back Button: popstate event cleanly exits theater mode without navigating away (0.1074ms)
+✔ PHASE B — Tiered Mobile Fullscreen Architecture (0.8359ms)
+▶ PHASE C — Responsive Control Bar Geometry (320px to Desktop)
+  ✔ At 320px screen width, control bar items fit with zero overflow (0.2002ms)
+  ✔ Touch targets meet or exceed mobile comfortable guidelines (>= 36px height, touch-manipulation) (0.0607ms)
+✔ PHASE C — Responsive Control Bar Geometry (320px to Desktop) (0.3423ms)
+ℹ tests 11
+ℹ suites 3
+ℹ pass 11
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 42.4777
+
+src/test/video-switching-leak.test.ts
+▶ PHASE A — Reproduction & Proof of Switching / State Leakage Bugs
+  ✔ Bug 1 Reproduction: Unpatched Guard onServerProgressResponse accepts Lesson A response on Lesson C because lessonId is not checked (1.6064ms)
+  ✔ Bug 2 Reproduction: YouTubePlayer prop update logic lacked else branch to reset isCompleted to false (0.1146ms)
+  ✔ Bug 3 Reproduction: Backend elapsed wall-clock across sessions allowed illegitimate progress jumps (0.1842ms)
+✔ PHASE A — Reproduction & Proof of Switching / State Leakage Bugs (2.6787ms)
+▶ PHASE B — MANDATORY VERIFICATION TESTS (Tests 1 to 6)
+  ✔ TEST 1: User scenario C -> A -> Seek A -> C (50 rapid switches) keeps C allowed seek at exactly 19% (0.9194ms)
+  ✔ TEST 2: Out-of-order & Cross-lesson heartbeat responses dropped cleanly (0.2119ms)
+  ✔ TEST 3: Component lifecycle - Player A destroyed while request pending, Player C initialized (0.1447ms)
+  ✔ TEST 4: Slow network - Lesson C opened before API progress arrives (0.1379ms)
+  ✔ TEST 5: Playback rate changes (1x, 1.5x, 2x) do not leak progress or cause backward seek during continuous play (0.651ms)
+  ✔ TEST 6: Backend Session Boundary - Session transition clamps elapsed time to 0, preventing progress jumps and false rewards (0.2006ms)
+✔ PHASE B — MANDATORY VERIFICATION TESTS (Tests 1 to 6) (2.5693ms)
+ℹ tests 9
+ℹ suites 2
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 46.3748
+
+src/test/video-controls-youtube-ux.test.ts
+▶ Production VideoControls with fake timers
+  ✔ play again: pointer focus and stationary hover cannot pin controls (1.9032ms)
+  ✔ forward 10s: pointer focus and stationary hover cannot pin controls (0.153ms)
+  ✔ rewind 10s: pointer focus and stationary hover cannot pin controls (0.1392ms)
+  ✔ 1x: pointer focus and stationary hover cannot pin controls (0.1404ms)
+  ✔ 1.25x: pointer focus and stationary hover cannot pin controls (0.0978ms)
+  ✔ 1.5x: pointer focus and stationary hover cannot pin controls (0.0873ms)
+  ✔ 1.75x: pointer focus and stationary hover cannot pin controls (0.0754ms)
+  ✔ 2x: pointer focus and stationary hover cannot pin controls (0.081ms)
+  ✔ fullscreen: pointer focus and stationary hover cannot pin controls (0.1223ms)
+  ✔ seek click: pointer focus and stationary hover cannot pin controls (0.1616ms)
+  ✔ pause pins controls; Play resumes auto-hide (0.1691ms)
+  ✔ Tab focus pins controls, including after pointer leaves; blur resumes (0.1436ms)
+  ✔ pointer input releases keyboard pin without blurring the DOM element (0.1009ms)
+  ✔ seek remains visible while dragging, then ends outside player (0.1233ms)
+  ✔ pointerup: ending a seek resumes the hide deadline (0.0945ms)
+  ✔ pointercancel: ending a seek resumes the hide deadline (0.0453ms)
+  ✔ lostpointercapture: ending a seek resumes the hide deadline (0.0481ms)
+  ✔ fullscreen transition: ending a seek resumes the hide deadline (0.0521ms)
+  ✔ touch plus compatibility mouse/click cannot double-toggle or pin (0.1137ms)
+  ✔ 50 speed changes and 50 seek clicks keep only the latest deadline (0.3668ms)
+  ✔ buffering PLAYING callbacks do not revive hidden controls or restart deadlines (0.1356ms)
+  ✔ window blur, video switch and unmount cancel old timers (0.1068ms)
+  ✔ fullscreen safe zone hides after 600ms and movement elsewhere reveals (0.0823ms)
+✔ Production VideoControls with fake timers (5.8121ms)
+ℹ tests 23
+ℹ suites 1
+ℹ pass 23
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 40.4172
+
+src/test/video-player-ui.test.ts
+▶ Production VideoControls with fake timers
+  ✔ play again: pointer focus and stationary hover cannot pin controls (1.5801ms)
+  ✔ forward 10s: pointer focus and stationary hover cannot pin controls (0.1687ms)
+  ✔ rewind 10s: pointer focus and stationary hover cannot pin controls (0.135ms)
+  ✔ 1x: pointer focus and stationary hover cannot pin controls (0.1306ms)
+  ✔ 1.25x: pointer focus and stationary hover cannot pin controls (0.0956ms)
+  ✔ 1.5x: pointer focus and stationary hover cannot pin controls (0.0792ms)
+  ✔ 1.75x: pointer focus and stationary hover cannot pin controls (0.0791ms)
+  ✔ 2x: pointer focus and stationary hover cannot pin controls (0.067ms)
+  ✔ fullscreen: pointer focus and stationary hover cannot pin controls (0.1217ms)
+  ✔ seek click: pointer focus and stationary hover cannot pin controls (0.1581ms)
+  ✔ pause pins controls; Play resumes auto-hide (0.1773ms)
+  ✔ Tab focus pins controls, including after pointer leaves; blur resumes (0.1318ms)
+  ✔ pointer input releases keyboard pin without blurring the DOM element (0.09ms)
+  ✔ seek remains visible while dragging, then ends outside player (0.1125ms)
+  ✔ pointerup: ending a seek resumes the hide deadline (0.1025ms)
+  ✔ pointercancel: ending a seek resumes the hide deadline (0.044ms)
+  ✔ lostpointercapture: ending a seek resumes the hide deadline (0.0566ms)
+  ✔ fullscreen transition: ending a seek resumes the hide deadline (0.048ms)
+  ✔ touch plus compatibility mouse/click cannot double-toggle or pin (0.0943ms)
+  ✔ 50 speed changes and 50 seek clicks keep only the latest deadline (0.3232ms)
+  ✔ buffering PLAYING callbacks do not revive hidden controls or restart deadlines (0.1354ms)
+  ✔ window blur, video switch and unmount cancel old timers (0.1124ms)
+  ✔ fullscreen safe zone hides after 600ms and movement elsewhere reveals (0.0766ms)
+✔ Production VideoControls with fake timers (5.3603ms)
+ℹ tests 23
+ℹ suites 1
+ℹ pass 23
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 37.1458
+
+src/test/video-continuity-security.test.ts
+▶ P0 — Video Continuity & Anti-Seek Verification Suite (Section 6 Scenarios)
+  ✔ Scenario 1: Xem từ 0 đến 60 giây ở 1x -> Ghi nhận khoảng 60 giây hợp lệ (0.8794ms)
+  ✔ Scenario 2: Xem từ 0 đến 60 giây ở 2x -> Ghi nhận khoảng 60 giây sau khoảng 30 giây thực (0.1592ms)
+  ✔ Scenario 3: Xem đến giây 60, tua tới 540 -> Không mở quyền học đoạn 60–540 (0.111ms)
+  ✔ Scenario 4: Tua tới 540, xem thêm 30 giây -> Không được cộng 30 giây đó như bằng chứng đã xem liên tục từ giây 60 (0.0987ms)
+  ✔ Scenario 5: Tua lùi từ 60 về 30 -> Cho phép, furthest giữ nguyên 60, lastPosition là 30 (0.0855ms)
+  ✔ Scenario 6: Pause 30 giây -> Không tăng tiến độ (0.1083ms)
+  ✔ Scenario 7: Buffering 20 giây -> Không tăng tiến độ (0.4419ms)
+  ✔ Scenario 8: Xem đủ video rồi ENDED -> Hoàn thành và thưởng theo quy tắc (0.2358ms)
+  ✔ Scenario 9: Gửi ENDED sau khi tua đến cuối -> Không hoàn thành (0.1248ms)
+  ✔ Scenario 10: Đổi A -> B -> A nhanh -> Không rò rỉ session/progress (0.9634ms)
+✔ P0 — Video Continuity & Anti-Seek Verification Suite (Section 6 Scenarios) (4.3277ms)
+ℹ tests 10
+ℹ suites 1
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 42.3938

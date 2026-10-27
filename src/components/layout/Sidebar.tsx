@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { apiFetch } from '@/lib/api/client';
+import { apiFetch, preparePilotNavigation, revokeApiSession } from '@/lib/api/client';
 
 interface NavItem {
   label: string;
@@ -134,6 +134,7 @@ export default function Sidebar({
   const [mounted, setMounted] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [navigationError, setNavigationError] = useState<string | null>(null);
   useEffect(() => { setMobileOpen(false); }, [pathname]);
   const [chapterId, setChapterId] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null;
@@ -175,6 +176,7 @@ export default function Sidebar({
   const handleLogout = async () => {
     if (isLoggingOut) return;
     setIsLoggingOut(true);
+    revokeApiSession();
 
     const refreshToken = typeof window !== 'undefined' ? localStorage.getItem('refreshToken') : null;
     try {
@@ -208,7 +210,7 @@ export default function Sidebar({
 
   return (
     <>
-    <div className="fixed inset-x-0 top-0 z-40 flex h-14 items-center justify-between border-b bg-white px-4 md:hidden"><span className="font-bold text-[#172554]">BBE E-Learning</span><button type="button" aria-expanded={mobileOpen} aria-controls="bbe-navigation" onClick={() => setMobileOpen((open) => !open)} className="rounded-lg border px-3 py-2 text-sm font-semibold">☰ Menu</button></div>
+    <div className="fixed inset-x-0 top-0 z-40 flex h-14 items-center justify-between border-b bg-white px-4 md:hidden"><span className="font-bold text-[#172554]">BBE E-Learning</span><button type="button" aria-expanded={mobileOpen} aria-controls="bbe-navigation" onClick={() => setMobileOpen((open) => !open)} className={`rounded-lg border px-3 py-2 text-sm font-semibold ${effectiveRole === 'CHAPTER_LEADER' ? 'min-h-11 min-w-11' : ''}`}> ☰ Menu</button></div>
     {mobileOpen && <button type="button" aria-label="Đóng menu điều hướng" onClick={() => setMobileOpen(false)} className="fixed inset-0 z-40 bg-slate-950/30 md:hidden" />}
     <aside id="bbe-navigation" onKeyDown={(event) => { if (event.key === 'Escape') setMobileOpen(false); }} className={`${mobileOpen ? 'flex' : 'hidden'} md:flex fixed left-0 top-0 h-screen max-h-screen w-64 bg-white border-r border-[#e5eeff] flex-col z-50 shadow-sm select-none`}>
       {/* Official BBE Logo */}
@@ -233,15 +235,25 @@ export default function Sidebar({
 
       {/* Nav */}
       <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+        {navigationError && <p role="alert" className="px-4 py-2 text-xs text-red-700">{navigationError}</p>}
         {nav.map((item) => {
           const active = isActive(item.href, pathname);
           return (
             <Link
               key={item.href}
               href={item.href}
+              onClick={async (event) => {
+                if(effectiveRole!=='CHAPTER_LEADER' || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button!==0 || event.defaultPrevented)return;
+                event.preventDefault();
+                if(pathname===item.href)return;
+                setNavigationError(null);
+                const result=await preparePilotNavigation(item.href);
+                if(result.ok)router.push(item.href);
+                else {window.dispatchEvent(new Event('bbe:navigation-cancelled'));setNavigationError('Chưa xác minh được phiên. Vui lòng thử chọn trang lại.');}
+              }}
               onMouseEnter={() => {
                 router.prefetch(item.href);
-                if (item.prefetchUrls) {
+                if (effectiveRole !== 'CHAPTER_LEADER' && item.prefetchUrls) {
                   item.prefetchUrls.forEach((url) => apiFetch(url).catch(() => {}));
                 }
               }}

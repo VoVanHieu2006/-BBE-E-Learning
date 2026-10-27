@@ -1,0 +1,746 @@
+{
+  "scope": "Standalone design specimen; not runtime cache/security acceptance",
+  "viewports": [
+    {
+      "engine": "Edge",
+      "screen": "dashboard",
+      "width": 360,
+      "height": 844,
+      "overflow": "PASS",
+      "touch": "PASS"
+    },
+    {
+      "engine": "Edge",
+      "screen": "courses",
+      "width": 360,
+      "height": 844,
+      "overflow": "PASS",
+      "touch": "PASS"
+    },
+    {
+      "engine": "Edge",
+      "screen": "transition",
+      "width": 360,
+      "height": 844,
+      "overflow": "PASS",
+      "touch": "PASS"
+    },
+    {
+      "engine": "Edge",
+      "screen": "dashboard",
+      "width": 390,
+      "height": 844,
+      "overflow": "PASS",
+      "touch": "PASS"
+    },
+    {
+      "engine": "Edge",
+      "screen": "courses",
+      "width": 390,
+      "height": 844,
+      "overflow": "PASS",
+      "touch": "PASS"
+    },
+    {
+      "engine": "Edge",
+      "screen": "transition",
+      "width": 390,
+      "height": 844,
+      "overflow": "PASS",
+      "touch": "PASS"
+    },
+    {
+      "engine": "Edge",
+      "screen": "dashboard",
+      "width": 430,
+      "height": 932,
+      "overflow": "PASS",
+      "touch": "PASS"
+    },
+    {
+      "engine": "Edge",
+      "screen": "courses",
+      "width": 430,
+      "height": 932,
+      "overflow": "PASS",
+      "touch": "PASS"
+    },
+    {
+      "engine": "Edge",
+      "screen": "transition",
+      "width": 430,
+      "height": 932,
+      "overflow": "PASS",
+      "touch": "PASS"
+    },
+    {
+      "engine": "Edge",
+      "screen": "dashboard",
+      "width": 768,
+      "height": 1024,
+      "overflow": "PASS",
+      "touch": "N/A"
+    },
+    {
+      "engine": "Edge",
+      "screen": "courses",
+      "width": 768,
+      "height": 1024,
+      "overflow": "PASS",
+      "touch": "N/A"
+    },
+    {
+      "engine": "Edge",
+      "screen": "transition",
+      "width": 768,
+      "height": 1024,
+      "overflow": "PASS",
+      "touch": "N/A"
+    },
+    {
+      "engine": "Edge",
+      "screen": "dashboard",
+      "width": 1024,
+      "height": 768,
+      "overflow": "PASS",
+      "touch": "N/A"
+    },
+    {
+      "engine": "Edge",
+      "screen": "courses",
+      "width": 1024,
+      "height": 768,
+      "overflow": "PASS",
+      "touch": "N/A"
+    },
+    {
+      "engine": "Edge",
+      "screen": "transition",
+      "width": 1024,
+      "height": 768,
+      "overflow": "PASS",
+      "touch": "N/A"
+    },
+    {
+      "engine": "Edge",
+      "screen": "dashboard",
+      "width": 1440,
+      "height": 900,
+      "overflow": "PASS",
+      "touch": "N/A"
+    },
+    {
+      "engine": "Edge",
+      "screen": "courses",
+      "width": 1440,
+      "height": 900,
+      "overflow": "PASS",
+      "touch": "N/A"
+    },
+    {
+      "engine": "Edge",
+      "screen": "transition",
+      "width": 1440,
+      "height": 900,
+      "overflow": "PASS",
+      "touch": "N/A"
+    },
+    {
+      "engine": "Edge",
+      "screen": "dashboard",
+      "width": 844,
+      "height": 390,
+      "overflow": "PASS",
+      "touch": "N/A"
+    },
+    {
+      "engine": "Edge",
+      "screen": "courses",
+      "width": 844,
+      "height": 390,
+      "overflow": "PASS",
+      "touch": "N/A"
+    },
+    {
+      "engine": "Edge",
+      "screen": "transition",
+      "width": 844,
+      "height": 390,
+      "overflow": "PASS",
+      "touch": "N/A"
+    },
+    {
+      "engine": "Chrome",
+      "screen": "dashboard",
+      "width": 360,
+      "height": 844,
+      "overflow": "PASS",
+      "touch": "PASS"
+    },
+    {
+      "engine": "Chrome",
+      "screen": "courses",
+      "width": 360,
+      "height": 844,
+      "overflow": "PASS",
+      "touch": "PASS"
+    },
+    {
+      "engine": "Chrome",
+      "screen": "transition",
+      "width": 360,
+      "height": 844,
+      "overflow": "PASS",
+      "touch": "PASS"
+    },
+    {
+      "engine": "Chrome",
+      "screen": "dashboard",
+      "width": 390,
+      "height": 844,
+      "overflow": "PASS",
+      "touch": "PASS"
+    },
+    {
+      "engine": "Chrome",
+      "screen": "courses",
+      "width": 390,
+      "height": 844,
+      "overflow": "PASS",
+      "touch": "PASS"
+    },
+    {
+      "engine": "Chrome",
+      "screen": "transition",
+      "width": 390,
+      "height": 844,
+      "overflow": "PASS",
+      "touch": "PASS"
+    },
+    {
+      "engine": "Chrome",
+      "screen": "dashboard",
+      "width": 430,
+      "height": 932,
+      "overflow": "PASS",
+      "touch": "PASS"
+    },
+    {
+      "engine": "Chrome",
+      "screen": "courses",
+      "width": 430,
+      "height": 932,
+      "overflow": "PASS",
+      "touch": "PASS"
+    },
+    {
+      "engine": "Chrome",
+      "screen": "transition",
+      "width": 430,
+      "height": 932,
+      "overflow": "PASS",
+      "touch": "PASS"
+    },
+    {
+      "engine": "Chrome",
+      "screen": "dashboard",
+      "width": 768,
+      "height": 1024,
+      "overflow": "PASS",
+      "touch": "N/A"
+    },
+    {
+      "engine": "Chrome",
+      "screen": "courses",
+      "width": 768,
+      "height": 1024,
+      "overflow": "PASS",
+      "touch": "N/A"
+    },
+    {
+      "engine": "Chrome",
+      "screen": "transition",
+      "width": 768,
+      "height": 1024,
+      "overflow": "PASS",
+      "touch": "N/A"
+    },
+    {
+      "engine": "Chrome",
+      "screen": "dashboard",
+      "width": 1024,
+      "height": 768,
+      "overflow": "PASS",
+      "touch": "N/A"
+    },
+    {
+      "engine": "Chrome",
+      "screen": "courses",
+      "width": 1024,
+      "height": 768,
+      "overflow": "PASS",
+      "touch": "N/A"
+    },
+    {
+      "engine": "Chrome",
+      "screen": "transition",
+      "width": 1024,
+      "height": 768,
+      "overflow": "PASS",
+      "touch": "N/A"
+    },
+    {
+      "engine": "Chrome",
+      "screen": "dashboard",
+      "width": 1440,
+      "height": 900,
+      "overflow": "PASS",
+      "touch": "N/A"
+    },
+    {
+      "engine": "Chrome",
+      "screen": "courses",
+      "width": 1440,
+      "height": 900,
+      "overflow": "PASS",
+      "touch": "N/A"
+    },
+    {
+      "engine": "Chrome",
+      "screen": "transition",
+      "width": 1440,
+      "height": 900,
+      "overflow": "PASS",
+      "touch": "N/A"
+    },
+    {
+      "engine": "Chrome",
+      "screen": "dashboard",
+      "width": 844,
+      "height": 390,
+      "overflow": "PASS",
+      "touch": "N/A"
+    },
+    {
+      "engine": "Chrome",
+      "screen": "courses",
+      "width": 844,
+      "height": 390,
+      "overflow": "PASS",
+      "touch": "N/A"
+    },
+    {
+      "engine": "Chrome",
+      "screen": "transition",
+      "width": 844,
+      "height": 390,
+      "overflow": "PASS",
+      "touch": "N/A"
+    },
+    {
+      "engine": "Chromium",
+      "screen": "dashboard",
+      "width": 360,
+      "height": 844,
+      "overflow": "PASS",
+      "touch": "PASS"
+    },
+    {
+      "engine": "Chromium",
+      "screen": "courses",
+      "width": 360,
+      "height": 844,
+      "overflow": "PASS",
+      "touch": "PASS"
+    },
+    {
+      "engine": "Chromium",
+      "screen": "transition",
+      "width": 360,
+      "height": 844,
+      "overflow": "PASS",
+      "touch": "PASS"
+    },
+    {
+      "engine": "Chromium",
+      "screen": "dashboard",
+      "width": 390,
+      "height": 844,
+      "overflow": "PASS",
+      "touch": "PASS"
+    },
+    {
+      "engine": "Chromium",
+      "screen": "courses",
+      "width": 390,
+      "height": 844,
+      "overflow": "PASS",
+      "touch": "PASS"
+    },
+    {
+      "engine": "Chromium",
+      "screen": "transition",
+      "width": 390,
+      "height": 844,
+      "overflow": "PASS",
+      "touch": "PASS"
+    },
+    {
+      "engine": "Chromium",
+      "screen": "dashboard",
+      "width": 430,
+      "height": 932,
+      "overflow": "PASS",
+      "touch": "PASS"
+    },
+    {
+      "engine": "Chromium",
+      "screen": "courses",
+      "width": 430,
+      "height": 932,
+      "overflow": "PASS",
+      "touch": "PASS"
+    },
+    {
+      "engine": "Chromium",
+      "screen": "transition",
+      "width": 430,
+      "height": 932,
+      "overflow": "PASS",
+      "touch": "PASS"
+    },
+    {
+      "engine": "Chromium",
+      "screen": "dashboard",
+      "width": 768,
+      "height": 1024,
+      "overflow": "PASS",
+      "touch": "N/A"
+    },
+    {
+      "engine": "Chromium",
+      "screen": "courses",
+      "width": 768,
+      "height": 1024,
+      "overflow": "PASS",
+      "touch": "N/A"
+    },
+    {
+      "engine": "Chromium",
+      "screen": "transition",
+      "width": 768,
+      "height": 1024,
+      "overflow": "PASS",
+      "touch": "N/A"
+    },
+    {
+      "engine": "Chromium",
+      "screen": "dashboard",
+      "width": 1024,
+      "height": 768,
+      "overflow": "PASS",
+      "touch": "N/A"
+    },
+    {
+      "engine": "Chromium",
+      "screen": "courses",
+      "width": 1024,
+      "height": 768,
+      "overflow": "PASS",
+      "touch": "N/A"
+    },
+    {
+      "engine": "Chromium",
+      "screen": "transition",
+      "width": 1024,
+      "height": 768,
+      "overflow": "PASS",
+      "touch": "N/A"
+    },
+    {
+      "engine": "Chromium",
+      "screen": "dashboard",
+      "width": 1440,
+      "height": 900,
+      "overflow": "PASS",
+      "touch": "N/A"
+    },
+    {
+      "engine": "Chromium",
+      "screen": "courses",
+      "width": 1440,
+      "height": 900,
+      "overflow": "PASS",
+      "touch": "N/A"
+    },
+    {
+      "engine": "Chromium",
+      "screen": "transition",
+      "width": 1440,
+      "height": 900,
+      "overflow": "PASS",
+      "touch": "N/A"
+    },
+    {
+      "engine": "Chromium",
+      "screen": "dashboard",
+      "width": 844,
+      "height": 390,
+      "overflow": "PASS",
+      "touch": "N/A"
+    },
+    {
+      "engine": "Chromium",
+      "screen": "courses",
+      "width": 844,
+      "height": 390,
+      "overflow": "PASS",
+      "touch": "N/A"
+    },
+    {
+      "engine": "Chromium",
+      "screen": "transition",
+      "width": 844,
+      "height": 390,
+      "overflow": "PASS",
+      "touch": "N/A"
+    },
+    {
+      "engine": "WebKit",
+      "screen": "dashboard",
+      "width": 360,
+      "height": 844,
+      "overflow": "PASS",
+      "touch": "PASS"
+    },
+    {
+      "engine": "WebKit",
+      "screen": "courses",
+      "width": 360,
+      "height": 844,
+      "overflow": "PASS",
+      "touch": "PASS"
+    },
+    {
+      "engine": "WebKit",
+      "screen": "transition",
+      "width": 360,
+      "height": 844,
+      "overflow": "PASS",
+      "touch": "PASS"
+    },
+    {
+      "engine": "WebKit",
+      "screen": "dashboard",
+      "width": 390,
+      "height": 844,
+      "overflow": "PASS",
+      "touch": "PASS"
+    },
+    {
+      "engine": "WebKit",
+      "screen": "courses",
+      "width": 390,
+      "height": 844,
+      "overflow": "PASS",
+      "touch": "PASS"
+    },
+    {
+      "engine": "WebKit",
+      "screen": "transition",
+      "width": 390,
+      "height": 844,
+      "overflow": "PASS",
+      "touch": "PASS"
+    },
+    {
+      "engine": "WebKit",
+      "screen": "dashboard",
+      "width": 430,
+      "height": 932,
+      "overflow": "PASS",
+      "touch": "PASS"
+    },
+    {
+      "engine": "WebKit",
+      "screen": "courses",
+      "width": 430,
+      "height": 932,
+      "overflow": "PASS",
+      "touch": "PASS"
+    },
+    {
+      "engine": "WebKit",
+      "screen": "transition",
+      "width": 430,
+      "height": 932,
+      "overflow": "PASS",
+      "touch": "PASS"
+    },
+    {
+      "engine": "WebKit",
+      "screen": "dashboard",
+      "width": 768,
+      "height": 1024,
+      "overflow": "PASS",
+      "touch": "N/A"
+    },
+    {
+      "engine": "WebKit",
+      "screen": "courses",
+      "width": 768,
+      "height": 1024,
+      "overflow": "PASS",
+      "touch": "N/A"
+    },
+    {
+      "engine": "WebKit",
+      "screen": "transition",
+      "width": 768,
+      "height": 1024,
+      "overflow": "PASS",
+      "touch": "N/A"
+    },
+    {
+      "engine": "WebKit",
+      "screen": "dashboard",
+      "width": 1024,
+      "height": 768,
+      "overflow": "PASS",
+      "touch": "N/A"
+    },
+    {
+      "engine": "WebKit",
+      "screen": "courses",
+      "width": 1024,
+      "height": 768,
+      "overflow": "PASS",
+      "touch": "N/A"
+    },
+    {
+      "engine": "WebKit",
+      "screen": "transition",
+      "width": 1024,
+      "height": 768,
+      "overflow": "PASS",
+      "touch": "N/A"
+    },
+    {
+      "engine": "WebKit",
+      "screen": "dashboard",
+      "width": 1440,
+      "height": 900,
+      "overflow": "PASS",
+      "touch": "N/A"
+    },
+    {
+      "engine": "WebKit",
+      "screen": "courses",
+      "width": 1440,
+      "height": 900,
+      "overflow": "PASS",
+      "touch": "N/A"
+    },
+    {
+      "engine": "WebKit",
+      "screen": "transition",
+      "width": 1440,
+      "height": 900,
+      "overflow": "PASS",
+      "touch": "N/A"
+    },
+    {
+      "engine": "WebKit",
+      "screen": "dashboard",
+      "width": 844,
+      "height": 390,
+      "overflow": "PASS",
+      "touch": "N/A"
+    },
+    {
+      "engine": "WebKit",
+      "screen": "courses",
+      "width": 844,
+      "height": 390,
+      "overflow": "PASS",
+      "touch": "N/A"
+    },
+    {
+      "engine": "WebKit",
+      "screen": "transition",
+      "width": 844,
+      "height": 390,
+      "overflow": "PASS",
+      "touch": "N/A"
+    }
+  ],
+  "checks": [
+    {
+      "engine": "Edge",
+      "keyboardDialogEscapeFocus": "PASS",
+      "scrollLock": "PASS",
+      "filter": "PASS",
+      "previewDraftAcrossViewsAndRefresh": "PASS",
+      "presentationStates": "PASS",
+      "reducedMotion": "PASS",
+      "noBusinessRequests": "PASS",
+      "consoleErrors": 0
+    },
+    {
+      "engine": "Chrome",
+      "keyboardDialogEscapeFocus": "PASS",
+      "scrollLock": "PASS",
+      "filter": "PASS",
+      "previewDraftAcrossViewsAndRefresh": "PASS",
+      "presentationStates": "PASS",
+      "reducedMotion": "PASS",
+      "noBusinessRequests": "PASS",
+      "consoleErrors": 0
+    },
+    {
+      "engine": "Chromium",
+      "keyboardDialogEscapeFocus": "PASS",
+      "scrollLock": "PASS",
+      "filter": "PASS",
+      "previewDraftAcrossViewsAndRefresh": "PASS",
+      "presentationStates": "PASS",
+      "reducedMotion": "PASS",
+      "noBusinessRequests": "PASS",
+      "consoleErrors": 0
+    },
+    {
+      "engine": "WebKit",
+      "keyboardDialogEscapeFocus": "PASS",
+      "scrollLock": "PASS",
+      "filter": "PASS",
+      "previewDraftAcrossViewsAndRefresh": "PASS",
+      "presentationStates": "PASS",
+      "reducedMotion": "PASS",
+      "noBusinessRequests": "PASS",
+      "consoleErrors": 0
+    }
+  ],
+  "engines": [
+    {
+      "name": "Edge",
+      "status": "PASS",
+      "version": "156.0.4314.42"
+    },
+    {
+      "name": "Chrome",
+      "status": "PASS",
+      "version": "155.0.8059.85"
+    },
+    {
+      "name": "Chromium",
+      "status": "PASS",
+      "version": "156.0.8078.4"
+    },
+    {
+      "name": "WebKit",
+      "status": "PASS",
+      "version": "27.2"
+    }
+  ],
+  "errors": []
+}
