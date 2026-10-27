@@ -15,54 +15,53 @@ interface TargetGroupDef {
 }
 const TARGET_GROUPS: TargetGroupDef[] = [
   {
-    name: '👥 Thành viên Ban Chapter',
+    name: 'Thành viên',
     color: 'bg-blue-900 text-blue-100',
     badgeBg: 'bg-blue-800/80',
     targetKeys: [
-      'MEMBER_BTV',
       'MEMBER_BTK',
-      'MEMBER_BND',
-      'MEMBER_BCL',
-      'MEMBER_BDH',
+      'MEMBER_BTV',
       'MEMBER_BKM',
       'MEMBER_BTTSK',
+      'MEMBER_BDH',
+      'MEMBER_BND',
+      'MEMBER_BCL',
     ],
   },
   {
-    name: '👑 Trưởng ban (LT) Chapter',
-    color: 'bg-indigo-900 text-indigo-100',
-    badgeBg: 'bg-indigo-800/80',
-    targetKeys: [
-      'LEADER_BTV',
-      'LEADER_BTK',
-      'LEADER_BND',
-      'LEADER_BCL',
-      'LEADER_BDH',
-      'LEADER_BKM',
-      'LEADER_BTTSK',
-    ],
-  },
-  {
-    name: '⭐ Chủ tịch',
+    name: 'Chủ tịch',
     color: 'bg-amber-900 text-amber-100',
     badgeBg: 'bg-amber-800/80',
     targetKeys: ['CHAPTER_PRESIDENT'],
   },
   {
-    name: '🧬 Khối DNA',
+    name: 'LT',
+    color: 'bg-indigo-900 text-indigo-100',
+    badgeBg: 'bg-indigo-800/80',
+    targetKeys: [
+      'LEADER_BTK',
+      'LEADER_BTV',
+      'LEADER_BKM',
+      'LEADER_BTTSK',
+      'LEADER_BDH',
+      'LEADER_BND',
+      'LEADER_BCL',
+    ],
+  },
+  {
+    name: 'DNA',
     color: 'bg-emerald-950 text-emerald-100',
     badgeBg: 'bg-emerald-900/80',
-    targetKeys: ['DNA_TT', 'DNA_SGDC', 'DNA_LDC'],
+    targetKeys: ['DNA_SGDC', 'DNA_LDC', 'DNA_TT'],
   },
 ]
 
-function getTargetShortLabel(target: any): string {
+function getTargetColumnLabel(target: any): string {
   let label = target.label || target.key
-  label = label.replace(/^Thành viên Ban\s*/i, '')
-  label = label.replace(/^Thành viên ban\s*/i, '')
-  label = label.replace(/^LT Ban\s*/i, '')
-  label = label.replace(/^LT\s*/i, '')
-  label = label.replace(/^DNA\s*/i, '')
+  label = label.replace(/^Thành viên\s+/i, '')
+  label = label.replace(/^LT\s+/i, '')
+  label = label.replace(/^Chủ tịch Chapter$/i, 'Chủ tịch')
+  label = label.replace(/^DNA\s+/i, '')
   return label
 }
 
@@ -131,6 +130,26 @@ export default function MandatoryCourseMatrixPage() {
     return groups
   }, [data?.targets])
 
+  const orderedTargets = useMemo(() => {
+    if (!data?.targets) return []
+    const byKey = new Map<string, any>(data.targets.map((target: any) => [target.key, target]))
+    const ordered = TARGET_GROUPS.flatMap((group) =>
+      group.targetKeys.map((key) => byKey.get(key)).filter(Boolean),
+    ) as any[]
+    const used = new Set(ordered.map((target: any) => target.key))
+    const extras = data.targets.filter((target: any) => !used.has(target.key))
+    return [...ordered, ...extras]
+  }, [data?.targets])
+
+  const eligibleTargets = useMemo(
+    () => orderedTargets.filter((target: any) => (target.scopeCount ?? 1) > 0),
+    [orderedTargets],
+  )
+
+  const catalogBroken = Boolean(
+    data && (data.targets.length !== 18 || data.catalogComplete === false),
+  )
+
   const changes = useMemo(() => {
     if (!data || !draft) return []
     return data.courses.flatMap((course: any) =>
@@ -172,6 +191,9 @@ export default function MandatoryCourseMatrixPage() {
   )
 
   const setCell = (courseId: string, targetKey: string, patch: any) => {
+    if (catalogBroken) return
+    const target = orderedTargets.find((item: any) => item.key === targetKey)
+    if (target && (target.scopeCount ?? 1) === 0) return
     setDraft((current: any) => ({
       ...current,
       [courseId]: {
@@ -185,11 +207,13 @@ export default function MandatoryCourseMatrixPage() {
   }
 
   const setRowEnabled = (course: any, enabled: boolean) => {
+    if (catalogBroken) return
     setDraft((current: any) => ({
       ...current,
       [course.id]: Object.fromEntries(
-        data.targets.map((target: any) => {
+        orderedTargets.map((target: any) => {
           const cell = current[course.id][target.key]
+          if ((target.scopeCount ?? 1) === 0) return [target.key, cell]
           return [
             target.key,
             {
@@ -204,6 +228,9 @@ export default function MandatoryCourseMatrixPage() {
   }
 
   const setColumnEnabled = (targetKey: string, enabled: boolean) => {
+    if (catalogBroken) return
+    const target = orderedTargets.find((item: any) => item.key === targetKey)
+    if (!target || (target.scopeCount ?? 1) === 0) return
     setDraft((current: any) => ({
       ...current,
       ...Object.fromEntries(
@@ -226,6 +253,7 @@ export default function MandatoryCourseMatrixPage() {
   }
 
   const save = async () => {
+    if (catalogBroken) return
     if (!changes.length && !rowDefaults.length) return
     setSaving(true)
     try {
@@ -275,7 +303,7 @@ export default function MandatoryCourseMatrixPage() {
             Ma trận khóa học bắt buộc
           </h1>
           <p className="mt-1 text-sm text-[#737686]">
-            Cấu hình đối tượng bắt buộc và thời hạn hoàn thành (ngày) cho 18 nhóm đối tượng. Chỉnh số ngày ở đầu hàng và bấm <strong>Lưu thay đổi</strong> để tự động áp dụng.
+            Cấu hình đối tượng bắt buộc và thời hạn hoàn thành (ngày) cho 18 đối tượng thuộc 4 nhóm: Thành viên, Chủ tịch, LT và DNA. Số ngày ở đầu hàng áp dụng cho tất cả đối tượng được tick trong hàng; bấm <strong>Lưu thay đổi</strong> để cập nhật.
           </p>
         </div>
         <div className="flex items-center gap-2.5">
@@ -286,7 +314,7 @@ export default function MandatoryCourseMatrixPage() {
           </Link>
           <Button
             loading={saving}
-            disabled={totalChanges === 0}
+            disabled={totalChanges === 0 || catalogBroken}
             onClick={save}
             className="shadow-sm font-bold"
           >
@@ -294,6 +322,12 @@ export default function MandatoryCourseMatrixPage() {
           </Button>
         </div>
       </div>
+
+      {catalogBroken && (
+        <div className="mb-4 rounded-2xl border border-red-300 bg-red-50 px-4 py-3 text-sm font-semibold text-red-900 shadow-2xs">
+          Danh mục đối tượng chưa đủ 18 (đang có {data?.targets?.length || 0}). Không thể lưu cấu hình cho đến khi danh mục được sửa.
+        </div>
+      )}
 
       {totalChanges > 0 && (
         <div className="mb-4 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900 flex items-center justify-between shadow-2xs">
@@ -329,31 +363,45 @@ export default function MandatoryCourseMatrixPage() {
               <span className="text-xs text-slate-500">ngày</span>
             </div>
             <div className="mt-3 space-y-1.5 max-h-60 overflow-y-auto">
-              {data.targets.map((target: any) => (
-                <label
-                  key={target.key}
-                  className="flex items-center gap-3 rounded-xl bg-slate-50 hover:bg-slate-100/70 p-2.5 text-xs cursor-pointer"
-                >
-                  <input
-                    type="checkbox"
-                    checked={Boolean(draft?.[course.id]?.[target.key]?.enabled)}
-                    onChange={(event) =>
-                      setCell(course.id, target.key, {
-                        enabled: event.target.checked,
-                        dueDays: rowDays[course.id] || 30,
-                      })
-                    }
-                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                  />
-                  <span className="font-medium text-slate-800">{target.label}</span>
-                </label>
-              ))}
+              {orderedTargets.map((target: any) => {
+                const unavailable = (target.scopeCount ?? 1) === 0
+                return (
+                  <label
+                    key={target.key}
+                    className={`flex items-center gap-3 rounded-xl p-2.5 text-xs ${unavailable ? 'bg-slate-100 cursor-not-allowed opacity-60' : 'bg-slate-50 hover:bg-slate-100/70 cursor-pointer'}`}
+                    title={unavailable ? 'Chưa cấu hình đơn vị hoặc chức vụ cho đối tượng này' : undefined}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={Boolean(draft?.[course.id]?.[target.key]?.enabled)}
+                      disabled={unavailable || catalogBroken}
+                      onChange={(event) =>
+                        setCell(course.id, target.key, {
+                          enabled: event.target.checked,
+                          dueDays: rowDays[course.id] || 30,
+                        })
+                      }
+                      className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 disabled:cursor-not-allowed"
+                    />
+                    <span className="font-medium text-slate-800">{target.label}</span>
+                  </label>
+                )
+              })}
             </div>
           </details>
         ))}
       </div>
 
       {/* GIAO DIỆN DESKTOP (TABLE VỚI HEADER 2 DÒNG THẲNG TẮP) */}
+      <div className="mb-3 hidden flex-wrap items-center gap-2 text-xs text-slate-600 md:flex">
+        <span className="font-semibold text-slate-800">Bảng có 18 đối tượng trong 4 nhóm:</span>
+        {targetGroupMap.map((group) => (
+          <span key={`summary-${group.name}`} className="rounded-full border border-slate-200 bg-white px-2.5 py-1 font-semibold">
+            {group.name}: {group.targets.length}
+          </span>
+        ))}
+        <span className="text-slate-400">Kéo ngang để xem hết các cột.</span>
+      </div>
       <div className="hidden overflow-x-auto md:block rounded-3xl border border-slate-200 bg-white shadow-sm">
         <table className="w-full text-xs text-left border-separate border-spacing-0">
           {/* HEADER 2 DÒNG THẲNG TẮP */}
@@ -379,7 +427,7 @@ export default function MandatoryCourseMatrixPage() {
                   <div className="inline-flex items-center gap-1.5">
                     <span>{group.name}</span>
                     <span className="text-[10px] opacity-80 font-normal">
-                      ({group.targets.length} nhóm)
+                      ({group.targets.length} đối tượng)
                     </span>
                   </div>
                 </th>
@@ -388,11 +436,12 @@ export default function MandatoryCourseMatrixPage() {
 
             {/* DÒNG 2: TÊN CỤ THỂ 18 TARGET & NÚT TICK CẢ CỘT ĐỒNG ĐỀU */}
             <tr className="bg-[#1e293b] text-slate-200 border-b border-slate-700">
-              {data?.targets?.map((target: any) => {
+              {orderedTargets.map((target: any) => {
+                const unavailable = (target.scopeCount ?? 1) === 0
                 const allEnabled =
                   data.courses.length > 0 &&
                   data.courses.every((course: any) => draft?.[course.id]?.[target.key]?.enabled)
-                const shortLabel = getTargetShortLabel(target)
+                const columnLabel = getTargetColumnLabel(target)
 
                 return (
                   <th
@@ -400,19 +449,22 @@ export default function MandatoryCourseMatrixPage() {
                     className="min-w-[105px] px-2 py-2.5 text-center border-r border-b border-slate-700/80 align-top bg-[#1e293b]"
                   >
                     <div className="font-bold text-xs text-white truncate" title={target.label}>
-                      {shortLabel}
+                      {columnLabel}
                     </div>
                     <button
                       type="button"
+                      disabled={unavailable || catalogBroken}
                       onClick={() => setColumnEnabled(target.key, !allEnabled)}
                       className={`mt-1.5 w-full whitespace-nowrap rounded-lg px-1.5 py-0.5 text-[10px] font-bold transition shadow-2xs border ${
-                        allEnabled
-                          ? 'bg-amber-400 text-slate-900 border-amber-300 hover:bg-amber-300'
-                          : 'bg-slate-700 text-slate-200 border-slate-600 hover:bg-slate-600'
+                        unavailable || catalogBroken
+                          ? 'bg-slate-800 text-slate-500 border-slate-700 cursor-not-allowed'
+                          : allEnabled
+                            ? 'bg-amber-400 text-slate-900 border-amber-300 hover:bg-amber-300'
+                            : 'bg-slate-700 text-slate-200 border-slate-600 hover:bg-slate-600'
                       }`}
-                      title={allEnabled ? 'Bỏ tick toàn bộ cột này' : 'Tick toàn bộ cột này'}
+                      title={unavailable ? 'Chưa cấu hình đơn vị hoặc chức vụ cho đối tượng này' : allEnabled ? 'Bỏ tick toàn bộ cột này' : 'Tick toàn bộ cột này'}
                     >
-                      {allEnabled ? '✓ Đã tick' : 'Tick cột'}
+                      {unavailable ? 'Chưa cấu hình' : allEnabled ? '✓ Đã tick' : 'Tick cột'}
                     </button>
                   </th>
                 )
@@ -424,8 +476,8 @@ export default function MandatoryCourseMatrixPage() {
           <tbody className="bg-white">
             {data?.courses?.map((course: any, idx: number) => {
               const allEnabled =
-                data.targets.length > 0 &&
-                data.targets.every((target: any) => draft?.[course.id]?.[target.key]?.enabled)
+                eligibleTargets.length > 0 &&
+                eligibleTargets.every((target: any) => draft?.[course.id]?.[target.key]?.enabled)
 
               return (
                 <tr
@@ -455,11 +507,14 @@ export default function MandatoryCourseMatrixPage() {
 
                       <button
                         type="button"
+                        disabled={catalogBroken}
                         onClick={() => setRowEnabled(course, !allEnabled)}
                         className={`rounded-xl px-2 py-1 text-[11px] font-bold transition border ${
-                          allEnabled
-                            ? 'bg-amber-100 text-amber-900 border-amber-300 hover:bg-amber-200'
-                            : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
+                          catalogBroken
+                            ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
+                            : allEnabled
+                              ? 'bg-amber-100 text-amber-900 border-amber-300 hover:bg-amber-200'
+                              : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
                         }`}
                       >
                         {allEnabled ? 'Bỏ cả dòng' : 'Tick cả dòng'}
@@ -468,26 +523,31 @@ export default function MandatoryCourseMatrixPage() {
                   </td>
 
                   {/* 18 CỘT CHECKBOX CĂN GIỮA ĐỒNG ĐỀU */}
-                  {data.targets.map((target: any) => {
+                  {orderedTargets.map((target: any) => {
                     const isChecked = Boolean(draft?.[course.id]?.[target.key]?.enabled)
+                    const unavailable = (target.scopeCount ?? 1) === 0
                     return (
                       <td
                         key={target.key}
                         className={`px-2 py-3 text-center border-r border-slate-100 ${
                           isChecked ? 'bg-blue-50/40' : ''
-                        }`}
+                        } ${unavailable ? 'bg-slate-50' : ''}`}
                       >
-                        <label className="inline-flex items-center justify-center cursor-pointer p-1 rounded-lg hover:bg-blue-100/60 transition">
+                        <label
+                          className={`inline-flex items-center justify-center p-1 rounded-lg transition ${unavailable ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:bg-blue-100/60'}`}
+                          title={unavailable ? 'Chưa cấu hình đơn vị hoặc chức vụ cho đối tượng này' : `${course.title} - ${target.label}`}
+                        >
                           <input
                             type="checkbox"
                             checked={isChecked}
+                            disabled={unavailable || catalogBroken}
                             onChange={(e) =>
                               setCell(course.id, target.key, {
                                 enabled: e.target.checked,
                                 dueDays: rowDays[course.id] || course.defaultDueDays || 30,
                               })
                             }
-                            className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 transition cursor-pointer"
+                            className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 transition cursor-pointer disabled:cursor-not-allowed"
                             title={`${course.title} - ${target.label}`}
                           />
                         </label>

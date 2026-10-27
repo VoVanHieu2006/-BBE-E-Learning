@@ -16,6 +16,7 @@ import { getCachedChapterLeaderboard, invalidateChapterLeaderboardCache, setCach
 import { evaluateCourseFinalRequirements } from '../lib/course-final-assessment-rules'
 import { selectBalancedFinalExamQuestions } from '../lib/final-exam-selection'
 import { canActivateAfterRestrictionLift, canDeadlineLockAccount, collectChapterAccountIds } from '../lib/account-restriction-rules'
+import { LEARNING_TARGETS } from '../lib/learning-catalog'
 
 describe('Account restriction rules', () => {
   it('includes legacy members, current organization members, and active position holders once', () => {
@@ -827,5 +828,16 @@ describe('quiz pool admin assignment validation', () => {
     ]), { ok: false, code: 'QuestionPoolAssignmentInvalid' })
     const emptyLastPool = assignments.map((item) => item.poolIndex === 4 ? { ...item, poolIndex: 3 } : item)
     assert.deepEqual(validateQuizPoolAssignments(5, questionIds, emptyLastPool), { ok: false, code: 'QuestionPoolIncomplete' })
+  })
+})
+
+describe('Mandatory learning catalog', () => {
+  it('has exactly 18 unique canonical targets', () => {
+    assert.equal(LEARNING_TARGETS.length, 18)
+    assert.equal(new Set(LEARNING_TARGETS.map((target) => target.code)).size, 18)
+    assert.equal(LEARNING_TARGETS.filter((target) => target.code.startsWith('MEMBER_')).length, 7)
+    assert.equal(LEARNING_TARGETS.filter((target) => target.code.startsWith('LEADER_')).length, 7)
+    assert.equal(LEARNING_TARGETS.filter((target) => target.code.startsWith('DNA_')).length, 3)
+    assert.ok(LEARNING_TARGETS.some((target) => target.code === 'CHAPTER_PRESIDENT'))
   })
 })

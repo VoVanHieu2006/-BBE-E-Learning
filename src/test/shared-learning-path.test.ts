@@ -5,7 +5,7 @@ import { reconcileSharedPath } from '../lib/shared-learning-path'
 import { CourseBudget, DAY_MS, budgetFingerprint } from '../lib/learning-cycle-rules'
 
 const at = (day: number) => new Date(Date.UTC(2026, 0, 1) + day * DAY_MS)
-const course = (courseId: string, days: number): CourseBudget => ({ courseId, days, completed: false })
+const course = (courseId: string, days: number, assignedAt?: Date): CourseBudget => ({ courseId, days, completed: false, assignedAt })
 
 // Exercise the actual persistence coordinator, including its reason selection.
 // A pure calculateSharedDeadline test alone did not catch the wrong dispatch.
@@ -18,7 +18,7 @@ function fixture(previous: CourseBudget[], next: CourseBudget[], dueDay: number)
   let assignmentDue: Date | null = null
   const tx = {
     userLearningAssignment: {
-      findMany: async () => next.map(row => ({ course_id: row.courseId, completed_at: row.completed ? at(1) : null, course: { mandatory_default_due_days: row.days } })),
+      findMany: async () => next.map(row => ({ course_id: row.courseId, assigned_at: row.assignedAt ?? at(0), completed_at: row.completed ? at(1) : null, course: { mandatory_default_due_days: row.days } })),
       updateMany: async ({ data }: { data: { due_at: Date | null } }) => { assignmentDue = data.due_at; return { count: next.length } },
     },
     learningPath: {
@@ -41,6 +41,12 @@ for (const [changedDay, expected] of [[5, 21], [20, 31]]) {
     assert.equal(f.events.length, 1, 'a retry does not extend the deadline or duplicate history')
   })
 }
+
+test('first mandatory course added to an existing path gets its full budget from the change instant', async () => {
+  const f = fixture([], [course('A', 5)], 100)
+  await reconcileSharedPath(f.tx, 'learner', 'cycle', at(10))
+  assert.equal(f.assignmentDue()?.getTime(), at(15).getTime())
+})
 
 test('late role expansion gives the full new-course budget from the change timestamp', async () => {
   const f = fixture([course('A', 10)], [course('A', 10), course('C', 11)], 10)
@@ -72,6 +78,18 @@ test('Admin shortening still applies its separate three-day safety floor', async
   const f = fixture([course('A', 30)], [course('A', 10)], 30)
   await reconcileSharedPath(f.tx, 'learner', 'cycle', at(20))
   assert.equal(f.assignmentDue()?.getTime(), at(23).getTime())
+})
+
+test('Admin shortening a course assigned later keeps that course full new budget', async () => {
+  const f = fixture(
+    [course('A', 10), course('B', 30)],
+    [course('A', 10, at(0)), course('B', 10, at(25))],
+    90,
+  )
+  await reconcileSharedPath(f.tx, 'learner', 'cycle', at(30))
+  // B was assigned on day 25 and still gets 10 new days; the three-day Admin
+  // floor is day 33, so the later assignment deadline wins.
+  assert.equal(f.assignmentDue()?.getTime(), at(35).getTime())
 })
 
 test('an empty or completed required set enforces no deadline', async () => {

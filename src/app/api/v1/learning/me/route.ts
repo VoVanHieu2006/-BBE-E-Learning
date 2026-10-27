@@ -3,12 +3,16 @@ import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { readLessonLearningStates } from '@/lib/lesson-learning-state'
 import { chapterRewardState } from '@/lib/chapter-reward-gate'
+import { reconcileLearnerReadThrough } from '@/lib/learning-outbox'
 
 /** One read model keeps monthly rewards separate from training completion. */
 export async function GET(request: NextRequest) {
   const auth = await authenticate(request)
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: 401 })
   const userId = auth.context!.userId
+  // Apply any pending matrix/membership reconciliation for this learner before
+  // reading the deadlines, so a saved matrix does not wait for the daily worker.
+  await reconcileLearnerReadThrough(userId).catch(() => false)
   const now = new Date()
   const rewardState = await chapterRewardState(prisma, userId, now)
   const [cycle, month, allStars, user, policy] = await Promise.all([

@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { reconcileLearnerReadThrough } from '@/lib/learning-outbox'
 
 export async function GET(request: NextRequest) {
   const auth = await authenticate(request)
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: 401 })
   const userId = auth.context!.userId
+  await reconcileLearnerReadThrough(userId).catch(() => false)
 
   const [activeAssignments, allMandatoryAssignments] = await Promise.all([
     prisma.userLearningAssignment.findMany({

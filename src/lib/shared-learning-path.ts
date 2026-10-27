@@ -6,7 +6,12 @@ export async function reconcileSharedPath(tx: Prisma.TransactionClient, userId: 
   const assignments = await tx.userLearningAssignment.findMany({ where: {
     user_id: userId, learning_cycle_id: cycleId, mandatory: true, ended_at: null,
   }, include: { course: { select: { mandatory_default_due_days: true } } } })
-  const next: CourseBudget[] = assignments.map((row) => ({ courseId: row.course_id, days: row.course.mandatory_default_due_days, completed: Boolean(row.completed_at) }))
+  const next: CourseBudget[] = assignments.map((row) => ({
+    courseId: row.course_id,
+    days: row.course.mandatory_default_due_days,
+    completed: Boolean(row.completed_at),
+    assignedAt: row.assigned_at,
+  }))
   const path = await tx.learningPath.upsert({ where: { learning_cycle_id: cycleId }, update: {}, create: {
     user_id: userId, learning_cycle_id: cycleId, starts_at: now,
   } })
@@ -17,7 +22,12 @@ export async function reconcileSharedPath(tx: Prisma.TransactionClient, userId: 
     const reduced = next.some((course) => previous.some((old) => old.courseId === course.courseId && old.days > course.days))
     let reason: SharedDeadlineReason = 'ROLE_CHANGED'
     if (!previous.length) {
-      reason = 'CYCLE_INITIALIZED'
+      // Only the first reconciliation of a just-created path is cycle
+      // initialization. If a learner already had a path open and Admin adds
+      // the first mandatory course later, that new obligation gets its full
+      // budget from the change instant (section 17/18), not from the old start.
+      const pathJustCreated = path.starts_at.getTime() >= now.getTime() - 5 * 60 * 1000
+      reason = pathJustCreated ? 'CYCLE_INITIALIZED' : 'ROLE_CHANGED'
     } else if (reduced) {
       reason = 'ADMIN_BUDGET_SHORTENED'
     }

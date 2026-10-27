@@ -48,7 +48,8 @@
     "audit:organization-integrity": "node scripts/audit-organization-integrity.mjs",
     "test:formula-audit": "node scripts/test-formula-audit.cjs",
     "test:shared-deadline": "ts-node -P tsconfig.test.json src/test/shared-learning-path.test.ts",
-    "audit:handbook-formulas": "node scripts/audit-handbook-formulas.cjs"
+    "audit:handbook-formulas": "node scripts/audit-handbook-formulas.cjs",
+    "audit:mandatory-learning": "node scripts/audit-mandatory-learning.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1121.0",

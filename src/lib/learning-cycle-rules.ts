@@ -20,7 +20,7 @@ export type SharedDeadlineReason =
   | 'ADMIN_MANUAL_EXTENSION'     // Admin mở khóa / gia hạn thời gian
   | 'LESSONS_ADDED_TO_COURSE'    // Admin bổ sung bài học mới vào khóa đã xuất bản
 
-export interface CourseBudget { courseId: string; days: number; completed: boolean }
+export interface CourseBudget { courseId: string; days: number; completed: boolean; assignedAt?: Date }
 
 export interface CalculateSharedDeadlineInput {
   startsAt: Date;
@@ -65,7 +65,19 @@ export function calculateSharedDeadline(input: CalculateSharedDeadlineInput): Da
       }
 
       case 'ADMIN_BUDGET_SHORTENED': {
-        const assignedTargetDue = startsAt.getTime() + totalNewDays * DAY_MS
+        // Mục 19: D_assigned is the moment the course was assigned, not
+        // necessarily the start of the whole learning path. A course added
+        // later must keep at least its own new budget from that assignment.
+        const shortened = next.filter((course) => {
+          const before = previous.find((old) => old.courseId === course.courseId)
+          return Boolean(before && course.days < before.days)
+        })
+        const assignedTargetDue = Math.max(
+          startsAt.getTime() + totalNewDays * DAY_MS,
+          ...shortened.map((course) =>
+            (course.assignedAt?.getTime() ?? startsAt.getTime()) + course.days * DAY_MS,
+          ),
+        )
         const safe3DayFloor = changedAt.getTime() + 3 * DAY_MS
         return new Date(Math.max(assignedTargetDue, safe3DayFloor))
       }

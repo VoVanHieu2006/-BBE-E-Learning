@@ -4,22 +4,23 @@ import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import {
   invalidateCoursesServerCache,
+  invalidateScopesCache,
   getCachedTargetCatalog,
   setCachedTargetCatalog,
   getCachedScopes,
   setCachedScopes,
 } from '@/lib/server-cache'
+import { LEARNING_TARGETS } from '@/lib/learning-catalog'
 
-const targets = [
-  { key: 'CONTENT', label: 'Thành viên ban Nội dung', department: 'Nội dung' },
-  { key: 'GUEST', label: 'Thành viên ban Khách mời', department: 'Khách mời' },
-  { key: 'MEMBER', label: 'Thành viên ban Thành viên', department: 'Thành viên' },
-  { key: 'QUALITY', label: 'Thành viên ban Chất lượng', department: 'Chất lượng' },
-  { key: 'MEDIA_EVENT', label: 'Thành viên ban TT&SK', department: 'TT&SK' },
-  { key: 'SECRETARY', label: 'Thành viên ban Thư ký', department: 'Thư ký' },
-  { key: 'LEAD', label: 'LT / Chủ tịch', position: 'DEPARTMENT_LEAD' },
-  { key: 'DNA', label: 'DNA', dna: true },
-] as const
+const CANONICAL_TARGETS = LEARNING_TARGETS.map((target) => ({
+  key: target.code,
+  label: target.label,
+  departmentCode: target.department_code,
+  positionCode: target.position_code,
+  dnaUnitCode: target.dna_unit_code,
+  sortOrder: target.sort_order,
+}))
+const CANONICAL_TARGET_CODES = CANONICAL_TARGETS.map((target) => target.key)
 
 type Scope = { organizationUnitId: string | null; positionId: string | null }
 type ExpandedChange = Scope & { courseId: string; enabled: boolean; dueDays: number | null }
@@ -66,8 +67,18 @@ function chunks<T>(items: T[], size = 1000) {
 async function targetCatalog() {
   const cached = getCachedTargetCatalog(60_000)
   if (cached) return cached
-  const configured = await prisma.learningTarget.findMany({ orderBy: { sort_order: 'asc' } })
-  const result = configured.length ? configured.map((row) => ({ key: row.code, label: row.label })) : [...targets]
+
+  const configured = await prisma.learningTarget.findMany()
+  const configuredByCode = new Map(configured.map((row) => [row.code, row]))
+  const result = CANONICAL_TARGETS.map((target) => {
+    const row = configuredByCode.get(target.key)
+    return {
+      key: target.key,
+      label: row?.label || target.label,
+      configured: Boolean(row),
+    }
+  })
+
   setCachedTargetCatalog(result)
   return result
 }
@@ -75,37 +86,32 @@ async function targetCatalog() {
 async function resolveScopes(): Promise<Map<string, Scope[]>> {
   const cached = getCachedScopes(60_000)
   if (cached) return cached
-  const configured = await prisma.learningTarget.findMany({ orderBy: { sort_order: 'asc' } })
-  if (configured.length) {
-    const [units, positions] = await Promise.all([
-      prisma.organizationUnit.findMany({ where: { status: 'ACTIVE' } }), prisma.position.findMany(),
-    ])
-    const result = new Map<string, Scope[]>()
-    for (const target of configured) {
-      const position = target.position_code && target.position_code !== 'MEMBER' ? positions.find((row) => row.code === target.position_code) : null
-      if (target.position_code && target.position_code !== 'MEMBER' && !position) { result.set(target.code, []); continue }
-      const scopedUnits = units.filter((row) => target.department_code ? row.type === 'DEPARTMENT' && row.code === target.department_code : target.dna_unit_code ? ['DNA', 'DNA_GROUP'].includes(row.type) && row.code === target.dna_unit_code : false)
-      result.set(target.code, target.department_code || target.dna_unit_code
-        ? scopedUnits.map((row) => ({ organizationUnitId: row.id, positionId: position?.id || null }))
-        : position ? [{ organizationUnitId: null, positionId: position.id }] : [])
+
+  const [units, positions] = await Promise.all([
+    prisma.organizationUnit.findMany({ where: { status: 'ACTIVE' } }),
+    prisma.position.findMany(),
+  ])
+  const result = new Map<string, Scope[]>()
+
+  for (const target of CANONICAL_TARGETS) {
+    const position = target.positionCode && target.positionCode !== 'MEMBER'
+      ? positions.find((row) => row.code === target.positionCode)
+      : null
+    if (target.positionCode && target.positionCode !== 'MEMBER' && !position) {
+      result.set(target.key, [])
+      continue
     }
-    setCachedScopes(result)
-    return result
+
+    const scopedUnits = units.filter((row) => {
+      if (target.departmentCode) return row.type === 'DEPARTMENT' && row.code === target.departmentCode
+      if (target.dnaUnitCode) return ['DNA', 'DNA_GROUP'].includes(row.type) && row.code === target.dnaUnitCode
+      return false
+    })
+    result.set(target.key, target.departmentCode || target.dnaUnitCode
+      ? scopedUnits.map((row) => ({ organizationUnitId: row.id, positionId: position?.id || null }))
+      : position ? [{ organizationUnitId: null, positionId: position.id }] : [])
   }
 
-  const [positions, departments, dna] = await Promise.all([
-    prisma.position.findMany({ where: { code: { in: ['MEMBER', 'DEPARTMENT_LEAD'] } } }),
-    prisma.organizationUnit.findMany({ where: { type: 'DEPARTMENT' } }),
-    prisma.organizationUnit.findFirst({ where: { type: 'DNA' }, orderBy: { created_at: 'asc' } }),
-  ])
-  const memberPosition = positions.find((position) => position.code === 'MEMBER')
-  const leadPosition = positions.find((position) => position.code === 'DEPARTMENT_LEAD')
-  const result = new Map<string, Scope[]>()
-  for (const target of targets) {
-    if ('department' in target) result.set(target.key, departments.filter((unit) => unit.name.toLocaleLowerCase('vi').includes(target.department.toLocaleLowerCase('vi'))).map((unit) => ({ organizationUnitId: unit.id, positionId: memberPosition?.id || null })))
-    else if ('position' in target) result.set(target.key, leadPosition ? [{ organizationUnitId: null, positionId: leadPosition.id }] : [])
-    else result.set(target.key, dna ? [{ organizationUnitId: dna.id, positionId: null }] : [])
-  }
   setCachedScopes(result)
   return result
 }
@@ -119,12 +125,19 @@ async function requireAdmin(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   const guard = await requireAdmin(request); if ('error' in guard) return guard.error
-  const targets = await targetCatalog()
-  const [courses, rules, scopes] = await Promise.all([
+  const catalog = await targetCatalog()
+  const [courses, rules, scopes, legacyRuleCount] = await Promise.all([
     prisma.course.findMany({ orderBy: { title: 'asc' }, select: { id: true, title: true, status: true, mandatory_default_due_days: true } }),
     prisma.learningRule.findMany({ where: { effective_until: null }, select: { course_id: true, organization_unit_id: true, position_id: true, due_days: true } }),
     resolveScopes(),
+    prisma.learningRule.count({
+      where: { effective_until: null, target_code: { not: null, notIn: CANONICAL_TARGET_CODES } },
+    }),
   ])
+  const targets = catalog.map((target) => ({
+    ...target,
+    scopeCount: (scopes.get(target.key) || []).length,
+  }))
   const rulesByScope = new Map<string, typeof rules>()
   for (const rule of rules) {
     const key = scopeKey(rule.course_id, rule.organization_unit_id, rule.position_id)
@@ -135,10 +148,20 @@ export async function GET(request: NextRequest) {
     cells[course.id] = {}
     for (const target of targets) {
       const matched = (scopes.get(target.key) || []).flatMap((scope) => rulesByScope.get(scopeKey(course.id, scope.organizationUnitId, scope.positionId)) || [])
-      cells[course.id][target.key] = { enabled: matched.length > 0, dueDays: course.mandatory_default_due_days }
+      cells[course.id][target.key] = {
+        enabled: matched.length > 0,
+        dueDays: matched[0]?.due_days ?? course.mandatory_default_due_days,
+      }
     }
   }
-  return NextResponse.json({ courses: courses.map((course) => ({ ...course, defaultDueDays: course.mandatory_default_due_days })), targets, cells })
+  return NextResponse.json({
+    courses: courses.map((course) => ({ ...course, defaultDueDays: course.mandatory_default_due_days })),
+    targets,
+    cells,
+    catalogComplete: targets.every((target) => target.configured),
+    configuredTargetCount: targets.filter((target) => target.configured).length,
+    legacyRuleCount,
+  })
 }
 
 export async function PUT(request: NextRequest) {
@@ -148,9 +171,29 @@ export async function PUT(request: NextRequest) {
   const raw = Array.isArray(body?.changes) ? body.changes : body?.courseId ? [body] : []
   const rowDefaults = Array.isArray(body?.rowDefaults) ? body.rowDefaults.map((item: any) => ({ courseId: String(item?.courseId || ''), dueDays: Number(item?.dueDays) })) : []
   const changes = raw.map((item: any) => ({ courseId: String(item?.courseId || ''), targetKey: String(item?.targetKey || ''), enabled: item?.enabled === true, dueDays: item?.enabled === true ? Number(item?.dueDays) : null }))
-  if ((!changes.length && !rowDefaults.length) || changes.some((item: any) => !item.courseId || !targets.some((target) => target.key === item.targetKey) || (item.enabled && (!Number.isInteger(item.dueDays) || item.dueDays < 1 || item.dueDays > 3650))) || rowDefaults.some((item: any) => !item.courseId || !Number.isInteger(item.dueDays) || item.dueDays < 1 || item.dueDays > 3650)) return NextResponse.json({ error: { code: 'ValidationError', message: 'Cấu hình không hợp lệ.' } }, { status: 400 })
+  const unknownTargets = changes.filter((item: any) => !targets.some((target) => target.key === item.targetKey))
+  if ((!changes.length && !rowDefaults.length) || changes.some((item: any) => !item.courseId || (item.enabled && (!Number.isInteger(item.dueDays) || item.dueDays < 1 || item.dueDays > 3650))) || unknownTargets.length || rowDefaults.some((item: any) => !item.courseId || !Number.isInteger(item.dueDays) || item.dueDays < 1 || item.dueDays > 3650)) {
+    return NextResponse.json({
+      error: {
+        code: 'ValidationError',
+        message: unknownTargets.length ? 'Có đối tượng không thuộc danh mục 18 đối tượng.' : 'Cấu hình không hợp lệ.',
+        targetKeys: unknownTargets.map((item: any) => item.targetKey),
+      },
+    }, { status: 400 })
+  }
   const scopes = await resolveScopes()
-  if (changes.some((item: any) => !(scopes.get(item.targetKey) || []).length)) return NextResponse.json({ error: { code: 'ScopeNotConfigured', message: 'Chưa có đơn vị hoặc chức vụ tương ứng.' } }, { status: 409 })
+  const targetsWithoutScope = changes
+    .filter((item: any) => item.enabled && !(scopes.get(item.targetKey) || []).length)
+    .map((item: any) => targets.find((target) => target.key === item.targetKey)?.label || item.targetKey)
+  if (targetsWithoutScope.length) {
+    return NextResponse.json({
+      error: {
+        code: 'ScopeNotConfigured',
+        message: `Chưa có đơn vị hoặc chức vụ tương ứng cho: ${targetsWithoutScope.join(', ')}.`,
+        targets: targetsWithoutScope,
+      },
+    }, { status: 409 })
+  }
   
   // Pre-fetch courses and their active rules in a single joined query
   const targetCourseIds = Array.from(new Set([
@@ -213,6 +256,7 @@ export async function PUT(request: NextRequest) {
 
   for (const change of changes) {
     const course = courseMap.get(change.courseId)!
+    const dueDays = change.dueDays ?? course.mandatory_default_due_days
     for (const scope of scopes.get(change.targetKey) || []) {
       const key = scopeKey(change.courseId, scope.organizationUnitId, scope.positionId)
       const existing = rulesByScope.get(key) || []
@@ -227,16 +271,16 @@ export async function PUT(request: NextRequest) {
           course_id: change.courseId,
           organization_unit_id: scope.organizationUnitId,
           position_id: scope.positionId,
-          due_days: course.mandatory_default_due_days,
+          due_days: dueDays,
           target_code: change.targetKey,
         })
-        rulesByScope.set(key, [{ id: 'pending', course_id: change.courseId, organization_unit_id: scope.organizationUnitId, position_id: scope.positionId, due_days: course.mandatory_default_due_days, target_code: change.targetKey } as any])
+        rulesByScope.set(key, [{ id: 'pending', course_id: change.courseId, organization_unit_id: scope.organizationUnitId, position_id: scope.positionId, due_days: dueDays, target_code: change.targetKey } as any])
       } else {
         const first = existing[0]
-        if (first.due_days !== course.mandatory_default_due_days || first.target_code !== change.targetKey) {
+        if (first.due_days !== dueDays || first.target_code !== change.targetKey) {
           rulesToUpdate.push({
             id: first.id,
-            due_days: course.mandatory_default_due_days,
+            due_days: dueDays,
             target_code: change.targetKey,
           })
         }
@@ -263,6 +307,7 @@ export async function PUT(request: NextRequest) {
       },
     }).catch((err) => console.error('AuditLog error:', err))
 
+    invalidateScopesCache()
     return NextResponse.json({ updated: changes.length, rules: { created: 0, closed: 0 } })
   }
 
@@ -327,6 +372,7 @@ export async function PUT(request: NextRequest) {
   }, { timeout: 30_000 })
 
   invalidateCoursesServerCache()
+  invalidateScopesCache()
 
   return NextResponse.json({ updated: changes.length, rules: result })
 }
