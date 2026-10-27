@@ -2,13 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { getUserStarBalance } from '@/lib/stars'
 import { prisma } from '@/lib/prisma'
-import { normalizeStarHistoryPagination } from '@/lib/star-history-rules'
+import { readStarHistoryPage } from '@/lib/star-history'
 
 export async function GET(request: NextRequest) {
   const auth = await authenticate(request)
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: 401 })
   const userId = auth.context!.userId
-  const where = { user_id: userId }
 
   const balance = await getUserStarBalance(userId, auth.context!.role)
   // The video classroom only needs the live total for its header. Avoid the
@@ -16,29 +15,12 @@ export async function GET(request: NextRequest) {
   if (request.nextUrl.searchParams.get('balanceOnly') === '1') {
     return NextResponse.json({ balance }, { headers: { 'Cache-Control': 'no-store' } })
   }
-  const totalItems = await prisma.starLedger.count({ where })
-
-  const { page, limit, totalPages } = normalizeStarHistoryPagination(
+  const { items, page, limit, totalPages, totalItems } = await readStarHistoryPage(
+    prisma,
+    userId,
     request.nextUrl.searchParams.get('page'),
     request.nextUrl.searchParams.get('limit'),
-    totalItems,
   )
-
-  const items = await prisma.starLedger.findMany({
-    where,
-    orderBy: [{ awarded_at: 'desc' }, { id: 'desc' }],
-    skip: (page - 1) * limit,
-    take: limit,
-    select: {
-      id: true,
-      amount: true,
-      reason: true,
-      awarded_at: true,
-      source_type: true,
-      source_id: true,
-      metadata: true,
-    },
-  })
 
   // Enrich with lesson, course and assessment titles
   const videoIds = items.filter((i) => i.source_type === 'VIDEO' && i.source_id).map((i) => i.source_id)
@@ -148,5 +130,5 @@ export async function GET(request: NextRequest) {
     limit,
     totalItems,
     totalPages,
-  })
+  }, { headers: { 'Cache-Control': 'no-store' } })
 }
