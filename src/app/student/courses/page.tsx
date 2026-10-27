@@ -6,7 +6,7 @@ import Link from 'next/link';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
-import { apiFetch, clearApiCache, getCachedApiData } from '@/lib/api/client';
+import { apiFetch, getCachedApiData } from '@/lib/api/client';
 import { getUrgencyLevel } from '@/lib/deadline-urgency';
 
 function normalizeVietnamese(str: string): string {
@@ -90,23 +90,39 @@ export default function StudentCoursesPage() {
 
     if (forceRefresh) {
       setRefreshing(true);
-      clearApiCache('/api/v1/courses');
-      if (hasToken) {
-        clearApiCache('/api/v1/members/me/courses');
-        clearApiCache('/api/v1/members/me/deadlines');
-        clearApiCache('/api/v1/users/me');
-        clearApiCache('/api/v1/stars/me?page=1&limit=20');
-        clearApiCache('/api/v1/learning/me');
-      }
     } else {
-      if (!courses.length && !getCachedApiData<any>('/api/v1/courses')?.items) {
+      const cachedCourses = getCachedApiData<any>('/api/v1/courses');
+      if (!hasToken) {
+        if (cachedCourses?.items) {
+          setCourses(cachedCourses.items);
+          setLoading(false);
+          return;
+        }
+      } else {
+        const cachedProgress = getCachedApiData<any>('/api/v1/members/me/courses');
+        const cachedDeadlines = getCachedApiData<any>('/api/v1/members/me/deadlines');
+        const cachedUser = getCachedApiData<any>('/api/v1/users/me');
+        const cachedStars = getCachedApiData<any>('/api/v1/stars/me?page=1&limit=20');
+        if (cachedCourses?.items && cachedProgress?.items && cachedDeadlines?.items && cachedUser && cachedStars?.balance !== undefined) {
+          setCourses(cachedCourses.items);
+          setProgressCourses(cachedProgress.items);
+          setProgressSummary(cachedProgress.summary || null);
+          setDeadlines(Object.fromEntries((cachedDeadlines.items || []).map((item: any) => [item.courseId, item.dueAt])));
+          setDeadlinesSummary(cachedDeadlines.summary || null);
+          setUser((prev: any) => ({ ...prev, ...cachedUser }));
+          setStarBalance(cachedStars.balance ?? 0);
+          setLoading(false);
+          return;
+        }
+      }
+      if (!courses.length) {
         setLoading(true);
       }
     }
 
     if (!hasToken) {
       // Guest path: ONLY fetch public courses; avoid 4 unauthorized requests
-      const coursesRes = await apiFetch<any>('/api/v1/courses', { noCache: forceRefresh });
+      const coursesRes = await apiFetch<any>('/api/v1/courses', { noCache: forceRefresh, tabCache: true });
       if (coursesRes.ok && coursesRes.data) {
         setCourses(coursesRes.data.items || []);
       }
@@ -116,11 +132,11 @@ export default function StudentCoursesPage() {
     }
 
     const [coursesRes, progressRes, deadlinesRes, userRes, starsRes] = await Promise.all([
-      apiFetch<any>('/api/v1/courses', { noCache: forceRefresh }),
-      apiFetch<any>('/api/v1/members/me/courses', { noCache: forceRefresh }),
-      apiFetch<any>('/api/v1/members/me/deadlines', { noCache: forceRefresh }),
-      apiFetch<any>('/api/v1/users/me', { noCache: forceRefresh }),
-      apiFetch<any>('/api/v1/stars/me?page=1&limit=20', { noCache: forceRefresh }),
+      apiFetch<any>('/api/v1/courses', { noCache: forceRefresh, tabCache: true }),
+      apiFetch<any>('/api/v1/members/me/courses', { noCache: forceRefresh, tabCache: true }),
+      apiFetch<any>('/api/v1/members/me/deadlines', { noCache: forceRefresh, tabCache: true }),
+      apiFetch<any>('/api/v1/users/me', { noCache: forceRefresh, tabCache: true }),
+      apiFetch<any>('/api/v1/stars/me?page=1&limit=20', { noCache: forceRefresh, tabCache: true }),
     ]);
 
     if (coursesRes.ok && coursesRes.data) {
@@ -414,7 +430,7 @@ export default function StudentCoursesPage() {
 
           {/* Tab 1: Lộ trình theo Chương trình */}
           <div className={mainTab === 'PROGRAM_TREE' ? 'space-y-6' : 'hidden'}>
-            <LearningPeriodSummary />
+            <LearningPeriodSummary refreshTrigger={refreshTrigger} />
             <ProgramCourseTree
               refreshTrigger={refreshTrigger}
               onDataLoaded={setTreeLearningData}

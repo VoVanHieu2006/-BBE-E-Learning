@@ -338,6 +338,9 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
       if (data.starReward?.awarded && Number(data.starReward.amount) > 0) {
         celebrateStarReward(Number(data.starReward.amount), data.starReward.rewardKey || null);
         clearApiCache(`/api/v1/lessons/${targetLessonId}/progress`);
+        clearApiCache('/api/v1/members/me');
+        clearApiCache('/api/v1/stars/me');
+        clearApiCache('/api/v1/streak');
         void revalidateProgress();
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('bbe-progress-updated', { detail: { lessonId: targetLessonId } }));
@@ -349,6 +352,9 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
 
       if (data.completed || data.videoCompleted) {
         clearApiCache(`/api/v1/lessons/${targetLessonId}/progress`);
+        clearApiCache('/api/v1/members/me');
+        clearApiCache('/api/v1/stars/me');
+        clearApiCache('/api/v1/streak');
         void revalidateProgress();
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('bbe-progress-updated', { detail: { lessonId: targetLessonId } }));

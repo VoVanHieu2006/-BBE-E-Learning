@@ -3,21 +3,36 @@ import { FormEvent, useEffect, useState } from 'react'
 import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Toast, { ToastMessage } from '@/components/ui/Toast'
-import { apiFetch, clearApiCache } from '@/lib/api/client'
+import { apiFetch, clearApiCache, getCachedApiData } from '@/lib/api/client'
 
 export default function ProfilePage() {
   const [profile, setProfile] = useState<any>(null)
   const [displayName, setDisplayName] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState<ToastMessage | null>(null)
 
+  async function loadProfile(force = false) {
+    if (force) setRefreshing(true)
+    const res = await apiFetch('/api/v1/users/me', { noCache: force, tabCache: true })
+    if (res.ok && res.data) {
+      setProfile(res.data)
+      setDisplayName(res.data.displayName || '')
+    }
+    setLoading(false)
+    setRefreshing(false)
+  }
+
   useEffect(() => {
-    apiFetch('/api/v1/users/me').then((res) => {
-      if (res.ok) {
-        setProfile(res.data)
-        setDisplayName(res.data?.displayName || '')
-      }
-    })
+    const cached = getCachedApiData<any>('/api/v1/users/me')
+    if (cached) {
+      setProfile(cached)
+      setDisplayName(cached.displayName || '')
+      setLoading(false)
+      return
+    }
+    void loadProfile()
   }, [])
 
   async function save(event: FormEvent) {
@@ -52,19 +67,32 @@ export default function ProfilePage() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
-          Hồ sơ cá nhân
-        </h1>
-        <p className="mt-1 text-sm text-[#737686]">
-          Tên giúp Lead Chapter và Admin đối chiếu bạn với danh sách cuối nhiệm kỳ. Email vẫn là mã nhận diện duy nhất.
-        </p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
+            Hồ sơ cá nhân
+          </h1>
+          <p className="mt-1 text-sm text-[#737686]">
+            Tên giúp Lead Chapter và Admin đối chiếu bạn với danh sách cuối nhiệm kỳ. Email vẫn là mã nhận diện duy nhất.
+          </p>
+        </div>
+        <button
+          type="button"
+          disabled={refreshing || loading || saving}
+          onClick={() => loadProfile(true)}
+          className="flex shrink-0 items-center gap-2 self-start rounded-xl border border-[#cbdbf5] bg-white px-4 py-2 text-sm font-semibold text-[#172554] shadow-xs transition hover:bg-[#eff4ff] active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
+          title="Làm mới thông tin hồ sơ và tư cách hiện tại"
+          aria-busy={refreshing}
+        >
+          <span aria-hidden="true" className={refreshing ? 'inline-block animate-spin' : ''}>🔄</span>
+          <span>{refreshing ? 'Đang làm mới...' : 'Làm mới'}</span>
+        </button>
       </div>
 
       <Card className="space-y-5 border border-[#eff4ff]">
         <div>
           <div className="text-xs font-semibold uppercase tracking-wide text-[#737686]">Email đăng nhập</div>
-          <div className="mt-1 font-medium text-[#172554]">{profile?.email || 'Đang tải…'}</div>
+          <div className="mt-1 font-medium text-[#172554]">{profile?.email || (loading ? 'Đang tải…' : '—')}</div>
         </div>
         <form onSubmit={save} className="space-y-3">
           <label className="block text-sm font-semibold text-[#172554]">Họ và tên</label>

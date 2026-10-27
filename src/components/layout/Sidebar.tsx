@@ -242,7 +242,7 @@ export default function Sidebar({
               onMouseEnter={() => {
                 router.prefetch(item.href);
                 if (item.prefetchUrls) {
-                  item.prefetchUrls.forEach((url) => apiFetch(url).catch(() => {}));
+                  item.prefetchUrls.forEach((url) => apiFetch(url, { tabCache: true }).catch(() => {}));
                 }
               }}
               className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition ${

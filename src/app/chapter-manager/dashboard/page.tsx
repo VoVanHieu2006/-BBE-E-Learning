@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Card from '@/components/ui/Card';
-import { apiFetch, clearApiCache, getCachedApiData } from '@/lib/api/client';
+import { apiFetch, getCachedApiData } from '@/lib/api/client';
 
 export default function ChapterManagerDashboard() {
   const [user, setUser] = useState<any>(null);
@@ -44,12 +44,15 @@ export default function ChapterManagerDashboard() {
 
     if (noCache) {
       setRefreshing(true);
-      clearApiCache('/api/v1/chapters');
     } else {
       const cachedMembers = getCachedApiData<any>(membersUrl);
       const cachedCourses = getCachedApiData<any>(coursesUrl);
       if (cachedMembers) setMembersData(cachedMembers);
       if (cachedCourses) setCoursesData(cachedCourses);
+      if (cachedMembers && cachedCourses) {
+        setLoading(false);
+        return;
+      }
       if (!cachedMembers && !cachedCourses) {
         setLoading(true);
       }
@@ -57,8 +60,8 @@ export default function ChapterManagerDashboard() {
 
     try {
       const [membersRes, coursesRes] = await Promise.all([
-        apiFetch(membersUrl, { noCache }),
-        apiFetch(coursesUrl, { noCache }),
+        apiFetch(membersUrl, { noCache, tabCache: true }),
+        apiFetch(coursesUrl, { noCache, tabCache: true }),
       ]);
 
       if (membersRes.ok && membersRes.data) {

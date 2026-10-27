@@ -68,10 +68,19 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
       '/api/v1/courses',
       ...(chapterId ? [`/api/v1/leaderboard/chapters/${chapterId}`] : []),
     ];
+    // The current tab already requests its own data. Skipping it here avoids a
+    // duplicate first-load request (the existing prefetch remains for siblings).
+    const currentTabUrls = new Set(
+      pathname.startsWith('/student/dashboard')
+        ? ['/api/v1/members/me/courses', '/api/v1/streak']
+        : pathname.startsWith('/student/courses')
+        ? ['/api/v1/courses']
+        : [],
+    );
 
     const prefetchAll = () => {
-      PREFETCH_URLS.forEach((url) => {
-        apiFetch(url).catch(() => {});
+      PREFETCH_URLS.filter((url) => !currentTabUrls.has(url)).forEach((url) => {
+        apiFetch(url, { tabCache: true }).catch(() => {});
       });
     };
 
@@ -80,7 +89,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
     } else {
       setTimeout(prefetchAll, 1200);
     }
-  }, [user]);
+  }, [user, pathname]);
 
   // Trang học video (/student/learning) có giao diện rạp chiếu & header riêng, không bọc Sidebar học viên
   if (isLearningRoute) {

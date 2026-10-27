@@ -6,7 +6,7 @@ import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
 import YouTubePlayer from '@/components/YouTubePlayer';
-import { apiFetch, clearApiCache, getCachedApiData } from '@/lib/api/client';
+import { apiFetch, getCachedApiData } from '@/lib/api/client';
 
 const STATE_META: Record<string, { label: string; badge: string; bar: string }> = {
   COMPLETED: { label: '✓ Đã hoàn thành', badge: 'bg-green-100 text-green-700', bar: 'bg-green-500' },
@@ -68,19 +68,18 @@ export default function ChapterManagerCoursesPage() {
 
     if (noCache) {
       setRefreshing(true);
-      clearApiCache('/api/v1/chapters');
-      clearApiCache('/api/v1/courses');
     } else {
       const cached = getCachedApiData<any>(url);
       if (cached?.items) {
         setCourses(cached.items);
-      } else {
-        setLoading(true);
+        setLoading(false);
+        return;
       }
+      setLoading(true);
     }
 
     try {
-      const res = await apiFetch(url, { noCache });
+      const res = await apiFetch(url, { noCache, tabCache: true });
       if (res.ok && res.data) {
         setCourses(res.data.items || []);
       }

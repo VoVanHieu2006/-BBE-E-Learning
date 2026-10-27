@@ -1,20 +1,28 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { apiFetch } from '@/lib/api/client'
+import { apiFetch, getCachedApiData } from '@/lib/api/client'
 
-export default function LearningPeriodSummary() {
+export default function LearningPeriodSummary({ refreshTrigger }: { refreshTrigger?: number } = {}) {
   const [data, setData] = useState<any>(null)
   const [error, setError] = useState(false)
   const [retry, setRetry] = useState(0)
   useEffect(() => {
     let live = true
     setError(false)
-    apiFetch<any>('/api/v1/learning/me').then((result) => {
+    const force = Boolean(refreshTrigger && refreshTrigger > 0)
+    if (!force) {
+      const cached = getCachedApiData<any>('/api/v1/learning/me')
+      if (cached) {
+        setData(cached)
+        return () => { live = false }
+      }
+    }
+    apiFetch<any>('/api/v1/learning/me', { noCache: force, tabCache: true }).then((result) => {
       if (!live) return
       if (result.ok) setData(result.data); else setError(true)
     }).catch(() => { if (live) setError(true) })
     return () => { live = false }
-  }, [retry])
+  }, [retry, refreshTrigger])
   if (error) return <div role="alert" className="rounded-xl border border-red-100 p-4 text-sm">Chưa tải được kỳ học. <button className="font-semibold text-blue-700" onClick={() => setRetry((value) => value + 1)}>Thử lại</button></div>
   if (!data) return <div aria-busy="true" className="animate-pulse rounded-xl bg-slate-100 p-6">Đang tải kỳ học…</div>
   if (!data.active) return <div className="rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">Cơ chế tháng và chu kỳ mới chưa được kích hoạt. Sao và tiến độ hiện có được giữ trong lịch sử.</div>

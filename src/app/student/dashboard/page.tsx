@@ -13,6 +13,7 @@ export default function StudentDashboard() {
   const [streak, setStreak] = useState<any>(null);
   const [stars, setStars] = useState<number>(0);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -44,11 +45,26 @@ export default function StudentDashboard() {
     loadData();
   }, [router]);
 
-  async function loadData() {
+  async function loadData(force = false) {
+    if (force) setRefreshing(true);
+
+    if (!force) {
+      const cachedCourses = getCachedApiData<any>('/api/v1/members/me/courses');
+      const cachedStreak = getCachedApiData<any>('/api/v1/streak');
+      const cachedStars = getCachedApiData<any>('/api/v1/stars/me');
+      if (cachedCourses && cachedStreak && cachedStars?.balance !== undefined) {
+        setCourses(cachedCourses.items || []);
+        setStreak(cachedStreak);
+        setStars(cachedStars.balance || 0);
+        setLoading(false);
+        return;
+      }
+    }
+
     const [coursesRes, streakRes, starsRes] = await Promise.all([
-      apiFetch('/api/v1/members/me/courses'),
-      apiFetch('/api/v1/streak'),
-      apiFetch('/api/v1/stars/me'),
+      apiFetch('/api/v1/members/me/courses', { noCache: force, tabCache: true }),
+      apiFetch('/api/v1/streak', { noCache: force, tabCache: true }),
+      apiFetch('/api/v1/stars/me', { noCache: force, tabCache: true }),
     ]);
 
     if (coursesRes.ok && coursesRes.data) {
@@ -59,6 +75,7 @@ export default function StudentDashboard() {
     }
     if (starsRes.ok && starsRes.data) setStars(starsRes.data.balance || 0);
     setLoading(false);
+    setRefreshing(false);
   }
 
   const totalCourses = courses.length;
@@ -74,7 +91,7 @@ export default function StudentDashboard() {
 
   return (
     <div>
-      <div className="flex justify-between items-start mb-8">
+      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-4xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
             Chào mừng, <span suppressHydrationWarning>{mounted && user?.email ? user.email.split('@')[0] : 'bạn'}</span>
@@ -83,9 +100,22 @@ export default function StudentDashboard() {
             Chapter: <span suppressHydrationWarning className="font-semibold text-[#172554]">{mounted && user?.chapterName ? user.chapterName : 'BBE Core'}</span> • Tiếp tục học nhé!
           </p>
         </div>
-        <Link href="/student/courses">
-          <Button>Khám phá khóa học</Button>
-        </Link>
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <button
+            type="button"
+            disabled={refreshing}
+            onClick={() => loadData(true)}
+            className="flex items-center gap-2 rounded-xl border border-[#cbdbf5] bg-white px-4 py-2 text-sm font-semibold text-[#172554] shadow-xs transition hover:bg-[#eff4ff] active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
+            title="Làm mới số liệu học tập và Star mới nhất"
+            aria-busy={refreshing}
+          >
+            <span aria-hidden="true" className={refreshing ? 'inline-block animate-spin' : ''}>🔄</span>
+            <span>{refreshing ? 'Đang làm mới...' : 'Làm mới'}</span>
+          </button>
+          <Link href="/student/courses">
+            <Button>Khám phá khóa học</Button>
+          </Link>
+        </div>
       </div>
 
         {/* Stats Grid */}

@@ -271,6 +271,9 @@ export default function LessonQuizPage({ params }: { params: { lessonId: string 
               clearApiCache('/api/v1/courses');
               clearApiCache('/api/v1/lessons');
               clearApiCache('/api/v1/learning');
+              clearApiCache('/api/v1/members/me');
+              clearApiCache('/api/v1/stars/me');
+              clearApiCache('/api/v1/streak');
               if (typeof window !== 'undefined') {
                 window.dispatchEvent(new CustomEvent('bbe-progress-updated', {
                   detail: { lessonId: params.lessonId, assessmentId, passed: quizCompleted }

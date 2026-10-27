@@ -6,7 +6,7 @@ import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
 import Toast, { ToastMessage } from '@/components/ui/Toast';
-import { apiFetch, clearApiCache } from '@/lib/api/client';
+import { apiFetch, clearApiCache, getCachedApiData } from '@/lib/api/client';
 import { ORDERED_CHAPTER_ROSTER, CHAPTER_ROSTER_COLUMNS } from '@/lib/departments';
 
 const SAMPLE_SHEET_URL =
@@ -231,18 +231,28 @@ export default function ChapterManagerTermTransitionPage() {
     }
   }, []);
 
+  function applyRosterData(data: any) {
+    setRosterData(data.roster || []);
+    setUnassignedMembers(data.unassignedMembers || []);
+    setAvailableDepartments(data.departments || []);
+    setScheduledBatch(data.scheduledBatch || null);
+    setCurrentTermNumber(data.currentTermNumber ?? null);
+  }
+
   async function loadCurrentRoster(chapterId: string, force = false) {
-    setRosterLoading(true);
-    if (force) {
-      clearApiCache('/api/v1/chapters');
+    const url = `/api/v1/chapters/${chapterId}/current-roster`;
+    if (!force) {
+      const cached = getCachedApiData<any>(url);
+      if (cached) {
+        applyRosterData(cached);
+        setRosterLoading(false);
+        return;
+      }
     }
-    const res = await apiFetch(`/api/v1/chapters/${chapterId}/current-roster`, { noCache: force });
+    setRosterLoading(true);
+    const res = await apiFetch(url, { noCache: force, tabCache: true });
     if (res.ok && res.data) {
-      setRosterData(res.data.roster || []);
-      setUnassignedMembers(res.data.unassignedMembers || []);
-      setAvailableDepartments(res.data.departments || []);
-      setScheduledBatch(res.data.scheduledBatch || null);
-      setCurrentTermNumber(res.data.currentTermNumber ?? null);
+      applyRosterData(res.data);
     }
     // Nếu force refresh, đồng bộ lại thông tin user session từ server nếu chức vụ hoặc quyền đã thay đổi
     if (force) {
@@ -293,11 +303,17 @@ export default function ChapterManagerTermTransitionPage() {
   })();
 
   async function loadHistory(chapterId: string, force = false) {
-    setHistoryLoading(true);
-    if (force) {
-      clearApiCache('/api/v1/chapters');
+    const url = `/api/v1/chapters/${chapterId}/reorganizations`;
+    if (!force) {
+      const cached = getCachedApiData<any>(url);
+      if (cached) {
+        setHistoryList(cached.items || []);
+        setHistoryLoading(false);
+        return;
+      }
     }
-    const res = await apiFetch(`/api/v1/chapters/${chapterId}/reorganizations`, { noCache: force });
+    setHistoryLoading(true);
+    const res = await apiFetch(url, { noCache: force, tabCache: true });
     if (res.ok && res.data) {
       setHistoryList(res.data.items || []);
     }

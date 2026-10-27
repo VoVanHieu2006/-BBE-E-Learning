@@ -3,7 +3,7 @@ import Sidebar from '@/components/layout/Sidebar';
 import ContentTransition from '@/components/layout/ContentTransition';
 import { apiFetch } from '@/lib/api/client';
 import { useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 
 function applyPreferredChapter(user: any, preferredChapterId?: string | null) {
   const chapters = user?.managedChapters || [];
@@ -19,6 +19,7 @@ function applyPreferredChapter(user: any, preferredChapterId?: string | null) {
  */
 function ChapterManagerLayoutInner({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [user, setUser] = useState<any>(() => {
     if (typeof window === 'undefined') return null;
     try {
@@ -120,10 +121,22 @@ function ChapterManagerLayoutInner({ children }: { children: React.ReactNode }) 
       `/api/v1/chapters/${chapterId}/dashboard/courses`,
       `/api/v1/invitations?chapterId=${chapterId}`,
     ];
+    // Do not duplicate the current page's own requests; sibling tabs keep the
+    // idle prefetch so their first visit stays fast.
+    const currentTabUrls = new Set(
+      pathname.startsWith('/chapter-manager/dashboard')
+        ? [
+            `/api/v1/chapters/${chapterId}/dashboard/members`,
+            `/api/v1/chapters/${chapterId}/dashboard/courses`,
+          ]
+        : pathname.startsWith('/chapter-manager/courses')
+        ? [`/api/v1/chapters/${chapterId}/dashboard/courses`]
+        : [],
+    );
 
     const prefetchAll = () => {
-      PREFETCH_URLS.forEach((url) => {
-        apiFetch(url).catch(() => {});
+      PREFETCH_URLS.filter((url) => !currentTabUrls.has(url)).forEach((url) => {
+        apiFetch(url, { tabCache: true }).catch(() => {});
       });
     };
 
@@ -132,7 +145,7 @@ function ChapterManagerLayoutInner({ children }: { children: React.ReactNode }) 
     } else {
       setTimeout(prefetchAll, 1500);
     }
-  }, [isAuthorized, user?.chapterId]);
+  }, [isAuthorized, user?.chapterId, pathname]);
 
 
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react'
 import Link from 'next/link'
-import { apiFetch, clearApiCache } from '@/lib/api/client'
+import { apiFetch, getCachedApiData } from '@/lib/api/client'
 
 const PROGRAM_THEME: Record<string, {
   icon: string
@@ -70,42 +70,49 @@ export default function ProgramCourseTree({ refreshTrigger, onDataLoaded }: Prog
   const [openPrograms, setOpenPrograms] = useState<Record<string, boolean>>({})
   const [openCourses, setOpenCourses] = useState<Record<string, boolean>>({})
 
+  const applyData = (data: any) => {
+    const progList = data.programs || []
+    const completedSet = new Set<string>(data.completedLessonIds || [])
+    const inProgressSet = new Set<string>(data.inProgressLessonIds || [])
+    const unlockedSet = new Set<string>(data.unlockedLessonIds || [])
+    setPrograms(progList)
+    setCompletedLessonIds(completedSet)
+    setInProgressLessonIds(inProgressSet)
+    // Server-durable unlock committed while heartbeats/quizzes ran. A signed-in
+    // learner ALWAYS follows progression, even on PUBLIC courses — visibility
+    // only governs whom the course is showable to, never sequential learning.
+    setUnlockedLessonIds(unlockedSet)
+    setLessonStates(data.lessonStates || {})
+    onDataLoaded?.({
+      programs: progList,
+      completedLessonIds: completedSet,
+      inProgressLessonIds: inProgressSet,
+      unlockedLessonIds: unlockedSet,
+      lessonStates: data.lessonStates || {},
+    })
+    // Programs open by default, but every course starts collapsed. This
+    // keeps long curricula scannable and avoids resetting any playing video.
+    setOpenPrograms((prev) => {
+      if (Object.keys(prev).length > 0) return prev
+      const init: Record<string, boolean> = {}
+      progList.forEach((p: any) => { init[p.id] = true })
+      return init
+    })
+  }
+
   const loadData = async (force = false) => {
-    if (force) {
-      setRefreshing(true)
-      clearApiCache('/api/v1/learning/me')
-    }
-    try {
-      const res = await apiFetch<any>('/api/v1/learning/me', { noCache: force })
-      if (res.ok && res.data) {
-        const progList = res.data.programs || []
-        const completedSet = new Set<string>(res.data.completedLessonIds || [])
-        const inProgressSet = new Set<string>(res.data.inProgressLessonIds || [])
-        const unlockedSet = new Set<string>(res.data.unlockedLessonIds || [])
-        setPrograms(progList)
-        setCompletedLessonIds(completedSet)
-        setInProgressLessonIds(inProgressSet)
-        // Server-durable unlock committed while heartbeats/quizzes ran. A signed-in
-        // learner ALWAYS follows progression, even on PUBLIC courses — visibility
-        // only governs whom the course is showable to, never sequential learning.
-        setUnlockedLessonIds(unlockedSet)
-        setLessonStates(res.data.lessonStates || {})
-        onDataLoaded?.({
-          programs: progList,
-          completedLessonIds: completedSet,
-          inProgressLessonIds: inProgressSet,
-          unlockedLessonIds: unlockedSet,
-          lessonStates: res.data.lessonStates || {},
-        })
-        // Programs open by default, but every course starts collapsed. This
-        // keeps long curricula scannable and avoids resetting any playing video.
-        setOpenPrograms((prev) => {
-          if (Object.keys(prev).length > 0) return prev
-          const init: Record<string, boolean> = {}
-          progList.forEach((p: any) => { init[p.id] = true })
-          return init
-        })
+    if (!force) {
+      const cached = getCachedApiData<any>('/api/v1/learning/me')
+      if (cached) {
+        applyData(cached)
+        setLoading(false)
+        return
       }
+    }
+    if (force) setRefreshing(true)
+    try {
+      const res = await apiFetch<any>('/api/v1/learning/me', { noCache: force, tabCache: true })
+      if (res.ok && res.data) applyData(res.data)
     } finally {
       setLoading(false)
       setRefreshing(false)
