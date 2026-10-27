@@ -1,8 +1,13 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { apiFetch } from '@/lib/api/client';
+
+// useLayoutEffect avoids a first-paint flash on the client, but React warns
+// when it runs during SSR. The module evaluates once per environment, so this
+// picks the correct hook without a conditional hook call.
+const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect;
 
 interface NavItem {
   label: string;
@@ -122,6 +127,71 @@ function isActive(href: string, pathname: string) {
   return pathname === href || pathname.startsWith(href + '/');
 }
 
+interface ActivePill {
+  top: number;
+  height: number;
+}
+
+function navLinkClass(active: boolean, fallback: boolean) {
+  const base =
+    'flex items-center gap-3 px-4 py-3 rounded-xl text-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#172554]';
+  if (active) {
+    return `${base} font-semibold ${
+      fallback ? 'bg-[#2563EB] text-white shadow-sm' : 'text-[#434655]'
+    }`;
+  }
+  return `${base} font-medium text-[#434655] hover:bg-[#f0f4ff] hover:text-[#172554]`;
+}
+
+function navPillRowClass(active: boolean) {
+  return `flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white ${
+    active ? 'font-semibold' : 'font-medium'
+  }`;
+}
+
+function NavContent({ item, dimmed = false }: { item: NavItem; dimmed?: boolean }) {
+  return (
+    <>
+      <span className={`text-lg ${dimmed ? 'opacity-0' : ''}`}>{item.icon}</span>
+      <span className={dimmed ? 'opacity-0' : ''}>{item.label}</span>
+    </>
+  );
+}
+
+// The blue pill is a floating copy of the active row: it carries the active
+// label with it, so labels it passes over are covered by an opaque surface
+// instead of being split into dark/white halves. Only transform is animated;
+// height is set from the measured row so a two-line tab is not clipped.
+function ActiveTabPill({
+  activeItem,
+  pill,
+  instant,
+}: {
+  activeItem: NavItem;
+  pill: ActivePill;
+  instant: boolean;
+}) {
+  return (
+    <div className="pointer-events-none absolute inset-0 z-10 overflow-hidden" aria-hidden="true">
+      <div
+        data-testid="sidebar-active-pill"
+        data-active-href={activeItem.href}
+        className={`bbe-tab-pill absolute left-4 right-4 top-0 overflow-hidden rounded-xl bg-[#2563EB] shadow-sm ${
+          instant ? 'bbe-tab-pill--instant' : ''
+        }`}
+        style={{
+          transform: `translate3d(0, ${pill.top}px, 0)`,
+          height: `${pill.height}px`,
+        }}
+      >
+        <div className={`${navPillRowClass(true)} h-full`}>
+          <NavContent item={activeItem} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Sidebar({
   role,
   user,
@@ -171,6 +241,78 @@ export default function Sidebar({
   const nav = getNav(effectiveRole, chapterId, isOrganizationManager || Boolean(user?.isOrganizationManager), managerKind || user?.managerKind).filter((item) =>
     !(item.href === '/chapter-manager/invitations' && user?.canManageMembers === false),
   );
+  const activeItem = nav.find((item) => isActive(item.href, pathname));
+  const activeHref = activeItem?.href;
+  const navKey = nav.map((item) => item.href).join('|');
+
+  const linkRefs = useRef(new Map<string, HTMLAnchorElement>());
+  const [pill, setPill] = useState<ActivePill | null>(null);
+  const [pillInstant, setPillInstant] = useState(false);
+  const previousActiveHref = useRef<string | undefined>(undefined);
+  const activeHrefRef = useRef<string | undefined>(activeHref);
+
+  activeHrefRef.current = activeHref;
+
+  // Measure after render so the pill lands exactly on the active link, including
+  // rows that wrap to two lines. The CSS transition handles the travel itself.
+  useIsomorphicLayoutEffect(() => {
+    const activeEl = activeHref ? linkRefs.current.get(activeHref) : null;
+
+    if (!activeEl || activeEl.offsetHeight === 0) {
+      setPill(null);
+      previousActiveHref.current = activeHref;
+      return;
+    }
+
+    const nextPill = { top: activeEl.offsetTop, height: activeEl.offsetHeight };
+    const activeChanged = previousActiveHref.current !== activeHref;
+    previousActiveHref.current = activeHref;
+
+    if (activeChanged) {
+      setPillInstant(false);
+    } else {
+      // A layout change (mobile menu opening, chapter switch, ...) should snap,
+      // not replay the travel animation from a stale position.
+      setPillInstant(true);
+    }
+    setPill(nextPill);
+
+    if (!activeChanged) {
+      const frame = requestAnimationFrame(() => setPillInstant(false));
+      return () => cancelAnimationFrame(frame);
+    }
+  }, [activeHref, navKey, mobileOpen]);
+
+  // Keep the pill aligned when the sidebar width or loaded font changes, but
+  // snap instead of animating a layout correction.
+  useEffect(() => {
+    let frame = 0;
+    let disposed = false;
+    const snap = () => {
+      if (disposed) return;
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        if (disposed) return;
+        const currentHref = activeHrefRef.current;
+        const activeEl = currentHref ? linkRefs.current.get(currentHref) : null;
+        if (!activeEl || activeEl.offsetHeight === 0) return;
+        setPillInstant(true);
+        setPill({ top: activeEl.offsetTop, height: activeEl.offsetHeight });
+        frame = requestAnimationFrame(() => setPillInstant(false));
+      });
+    };
+
+    window.addEventListener('resize', snap);
+    if (document.fonts?.ready) {
+      document.fonts.ready.then(snap).catch(() => {});
+    }
+
+    return () => {
+      disposed = true;
+      window.removeEventListener('resize', snap);
+      cancelAnimationFrame(frame);
+    };
+  }, []);
 
   const handleLogout = async () => {
     if (isLoggingOut) return;
@@ -232,30 +374,44 @@ export default function Sidebar({
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-        {nav.map((item) => {
-          const active = isActive(item.href, pathname);
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              onMouseEnter={() => {
-                router.prefetch(item.href);
-                if (item.prefetchUrls) {
-                  item.prefetchUrls.forEach((url) => apiFetch(url, { tabCache: true }).catch(() => {}));
-                }
-              }}
-              className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition ${
-                active
-                  ? 'bg-[#2563EB] text-white font-semibold shadow-sm'
-                  : 'text-[#434655] hover:bg-[#f0f4ff] hover:text-[#172554]'
-              }`}
-            >
-              <span className="text-lg">{item.icon}</span>
-              <span>{item.label}</span>
-            </Link>
-          );
-        })}
+      <nav className="flex-1 overflow-y-auto">
+        <div className="relative p-4">
+          <div className="space-y-1">
+            {nav.map((item) => {
+              const active = isActive(item.href, pathname);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  ref={(node) => {
+                    if (node) linkRefs.current.set(item.href, node);
+                    else linkRefs.current.delete(item.href);
+                  }}
+                  aria-current={active ? 'page' : undefined}
+                  onMouseEnter={() => {
+                    router.prefetch(item.href);
+                    if (item.prefetchUrls) {
+                      item.prefetchUrls.forEach((url) => apiFetch(url, { tabCache: true }).catch(() => {}));
+                    }
+                  }}
+                  className={navLinkClass(active, Boolean(active && !pill))}
+                >
+                  <NavContent item={item} dimmed={Boolean(active && pill)} />
+                </Link>
+              );
+            })}
+          </div>
+
+          {/* Floating active row: it carries its label while the blue surface
+              travels between tabs, so it never splits a label in half. */}
+          {pill && activeItem && (
+            <ActiveTabPill
+              activeItem={activeItem}
+              pill={pill}
+              instant={pillInstant}
+            />
+          )}
+        </div>
       </nav>
 
       {/* User Info & Logout (Mounted client-side only to eliminate hydration mismatch) */}

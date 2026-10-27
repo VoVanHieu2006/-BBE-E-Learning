@@ -147,6 +147,19 @@ h1, h2, h3, h4, h5, h6 {
   animation: star-reward-ring 1100ms cubic-bezier(0.16, 1, 0.3, 1) 120ms both;
 }
 
+/* Sidebar active-tab pill. CSS-only on purpose: the sidebar renders on every
+   authenticated page, so importing an animation library here would add weight
+   to the first load. Only transform animates (compositor-friendly); height is
+   set from the measured row. The overshoot easing makes a far jump travel
+   faster and overshoot further than a near one without per-frame JavaScript. */
+.bbe-tab-pill {
+  transition: transform 520ms cubic-bezier(0.22, 1.35, 0.35, 1);
+}
+
+.bbe-tab-pill--instant {
+  transition: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -163,6 +176,10 @@ h1, h2, h3, h4, h5, h6 {
   .page-transition,
   .page-loading > * {
     animation: none !important;
+  }
+
+  .bbe-tab-pill {
+    transition: none;
   }
 }
 

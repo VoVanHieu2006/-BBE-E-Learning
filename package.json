@@ -42,6 +42,7 @@
     "test:video-player-ui": "ts-node -P tsconfig.test.json src/test/video-player-ui.test.ts",
     "test:video-player-browser": "playwright test -c playwright.player.config.ts",
     "test:tab-cache": "playwright test -c playwright.tabs.config.ts",
+    "test:sidebar": "npm run build && playwright test -c playwright.sidebar.config.ts",
     "test:organization-integrity": "node scripts/test-organization-integrity.cjs",
     "test:organization-repair": "node scripts/test-organization-repair.mjs",
     "audit:organization-integrity": "node scripts/audit-organization-integrity.mjs",
