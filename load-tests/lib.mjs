@@ -6,6 +6,10 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 export const ROOT = path.dirname(fileURLToPath(import.meta.url));
 export const REPO = path.dirname(ROOT);
+export const RESULTS = path.join(REPO,'artifacts','load-tests','results');
+export const REPORTS = path.join(REPO,'artifacts','load-tests','reports');
+fs.mkdirSync(RESULTS,{recursive:true});
+fs.mkdirSync(REPORTS,{recursive:true});
 export const SANDBOX = path.join(ROOT,'.sandbox');
 export function localDatabase(value) {
   if (!value) throw new Error('Set LOAD_DATABASE_URL to a dedicated local test DB (root .env is never used)');

@@ -5,7 +5,7 @@ import net from 'node:net';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { ROOT,REPO,SANDBOX,localDatabase,safeEnv,id,save,freeGiB,fixture,assertFixture } from './lib.mjs';
+import { ROOT,REPO,SANDBOX,localDatabase,safeEnv,id,save,freeGiB,fixture,assertFixture ,RESULTS} from './lib.mjs';
 import { target,integer } from './config.js';
 import { snapshot,compare } from './audit.mjs';
 import { writeRunReport } from './summarize.mjs';
@@ -43,7 +43,7 @@ const minFree=vus>=750?6:vus>=300?4:staticOnly?1:2;
 if(freeGiB()<minFree) throw new Error(`Safety gate: need >=${minFree} GiB available for this co-located run`);
 // Refuse an occupied port; never target an unknown local dev/proxy process.
 await new Promise((resolve,reject)=>{const s=net.createServer();s.once('error',reject);s.listen(Number(base.split(':').pop()),'127.0.0.1',()=>s.close(resolve));});
-const runId=id(), dir=path.join(ROOT,'results',runId);fs.mkdirSync(dir,{recursive:true});
+const runId=id(), dir=path.join(RESULTS,runId);fs.mkdirSync(dir,{recursive:true});
 const metadata={runId,startedAt:new Date().toISOString(),mode,vusConfigured:vus,hold,ramp,recovery,base,
   scenarioSha256:crypto.createHash('sha256').update(fs.readFileSync(path.join(ROOT,'scenarios/learners.js'))).digest('hex'),
   requestTimeoutSeconds:requestTimeout,sqlLogging:sqlLog,diagnosticOnly:p95Ms>1500||requestTimeout>10,
@@ -75,7 +75,7 @@ try {
     // Actual DB must be reachable before launching k6.
     await pool.query('SELECT 1');before=await snapshot(db,f);save(path.join(dir,'before.json'),before);
   }
-  const env={...safeEnv(db),BASE_URL:base,MAX_VUS:String(vus),MODE:mode,HOLD_SECONDS:String(hold),RAMP_SECONDS:String(ramp),RECOVERY_SECONDS:String(recovery),LOGIN_RATE:String(loginRate),FIXTURE_FILE:fixtureName,ERROR_LIMIT:String(errorLimit),P95_MS:String(p95Ms),REQUEST_TIMEOUT_SECONDS:String(requestTimeout),USER_OFFSET:String(userOffset),SAFETY_PREFLIGHT:'verified',RUN_DIR:'results/'+runId};
+  const env={...safeEnv(db),BASE_URL:base,MAX_VUS:String(vus),MODE:mode,HOLD_SECONDS:String(hold),RAMP_SECONDS:String(ramp),RECOVERY_SECONDS:String(recovery),LOGIN_RATE:String(loginRate),FIXTURE_FILE:fixtureName,ERROR_LIMIT:String(errorLimit),P95_MS:String(p95Ms),REQUEST_TIMEOUT_SECONDS:String(requestTimeout),USER_OFFSET:String(userOffset),SAFETY_PREFLIGHT:'verified',RUN_DIR:'../artifacts/load-tests/results/'+runId};
   k6=spawn('k6',['--config','k6.config.json','run','--no-usage-report','--out','json='+path.join(dir,'samples.json'),'--out','csv='+path.join(dir,'samples.csv'),'scenarios/learners.js'],{cwd:ROOT,env,stdio:['ignore',k6Log,k6Log]});
   const monitorLog=fs.openSync(path.join(dir,'monitor.log'),'wx');
   monitor=spawn('powershell.exe',['-NoProfile','-File',path.join(ROOT,'monitor.ps1'),'-BackendPid',String(backend.pid),'-K6Pid',String(k6.pid),'-Output',path.join(dir,'process.csv'),'-StopFile',stopFile],{windowsHide:true,stdio:['ignore',monitorLog,monitorLog]});

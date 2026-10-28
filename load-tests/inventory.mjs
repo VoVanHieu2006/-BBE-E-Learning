@@ -1,7 +1,7 @@
 // Static route inventory. Models are conservative source references, not SQL traces.
 import fs from 'node:fs';
 import path from 'node:path';
-import { ROOT,REPO } from './lib.mjs';
+import { ROOT,REPO ,REPORTS} from './lib.mjs';
 const slash=p=>p.replaceAll('\\','/');
 function walk(dir){return fs.readdirSync(dir,{withFileTypes:true}).flatMap(e=>e.isDirectory()?walk(path.join(dir,e.name)):[path.join(dir,e.name)]);}
 const files=walk(path.join(REPO,'src')).filter(f=>/\.(tsx?|jsx?)$/.test(f));
@@ -23,6 +23,6 @@ for(const [f,s]of source)if(f.includes('/src/app/api/')&&f.endsWith('/route.ts')
 }
 const actions=[...source].filter(([,s])=>/['"]use server['"]/.test(s)).map(([f])=>slash(path.relative(REPO,f)));
 lines.push('','Server action directive matches: '+(actions.join(', ')||'none found')+'.');
-fs.mkdirSync(ROOT+'/reports',{recursive:true});
-fs.writeFileSync(ROOT+'/reports/API_INVENTORY.md',lines.join('\n'));
+fs.mkdirSync(REPORTS+'',{recursive:true});
+fs.writeFileSync(REPORTS+'/API_INVENTORY.md',lines.join('\n'));
 console.log('Inventory written: '+(lines.filter(x=>x.startsWith('| /api/')).length)+' route files');

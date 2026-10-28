@@ -1,11 +1,11 @@
 import fs from 'node:fs';
 import {createRequire} from 'node:module';
 import {configuredSupabase} from './supabase-profile.mjs';
-import {ROOT,id,save,fixture} from './lib.mjs';
+import {ROOT,id,save,fixture,RESULTS} from './lib.mjs';
 const require=createRequire(import.meta.url),{Pool}=require('pg'),f=fixture(process.argv[2]);
 if(f.scope!=='SUPABASE_BASELINE'||!f.complete)throw new Error('Require approved synthetic fixture');
 const pool=new Pool({connectionString:configuredSupabase(),max:1,connectionTimeoutMillis:10000,statement_timeout:5000,application_name:'bbe_perf_test_state_readonly'});
-const dir=ROOT+'/results/test-state_'+id();fs.mkdirSync(dir,{recursive:true});let c;
+const dir=RESULTS+'/test-state_'+id();fs.mkdirSync(dir,{recursive:true});let c;
 try {
   c=await pool.connect();await c.query('BEGIN READ ONLY');
   const quiz=await c.query('SELECT question_count,duration_minutes FROM public.assessments WHERE id=$1::uuid',[f.users[0].assessmentId]);

@@ -1,6 +1,6 @@
 # BBE E-Learning — k6 tới 1.000 VU
 
-**Trạng thái hiện tại: chưa xác nhận năng lực 1.000 người học.** Xem [báo cáo](reports/LOAD_TEST_REPORT.md), [kiến trúc/mô hình tải](reports/ARCHITECTURE.md) và [inventory API từ source](reports/API_INVENTORY.md).
+**Trạng thái hiện tại: chưa xác nhận năng lực 1.000 người học.** Xem [kết quả đo và mô hình tải](../docs/performance.md), [kiến trúc](../docs/architecture.md) và [API](../docs/api.md). Đầu ra sinh bởi harness nằm trong `artifacts/load-tests/results/` và `artifacts/load-tests/reports/` ở gốc repo, được Git bỏ qua. Manifest private tiếp tục nằm trong `load-tests/fixtures/` để nhận diện và dọn đúng cohort.
 
 Suite chỉ chấp nhận HTTP loopback. Runner tự khởi động bản production snapshot, từ chối port đã có process, không nhắm tới dev server/proxy không xác minh. Mặc định database phải là PostgreSQL riêng trên loopback, tên `bbe_loadtest` hoặc `bbe_loadtest_<chữ/số>`. **Không chạy HTTP load test trên Vercel Hobby, preview hoặc custom domain.** Theo chỉ thị bổ sung của chủ dự án, có profile Supabase baseline opt-in giới hạn nhỏ bên dưới; không tự coi đây là quyền phát tải tới 1.000 VU trên Supabase Free.
 
@@ -29,7 +29,7 @@ Mở rộng timeout >10s và CPU profiling chỉ được chạy ở 1 VU. `diag
 
 Quiz đọc `expiresAt` của server và chừa timeout +10s khi chọn think time; không sửa hạn bài. Các lỗi ở lần chạy trước do think time vượt deadline được giữ làm bằng chứng harness lỗi, không tính thành capacity backend. `calibrate-supabase.mjs <fixture>` và `inspect-test-state.mjs <fixture>` chỉ đọc, đều giới hạn vào cohort hoặc phép đo SELECT/EXPLAIN đơn giản.
 
-Sau khi run hoàn tất: `node load-tests/analyze-run.mjs <run-id>`. Để ngoại suy từ các run profile 1 VU thành công: `node load-tests/estimate-vercel.mjs <read-run-id> <video-run-id> <quiz-run-id>`. Xem [ước lượng](reports/VERCEL_ESTIMATE.md): số người trong bảng là giả định, không phải VU đã đo; phần cứng, cache, RTT và DB concurrency chưa được hiệu chuẩn production.
+Sau khi run hoàn tất: `node load-tests/analyze-run.mjs <run-id>`. Để ngoại suy từ các run profile 1 VU thành công: `node load-tests/estimate-vercel.mjs <read-run-id> <video-run-id> <quiz-run-id>`. Xem [ước lượng](../docs/performance.md): số người trong bảng là giả định, không phải VU đã đo; phần cứng, cache, RTT và DB concurrency chưa được hiệu chuẩn production.
 
 ## Thành phần
 
@@ -41,7 +41,7 @@ Sau khi run hoàn tất: `node load-tests/analyze-run.mjs <run-id>`. Để ngo�
 - `run.mjs`, `monitor.ps1`, `audit.mjs`, `summarize.mjs`: chạy, đo, kiểm tra dữ liệu và xuất bằng chứng.
 - `suite.ps1`: tăng tải có dừng khi lỗi, không mặc định dừng ở 100.
 - `tests/`: guard tests, cấu hình 1.000 VU bằng inspect, smoke công cụ với stub.
-- Bốn script k6 cũ đã khóa bằng `legacy-disabled.js`: chúng thiếu kiểm tra upstream, có script gọi health/R2 hoặc cho phép URL tùy ý. Dùng runner mới.
+- Bốn entrypoint k6 cũ và `legacy-disabled.js` đã được xóa. Dùng runner mới có kiểm tra đích và upstream.
 
 ## Chuẩn bị PostgreSQL local trên Windows PowerShell (phương án tùy chọn)
 
@@ -140,7 +140,7 @@ CPU process/RAM được ghi riêng; CPU cao không tự chứng minh cạn tài
 
 ## Kết quả, bảo mật và giới hạn
 
-Mỗi run có thư mục timestamp UTC + random suffix, không ghi đè: `results/<id>/summary.json`, `samples.json`, `samples.csv`, `REPORT.md`, `metadata.json`, `process.csv`, `resources.jsonl`, `database.jsonl`, `before.json`, `after.json`, `integrity.json`. Một số file chỉ có sau khi khởi động/đo thành công. CPU/RAM và DB metrics là time series riêng, không được giả điền vào k6 summary. RPS/percentile summary gồm ramp+hold+recovery, không phải hold-only. Lọc `samples` theo timestamp/scenario/phase để đánh giá từng pha; chưa có dashboard Grafana tự động.
+Mỗi run có thư mục timestamp UTC + random suffix, không ghi đè: `artifacts/load-tests/results/<id>/summary.json`, `samples.json`, `samples.csv`, `REPORT.md`, `metadata.json`, `process.csv`, `resources.jsonl`, `database.jsonl`, `before.json`, `after.json`, `integrity.json`. Một số file chỉ có sau khi khởi động/đo thành công. CPU/RAM và DB metrics là time series riêng, không được giả điền vào k6 summary. RPS/percentile summary gồm ramp+hold+recovery, không phải hold-only. Lọc `samples` theo timestamp/scenario/phase để đánh giá từng pha; chưa có dashboard Grafana tự động.
 
 `process.csv`: CPU trung bình khoảng mẫu, working set/private memory backend và k6. `database.jsonl`: connections, active queries, lock waiters, longest active query — **không phải thống kê đầy đủ slow-query history**. Cần log PostgreSQL/pg_stat_statements cấu hình trước khi đo và quyền quan sát phù hợp; tool không tự cài extension hoặc bật query log. Audit chỉ kiểm tra cohort, regression tiến độ, quiz ACK, chấm điểm và giới hạn sao; không chứng minh toàn bộ heartbeat/no-data-loss. Pool recovery, outbox và các tiêu chí chưa đo cần được xác nhận trước khi tuyên bố tất cả tiêu chí đạt.
 

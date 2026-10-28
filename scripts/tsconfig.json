@@ -5,5 +5,5 @@
     "moduleResolution": "node",
     "isolatedModules": false
   },
-  "include": ["./*.ts"]
+  "include": ["./**/*.ts"]
 }

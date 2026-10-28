@@ -1,11 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import {ROOT,save,id} from './lib.mjs';
+import {ROOT,save,id,RESULTS,REPORTS} from './lib.mjs';
 const names=process.argv.slice(2);
 if(!names.length||names.some(n=>!/^[a-zA-Z0-9_-]+$/.test(n)))throw new Error('Pass completed run IDs with request CPU profiles');
 const all={},sourceRuns=[];
 for(const name of names){
-  const dir=path.join(ROOT,'results',name),meta=JSON.parse(fs.readFileSync(dir+'/metadata.json','utf8'));
+  const dir=path.join(RESULTS,name),meta=JSON.parse(fs.readFileSync(dir+'/metadata.json','utf8'));
   if(meta.vusConfigured!==1||!meta.requestCpuProfiling||meta.k6Exit!==0)throw new Error('Only successful 1-VU profiling runs can calibrate this model');
   const rows=fs.readFileSync(dir+'/request-cpu.jsonl','utf8').trim().split('\n').filter(Boolean).map(l=>JSON.parse(l));
   const groups={};
@@ -43,8 +43,8 @@ model.perLearner={basis:'Weighted average of the assumed 25/40/20/15 workload, e
   cpuMillisecondsPerWallSecond:perUserCpuSecondsPerSecond===null?null:perUserCpuSecondsPerSecond*1000};
 model.capacityDivision={assumption:'Vercel CPU execution cost equals measured local CPU; ignores DB, RAM, scaling distribution and SLA constraints',learnersPerOneCpuAt100Percent:perUserCpuSecondsPerSecond?1/perUserCpuSecondsPerSecond:null,learnersPerOneCpuAt70Percent:perUserCpuSecondsPerSecond?0.7/perUserCpuSecondsPerSecond:null,
   equivalentOneCpuInstancesFor1000At70Percent:base.localCpuEquivalentCores===null?null:Math.ceil(base.localCpuEquivalentCores/.7),learnerHoursFromFourCpuHours:perUserCpuSecondsPerSecond?14400/(perUserCpuSecondsPerSecond*3600):null,learnerHoursFromOneMillionInvocations:1000000/model.perLearner.apiRequestsPerHour};
-const out=ROOT+'/reports/VERCEL_ESTIMATE.json';
-if(fs.existsSync(out))fs.copyFileSync(out,ROOT+'/reports/VERCEL_ESTIMATE_'+id()+'.json',fs.constants.COPYFILE_EXCL);
+const out=REPORTS+'/VERCEL_ESTIMATE.json';
+if(fs.existsSync(out))fs.copyFileSync(out,REPORTS+'/VERCEL_ESTIMATE_'+id()+'.json',fs.constants.COPYFILE_EXCL);
 fs.writeFileSync(out,JSON.stringify(model,null,2));
 const f=(v,d=2)=>v===null?'N/A':Number(v).toFixed(d);
 const lines=['# Ước lượng có điều kiện cho Vercel Hobby','','**Không phải kết quả chạy 1.000 VU trên Vercel hoặc Supabase.** Các hàng số người bên dưới là đầu vào giả định, không phải quy mô đã kiểm thử.','',
@@ -78,5 +78,5 @@ lines.push('','Các hệ số 0,5×–2× chỉ là phép thử độ nhạy, **
 '## Kết luận','',
 'Có thể định lượng nhu cầu request, CPU giả định và quota cho mục tiêu 1.000 người. **Chưa thể xác nhận sức chịu tải hoặc số người tối đa của deployment.** Cần giảm round-trip trên đường heartbeat/quiz, hiệu chỉnh bằng Usage/latency thật và đo concurrency trong môi trường được phép trước khi cam kết.','',
 'Nguồn các profile: '+sourceRuns.map(r=>`[${r.runId}](../results/${r.runId}/request-cpu.jsonl)`).join(', ')+'.');
-fs.writeFileSync(ROOT+'/reports/VERCEL_ESTIMATE.md',lines.join('\n'));
+fs.writeFileSync(REPORTS+'/VERCEL_ESTIMATE.md',lines.join('\n'));
 console.log(JSON.stringify({modelFile:out,missingEndpoints:missing,scenario1000:thousand},null,2));

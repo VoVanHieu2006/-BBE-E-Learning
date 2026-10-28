@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import {spawnSync} from 'node:child_process';
-import { ROOT,REPO,id,save } from './lib.mjs';
+import { ROOT,REPO,id,save ,RESULTS} from './lib.mjs';
 const configs=[];
 for(const file of ['.env','.env.local']) {
   if(!fs.existsSync(REPO+'/'+file))continue;
@@ -17,5 +17,5 @@ for(const file of ['.env','.env.local']) {
 }
 const version=spawnSync('k6',['version'],{encoding:'utf8'});
 const result={at:new Date().toISOString(),node:process.version,k6:version.status===0?version.stdout.trim():'not verified',cpu:os.cpus()[0].model,logicalCpus:os.cpus().length,totalMemoryBytes:os.totalmem(),availableMemoryBytes:os.freemem(),rootDbConfig:configs,productionDbContacted:false};
-const dir=ROOT+'/results/preflight_'+id();fs.mkdirSync(dir,{recursive:true});save(dir+'/environment.json',result);
+const dir=RESULTS+'/preflight_'+id();fs.mkdirSync(dir,{recursive:true});save(dir+'/environment.json',result);
 console.log(JSON.stringify({path:dir+'/environment.json',...result},null,2));

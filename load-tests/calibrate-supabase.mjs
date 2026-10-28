@@ -1,12 +1,12 @@
 import fs from 'node:fs';
 import {createRequire} from 'node:module';
 import {configuredSupabase} from './supabase-profile.mjs';
-import {ROOT,id,save,fixture} from './lib.mjs';
+import {ROOT,id,save,fixture,RESULTS} from './lib.mjs';
 const require=createRequire(import.meta.url),{Pool}=require('pg');
 const name=process.argv[2],f=fixture(name);
 if(f.scope!=='SUPABASE_BASELINE'||!f.complete)throw new Error('Require approved synthetic cohort');
 const pool=new Pool({connectionString:configuredSupabase(),max:1,connectionTimeoutMillis:10000,statement_timeout:3000,application_name:'bbe_perf_network_calibration'});
-const dir=ROOT+'/results/network_'+id();fs.mkdirSync(dir,{recursive:true});
+const dir=RESULTS+'/network_'+id();fs.mkdirSync(dir,{recursive:true});
 const r={at:new Date().toISOString(),kind:'READONLY_NETWORK_CALIBRATION',roundTripsMs:[],plans:[],note:'Round-trip includes network/driver/pooler/server scheduling; not pure network latency.'};
 let c;
 try {

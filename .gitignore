@@ -43,3 +43,7 @@ graphify-out/
 
 .vercel
 .env*
+!.env.example
+
+# Generated audits, learning mapping, migration and load-test output
+/artifacts/

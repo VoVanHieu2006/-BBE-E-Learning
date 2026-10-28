@@ -208,6 +208,6 @@ export function learner(data) {
 }
 export function handleSummary(data) {
   const path = __ENV.RUN_DIR;
-  if (!path || !/^results\/[a-zA-Z0-9_-]+$/.test(path)) throw new Error('Invalid output directory');
+  if (!path || !/^\.\.\/artifacts\/load-tests\/results\/[a-zA-Z0-9_-]+$/.test(path)) throw new Error('Invalid output directory');
   return { [path+'/summary.json']: JSON.stringify(data,null,2), stdout: JSON.stringify({mode:MODE,maxConfigured:MAX,metrics:data.metrics},null,2)+'\n' };
 }

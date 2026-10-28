@@ -1,9 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
-import {ROOT,save} from './lib.mjs';
+import {ROOT,save,RESULTS} from './lib.mjs';
 const name=process.argv[2];if(!/^[a-zA-Z0-9_-]+$/.test(name||''))throw new Error('Pass a run ID');
-const dir=path.join(ROOT,'results',name),read=n=>JSON.parse(fs.readFileSync(path.join(dir,n),'utf8'));
+const dir=path.join(RESULTS,name),read=n=>JSON.parse(fs.readFileSync(path.join(dir,n),'utf8'));
 const metadata=read('metadata.json'),s=read('summary.json');
 const rows=[];
 if(fs.existsSync(dir+'/process.csv')) {

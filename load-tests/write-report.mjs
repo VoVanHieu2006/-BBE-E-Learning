@@ -1,11 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import {ROOT} from './lib.mjs';
+import {ROOT,RESULTS,REPORTS} from './lib.mjs';
 const read=f=>JSON.parse(fs.readFileSync(f,'utf8'));
 const f=(v,d=2)=>v===null||v===undefined?'—':Number(v).toFixed(d);
 const runs=[];
-for(const name of fs.readdirSync(ROOT+'/results')){
-  const dir=path.join(ROOT,'results',name);if(!fs.existsSync(dir+'/metadata.json')||!fs.existsSync(dir+'/summary.json'))continue;
+for(const name of fs.readdirSync(RESULTS+'')){
+  const dir=path.join(RESULTS,name);if(!fs.existsSync(dir+'/metadata.json')||!fs.existsSync(dir+'/summary.json'))continue;
   const m=read(dir+'/metadata.json');if(!m.mode||!m.base)continue;
   const s=read(dir+'/summary.json'),integrity=fs.existsSync(dir+'/integrity.json')?read(dir+'/integrity.json'):null;
   const process=[];
@@ -20,13 +20,13 @@ for(const name of fs.readdirSync(ROOT+'/results')){
 }
 runs.sort((a,b)=>a.m.startedAt.localeCompare(b.m.startedAt));
 const profiles=runs.filter(r=>r.m.requestCpuProfiling&&r.m.k6Exit===0);
-const modelPath=ROOT+'/reports/VERCEL_ESTIMATE.json';
+const modelPath=REPORTS+'/VERCEL_ESTIMATE.json';
 if(!fs.existsSync(modelPath))throw new Error('Generate VERCEL_ESTIMATE first');
 const model=read(modelPath),thousand=model.scenarios.at(-1);
 const peak=Math.max(...runs.filter(r=>r.m.database!=='disabled').map(r=>r.s.metrics.vus?.values?.max||0));
 const submissions=runs.reduce((n,r)=>n+(r.integrity?.newSubmissions||0),0);
-const networkDirs=fs.readdirSync(ROOT+'/results').filter(n=>n.startsWith('network_')).sort();
-const network=networkDirs.length?read(ROOT+'/results/'+networkDirs.at(-1)+'/calibration.json'):null;
+const networkDirs=fs.readdirSync(RESULTS+'').filter(n=>n.startsWith('network_')).sort();
+const network=networkDirs.length?read(RESULTS+'/'+networkDirs.at(-1)+'/calibration.json'):null;
 const dbPeak=Math.max(...runs.flatMap(r=>r.db.map(d=>d.connections))),lockPeak=Math.max(...runs.flatMap(r=>r.db.map(d=>d.lock_waiters)));
 const lines=['# BÁO CÁO ĐO LOCAL + SUPABASE VÀ ƯỚC LƯỢNG VERCEL — BBE E-LEARNING','',
 'Cập nhật: '+new Date().toISOString()+' (ngày 25/10/2026 UTC+7). Báo cáo này thay thế kết luận trước khi chủ dự án cho phép dùng Supabase thật. Lịch sử ban đầu được giữ ở LOAD_TEST_REPORT_INITIAL.md.','',
@@ -98,7 +98,7 @@ lines.push('','Không có ngưỡng tải cao nhất đạt SLA hoặc điểm b
 lines.push('','## 10. Kiểm tra bộ công cụ','',
 'Kiểm tra cuối: 9/9 unit/security/profiler tests qua; 17/17 k6 inspect checks qua (10 mode cấu hình tới 1.000 VU, 3 URL ngoài whitelist bị chặn, 4 script legacy bị vô hiệu hóa). Smoke stub 1 lượt vẫn qua nhưng được tách khỏi 8 run ứng dụng. Syntax JS/MJS/CJS, parser PowerShell và git diff --check qua. Đối chiếu hash 6 file source quan trọng của snapshot với repository hiện tại khớp; không chỉnh src hoặc migration.',
 '','Bằng chứng: [inspect cuối](../results/inspect_2026-10-24T19-03-19-075Z_60b45add/validation.json), [trạng thái cohort cuối, timestamp UTC](../results/test-state_2026-10-24T18-58-07-152Z_89263fd9/state.json). Trạng thái cohort ghi 2 bài SUBMITTED score 100%, 1 IN_PROGRESS đã hết hạn, 12 sao ASSESSMENT và 20 sao VIDEO lịch sử seed. Không lấy 20 sao seed làm số sao video kiếm được trong bài test.');
-const out=ROOT+'/reports/LOAD_TEST_REPORT.md',archive=ROOT+'/reports/LOAD_TEST_REPORT_INITIAL.md';
+const out=REPORTS+'/LOAD_TEST_REPORT.md',archive=REPORTS+'/LOAD_TEST_REPORT_INITIAL.md';
 if(fs.existsSync(out)&&!fs.existsSync(archive))fs.copyFileSync(out,archive,fs.constants.COPYFILE_EXCL);
 fs.writeFileSync(out,lines.join('\n'));
 console.log(JSON.stringify({report:out,runs:runs.length,authenticatedVuPeak:peak,successfulSubmissions:submissions,modelMissingEndpoints:model.missingEndpoints}));

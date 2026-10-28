@@ -1,10 +1,10 @@
 import fs from 'node:fs';
 import {createRequire} from 'node:module';
 import {configuredSupabase} from './supabase-profile.mjs';
-import {ROOT,id,save} from './lib.mjs';
+import {ROOT,id,save,RESULTS} from './lib.mjs';
 const require=createRequire(import.meta.url),{Pool}=require('pg');
 const pool=new Pool({connectionString:configuredSupabase(),max:1,connectionTimeoutMillis:10000,statement_timeout:5000,application_name:'bbe_perf_readonly_inspection'});
-const runId='supabase-inspection_'+id(),dir=ROOT+'/results/'+runId;fs.mkdirSync(dir,{recursive:true});
+const runId='supabase-inspection_'+id(),dir=RESULTS+'/'+runId;fs.mkdirSync(dir,{recursive:true});
 const result={at:new Date().toISOString(),kind:'SUPABASE_READONLY_INSPECTION',loadTest:false,queries:[]};
 let client;
 try {
