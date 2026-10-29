@@ -65,7 +65,7 @@ function createTabCacheStore(): Map<string, CacheEntry> {
 const tabApiCache = createTabCacheStore()
 
 const TAB_CACHE_PATH_RE =
-  /^\/api\/v1\/(?:chapters\/[^/?]+\/(?:dashboard\/(?:members|courses)|current-roster|reorganizations)|members\/me\/(?:courses|deadlines)|users\/me|stars\/me|streak|learning\/me|courses)$/
+  /^\/api\/v1\/(?:chapters\/[^/?]+\/(?:dashboard\/(?:members|courses)|current-roster|reorganizations)|members\/me\/(?:courses|deadlines)|users\/me|stars\/me|streak|learning\/me|admin\/transfer-seasons\/progress|courses)$/
 
 function isTabCachePath(path: string): boolean {
   return TAB_CACHE_PATH_RE.test(path.split('?')[0])

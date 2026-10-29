@@ -6,6 +6,7 @@ import { lockLearningUser } from './learning-periods'
 import { addCalendarMonthsVietnam } from './chapter-term-rules'
 import { readChapterTermResult } from './chapter-term-results'
 import { dnaSeasonEnd } from './chapter-reward-gate'
+import { actualTransferAt } from './transfer-windows'
 
 type Tx = Prisma.TransactionClient
 const leftBoundary = (at: Date) => ({ starts_at: { lt: at }, OR: [{ ends_at: null }, { ends_at: { gte: at } }] })
@@ -208,8 +209,14 @@ export async function historicalChapterMonthRows(tx: Tx, month: { id: string; ke
     coreLessonIdsAt(tx, end),
     tx.learningCycle.findMany({ where: leftBoundary(end), select: { id: true, user_id: true } }),
     tx.chapterReorganization.findMany({
-      where: { status: 'APPLIED', applied_at: { gt: month.starts_at, lt: end } },
-      select: { chapter_id: true, applied_at: true },
+      // A delayed worker keeps its real applied_at, while business time is
+      // min(effective_at, applied_at). Fetch both and filter in memory.
+      where: {
+        status: 'APPLIED',
+        applied_at: { lte: end },
+        OR: [{ applied_at: { gt: month.starts_at } }, { effective_at: { gt: month.starts_at } }],
+      },
+      select: { chapter_id: true, effective_at: true, applied_at: true },
       orderBy: { applied_at: 'asc' },
     }),
     tx.organizationMembership.findMany({
@@ -253,8 +260,12 @@ export async function historicalChapterMonthRows(tx: Tx, month: { id: string; ke
   const kpiByChapter = new Map(kpis.map((row) => [row.chapter_id, row]))
   const items = []
   for (const chapter of chapters) {
-    const chapterTransfers = transfers.filter((row) => row.chapter_id === chapter.id)
-    const endpoints = Array.from(new Set([...chapterTransfers.map((row) => row.applied_at!.getTime()), end.getTime()])).sort((a, b) => a - b)
+    const chapterTransfers = transfers
+      .filter((row) => row.chapter_id === chapter.id)
+      .map((row) => ({ ...row, actualAt: actualTransferAt(row.effective_at, row.applied_at) }))
+      .filter((row): row is typeof row & { actualAt: Date } => Boolean(row.actualAt && row.actualAt > month.starts_at && row.actualAt < end))
+      .sort((a, b) => a.actualAt.getTime() - b.actualAt.getTime())
+    const endpoints = Array.from(new Set([...chapterTransfers.map((row) => row.actualAt.getTime()), end.getTime()])).sort((a, b) => a - b)
     const stages: ChapterStage[] = []
     let startsAt = month.starts_at
     for (const timestamp of endpoints) {

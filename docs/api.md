@@ -22,7 +22,7 @@ Danh mục đọc từ 96 file route trong `src/app/api`. Đường dẫn độn
 | Course authoring | Draft → session/lesson/video/document → assessment/bank → publish; draft snapshot/publish riêng | Admin; used bank/version và content publishing có guard; không tự reset attempt |
 | Chuyển giao | Đọc roster, parse sheet, preview/POST batch, apply/cancel theo batch | Scope Chapter thực tế; GET danh sách/roster hiện có thể apply đợt đến hạn (xem known-issues); scheduling chưa reset; successful apply mới reset và tạo outbox |
 | BXH kỳ | `group=MEMBER/LT/DNA/CHAPTER`, `periodType=MONTH/TERM/ACTUAL_TERM`; thêm periodId/chapterId theo source | ACTUAL_TERM chỉ CHAPTER, statisticsOnly; bảng đóng đọc snapshot, thiếu dữ liệu trả reason; thành viên/manager bị giới hạn đơn vị |
-| Learning policy | Admin GET cấu hình/readiness; PUT catalog/mapping/season; POST activation/retry theo action | Cutover cần gate rõ ràng; mapping đề xuất chưa được tự duyệt; season không chồng lấn, boundary April/October UTC+7 |
+| Learning policy | Admin GET cấu hình/readiness; PUT catalog/mapping/season; POST activation/retry theo action | Cutover cần gate rõ ràng; mapping đề xuất chưa được tự duyệt; season không chồng lấn, boundary April/October UTC+7, và phải phủ cửa sổ `01/01–30/06` / `01/07–31/12` |
 
 ## Danh mục route
 
@@ -53,6 +53,12 @@ Danh mục đọc từ 96 file route trong `src/app/api`. Đường dẫn độn
 | [GET](../src/app/api/v1/admin/learning-policy/route.ts#L13) | `admin`, `authenticate`, `role ADMIN` | — | `policy, programs, targets, courses, pending, failed, seasons` | `AccessDenied` |
 | [PUT](../src/app/api/v1/admin/learning-policy/route.ts#L28) | `admin`, `authenticate`, `role ADMIN` | `body.courses`, `body.normalizeOrganization`, `body.programs`, `body.retryOutboxIds`, `body.seasons`, `body.targets`, `body.units` | `saved` | `AccessDenied`, `ValidationError` |
 | [POST](../src/app/api/v1/admin/learning-policy/route.ts#L92) | `admin`, `authenticate`, `role ADMIN` | `body.cutoverAt` | `cutoverAt` | `AccessDenied`, `FutureCutoverRequired`, `MappingIncomplete`, `PolicyAlreadyScheduled`, `ReleaseNotReady` |
+
+### `/api/v1/admin/transfer-seasons/progress`
+
+| Method | Truy cập / guard | Đầu vào đọc trực tiếp | Response thành công | Mã lỗi thấy trong handler |
+|---|---|---|---|---|
+| [GET](../src/app/api/v1/admin/transfer-seasons/progress/route.ts#L53) | `admin`, `authenticate`, `role ADMIN` | — | `generatedAt, labels, items` | `AccessDenied` |
 
 ### `/api/v1/admin/learning-rules/[ruleId]/materialize`
 
@@ -285,7 +291,7 @@ Danh mục đọc từ 96 file route trong `src/app/api`. Đường dẫn độn
 | Method | Truy cập / guard | Đầu vào đọc trực tiếp | Response thành công | Mã lỗi thấy trong handler |
 |---|---|---|---|---|
 | [GET](../src/app/api/v1/chapters/[chapterId]/reorganizations/route.ts#L9) | `authenticate`, `canAccessChapterPermission`, `role ADMIN` | — | `items` | `AccessDenied` |
-| [POST](../src/app/api/v1/chapters/[chapterId]/reorganizations/route.ts#L62) | `authenticate`, `canAccessChapterPermission`, `role ADMIN` | `body.effectiveAt`, `body.items`, `body.sourceUrl`, `body.termNumber` | `item, appliedImmediately` | `AccessDenied`, `ChapterNotFound`, `ChapterPresidentPositionRequired`, `DepartmentScopeInvalid`, `DuplicateUser`, `InvalidTermNumber`, `MemberScopeInvalid`, `MultipleChapterPresidents`, `PositionScopeInvalid`, `ScheduledReorganizationExists`, `TransferApplyFailed`, `TransferSeasonAlreadyApplied`, `TransferSeasonNotConfigured`, `ValidationError` |
+| [POST](../src/app/api/v1/chapters/[chapterId]/reorganizations/route.ts#L62) | `authenticate`, `canAccessChapterPermission`, `role ADMIN` | `body.effectiveAt`, `body.items`, `body.sourceUrl`, `body.termNumber` | `item, appliedImmediately, normalized` | `AccessDenied`, `ChapterNotFound`, `ChapterPresidentPositionRequired`, `DepartmentScopeInvalid`, `DuplicateUser`, `InvalidTermNumber`, `MemberScopeInvalid`, `MultipleChapterPresidents`, `PositionScopeInvalid`, `ScheduledReorganizationExists`, `TransferApplyFailed`, `WINDOW_ALREADY_APPLIED`, `SEASON_NOT_CONFIGURED`, `SEASON_OVERLAP`, `SEASON_NOT_COVERING_DATE`, `SEASON_LEGACY_WINDOW`, `SEASON_WINDOW_MISMATCH`, `SEASON_BOUNDARY_MISMATCH`, `ValidationError` |
 
 ### `/api/v1/chapters`
 

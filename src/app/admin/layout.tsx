@@ -23,6 +23,7 @@ const PREFETCH_URLS = [
   '/api/v1/users?compact=1&page=1&limit=100',
   '/api/v1/admin/restrictions?limit=50',
   '/api/v1/courses?limit=100',
+  '/api/v1/admin/transfer-seasons/progress',
 ];
 
 function AdminLayoutInner({ children }: { children: React.ReactNode }) {

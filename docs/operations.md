@@ -40,8 +40,8 @@ Trước release:
 1. Admin `/admin/learning-policy`: duyệt nội dung thật mọi published course và bốn chương trình. `artifacts/learning/mapping-audit.json`/`mapping-proposals.md` chỉ là đề xuất; tái tạo bằng `db:audit-learning-mapping`, không tự apply.
 2. Chuẩn hóa code/Ban chỉ khi rõ ràng. Trùng/mơ hồ phải quyết định chủ động, không đoán theo tên; giữ compatibility history.
 3. `/admin/courses/mandatory`: kiểm tra 18 target và mọi legacy rule ngoài target chuẩn. Một ngân sách ngày chung mỗi khóa; không âm thầm bỏ rule.
-4. Xử lý rõ alias `CHAPTER_MANAGER` thành Lead/President theo nghiệp vụ; kiểm tra binding, affiliation và readiness. Không bỏ gate để làm chạy.
-5. Cấu hình season không chồng lấn: `code`, `startsAt`, `endsAt`, `rewardBoundaryAt`; boundary 00:00 ngày 01/04 hoặc 01/10 UTC+7 và nằm trong season. Applied season bất biến; sau cutover chỉ tương lai/chưa dùng theo API.
+4. Xử lý rõ alias `CHAPTER_MANAGER` thành **Lead Chapter** (không phải President — President là vị trí riêng, thuộc LT và vẫn nhận sao); kiểm tra binding, affiliation và readiness. Không bỏ gate để làm chạy.
+5. Cấu hình season không chồng lấn: `code`, `startsAt`, `endsAt`, `rewardBoundaryAt`; boundary 00:00 ngày 01/04 hoặc 01/10 UTC+7 và nằm trong season. Season phải phủ đúng **cửa sổ chuyển giao**: `01/01–30/06` (mốc `01/04`) và `01/07–31/12` (mốc `01/10`) — mọi thời điểm chuyển giao chuẩn hóa về mốc gần nhất, và mỗi cửa sổ chỉ được chuyển giao 1 lần. Applied season bất biến; season đang được batch `SCHEDULED` tham chiếu cũng không sửa; sau cutover chỉ tương lai/chưa dùng theo API.
 6. Duyệt content/history, Chapter→DNA và release gates; sau đó mới bật `LEARNING_CUTOVER_ENABLED=true` và POST future `cutoverAt` bằng Admin endpoint.
 
 Tháng đầu có thể rút ngắn từ cutover tới biên tháng UTC+7. Không phân bổ lại ledger, reset progress hoặc cấp lại reward budget để làm đẹp mapping. Ngoại lệ nhiệm kỳ đầu theo [business-rules](business-rules.md), không dùng runbook cũ ép pause.

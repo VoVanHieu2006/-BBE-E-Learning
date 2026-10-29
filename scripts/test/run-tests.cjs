@@ -5,7 +5,7 @@ const ts = file => ['-r', 'ts-node/register', '-r', './scripts/test/alias-hook.c
 // Explicit lists: never discover and execute arbitrary scripts against a database.
 const suites = {
   unit: [
-    ...['business-rules','video-playback-guard','video-progress-session','video-fullscreen-controls','video-controls-youtube-ux','video-switching-leak','video-player-ui','shared-learning-path','quiz-plan-b-selection','p1-rules','prompt1-verification','prompt2-verification','master-verification','video-continuity-security','chapter-initial-rewards'].map(name => ts(`src/test/${name}.test.ts`)),
+    ...['business-rules','video-playback-guard','video-progress-session','video-fullscreen-controls','video-controls-youtube-ux','video-switching-leak','video-player-ui','shared-learning-path','quiz-plan-b-selection','p1-rules','prompt1-verification','prompt2-verification','master-verification','video-continuity-security','chapter-initial-rewards','transfer-windows'].map(name => ts(`src/test/${name}.test.ts`)),
     ...['baseline-empty-database.test.mjs','test-formula-audit.cjs','test-chapter-period-api.cjs','test-chapter-term-aggregation.cjs','test-completed-lessons.cjs','test-transfer-responses.cjs'].map(file => [`scripts/test/${file}`]),
     ['scripts/test/database-safety.test.cjs'], ['load-tests/tests/safety.test.mjs'], ['load-tests/tests/profiler.test.mjs'],
   ],

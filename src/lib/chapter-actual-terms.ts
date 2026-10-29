@@ -1,17 +1,22 @@
 import { Prisma } from '@prisma/client'
+import { actualTransferAt } from './transfer-windows'
 
 /** Statistics only. No score or rank is assigned across competition intervals. */
 export async function chapterActualTermRows(tx: Prisma.TransactionClient, at: Date, chapterId?: string | null, termId?: string | null) {
   const chapters = await tx.chapter.findMany({ where: chapterId ? { id: chapterId } : { status: 'ACTIVE' }, select: { id: true, name: true, created_at: true } })
   const terms = await tx.chapterCompetitionTerm.findMany({ where: { chapter_id: { in: chapters.map(c => c.id) }, ...(termId ? { id: termId } : { starts_at: { lte: at }, OR: [{ ends_at: null }, { ends_at: { gt: at } }] }) }, orderBy: { starts_at: 'desc' } })
-  const transfers = await tx.chapterReorganization.findMany({ where: { chapter_id: { in: chapters.map(c => c.id) }, status: 'APPLIED', applied_at: { lte: at } }, select: { chapter_id: true, applied_at: true }, orderBy: { applied_at: 'desc' } })
+  const transferRows = await tx.chapterReorganization.findMany({ where: { chapter_id: { in: chapters.map(c => c.id) }, status: 'APPLIED', applied_at: { lte: at } }, select: { chapter_id: true, effective_at: true, applied_at: true }, orderBy: { applied_at: 'desc' } })
+  const transfers = transferRows
+    .map((row) => ({ chapter_id: row.chapter_id, actualAt: actualTransferAt(row.effective_at, row.applied_at) }))
+    .filter((row): row is { chapter_id: string; actualAt: Date } => Boolean(row.actualAt))
+    .sort((a, b) => b.actualAt.getTime() - a.actualAt.getTime())
   const items = []
   for (const chapter of chapters) {
     const term = terms.find(t => t.chapter_id === chapter.id)
     if (termId && !term) continue
     // Founding is authoritative for the first actual term, including before cutover.
-    const prior = transfers.find(t => t.chapter_id === chapter.id && t.applied_at && (!term || t.applied_at <= term.starts_at))
-    const startsAt = term?.season_id ? term.starts_at : prior?.applied_at || chapter.created_at
+    const prior = transfers.find(t => t.chapter_id === chapter.id && (!term || t.actualAt <= term.starts_at))
+    const startsAt = term?.season_id ? term.starts_at : prior?.actualAt || chapter.created_at
     const endsAt = term?.ends_at || null
     if (term && endsAt && endsAt <= at) {
       const saved = await tx.learningSnapshot.findUnique({ where: { key: `statistics:CHAPTER:${term.id}` } })

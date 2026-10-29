@@ -496,12 +496,12 @@ async function main() {
   const aprSeason = await prisma.transferSeason.upsert({
     where: { code: '2026-APR' },
     update: {},
-    create: { code: '2026-APR', starts_at: new Date('2026-04-01T00:00:00+07:00'), ends_at: new Date('2026-10-01T00:00:00+07:00'), reward_boundary_at: VN_BOUNDARY_APR },
+    create: { code: '2026-APR', starts_at: new Date('2026-01-01T00:00:00+07:00'), ends_at: new Date('2026-07-01T00:00:00+07:00'), reward_boundary_at: VN_BOUNDARY_APR },
   })
   const octSeason = await prisma.transferSeason.upsert({
     where: { code: '2026-OCT' },
     update: {},
-    create: { code: '2026-OCT', starts_at: new Date('2026-10-01T00:00:00+07:00'), ends_at: new Date('2027-04-01T00:00:00+07:00'), reward_boundary_at: VN_BOUNDARY_OCT },
+    create: { code: '2026-OCT', starts_at: new Date('2026-07-01T00:00:00+07:00'), ends_at: new Date('2027-01-01T00:00:00+07:00'), reward_boundary_at: VN_BOUNDARY_OCT },
   })
   const chapterTransferSchedule: Record<string, Date> = {
     'seed-checkpoint': new Date('2026-09-15T00:00:00+07:00'),

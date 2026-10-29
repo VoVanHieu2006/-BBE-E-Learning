@@ -27,7 +27,7 @@ Typecheck dùng `tsconfig.json`, hợp nhất config check trùng lặp. Unit d�
 | Browser | `test:browser`, `test:video-player-browser`, `test:tab-cache`, `test:sidebar` | Player, cache/dedupe, navigation/motion; config riêng |
 | Load harness | `node --test load-tests/tests/safety.test.mjs load-tests/tests/profiler.test.mjs`, `node load-tests/tests/inspect.mjs`, `node load-tests/tests/harness-smoke.mjs` | Guards/profiler/k6 inspect/stub, không phải capacity evidence |
 
-`audit:handbook-formulas` chạy riêng, còn FAIL ở [known-issues](known-issues.md). Không đổi production formulas để ép audit xanh. Giữ test program/department, quiz và sáu tháng lịch; những file chưa có npm command cũ vẫn có giá trị.
+`audit:handbook-formulas` chạy riêng, còn FAIL ở [known-issues](known-issues.md). Không đổi production formulas để ép audit xanh. Giữ test program/department và quiz; những file chưa có npm command cũ vẫn có giá trị. Riêng test **"sáu tháng lịch"** (`chapter-six-month-transfer.test.ts`, `chapter-initial-rewards.test.ts`) **đã được viết lại**: quy tắc đủ sáu tháng đã bị bỏ và cửa sổ mùa đổi thành `01/01–30/06` / `01/07–31/12` — xem [CKNK](CKNK.md#21-chapter-mới-chuyển-giao-được-ngay-không-phải-chờ).
 
 ## DB riêng, loopback
 

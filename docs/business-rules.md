@@ -18,7 +18,7 @@ Mục tiêu là tập trung đào tạo và giúp người học/Lead theo dõi 
 | Lead Chapter / Lead DNA | Quản lý đúng đơn vị/chức vụ có hiệu lực; không mặc nhiên là người thi đua |
 | Admin | Quản trị toàn hệ thống, nội dung, tổ chức, tài khoản và vận hành |
 
-Role legacy `ADMIN`, `CHAPTER_LEADER`, `MEMBER` không thay kiểm tra chức vụ, thời hạn và đơn vị trong DB. Admin/Lead quản trị không nhận sao/BXH theo đặc tả; alias `CHAPTER_MANAGER` còn lệch reward predicate được ghi riêng. Bảy Ban chuẩn: BTV, BTK, BND, BCL, BDH, BKM, BTTSK. Lead Chapter gắn cố định một Chapter, không sang DNA kể cả sau thu hồi. President là vị trí Chapter và thuộc LT.
+Role legacy `ADMIN`, `CHAPTER_LEADER`, `MEMBER` không thay kiểm tra chức vụ, thời hạn và đơn vị trong DB. Admin/Lead quản trị không nhận sao/BXH theo đặc tả; alias `CHAPTER_MANAGER` còn lệch reward predicate được ghi riêng. Bảy Ban chuẩn: BTV, BTK, BND, BCL, BDH, BKM, BTTSK. Lead Chapter gắn cố định một Chapter, không sang DNA kể cả sau thu hồi. President là vị trí Chapter và thuộc LT; trong DB vị trí này mang mã `CHAPTER_PRESIDENT`, đang được thống nhất về `PRESIDENT`. Vị trí và Ban lưu ở `organization_units`, `organization_memberships`, `positions`, `position_assignments` — **không** suy ra từ cột `role`.
 
 Một người chỉ có một tư cách Chapter/DNA đang hoạt động. Chapter → DNA chấm dứt Ban/chức vụ/quyền Chapter hiện hành, giữ sao, tiến độ và lịch sử. Không xóa history hoặc tạo ledger giả để chuyển điểm. Raw import, chức vụ tương lai và concurrent writes cũng chịu guard tổ chức.
 
@@ -95,12 +95,12 @@ Lịch sử sao quiz gộp các positive ledger entry của **cùng attempt đã
 
 ## Chuyển giao và nhiệm kỳ đầu
 
-- Cửa sổ giờ Việt Nam: 01/03–30/04, 01/09–31/10. Reward boundary 00:00 ngày 01/04 hoặc 01/10 trong season. **Schedule chưa reset**; apply thành công mới đóng cycle cũ, mở cycle mới, hủy attempt cũ, đồng bộ nghĩa vụ qua outbox.
-- Nghĩa vụ đầu xét đủ **sáu tháng lịch tại lúc mở cửa sổ**, không 180 ngày. Ghim ngày cuối tháng, giữ giờ/phút/giây/millisecond. Thiếu dù một giây thì bỏ qua cả mùa; đủ tuổi giữa mùa không tự bắt buộc giữa mùa.
+- Cửa sổ giờ Việt Nam: **01/01–30/06** và **01/07–31/12**. Mọi thời điểm chuyển giao được **chuẩn hóa về mốc gần nhất**: `01/01–30/06` → `01/04`, `01/07–31/12` → `01/10`. Reward boundary 00:00 ngày 01/04 hoặc 01/10 trong season. **Schedule chưa reset**; apply thành công mới đóng cycle cũ, mở cycle mới, hủy attempt cũ, đồng bộ nghĩa vụ qua outbox.
+- **Không có nghĩa vụ "đủ sáu tháng lịch"** — quy tắc cũ đã bỏ. Chapter vừa thành lập vẫn lên lịch chuyển giao được ngay; không có mốc đủ điều kiện nào, và việc vượt mốc không tự bắt buộc chuyển giao.
 - Quyết định mới nhất: Chapter **chưa từng apply chuyển giao thành công** tiếp tục học/nhận sao tới apply đầu, kể cả nhãn quá hạn. Ngoại lệ này thay mô tả pause nhiệm kỳ đầu trong báo cáo cũ.
 - Đã từng apply, tới boundary mà mùa tương ứng chưa apply hợp lệ thì pause sao video/quiz; vẫn học, không backpay. Thiếu season không được mở thưởng kỳ sau. Chuyển giao sớm hợp lệ mở cycle ngay, không reset lại ở boundary.
-- Chuyển giao tự nguyện trước sáu tháng hợp lệ. Người bỏ khỏi draft không mặc nhiên bị xóa Chapter. Lưu history/snapshot trước reset; retry không reset hai lần.
-- Chapter ban đầu vẫn đóng kết quả thi đua cuối tháng 3/9 mà không reset học/sao. Actual term từ thành lập/apply gần nhất tới apply kế tiếp; không gộp các khoảng thi đua rời nhau thành ranking.
+- Chuyển giao **1 lần mỗi cửa sổ** → tối đa 2 lần/năm. Cửa sổ sau không bị chặn bởi cửa sổ trước. Một **nhiệm kỳ thi đua** (`01/04→01/10` hoặc `01/10→01/04`) trải qua **hai cửa sổ**, nên một nhiệm kỳ có thể có **2 lần chuyển giao** — điều này hợp lệ. Người bỏ khỏi draft không mặc nhiên bị xóa Chapter. Lưu history/snapshot trước reset; retry không reset hai lần.
+- Chapter ban đầu vẫn đóng kết quả thi đua **cuối nhiệm kỳ** (`01/10` hoặc `01/04`) mà không reset học/sao. Theo quy tắc chuẩn, nhiệm kỳ thi đua tính theo **mốc + 6 tháng**, không theo ngày apply: `01/04→01/10` và `01/10→01/04`; mã hiện vẫn mở nhiệm kỳ tại thời điểm apply (ngoài phạm vi P0–P4, xem [CKNK mục 1.5](CKNK.md#15-nhiệm-kỳ-khác-cửa-sổ)). Actual term từ thành lập/apply gần nhất tới apply kế tiếp; không gộp các khoảng thi đua rời nhau thành ranking.
 - DNA reset độc lập ở April/October. Worker trễ dùng DB time sau lock, không backdate sao/reset.
 
 Phân điểm stage/nhiệm kỳ cần đối chiếu audit đầy đủ dependency và đặc tả mới, xem [known-issues](known-issues.md). Không tự tái tính/ghi đè lịch sử.

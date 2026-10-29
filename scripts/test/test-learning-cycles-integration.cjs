@@ -26,7 +26,7 @@ const { prepareOrganizationTransition } = require('../../src/lib/organization-tr
 const { publishCourseRequirements, captureCourseRequirementVersion } = require('../../src/lib/course-requirements')
 const { closeCompetitionMonths, completePendingCompetitionKpis, closeCompetitionTerms } = require('../../src/lib/competition-snapshots')
 const { initializeLearningCutover } = require('../../src/lib/learning-cutover')
-const { chapterRewardBoundary } = require('../../src/lib/chapter-reward-gate')
+const { windowOf } = require('../../src/lib/transfer-windows')
 
 const owned = { userIds: [] }
 let originalPolicy
@@ -126,8 +126,12 @@ async function main() {
   await prisma.lessonProgress.create({ data: { user_id: user.id, lesson_id: lesson.id, completed: true, completed_at: new Date(), furthest_watched_position_seconds: 10 } })
   await prisma.starLedger.create({ data: { user_id: user.id, amount: 99, reason: 'ADMIN_ADJUSTMENT', reward_key: suffix, source_type: 'USER', source_id: user.id } })
   await prisma.learningPolicy.upsert({ where: { id: 'default' }, update: { cutover_at: new Date(Date.now() - 60_000), mapping_approved_at: new Date() }, create: { cutover_at: new Date(Date.now() - 60_000), mapping_approved_at: new Date() } })
-  const boundary = chapterRewardBoundary(new Date())
-  const season = await prisma.transferSeason.upsert({ where: { reward_boundary_at: boundary }, update: {}, create: { code: `IT_${boundary.toISOString()}`, reward_boundary_at: boundary, starts_at: new Date(boundary.getTime() - 30 * 86_400_000), ends_at: new Date(boundary.getTime() + 150 * 86_400_000) } })
+  const scheduleWindow = windowOf(new Date())
+  const season = await prisma.transferSeason.upsert({
+    where: { reward_boundary_at: scheduleWindow.anchor },
+    update: { starts_at: scheduleWindow.startsAt, ends_at: scheduleWindow.endsAt },
+    create: { code: `IT_${scheduleWindow.anchor.toISOString()}`, reward_boundary_at: scheduleWindow.anchor, starts_at: scheduleWindow.startsAt, ends_at: scheduleWindow.endsAt },
+  })
   const earlyFixture = await prisma.chapterReorganization.create({ data: { transfer_season_id: season.id, chapter_id: chapter.id, created_by_user_id: admin.id, status: 'APPLIED', effective_at: new Date(Date.now() - 86_400_000), applied_at: new Date(Date.now() - 86_400_000) } })
   await reconcileLearningAssignmentsForUser(user.id)
   const cycle = await prisma.learningCycle.findFirstOrThrow({ where: { user_id: user.id, ends_at: null } })

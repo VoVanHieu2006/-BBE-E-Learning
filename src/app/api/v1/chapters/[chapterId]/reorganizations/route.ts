@@ -5,6 +5,8 @@ import { canAccessChapterPermission } from '@/lib/authorization'
 import { getOrganizationUnitTreeIds } from '@/lib/learning-assignments'
 import { applyDueChapterReorganizations } from '@/lib/chapter-reorganizations'
 import { prisma } from '@/lib/prisma'
+import { actualTransferAt, describeWindow, nextWindow, windowOf } from '@/lib/transfer-windows'
+import { resolveSeasonForWindow } from '@/lib/transfer-season-lookup'
 
 export async function GET(request: NextRequest, { params }: { params: { chapterId: string } }) {
   const auth = await authenticate(request)
@@ -45,6 +47,7 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
     ...b,
     effectiveAt: b.effective_at,
     appliedAt: b.applied_at,
+    actualTransferAt: actualTransferAt(b.effective_at, b.applied_at),
     termNumber: b.term_number,
     itemCount: b.items.length,
     items: b.items.map((i) => ({
@@ -174,13 +177,41 @@ export async function POST(request: NextRequest, { params }: { params: { chapter
     )
   }
 
+  const transferWindow = windowOf(effectiveAt)
+  const policyActive = Boolean(await activeLearningPolicy(prisma, effectiveAt))
   let transferSeasonId: string | null = null
-  if (await activeLearningPolicy(prisma, effectiveAt)) {
-    const seasons = await prisma.transferSeason.findMany({ where: { starts_at: { lte: effectiveAt }, ends_at: { gt: effectiveAt } } })
-    if (seasons.length !== 1) return NextResponse.json({ error: { code: 'TransferSeasonNotConfigured', message: 'Admin cần cấu hình mùa chuyển giao cho thời điểm đã chọn.' } }, { status: 409 })
-    transferSeasonId = seasons[0].id
-    const applied = await prisma.chapterReorganization.count({ where: { chapter_id: params.chapterId, transfer_season_id: transferSeasonId, status: 'APPLIED' } })
-    if (applied) return NextResponse.json({ error: { code: 'TransferSeasonAlreadyApplied' } }, { status: 409 })
+  if (policyActive) {
+    const resolution = await resolveSeasonForWindow(prisma, effectiveAt)
+    if (!resolution.ok || !resolution.season) {
+      return NextResponse.json({
+        error: {
+          code: resolution.reason,
+          message: resolution.message,
+          window: {
+            startsAt: resolution.window.startsAt,
+            endsAt: resolution.window.endsAt,
+            anchor: resolution.window.anchor,
+            label: describeWindow(resolution.window),
+          },
+        },
+      }, { status: 409 })
+    }
+    transferSeasonId = resolution.season.id
+  }
+  const alreadyApplied = await prisma.chapterReorganization.count({
+    where: {
+      chapter_id: params.chapterId,
+      status: 'APPLIED',
+      effective_at: { gte: transferWindow.startsAt, lt: transferWindow.endsAt },
+    },
+  })
+  if (alreadyApplied) {
+    return NextResponse.json({
+      error: {
+        code: 'WINDOW_ALREADY_APPLIED',
+        message: `Giai đoạn ${describeWindow(transferWindow)} đã có chuyển giao được áp dụng. Lần chuyển giao kế tiếp là ${describeWindow(nextWindow(transferWindow))}.`,
+      },
+    }, { status: 409 })
   }
   const isImmediate = effectiveAt.getTime() <= Date.now() + 60000
 
@@ -188,11 +219,25 @@ export async function POST(request: NextRequest, { params }: { params: { chapter
     await tx.$queryRaw`SELECT id FROM chapters WHERE id = ${params.chapterId}::uuid FOR UPDATE`
     const queued = await tx.chapterReorganization.findFirst({ where: { chapter_id: params.chapterId, status: 'SCHEDULED' } })
     if (queued) return { conflict: 'ScheduledReorganizationExists' as const }
-    if (transferSeasonId && await tx.chapterReorganization.count({ where: { chapter_id: params.chapterId, transfer_season_id: transferSeasonId, status: 'APPLIED' } })) return { conflict: 'TransferSeasonAlreadyApplied' as const }
+    let useSeasonId = transferSeasonId
+    if (policyActive) {
+      // Re-check inside the transaction so a season edited after the first
+      // lookup cannot silently attribute this transfer to another window.
+      const resolution = await resolveSeasonForWindow(tx, effectiveAt)
+      if (!resolution.ok || !resolution.season) return { conflict: resolution.reason, message: resolution.message } as const
+      useSeasonId = resolution.season.id
+    }
+    if (await tx.chapterReorganization.count({
+      where: {
+        chapter_id: params.chapterId,
+        status: 'APPLIED',
+        effective_at: { gte: transferWindow.startsAt, lt: transferWindow.endsAt },
+      },
+    })) return { conflict: 'WINDOW_ALREADY_APPLIED' as const }
     return tx.chapterReorganization.create({
     data: {
       chapter_id: params.chapterId,
-      transfer_season_id: transferSeasonId,
+      transfer_season_id: useSeasonId,
       effective_at: effectiveAt,
       term_number: termNumber,
       status: 'SCHEDULED',
@@ -212,7 +257,18 @@ export async function POST(request: NextRequest, { params }: { params: { chapter
     include: { items: true },
   })
   })
-  if ('conflict' in creation) return NextResponse.json({ error: { code: creation.conflict, message: 'Đợt chuyển giao đã thay đổi. Hãy tải lại trạng thái.' } }, { status: 409 })
+  if ('conflict' in creation) {
+    const messages: Record<string, string> = {
+      ScheduledReorganizationExists: 'Đã có đợt chuyển giao nhiệm kỳ đang được lên lịch. Vui lòng áp dụng hoặc hủy đợt hiện tại trước khi lên lịch đợt mới.',
+      WINDOW_ALREADY_APPLIED: `Giai đoạn ${describeWindow(transferWindow)} đã có chuyển giao được áp dụng. Lần chuyển giao kế tiếp là ${describeWindow(nextWindow(transferWindow))}.`,
+    }
+    return NextResponse.json({
+      error: {
+        code: creation.conflict,
+        message: ('message' in creation && creation.message) || messages[creation.conflict] || 'Đợt chuyển giao đã thay đổi. Hãy tải lại trạng thái.',
+      },
+    }, { status: 409 })
+  }
   const batch = creation
 
 
@@ -221,6 +277,13 @@ export async function POST(request: NextRequest, { params }: { params: { chapter
   }
 
   const saved = await prisma.chapterReorganization.findUnique({ where: { id: batch.id }, include: { items: true } })
-  if (isImmediate && saved?.status !== 'APPLIED') return NextResponse.json({ item: saved, appliedImmediately: false, error: { code: 'TransferApplyFailed', message: saved?.last_error || 'Đã lưu đợt chuyển giao nhưng chưa áp dụng thành công. Hãy tải lại và thử lại.' } }, { status: 409 })
-  return NextResponse.json({ item: saved, appliedImmediately: saved?.status === 'APPLIED' }, { status: 201 })
+  const normalized = {
+    anchor: transferWindow.anchor,
+    startsAt: transferWindow.startsAt,
+    endsAt: transferWindow.endsAt,
+    label: describeWindow(transferWindow),
+    proposedEffectiveAt: effectiveAt,
+  }
+  if (isImmediate && saved?.status !== 'APPLIED') return NextResponse.json({ item: saved, appliedImmediately: false, normalized, error: { code: 'TransferApplyFailed', message: saved?.last_error || 'Đã lưu đợt chuyển giao nhưng chưa áp dụng thành công. Hãy tải lại và thử lại.' } }, { status: 409 })
+  return NextResponse.json({ item: saved, appliedImmediately: saved?.status === 'APPLIED', normalized }, { status: 201 })
 }

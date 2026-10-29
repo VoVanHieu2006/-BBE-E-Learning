@@ -11,6 +11,7 @@ const Module = require('node:module'), resolve = Module._resolveFilename
 Module._resolveFilename = function (name, ...args) { return resolve.call(this, name.startsWith('@/') ? path.resolve('src', name.slice(2)) : name, ...args) }
 const { prisma: db } = require('../../src/lib/prisma')
 const { chapterRewardBoundary, chapterRewardState } = require('../../src/lib/chapter-reward-gate')
+const { windowOf, windowOfAnchor } = require('../../src/lib/transfer-windows')
 const { learningContext, lockLearningUser } = require('../../src/lib/learning-periods')
 const { submitQuiz } = require('../../src/lib/quiz-submission')
 const { recordVideoHeartbeat } = require('../../src/lib/video-heartbeat')
@@ -20,15 +21,18 @@ const { applyDueDnaCycleResets } = require('../../src/lib/dna-cycle-resets')
 
 async function main() {
   const key = randomUUID(), now = new Date(), boundary = chapterRewardBoundary(now)
-  const season = await db.transferSeason.upsert({ where: { reward_boundary_at: boundary }, update: {}, create: { code: `QA_${boundary.toISOString()}`, reward_boundary_at: boundary, starts_at: new Date(boundary.getTime() - 30 * 86400000), ends_at: new Date(boundary.getTime() + 150 * 86400000) } })
+  const scheduleWindow = windowOf(now), pauseWindow = windowOfAnchor(boundary)
+  const season = await db.transferSeason.upsert({ where: { reward_boundary_at: scheduleWindow.anchor }, update: { starts_at: scheduleWindow.startsAt, ends_at: scheduleWindow.endsAt }, create: { code: `QA_${key}`, reward_boundary_at: scheduleWindow.anchor, starts_at: scheduleWindow.startsAt, ends_at: scheduleWindow.endsAt } })
   await db.learningPolicy.upsert({ where: { id: 'default' }, update: { cutover_at: new Date(now.getTime() - 60000), mapping_approved_at: now }, create: { cutover_at: new Date(now.getTime() - 60000), mapping_approved_at: now } })
   const admin = await db.user.create({ data: { email: `pause-admin-${key}@example.invalid`, password_hash: '-', role: 'ADMIN' } })
   const user = await db.user.create({ data: { email: `pause-${key}@example.invalid`, password_hash: '-', role: 'MEMBER', created_at: new Date(now.getTime() - 86400000) } })
   const unit = await db.organizationUnit.create({ data: { name: key, type: 'CHAPTER' } })
   const chapter = await db.chapter.create({ data: { name: key, organization_unit_id: unit.id } })
-  // This fixture represents a previously transferred Chapter. Initial Chapters
-  // keep earning until their first real application and are covered separately.
-  await db.chapterReorganization.create({ data: { chapter_id: chapter.id, created_by_user_id: admin.id, status: 'APPLIED', effective_at: new Date(boundary.getTime() - 86400000), applied_at: new Date(boundary.getTime() - 86400000) } })
+  // This fixture represents a previously transferred Chapter. The transfer sits
+  // in the window before the current pause window, so it is not evidence of the
+  // transfer this Chapter still owes.
+  const priorTransferAt = new Date(pauseWindow.startsAt.getTime() - 86400000)
+  await db.chapterReorganization.create({ data: { chapter_id: chapter.id, created_by_user_id: admin.id, status: 'APPLIED', effective_at: priorTransferAt, applied_at: priorTransferAt } })
   await db.chapterMember.create({ data: { user_id: user.id, chapter_id: chapter.id } })
   await db.organizationMembership.create({ data: { user_id: user.id, unit_id: unit.id } })
   const program = await db.learningProgram.findUniqueOrThrow({ where: { code: 'CORE_MEMBER' } })

@@ -2,6 +2,8 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { captureChapterActualTerm } from './chapter-actual-terms'
 import { learningContext, lockLearningUser, enqueueAssignmentSync, activeLearningPolicy } from './learning-periods'
+import { windowOf } from './transfer-windows'
+import { resolveSeasonForWindow } from './transfer-season-lookup'
 
 /** Applies scheduled Chapter department/LT changes atomically, then rebuilds learning paths. */
 export async function applyDueChapterReorganizations(now = new Date(), batchId?: string, applyNow = false): Promise<number> {
@@ -32,12 +34,27 @@ export async function applyDueChapterReorganizations(now = new Date(), batchId?:
       if (fresh.items.some((item) => !rosterIds.includes(item.user_id))) throw new Error('TransferMemberNoLongerInChapter')
       const policy = await activeLearningPolicy(tx, appliedAt)
       let seasonId = fresh.transfer_season_id
+      // Duplicate protection belongs to the transfer window of the scheduled
+      // effective time, not to a season row that an Admin may have edited.
+      const transferWindow = windowOf(fresh.effective_at)
+      if (await tx.chapterReorganization.count({
+        where: {
+          chapter_id: batch.chapter_id,
+          status: 'APPLIED',
+          id: { not: batch.id },
+          effective_at: { gte: transferWindow.startsAt, lt: transferWindow.endsAt },
+        },
+      })) throw new Error('Giai đoạn này đã có một lần chuyển giao được áp dụng. Mỗi giai đoạn chỉ được chuyển giao một lần.')
       if (policy) {
-        const seasons = await tx.transferSeason.findMany({ where: { ...(seasonId ? { id: seasonId } : {}), starts_at: { lte: fresh.effective_at }, ends_at: { gt: fresh.effective_at } } })
-        if (seasons.length !== 1) throw new Error('TransferSeasonNotConfigured')
-        if (appliedAt < seasons[0].starts_at || appliedAt >= seasons[0].ends_at) throw new Error('TransferOutsideSeasonWindow')
-        seasonId = seasons[0].id
-        if (await tx.chapterReorganization.count({ where: { chapter_id: batch.chapter_id, transfer_season_id: seasonId, status: 'APPLIED', id: { not: batch.id } } })) throw new Error('TransferSeasonAlreadyApplied')
+        // A batch that was explicitly linked to a season keeps that link so
+        // legacy six-month seasons stay readable. New batches are validated by
+        // the POST route against the standard window.
+        const linked = seasonId ? await tx.transferSeason.findUnique({ where: { id: seasonId } }) : null
+        if (!linked) {
+          const resolution = await resolveSeasonForWindow(tx, fresh.effective_at)
+          if (!resolution.ok || !resolution.season) throw new Error(resolution.message || 'Chưa có mùa chuyển giao phù hợp cho giai đoạn đã chọn.')
+          seasonId = resolution.season.id
+        }
       }
       const snapshot = {
         scheduledAt: fresh.effective_at.toISOString(), appliedAt: appliedAt.toISOString(),

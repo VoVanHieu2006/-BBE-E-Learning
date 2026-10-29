@@ -9,12 +9,12 @@ Phân biệt lỗi nghiệp vụ, fixture test không tương thích và phần 
 | ID | Tái hiện và bằng chứng | Tình trạng |
 |---|---|---|
 | HANDBOOK-DEADLINE-ADDED | Khóa 20 ngày, 5 bài, đã hoàn thành, hạn cũ ngày 10; publish thêm 2 bài ngày 20, tổng 7 bài. Expected `20+2*max(ceil(20/7),3)=26`; `executePublishCourseRequirements` cộng hạn cũ ra 16. | Lệch mốc tái hiện. Sửa riêng cần completed/incomplete, due future/past, publish retry; không suy rộng mọi khóa. |
-| HANDBOOK-MANAGER-ALIAS | User MEMBER có vị trí `CHAPTER_MANAGER`, course published; `rewardEligibility` vẫn true, thiếu alias trong loại trừ. `competitionGroup` đã loại alias khỏi BXH. | Lỗi predicate tái hiện; chưa audit thiệt hại ledger thật. Không thu hồi sao/sửa history lần này. |
-| HANDBOOK-TERM-EXPECTATION | Chuyển 15/9, stage 4+6; sổ tay muốn 10 thuộc kỳ kết thúc 30/9. Baseline fixture thiếu dependency; sau bổ sung dependency, audit thực sự chạy và trả **4**, expected **10**. | Không còn bị chặn bởi fixture. Hàm hiện phân theo actual-term/stage; phải hòa giải expectation sổ tay với quyết định actual-term mới trước kết luận/sửa nghiệp vụ. Không sửa production để ép expectation. |
+| HANDBOOK-MANAGER-ALIAS | User MEMBER có vị trí `CHAPTER_MANAGER`, course published; `rewardEligibility` vẫn true, thiếu alias trong loại trừ. `competitionGroup` đã loại alias khỏi BXH. | Lỗi predicate tái hiện; chưa audit thiệt hại ledger thật. Không thu hồi sao/sửa history lần này. Chi tiết và cách sửa: [CKNK mục 7.4](CKNK.md#74-alias-chaptermanager-vẫn-được-nhận-sao). |
+| HANDBOOK-TERM-EXPECTATION | Chuyển 15/9, stage 4+6; sổ tay (bản cũ) muốn 10 thuộc kỳ kết thúc 30/9. Baseline fixture thiếu dependency; sau bổ sung dependency, audit thực sự chạy và trả **4**, expected **10**. | **ĐÃ CHỐT ngày 29/10/2026: code trả 4 là ĐÚNG, expectation 10 là SAI.** Chuyển giao `15/9` chuẩn hóa về mốc `01/10`, nên nhiệm kỳ vừa kết thúc là `01/04→01/10` và nhiệm kỳ mới là `01/10→01/04`. Khung `30/9` đã bị bỏ khỏi [handbook-formulas](reference/handbook-formulas.md) mục 13. Audit vẫn đỏ cho tới khi expectation được cập nhật theo khung mới; không sửa production để ép expectation. |
 
 Deadline chung mục 18 đã chốt `max(D_start+T_new,D_change+T_added)`, thay deadline riêng; ví dụ ngày 5→21/ngày 20→31 và retry/history có `test:shared-deadline`. Không backfill hạn đã lưu. Formula regression cũ PASS không chứng minh phù hợp toàn sổ tay, nhất là expectation stage midpoint cũ.
 
-Lần chạy sau sửa fixture trong đợt cleanup: **8 PASS / 3 FAIL**, gồm actual4/expected10 ở phân điểm, actual16/expected26 ở thêm bài, actualtrue/expectedfalse ở alias. Hai sai lệch sau đã tái hiện rõ; phân điểm cần quyết định đặc tả, không gộp thành một fixture error chưa chạy hoặc tự sửa công thức.
+Lần chạy sau sửa fixture trong đợt cleanup: **8 PASS / 3 FAIL**, gồm actual4/expected10 ở phân điểm, actual16/expected26 ở thêm bài, actualtrue/expectedfalse ở alias. Hai sai lệch sau đã tái hiện rõ; phân điểm **đã có kết luận đặc tả** (code đúng, expectation sai — xem bảng trên), không gộp thành một fixture error chưa chạy hoặc tự sửa công thức.
 
 ## Hiệu năng và dữ liệu lớn
 

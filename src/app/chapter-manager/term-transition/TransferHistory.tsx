@@ -20,6 +20,23 @@ type Props = Pick<
   | 'viewMode'
 >;
 
+function validDate(value: unknown): Date | null {
+  if (!value) return null;
+  const date = new Date(value as string);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+/** APPLIED rows show the business transfer time; scheduled rows show their effective time. */
+function termMoment(term: any) {
+  const effectiveAt = validDate(term.effectiveAt);
+  const appliedAt = validDate(term.appliedAt);
+  const actualAt = validDate(term.actualTransferAt) || (term.status === 'APPLIED' ? appliedAt : null);
+  const isApplied = term.status === 'APPLIED';
+  const shownAt = isApplied ? actualAt || effectiveAt : effectiveAt || appliedAt;
+  const late = Boolean(isApplied && actualAt && appliedAt && appliedAt.getTime() - actualAt.getTime() > 60_000);
+  return { effectiveAt, appliedAt, actualAt, isApplied, shownAt, late };
+}
+
 export default function TransferHistory({
   historyList,
   historyLoading,
@@ -68,10 +85,8 @@ export default function TransferHistory({
           ) : (
             <div className="divide-y divide-[#eff4ff]">
               {historyList.map((term: any) => {
-                const dateObj = term.appliedAt || term.effectiveAt ? new Date(term.appliedAt || term.effectiveAt) : null;
-                const dateStr = dateObj && !isNaN(dateObj.getTime())
-                  ? dateObj.toLocaleString('vi-VN')
-                  : 'Chưa xác định';
+                const { appliedAt, actualAt, isApplied, shownAt, late } = termMoment(term);
+                const dateStr = shownAt ? shownAt.toLocaleString('vi-VN') : 'Chưa xác định';
                 const totalCount = term.itemCount ?? term.items?.length ?? 0;
                 const termTitle = term.termNumber
                   ? `Sơ đồ 7 Ban ${formatTermBadge(term.termNumber)}`
@@ -89,19 +104,28 @@ export default function TransferHistory({
                         </span>
                         <span
                           className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                            term.status === 'APPLIED'
+                            isApplied
                               ? 'bg-emerald-100 text-emerald-800'
                               : 'bg-blue-100 text-blue-800'
                           }`}
                         >
-                          {term.status === 'APPLIED' ? 'Đã áp dụng' : 'Đã lên lịch'}
+                          {isApplied ? 'Đã áp dụng' : 'Đã lên lịch'}
                         </span>
                       </div>
                       {term.last_error && <p role="alert" className="mt-2 text-xs text-red-700">Chưa áp dụng được (lần {term.apply_attempts}): {term.last_error}. Hệ thống sẽ retry; có thể bấm áp dụng lại.</p>}
                       <div className="text-xs text-[#737686] mt-1 space-y-0.5">
                         <p>
-                          <span className="font-medium text-slate-700">Đã áp dụng lúc:</span> {dateStr}
+                          <span className="font-medium text-slate-700">
+                            {isApplied ? 'Thời gian chuyển giao thực tế:' : 'Có hiệu lực:'}
+                          </span>{' '}
+                          {dateStr}
                         </p>
+                        {isApplied && actualAt && appliedAt && (
+                          <p>
+                            <span className="font-medium text-slate-700">Thực tế áp dụng:</span> {appliedAt.toLocaleString('vi-VN')}
+                            {late && <span className="text-amber-700"> · Hệ thống áp dụng trễ so với giờ hẹn</span>}
+                          </p>
+                        )}
                         <p>
                           <span className="font-medium text-slate-700">Tổng nhân sự phân ban:</span> <strong>{totalCount}</strong> thành viên
                           {term.sourceUrl && (
@@ -146,8 +170,8 @@ export default function TransferHistory({
                   {selectedHistoryTerm.termNumber
                     ? `Cơ cấu nhân sự ${formatTermBadge(selectedHistoryTerm.termNumber)}`
                     : 'Cơ cấu nhân sự nhiệm kỳ'}
-                  {selectedHistoryTerm.appliedAt || selectedHistoryTerm.effectiveAt
-                    ? ` (${new Date(selectedHistoryTerm.appliedAt || selectedHistoryTerm.effectiveAt).toLocaleDateString('vi-VN')})`
+                  {termMoment(selectedHistoryTerm).shownAt
+                    ? ` (${termMoment(selectedHistoryTerm).shownAt!.toLocaleDateString('vi-VN')})`
                     : ''}
                 </h3>
                 <p className="text-xs text-[#737686]">

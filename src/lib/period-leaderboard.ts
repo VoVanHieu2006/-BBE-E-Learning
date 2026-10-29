@@ -146,7 +146,9 @@ export async function periodLeaderboard(request: NextRequest) {
         ends_at: dnaSeasonEnd(season.reward_boundary_at),
       }
     : null
-  const chapterPeriod = group === 'CHAPTER' && season?.reward_boundary_at ? { ...season, starts_at: season.starts_at, ends_at: addCalendarMonthsVietnam(season.reward_boundary_at, 6), transferWindow: { startsAt: season.starts_at, endsAt: season.ends_at }, competitionStartsAt: season.reward_boundary_at } : null
+  // A Chapter competition term starts at the reward anchor, not at the start of
+  // the transfer window that contains it.
+  const chapterPeriod = group === 'CHAPTER' && season?.reward_boundary_at ? { ...season, starts_at: season.reward_boundary_at, ends_at: addCalendarMonthsVietnam(season.reward_boundary_at, 6), transferWindow: { startsAt: season.starts_at, endsAt: season.ends_at }, competitionStartsAt: season.reward_boundary_at } : null
   const period = month || term || chapterPeriod || (group === 'DNA' ? dnaPeriod : season) || (group === 'CHAPTER' ? season : null)
   if (!period) {
     const missing = readinessForReason(periodType === 'MONTH' ? 'MONTH_NOT_CONFIGURED' : useSeason || useGlobalIndividualTerm ? 'SEASON_NOT_CONFIGURED' : 'TERM_NOT_CONFIGURED')

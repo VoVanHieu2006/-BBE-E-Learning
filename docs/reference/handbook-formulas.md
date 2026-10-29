@@ -234,10 +234,16 @@ Quy định này chỉ đặt lại quyền tua và làm quiz theo tháng, khôn
 | **Tiêu chí**      | **Nhiệm kỳ thi đua Chapter** | **Chu kỳ đào tạo Chapter**    |
 |-------------------|------------------------------|-------------------------------|
 | Thời điểm bắt đầu | 01/04 hoặc 01/10             | Timestamp chuyển giao thực tế |
-| Kết thúc          | 30/09 hoặc 31/03             | Chuyển giao tiếp theo         |
+| Kết thúc          | 01/10 hoặc 01/04 năm sau     | Chuyển giao tiếp theo         |
 | Dùng để           | Xếp hạng Chapter nhiệm kỳ    | Tiến độ, sao và thưởng lại    |
 
-**Ví dụ chuyển giao sớm:** Chapter chuyển giao ngày 15/9. Người học có chu kỳ học mới từ 15/9, nhưng **toàn bộ điểm Chapter tháng 9**, kể cả sao phát sinh sau 15/9, vẫn thuộc **nhiệm kỳ thi đua kết thúc 30/9**.
+**Ví dụ chuyển giao sớm:** Chapter chuyển giao ngày 15/9. Mọi thời điểm chuyển giao đều được **chuẩn hóa về mốc gần nhất** — ở đây là **01/10** — nên:
+
+- **Nhiệm kỳ thi đua vừa kết thúc** là `01/04 → 01/10` năm đó. Toàn bộ điểm Chapter tháng 9, **kể cả sao phát sinh sau 15/9**, vẫn thuộc nhiệm kỳ này vì nhiệm kỳ chỉ đóng ở mốc `01/10` — như vậy nhiệm kỳ mới có đủ dữ liệu để xếp hạng.
+- **Nhiệm kỳ thi đua mới** là `01/10` năm đó → `01/04` năm sau.
+- **Chu kỳ đào tạo** thì tách riêng: người học có chu kỳ học mới ngay từ **15/9** (timestamp chuyển giao thực tế), không chờ tới `01/10`.
+
+> ⚠️ **Đã sửa ngày 29/10/2026.** Bản trước của mục này ghi nhiệm kỳ kết thúc **30/9**, mâu thuẫn với chính bảng ở trên (`01/04 → 30/09`) và với mốc chuẩn hóa `01/10`. Khung `30/9` / `31/3` bị bỏ; chuẩn là `01/04 → 01/10` và `01/10 → 01/04`. Xem [CKNK mục 1.5](../CKNK.md#15-nhiệm-kỳ-khác-cửa-sổ).
 
 DNA có chu kỳ riêng, tự chuyển sang kỳ mới đúng 01/04 và 01/10 (theo giờ Việt Nam), không cần thao tác chuyển giao Chapter.
 

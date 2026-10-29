@@ -62,6 +62,7 @@ const adminNav: NavItem[] = [
   { label: 'Khóa học & lộ trình', href: '/admin/courses', icon: '📚', prefetchUrls: ['/api/v1/courses', '/api/v1/admin/learning-rules'] },
   { label: 'Mời & quản lý Lead', href: '/admin/invitations', icon: '✉️', prefetchUrls: ['/api/v1/invitations'] },
   { label: 'Bảng xếp hạng Chapter', href: '/admin/chapters', icon: '🏆', prefetchUrls: ['/api/v1/leaderboard/chapters'] },
+  { label: 'Tiến độ chuyển giao', href: '/admin/transfer-seasons', icon: '🔄', prefetchUrls: ['/api/v1/admin/transfer-seasons/progress'] },
   { label: 'Quản lý tài khoản', href: '/admin/users', icon: '👤', prefetchUrls: ['/api/v1/users?page=1&limit=20', '/api/v1/chapters'] },
 ];
 

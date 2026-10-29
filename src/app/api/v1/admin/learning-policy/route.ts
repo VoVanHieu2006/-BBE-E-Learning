@@ -3,7 +3,7 @@ import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { LEARNING_PROGRAMS, LEARNING_TARGETS, suggestLearningProgram } from '@/lib/learning-catalog'
 import { normalizeLearningOrganization } from '@/lib/normalize-learning-organization'
-import { chapterRewardBoundary } from '@/lib/chapter-reward-gate'
+import { checkSeasonConfiguration, resolveSeasonForWindow, seasonWindowOf } from '@/lib/transfer-season-lookup'
 
 async function admin(request: NextRequest) {
   const auth = await authenticate(request)
@@ -42,14 +42,38 @@ export async function PUT(request: NextRequest) {
     for (const season of body.seasons || []) {
       const startsAt = new Date(season.startsAt), endsAt = new Date(season.endsAt)
       const boundaryAt = new Date(season.rewardBoundaryAt)
-      const localBoundary = new Date(boundaryAt.getTime() + 7 * 3_600_000)
-      if (!Number.isFinite(boundaryAt.getTime()) || ![3, 9].includes(localBoundary.getUTCMonth()) || localBoundary.getUTCDate() !== 1 || localBoundary.getUTCHours() !== 0 || localBoundary.getUTCMinutes() !== 0 || localBoundary.getUTCSeconds() !== 0 || localBoundary.getUTCMilliseconds() !== 0 || boundaryAt < startsAt || boundaryAt >= endsAt) throw new Error('InvalidRewardBoundary')
-      if (!code.test(season.code) || !Number.isFinite(startsAt.getTime()) || !Number.isFinite(endsAt.getTime()) || endsAt <= startsAt || policy.cutover_at && startsAt <= new Date()) throw new Error('InvalidFutureSeason')
+      if (!code.test(season.code)) throw new Error('InvalidSeasonCode')
+      const check = checkSeasonConfiguration(startsAt, endsAt, boundaryAt)
+      if (!check.ok) throw new Error(check.reason === 'SEASON_BOUNDARY_MISMATCH' ? 'InvalidRewardBoundary' : 'InvalidSeasonWindow')
       const overlap = await tx.transferSeason.count({ where: { code: { not: season.code }, starts_at: { lt: endsAt }, ends_at: { gt: startsAt } } })
       if (overlap) throw new Error('OverlappingTransferSeason')
       const existingSeason = await tx.transferSeason.findUnique({ where: { code: season.code } })
-      const used = existingSeason ? await tx.chapterReorganization.count({ where: { transfer_season_id: existingSeason.id, status: 'APPLIED' } }) : 0
-      if (existingSeason && (used || policy.cutover_at && existingSeason.starts_at <= new Date())) throw new Error('TransferSeasonAlreadyUsed')
+      // A season may be corrected while it is still unused, including the
+      // current window. Any APPLIED transfer tied to the season, already
+      // attributed to its new window, or sitting in its previous window freezes
+      // the configuration. A SCHEDULED batch that still points at this season
+      // also freezes it: the worker trusts that link when it applies, so editing
+      // the season now could attribute the batch to the wrong window.
+      const previousWindow = existingSeason ? seasonWindowOf(existingSeason) : null
+      const windows = [
+        { startsAt, endsAt },
+        ...(previousWindow ? [{ startsAt: previousWindow.startsAt, endsAt: previousWindow.endsAt }] : []),
+      ]
+      const used = await tx.chapterReorganization.count({
+        where: {
+          OR: [
+            {
+              status: 'APPLIED',
+              OR: [
+                ...(existingSeason ? [{ transfer_season_id: existingSeason.id }] : []),
+                ...windows.map((window) => ({ effective_at: { gte: window.startsAt, lt: window.endsAt } })),
+              ],
+            },
+            ...(existingSeason ? [{ status: 'SCHEDULED' as const, transfer_season_id: existingSeason.id }] : []),
+          ],
+        },
+      })
+      if (used) throw new Error('TransferSeasonAlreadyUsed')
       await tx.transferSeason.upsert({ where: { code: season.code }, create: { code: season.code, starts_at: startsAt, ends_at: endsAt, reward_boundary_at: boundaryAt }, update: { starts_at: startsAt, ends_at: endsAt, reward_boundary_at: boundaryAt } })
     }
     for (const program of LEARNING_PROGRAMS) await tx.learningProgram.upsert({ where: { code: program.code }, update: {}, create: program })
@@ -84,7 +108,15 @@ export async function PUT(request: NextRequest) {
     await tx.auditLog.create({ data: { actor_user_id: actor.userId, action: 'CONFIGURE_LEARNING_POLICY', entity_type: 'USER', entity_id: actor.userId, metadata: { programCount: body.programs?.length || 0, targetCount: body.targets?.length || 0 } } })
   }, { timeout: 30_000 })
   } catch (error) {
-    return NextResponse.json({ error: { code: error instanceof Error && !('code' in error) ? error.message : 'ConfigurationInvalid', message: 'Không lưu được cấu hình. Kiểm tra mapping, mã và khoảng thời gian mùa.' } }, { status: 409 })
+    const code = error instanceof Error && !('code' in error) ? error.message : 'ConfigurationInvalid'
+    const messages: Record<string, string> = {
+      InvalidSeasonCode: 'Mã mùa chuyển giao không hợp lệ. Mã chỉ gồm chữ in hoa, số và dấu gạch dưới.',
+      InvalidRewardBoundary: 'Mốc thưởng phải đúng 01/04 hoặc 01/10 lúc 00:00 giờ Việt Nam và nằm trong mùa chuyển giao.',
+      InvalidSeasonWindow: 'Mùa chuyển giao phải trùng đúng một giai đoạn: 01/01–30/06 hoặc 01/07–31/12.',
+      OverlappingTransferSeason: 'Khoảng thời gian của mùa chuyển giao bị trùng với một mùa khác. Admin cần điều chỉnh để hai mùa không chồng lên nhau.',
+      TransferSeasonAlreadyUsed: 'Mùa này đã có chapter chuyển giao hoặc đang có đợt chờ áp dụng nên không thể sửa. Admin chỉ có thể sửa mùa chưa được sử dụng.',
+    }
+    return NextResponse.json({ error: { code, message: messages[code] || 'Không lưu được cấu hình. Kiểm tra lại thông tin mùa chuyển giao và các lựa chọn đã nhập.' } }, { status: 409 })
   }
   return NextResponse.json({ saved: true })
 }
@@ -98,15 +130,15 @@ export async function POST(request: NextRequest) {
   if (!Number.isFinite(at.getTime()) || at <= new Date()) return NextResponse.json({ error: { code: 'FutureCutoverRequired' } }, { status: 400 })
   const result = await prisma.$transaction(async (tx) => {
   await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('learning-catalog-configuration'))::text`
-  const [programs, targets, unclassified, legacyRules, ambiguousPositions, currentSeason] = await Promise.all([
+  const [programs, targets, unclassified, legacyRules, ambiguousPositions, seasonResolution] = await Promise.all([
     tx.learningProgram.findMany(), tx.learningTarget.findMany(),
     tx.course.count({ where: { status: 'PUBLISHED', program_id: null } }),
     tx.learningRule.count({ where: { effective_until: null, OR: [{ target_code: null }, { target_code: { notIn: LEARNING_TARGETS.map((row) => row.code) } }] } }),
     tx.positionAssignment.count({ where: { position: { code: 'CHAPTER_MANAGER' }, OR: [{ ends_at: null }, { ends_at: { gt: at } }] } }),
-    tx.transferSeason.findUnique({ where: { reward_boundary_at: chapterRewardBoundary(at) } }),
+    resolveSeasonForWindow(tx, at),
   ])
-  if (programs.length !== 4 || LEARNING_PROGRAMS.some((program) => !programs.some((row) => row.code === program.code && row.is_core === program.is_core)) || targets.length !== 18 || LEARNING_TARGETS.some((target) => !targets.some((row) => row.code === target.code)) || unclassified || legacyRules || ambiguousPositions || !currentSeason) {
-    return NextResponse.json({ error: { code: 'MappingIncomplete', message: 'Cần duyệt chương trình, target, rule cũ, chức vụ chưa rõ và cấu hình mùa chuyển giao.', unclassifiedCourses: unclassified, legacyRules, ambiguousPositions, seasonConfigured: Boolean(currentSeason) } }, { status: 409 })
+  if (programs.length !== 4 || LEARNING_PROGRAMS.some((program) => !programs.some((row) => row.code === program.code && row.is_core === program.is_core)) || targets.length !== 18 || LEARNING_TARGETS.some((target) => !targets.some((row) => row.code === target.code)) || unclassified || legacyRules || ambiguousPositions || !seasonResolution.ok) {
+    return NextResponse.json({ error: { code: 'MappingIncomplete', message: seasonResolution.message || 'Cần duyệt chương trình, target, rule cũ, chức vụ chưa rõ và cấu hình mùa chuyển giao.', unclassifiedCourses: unclassified, legacyRules, ambiguousPositions, seasonConfigured: seasonResolution.ok } }, { status: 409 })
   }
   const saved = await tx.learningPolicy.updateMany({ where: { id: 'default', cutover_at: null }, data: { cutover_at: at, mapping_approved_at: new Date() } })
   if (!saved.count) return NextResponse.json({ error: { code: 'PolicyAlreadyScheduled' } }, { status: 409 })

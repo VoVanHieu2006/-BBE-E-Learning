@@ -293,10 +293,13 @@ async function videoRewards() {
     })
     const now = new Date(), cutover = new Date(Date.now() - 86400000)
     await prisma.learningPolicy.create({ data: { id: 'default', cutover_at: cutover, mapping_approved_at: cutover } })
-    const { chapterRewardBoundary, dnaSeasonEnd } = require('../../src/lib/chapter-reward-gate')
+    const { chapterRewardBoundary } = require('../../src/lib/chapter-reward-gate')
+    const { windowOf, windowOfAnchor } = require('../../src/lib/transfer-windows')
     const boundary = chapterRewardBoundary(now)
-    let season = await prisma.transferSeason.findUnique({ where: { reward_boundary_at: boundary } })
-    if (!season) season = await prisma.transferSeason.create({ data: { code: `fb-${randomUUID()}`, starts_at: boundary, ends_at: dnaSeasonEnd(boundary), reward_boundary_at: boundary } })
+    const scheduleWindow = windowOf(now), pauseWindow = windowOfAnchor(boundary)
+    let season = await prisma.transferSeason.findUnique({ where: { reward_boundary_at: scheduleWindow.anchor } })
+    if (!season) season = await prisma.transferSeason.create({ data: { code: `fb-${randomUUID()}`, starts_at: scheduleWindow.startsAt, ends_at: scheduleWindow.endsAt, reward_boundary_at: scheduleWindow.anchor } })
+    else if (season.starts_at.getTime() !== scheduleWindow.startsAt.getTime() || season.ends_at.getTime() !== scheduleWindow.endsAt.getTime()) season = await prisma.transferSeason.update({ where: { id: season.id }, data: { starts_at: scheduleWindow.startsAt, ends_at: scheduleWindow.endsAt } })
     const f = await videoFixture()
     await prisma.chapterReorganization.create({ data: { chapter_id: f.ch.id, created_by_user_id: f.admin.id, effective_at: cutover, applied_at: cutover, status: 'APPLIED', transfer_season_id: season.id } })
     const beat = (position, event = 'HEARTBEAT') => recordVideoHeartbeat(f.member.id, f.lesson.id, position, position, false, 'fb-session', { event, playbackRate: 2, playerDurationSeconds: 862 })
@@ -335,8 +338,10 @@ async function videoRewards() {
       const g = await videoFixture()
       await prisma.chapter.update({ where: { id: g.ch.id }, data: { created_at: new Date(season.starts_at.getTime() - 200 * 86400000) } })
       // A founding Chapter remains eligible until its first actual transfer.
-      // This fixture tests an overdue *previously transferred* Chapter.
-      await prisma.chapterReorganization.create({ data: { chapter_id: g.ch.id, created_by_user_id: g.admin.id, status: 'APPLIED', effective_at: new Date(boundary.getTime() - 86400000), applied_at: new Date(boundary.getTime() - 86400000) } })
+      // This fixture tests an overdue *previously transferred* Chapter, so the
+      // earlier transfer sits before the current pause window.
+      const priorTransferAt = new Date(pauseWindow.startsAt.getTime() - 86400000)
+      await prisma.chapterReorganization.create({ data: { chapter_id: g.ch.id, created_by_user_id: g.admin.id, status: 'APPLIED', effective_at: priorTransferAt, applied_at: priorTransferAt } })
       const send = () => recordVideoHeartbeat(g.member.id, g.lesson.id, 862, 862, false, 'suppression', { event: 'ENDED', playbackRate: 2 })
       await recordVideoHeartbeat(g.member.id, g.lesson.id, 0, 0, false, 'suppression', { event: 'PLAY', playbackRate: 2 })
       await prisma.monthlyVideoReplay.updateMany({ where: { user_id: g.member.id, video_id: g.video.id }, data: { furthest_seconds: 842, last_heartbeat_at: new Date(Date.now() - 10050) } })

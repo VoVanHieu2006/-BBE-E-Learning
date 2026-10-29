@@ -62,7 +62,7 @@ Cookie login/refresh có HttpOnly, Secure ở production; client hiện vẫn l�
 ## Learning và transaction
 
 1. Legacy hoạt động trước cutover; Admin duyệt mapping/rules/aliases/season/readiness trước đặt future cutover.
-2. Sau cutover, context gồm tháng UTC+7, cycle học và cửa sổ thưởng. Training completion, monthly replay và sao là facts riêng.
+2. Sau cutover, context gồm tháng UTC+7, cycle học và cửa sổ thưởng. Cửa sổ chuyển giao nhiệm kỳ là `01/01–30/06` (mốc `01/04`) và `01/07–31/12` (mốc `01/10`); mọi thời điểm chuyển giao chuẩn hóa về mốc gần nhất. Theo quy tắc chuẩn, nhiệm kỳ thi đua là mốc + 6 tháng; việc mở nhiệm kỳ tại thời điểm apply vẫn nằm ngoài phạm vi P0–P4 và được ghi ở [known-issues](known-issues.md). Training completion, monthly replay và sao là facts riêng.
 3. Heartbeat kiểm tra video/session, lock user/context, tăng furthest theo elapsed bounded. ENDED có dung sai nhỏ, không bỏ chứng cứ watch time.
 4. Manual/auto submit dùng chung service, snapshot đề/grading, bảo vệ expiry/cycle cũ và high-water idempotency.
 5. Apply transfer snapshot/reset atomic rồi enqueue từng người; retry outbox không reset lại. DNA boundary riêng; scheduler trễ dùng DB clock thực.

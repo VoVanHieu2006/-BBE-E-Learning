@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
+import { describeWindow, formatVietnamDate, windowOf } from '@/lib/transfer-windows';
 import { formatTermBadge, SAMPLE_SHEET_URL } from './term-format';
 import type { TermTransitionState } from './useTermTransition';
 
@@ -33,6 +34,17 @@ type Props = Pick<
   | 'user'
 >;
 
+function transferWindowPreview(value: string) {
+  if (!value) return null;
+  const at = new Date(value);
+  if (Number.isNaN(at.getTime())) return null;
+  const window = windowOf(at);
+  return {
+    label: describeWindow(window),
+    anchor: formatVietnamDate(window.anchor),
+  };
+}
+
 export default function TransferDraft({
   currentTermNumber,
   deactivatingUserId,
@@ -58,6 +70,8 @@ export default function TransferDraft({
   termOptions,
   user,
 }: Props) {
+  const windowPreview = transferWindowPreview(effectiveAt);
+
   return (
     <>
           {!scheduledBatch && (
@@ -183,6 +197,16 @@ export default function TransferDraft({
                       onChange={(e) => setEffectiveAt(e.target.value)}
                       className="w-full rounded-xl border border-[#cbdbf5] px-3.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
                     />
+                    <p className="text-[11px] text-[#737686] mt-1">
+                      {windowPreview ? (
+                        <>
+                          Thời điểm này thuộc giai đoạn <strong className="text-[#172554]">{windowPreview.label}</strong>;
+                          mốc thưởng của giai đoạn là <strong className="text-[#172554]">{windowPreview.anchor}</strong>.
+                        </>
+                      ) : (
+                        'Chọn thời điểm để xem giai đoạn chuyển giao tương ứng.'
+                      )}
+                    </p>
                     <p className="text-[11px] text-[#737686] mt-1">
                       Nếu đặt ngày hiện tại, hệ thống sẽ áp dụng và đổi Ban cho Chapter ngay lập tức.
                     </p>
