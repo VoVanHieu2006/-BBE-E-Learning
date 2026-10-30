@@ -11,10 +11,16 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   title: "BBE E-Learning",
   description: "BBE E-Learning Club Platform — Nền tảng học tập và phát triển kỹ năng BBE",
+  manifest: "/manifest.webmanifest",
   icons: {
     icon: "/images/logo-white.png",
     shortcut: "/images/logo-white.png",
-    apple: "/images/logo-white.png",
+    apple: [{ url: "/icons/apple-touch-icon-180.png", sizes: "180x180", type: "image/png" }],
+  },
+  appleWebApp: {
+    capable: true,
+    title: "BBE Learn",
+    statusBarStyle: "black",
   },
 };
 

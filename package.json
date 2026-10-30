@@ -12,6 +12,7 @@
     "test:video-progress-session": "ts-node -P tsconfig.test.json src/test/video-progress-session.test.ts",
     "test:fb-fixes": "node scripts/test/test-fb-fixes.cjs",
     "test:video-controls": "ts-node -P tsconfig.test.json src/test/video-fullscreen-controls.test.ts",
+    "test:pwa": "ts-node -P tsconfig.test.json src/test/pwa-standalone.test.ts",
     "test:video-youtube-ux": "ts-node -P tsconfig.test.json src/test/video-controls-youtube-ux.test.ts",
     "test:video-switching-leak": "ts-node -P tsconfig.test.json src/test/video-switching-leak.test.ts",
     "test:baseline-safety": "node --test scripts/test/baseline-empty-database.test.mjs",

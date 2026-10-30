@@ -6,6 +6,7 @@ import { VideoControls } from '@/lib/video-controls';
 import { VideoFullscreen, type FullscreenMode } from '@/lib/video-fullscreen';
 import { VideoProgressSession, type PlaybackEvent, type VideoProgressPayload } from '@/lib/video-progress-session';
 import { isServerVideoCompleted } from '@/lib/video-progress-rules';
+import { isStandaloneMode } from '@/lib/pwa';
 
 declare global {
   interface Window {
@@ -107,6 +108,7 @@ export default function YouTubePlayer({
   const [retryNonce, setRetryNonce] = useState(0);
   const [progressNotice, setProgressNotice] = useState('');
   const [verificationState, setVerificationState] = useState<'IDLE' | 'PLAYING' | 'ENDING' | 'VERIFYING' | 'COMPLETED' | 'RETRYABLE_ERROR'>('IDLE');
+  const [isStandaloneApp, setIsStandaloneApp] = useState(false);
 
   const serverConfirmedFurthestRef = useRef(initialFurthest);
   const isVerifyingEndedRef = useRef(false);
@@ -126,6 +128,10 @@ export default function YouTubePlayer({
   const playerStateRef = useRef(-1);
   const finishPlaybackRef = useRef<() => Promise<void>>(async () => {});
   accessTokenRef.current = accessToken;
+
+  useEffect(() => {
+    setIsStandaloneApp(isStandaloneMode());
+  }, []);
 
   // Mobile Tiered Fullscreen management (Native Fullscreen + Viewport Theater Mode fallback for iPhone/WebKit)
   const fullscreenModeRef = useRef<FullscreenMode>('NONE');
@@ -914,7 +920,7 @@ export default function YouTubePlayer({
           : 'relative aspect-video rounded-3xl overflow-hidden'
       }`}
     >
-      {fullscreenMode === 'THEATER' && showControls && (
+      {fullscreenMode === 'THEATER' && showControls && !isStandaloneApp && (
         <span role="status" className="pointer-events-none absolute left-4 top-4 z-40 rounded-lg bg-slate-900/90 px-3 py-2 text-xs text-white mt-[env(safe-area-inset-top)] ml-[env(safe-area-inset-left)]" title="Trình duyệt không cho phép toàn màn hình thiết bị với player này; thanh địa chỉ có thể vẫn hiển thị.">
           Xem rộng trong trình duyệt
         </span>

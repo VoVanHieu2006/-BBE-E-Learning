@@ -418,6 +418,7 @@ for (const legacy of [false, true]) {
     await fullscreen(page).click();
     await viewportFilled(page);
     await expect(wrapper(page)).toHaveAttribute('data-fullscreen-mode', 'THEATER');
+    await expect(page.getByRole('status').filter({ hasText: 'Xem rộng trong trình duyệt' })).toBeVisible();
     expect(await page.evaluate(() => document.fullscreenElement === null)).toBe(true);
     await expect.poll(() => page.evaluate(() => history.state?.bbeTheater)).toBeTruthy();
     if (!legacy) await expect(wrapper(page)).toHaveJSProperty('popover', 'manual');
@@ -439,6 +440,17 @@ for (const legacy of [false, true]) {
     await hiddenAfterIdle(page);
   });
 }
+
+test('installed standalone mode hides the browser-only theater notice', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'standalone', { get: () => true, configurable: true });
+  });
+  await setup(page, { theater: true });
+  await fullscreen(page).click();
+  await viewportFilled(page);
+  await expect(wrapper(page)).toHaveAttribute('data-fullscreen-mode', 'THEATER');
+  await expect(page.getByRole('status').filter({ hasText: 'Xem rộng trong trình duyệt' })).toHaveCount(0);
+});
 
 test('native rejection falls back once; repeated theater exit/Back preserves Next history state', async ({ page }) => {
   await setup(page, { reject: true });
