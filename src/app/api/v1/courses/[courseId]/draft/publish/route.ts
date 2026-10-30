@@ -262,7 +262,7 @@ export async function POST(request: NextRequest, { params }: { params: { courseI
       // 6. Execute atomic publish requirements (increments content_version once, extends deadlines)
       const [clock] = await tx.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`
       const scope = await lockCompetitionScope(tx, clock.now)
-      const now = scope?.now || clock.now
+      const now = scope.now
       const publishedCourse = await executePublishCourseRequirements(tx, courseId, now)
 
       // 7. Delete draft

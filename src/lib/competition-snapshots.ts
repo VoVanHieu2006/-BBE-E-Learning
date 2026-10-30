@@ -486,16 +486,18 @@ export async function closeCompetitionTerms() {
   ])
   let captured = 0
   const policy = await prisma.learningPolicy.findUnique({ where: { id: 'default' } })
+  const cutoverAt = policy?.cutover_at || null
   const dnaSeasons = await prisma.transferSeason.findMany({ where: { reward_boundary_at: { not: null } } })
   for (const season of dnaSeasons) {
     const end = dnaSeasonEnd(season.reward_boundary_at!)
-    if (end > now || !policy?.cutover_at || end <= policy.cutover_at) continue
+    // Seasons that ended before the current model started remain history.
+    if (end > now || (cutoverAt && end <= cutoverAt)) continue
     await prisma.$transaction(async (tx) => {
       const users = await tx.user.findMany({ select: { id: true }, orderBy: { id: 'asc' } })
       for (const user of users) await lockLearningUser(tx, user.id)
       const key = `ranking:DNA:${season.id}`
       if (await tx.learningSnapshot.findUnique({ where: { key } })) return
-      const period = { ...season, starts_at: new Date(Math.max(season.reward_boundary_at!.getTime(), policy.cutover_at!.getTime())), ends_at: end }
+      const period = { ...season, starts_at: new Date(Math.max(season.reward_boundary_at!.getTime(), cutoverAt?.getTime() ?? 0)), ends_at: end }
       await saveSnapshot(tx, key, { group: 'DNA', periodType: 'TERM', period, state: 'FINALIZED', items: await individualPeriodRows(tx, period.starts_at, end, 'DNA') }, now)
       captured++
     }, { timeout: 60_000 })

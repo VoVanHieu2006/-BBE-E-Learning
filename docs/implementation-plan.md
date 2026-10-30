@@ -77,7 +77,6 @@ termOfAnchor(anchor)     → { startsAt: anchor, endsAt: anchor + 6 tháng }
 | `reorganizations/route.ts:177-184` | `findMany(starts_at <= t < ends_at)`, `length !== 1` → 1 câu lỗi | gọi `resolveSeasonForWindow(tx, at)` |
 | `chapter-reorganizations.ts:36-37` | như trên, throw `TransferSeasonNotConfigured` | gọi cùng hàm, throw theo `reason` |
 | `chapter-reward-gate.ts:31-32` | `findUnique(reward_boundary_at = boundary)` | gọi cùng hàm theo **cửa sổ chứa `t`** |
-| `admin/learning-policy/route.ts:106` | `findUnique(reward_boundary_at = chapterRewardBoundary(at))` | gọi cùng hàm theo **cửa sổ chứa `cutoverAt`** |
 
 `resolveSeasonForWindow(tx, at)` trả:
 
@@ -116,7 +115,7 @@ Trong `POST` route, **trước** mọi kiểm tra:
 
 ### A6. Giữ `chapterRewardBoundary` = mốc đã qua; tách phép tính mốc gần nhất cho đặt lịch (chặn R6)
 
-- `chapter-reward-gate.ts`: `chapterRewardBoundary` = `anchorElapsed` (**không** đổi sang `anchorNearest`). Đây là mốc cho ngừng thưởng, DNA reset và admin cutover.
+- `chapter-reward-gate.ts`: `chapterRewardBoundary` = `anchorElapsed` (**không** đổi sang `anchorNearest`). Đây là mốc cho ngừng thưởng, DNA reset và phân bổ kỳ lịch sử.
 - Đặt lịch và tra mùa dùng `anchorNearest` / `windowOf` trong `transfer-windows.ts`; không dùng chung một hàm với ngừng thưởng.
 - `chapter-reward-gate.ts`: kiểm tra bằng chứng `APPLIED` theo **đầu cửa sổ** `windowOfAnchor(anchorElapsed(at)).startsAt`, không so trực tiếp `applied_at >= boundary`.
 - `chapter-term-rules.ts`: dùng chung `isChapterTransferPausedAt`; khoảng xét là `[S(t), t]`, mở rộng qua cuối cửa sổ để đợt áp dụng trễ vẫn đóng được khoảng thiếu.

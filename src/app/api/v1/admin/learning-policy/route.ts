@@ -3,7 +3,7 @@ import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { LEARNING_PROGRAMS, LEARNING_TARGETS, suggestLearningProgram } from '@/lib/learning-catalog'
 import { normalizeLearningOrganization } from '@/lib/normalize-learning-organization'
-import { checkSeasonConfiguration, resolveSeasonForWindow, seasonWindowOf } from '@/lib/transfer-season-lookup'
+import { checkSeasonConfiguration, seasonWindowOf } from '@/lib/transfer-season-lookup'
 
 async function admin(request: NextRequest) {
   const auth = await authenticate(request)
@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({ policy, programs, targets, courses: courses.map((course) => ({ ...course, proposal: suggestLearningProgram(course.title) })), pending, failed, seasons })
 }
 
-/** Admin supplies explicit codes/mappings. No title matching or automatic cutover. */
+/** Admin supplies explicit codes/mappings. No title matching or automatic activation. */
 export async function PUT(request: NextRequest) {
   const actor = await admin(request)
   if (!actor) return NextResponse.json({ error: { code: 'AccessDenied' } }, { status: 403 })
@@ -37,8 +37,6 @@ export async function PUT(request: NextRequest) {
   try {
   await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('learning-catalog-configuration'))::text`
-    const policy = await tx.learningPolicy.upsert({ where: { id: 'default' }, update: {}, create: { id: 'default' } })
-    if (policy.cutover_at && (body.programs || body.targets || body.units || body.normalizeOrganization)) throw new Error('PolicyAlreadyScheduled')
     for (const season of body.seasons || []) {
       const startsAt = new Date(season.startsAt), endsAt = new Date(season.endsAt)
       const boundaryAt = new Date(season.rewardBoundaryAt)
@@ -89,11 +87,9 @@ export async function PUT(request: NextRequest) {
     })
     for (const row of body.courses || []) {
       const program = row.programCode ? await tx.learningProgram.findUniqueOrThrow({ where: { code: row.programCode } }) : null
-      if (policy.cutover_at) {
-        const course = await tx.course.findUniqueOrThrow({ where: { id: row.courseId } })
-        if (course.program_id === (program?.id || null)) continue
-        if (course.status === 'PUBLISHED' || course.program_id) throw new Error('PublishedProgramMappingImmutable')
-      }
+      const course = await tx.course.findUniqueOrThrow({ where: { id: row.courseId } })
+      if (course.program_id === (program?.id || null)) continue
+      if (course.status === 'PUBLISHED' || course.program_id) throw new Error('PublishedProgramMappingImmutable')
       await tx.course.update({ where: { id: row.courseId }, data: { program_id: program?.id || null } })
     }
     for (const row of body.units || []) {
@@ -104,7 +100,6 @@ export async function PUT(request: NextRequest) {
       if (!Array.isArray(body.retryOutboxIds) || body.retryOutboxIds.length > 100 || body.retryOutboxIds.some((id: unknown) => typeof id !== 'string' || !/^[0-9a-f-]{36}$/i.test(id))) throw new Error('InvalidOutboxIds')
       await tx.learningOutbox.updateMany({ where: { id: { in: body.retryOutboxIds }, processed_at: null }, data: { available_at: new Date() } })
     }
-    if (!policy.cutover_at && (body.courses || body.programs || body.targets || body.units || body.normalizeOrganization)) await tx.learningPolicy.update({ where: { id: 'default' }, data: { mapping_approved_at: null } })
     await tx.auditLog.create({ data: { actor_user_id: actor.userId, action: 'CONFIGURE_LEARNING_POLICY', entity_type: 'USER', entity_id: actor.userId, metadata: { programCount: body.programs?.length || 0, targetCount: body.targets?.length || 0 } } })
   }, { timeout: 30_000 })
   } catch (error) {
@@ -119,30 +114,4 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: { code, message: messages[code] || 'Không lưu được cấu hình. Kiểm tra lại thông tin mùa chuyển giao và các lựa chọn đã nhập.' } }, { status: 409 })
   }
   return NextResponse.json({ saved: true })
-}
-
-export async function POST(request: NextRequest) {
-  const actor = await admin(request)
-  if (!actor) return NextResponse.json({ error: { code: 'AccessDenied' } }, { status: 403 })
-  if (process.env.LEARNING_CUTOVER_ENABLED !== 'true') return NextResponse.json({ error: { code: 'ReleaseNotReady', message: 'Cutover chưa được mở trong cấu hình phát hành.' } }, { status: 409 })
-  const body = await request.json().catch(() => null)
-  const at = new Date(body?.cutoverAt)
-  if (!Number.isFinite(at.getTime()) || at <= new Date()) return NextResponse.json({ error: { code: 'FutureCutoverRequired' } }, { status: 400 })
-  const result = await prisma.$transaction(async (tx) => {
-  await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('learning-catalog-configuration'))::text`
-  const [programs, targets, unclassified, legacyRules, ambiguousPositions, seasonResolution] = await Promise.all([
-    tx.learningProgram.findMany(), tx.learningTarget.findMany(),
-    tx.course.count({ where: { status: 'PUBLISHED', program_id: null } }),
-    tx.learningRule.count({ where: { effective_until: null, OR: [{ target_code: null }, { target_code: { notIn: LEARNING_TARGETS.map((row) => row.code) } }] } }),
-    tx.positionAssignment.count({ where: { position: { code: 'CHAPTER_MANAGER' }, OR: [{ ends_at: null }, { ends_at: { gt: at } }] } }),
-    resolveSeasonForWindow(tx, at),
-  ])
-  if (programs.length !== 4 || LEARNING_PROGRAMS.some((program) => !programs.some((row) => row.code === program.code && row.is_core === program.is_core)) || targets.length !== 18 || LEARNING_TARGETS.some((target) => !targets.some((row) => row.code === target.code)) || unclassified || legacyRules || ambiguousPositions || !seasonResolution.ok) {
-    return NextResponse.json({ error: { code: 'MappingIncomplete', message: seasonResolution.message || 'Cần duyệt chương trình, target, rule cũ, chức vụ chưa rõ và cấu hình mùa chuyển giao.', unclassifiedCourses: unclassified, legacyRules, ambiguousPositions, seasonConfigured: seasonResolution.ok } }, { status: 409 })
-  }
-  const saved = await tx.learningPolicy.updateMany({ where: { id: 'default', cutover_at: null }, data: { cutover_at: at, mapping_approved_at: new Date() } })
-  if (!saved.count) return NextResponse.json({ error: { code: 'PolicyAlreadyScheduled' } }, { status: 409 })
-  return NextResponse.json({ cutoverAt: at.toISOString() })
-  })
-  return result
 }

@@ -62,9 +62,9 @@ test('FB03 all three conditions remain visible when every Chapter is excluded', 
 })
 
 test('FB08 UI displays backend readiness reason', async ({ page, context }) => {
-  await admin(page, context, url => url.pathname === '/api/v1/leaderboard' ? { state: 'AWAITING_CUTOVER', reasonCode: 'POLICY_MISSING', message: 'Chưa có cấu hình chính sách học tập.', items: [] } : null)
+  await admin(page, context, url => url.pathname === '/api/v1/leaderboard' ? { state: 'PERIOD_UNAVAILABLE', reasonCode: 'MONTH_NOT_CONFIGURED', message: 'Chưa có kỳ thi đua tháng hiện tại.', items: [] } : null)
   await page.goto('/leaderboard')
-  await expect(page.getByText('Chưa có cấu hình chính sách học tập.', { exact: true })).toBeVisible()
+  await expect(page.getByText('Chưa có kỳ thi đua tháng hiện tại.', { exact: true })).toBeVisible()
 })
 
 test('FB01 Admin updates quiz duration from 5 to 7 minutes and persists across reload', async ({ page, context }) => {

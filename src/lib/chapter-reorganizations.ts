@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { captureChapterActualTerm } from './chapter-actual-terms'
-import { learningContext, lockLearningUser, enqueueAssignmentSync, activeLearningPolicy } from './learning-periods'
+import { learningContext, lockLearningUser, enqueueAssignmentSync } from './learning-periods'
 import { windowOf } from './transfer-windows'
 import { resolveSeasonForWindow } from './transfer-season-lookup'
 
@@ -32,7 +32,6 @@ export async function applyDueChapterReorganizations(now = new Date(), batchId?:
         appliedAt = clock.now
       }
       if (fresh.items.some((item) => !rosterIds.includes(item.user_id))) throw new Error('TransferMemberNoLongerInChapter')
-      const policy = await activeLearningPolicy(tx, appliedAt)
       let seasonId = fresh.transfer_season_id
       // Duplicate protection belongs to the transfer window of the scheduled
       // effective time, not to a season row that an Admin may have edited.
@@ -45,16 +44,14 @@ export async function applyDueChapterReorganizations(now = new Date(), batchId?:
           effective_at: { gte: transferWindow.startsAt, lt: transferWindow.endsAt },
         },
       })) throw new Error('Giai đoạn này đã có một lần chuyển giao được áp dụng. Mỗi giai đoạn chỉ được chuyển giao một lần.')
-      if (policy) {
-        // A batch that was explicitly linked to a season keeps that link so
-        // legacy six-month seasons stay readable. New batches are validated by
-        // the POST route against the standard window.
-        const linked = seasonId ? await tx.transferSeason.findUnique({ where: { id: seasonId } }) : null
-        if (!linked) {
-          const resolution = await resolveSeasonForWindow(tx, fresh.effective_at)
-          if (!resolution.ok || !resolution.season) throw new Error(resolution.message || 'Chưa có mùa chuyển giao phù hợp cho giai đoạn đã chọn.')
-          seasonId = resolution.season.id
-        }
+      // A batch that was explicitly linked to a season keeps that link so
+      // legacy six-month seasons stay readable. New batches are validated by
+      // the POST route against the standard window.
+      const linked = seasonId ? await tx.transferSeason.findUnique({ where: { id: seasonId } }) : null
+      if (!linked) {
+        const resolution = await resolveSeasonForWindow(tx, fresh.effective_at)
+        if (!resolution.ok || !resolution.season) throw new Error(resolution.message || 'Chưa có mùa chuyển giao phù hợp cho giai đoạn đã chọn.')
+        seasonId = resolution.season.id
       }
       const snapshot = {
         scheduledAt: fresh.effective_at.toISOString(), appliedAt: appliedAt.toISOString(),
@@ -64,20 +61,18 @@ export async function applyDueChapterReorganizations(now = new Date(), batchId?:
       }
       await tx.learningSnapshot.create({ data: { key: `transfer:${batch.id}`, kind: 'BEFORE_TRANSFER', captured_at: appliedAt, payload: JSON.parse(JSON.stringify(snapshot)) } })
       await tx.chapterReorganization.update({ where: { id: batch.id }, data: { status: 'APPLIED', applied_at: appliedAt, transfer_season_id: seasonId, last_error: null, apply_attempts: { increment: 1 } } })
-      if (policy) {
-        await captureChapterActualTerm(tx, batch.chapter_id, appliedAt)
-        await tx.chapterCompetitionTerm.updateMany({ where: { chapter_id: batch.chapter_id, ends_at: null }, data: { ends_at: appliedAt } })
-        await tx.chapterCompetitionTerm.create({ data: { chapter_id: batch.chapter_id, season_id: seasonId, starts_at: appliedAt } })
-        for (const userId of rosterIds) {
-          await learningContext(tx, userId, appliedAt)
-          await tx.learningCycle.updateMany({ where: { user_id: userId, ends_at: null }, data: { ends_at: appliedAt } })
-          await tx.learningCycle.create({ data: { user_id: userId, chapter_id: batch.chapter_id, starts_at: appliedAt, trigger_key: `transfer:${batch.id}:${userId}` } })
-          await tx.attempt.updateMany({ where: { user_id: userId, status: 'IN_PROGRESS' }, data: { status: 'CANCELLED', submitted_at: appliedAt, cancellation_reason: 'LEARNING_CYCLE_RESET' } })
-          // lesson_progress is the compatibility projection; the previous cycle survives above.
-          await tx.lessonProgress.updateMany({ where: { user_id: userId }, data: { completed: false, completed_at: null, furthest_watched_position_seconds: 0, last_position_seconds: 0, last_watched_at: null } })
-          await tx.userLearningAssignment.updateMany({ where: { user_id: userId, ended_at: null }, data: { ended_at: appliedAt } })
-          await tx.supplementalLearningRequirement.updateMany({ where: { user_id: userId, ended_at: null }, data: { ended_at: appliedAt } })
-        }
+      await captureChapterActualTerm(tx, batch.chapter_id, appliedAt)
+      await tx.chapterCompetitionTerm.updateMany({ where: { chapter_id: batch.chapter_id, ends_at: null }, data: { ends_at: appliedAt } })
+      await tx.chapterCompetitionTerm.create({ data: { chapter_id: batch.chapter_id, season_id: seasonId, starts_at: appliedAt } })
+      for (const userId of rosterIds) {
+        await learningContext(tx, userId, appliedAt)
+        await tx.learningCycle.updateMany({ where: { user_id: userId, ends_at: null }, data: { ends_at: appliedAt } })
+        await tx.learningCycle.create({ data: { user_id: userId, chapter_id: batch.chapter_id, starts_at: appliedAt, trigger_key: `transfer:${batch.id}:${userId}` } })
+        await tx.attempt.updateMany({ where: { user_id: userId, status: 'IN_PROGRESS' }, data: { status: 'CANCELLED', submitted_at: appliedAt, cancellation_reason: 'LEARNING_CYCLE_RESET' } })
+        // lesson_progress is the compatibility projection; the previous cycle survives above.
+        await tx.lessonProgress.updateMany({ where: { user_id: userId }, data: { completed: false, completed_at: null, furthest_watched_position_seconds: 0, last_position_seconds: 0, last_watched_at: null } })
+        await tx.userLearningAssignment.updateMany({ where: { user_id: userId, ended_at: null }, data: { ended_at: appliedAt } })
+        await tx.supplementalLearningRequirement.updateMany({ where: { user_id: userId, ended_at: null }, data: { ended_at: appliedAt } })
       }
       for (const userId of rosterIds) await enqueueAssignmentSync(tx, userId, `transfer-sync:${batch.id}:${userId}`)
       // Do not backdate a delayed reset to its scheduled timestamp.
@@ -136,8 +131,18 @@ export async function applyDueChapterReorganizations(now = new Date(), batchId?:
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 30_000 })
     if (result) applied++
     } catch (error) {
-      await prisma.chapterReorganization.updateMany({ where: { id: batch.id, status: 'SCHEDULED' }, data: { last_error: error instanceof Error ? error.message.slice(0, 2000) : 'UnknownTransferError', apply_attempts: { increment: 1 } } })
+      await prisma.chapterReorganization.updateMany({ where: { id: batch.id, status: 'SCHEDULED' }, data: { last_error: transferApplyErrorMessage(error), apply_attempts: { increment: 1 } } })
     }
   }
   return applied
+}
+
+function transferApplyErrorMessage(error: unknown): string {
+  if (!(error instanceof Error)) return 'UnknownTransferError'
+  const detail = error as Error & { code?: string; meta?: { target?: unknown } }
+  const target = Array.isArray(detail.meta?.target) ? detail.meta.target.map(String) : []
+  if (detail.code === 'P2002' && (target.includes('transfer_season_id') || /chapter_transfers_one_applied_season|transfer_season_id/.test(error.message))) {
+    return 'Giai đoạn này đã có một lần chuyển giao được áp dụng. Mỗi giai đoạn chỉ được chuyển giao một lần.'
+  }
+  return error.message.slice(0, 2000)
 }

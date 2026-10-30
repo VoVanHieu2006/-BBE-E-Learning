@@ -25,7 +25,7 @@ const { processLearningOutbox } = require('../../src/lib/learning-outbox')
 const { prepareOrganizationTransition } = require('../../src/lib/organization-transition')
 const { publishCourseRequirements, captureCourseRequirementVersion } = require('../../src/lib/course-requirements')
 const { closeCompetitionMonths, completePendingCompetitionKpis, closeCompetitionTerms } = require('../../src/lib/competition-snapshots')
-const { initializeLearningCutover } = require('../../src/lib/learning-cutover')
+const { learningContext } = require('../../src/lib/learning-periods')
 const { windowOf } = require('../../src/lib/transfer-windows')
 
 const owned = { userIds: [] }
@@ -258,20 +258,13 @@ async function main() {
   await closeCompetitionTerms()
   assert.equal((await prisma.learningSnapshot.findUniqueOrThrow({ where: { key: `ranking:MEMBER:${closedTerm.id}` } })).payload.state, 'FINALIZED')
 
-  // A legacy ChapterMember may exist without a matching organization membership.
-  await prisma.learningPolicy.update({ where: { id: 'default' }, data: { cutover_at: null } })
-  const dual = await createOwnedUser({ data: { email: `legacy-dual-${suffix}@example.invalid`, password_hash: '-', role: 'MEMBER' } })
-  await prisma.chapterMember.create({ data: { user_id: dual.id, chapter_id: chapter.id } })
-  await prisma.organizationMembership.create({ data: { user_id: dual.id, unit_id: dna.id } })
-  await prisma.starLedger.create({ data: { user_id: dual.id, amount: 9, reason: 'ADMIN_ADJUSTMENT', source_type: 'USER', source_id: dual.id, reward_key: `legacy-dual:${suffix}` } })
-  await prisma.learningPolicy.update({ where: { id: 'default' }, data: { cutover_at: new Date(Date.now() - 1_000), mapping_approved_at: new Date() } })
-  owned.cutoverKey = `cutover:${(await prisma.learningPolicy.findUniqueOrThrow({ where: { id: 'default' } })).cutover_at.toISOString()}`
-  assert.equal(await initializeLearningCutover(), true)
-  assert.equal(await prisma.chapterMember.count({ where: { user_id: dual.id } }), 0, 'cutover atomically converts legacy dual affiliation to DNA')
-  assert.equal(await prisma.organizationMembership.count({ where: { user_id: dual.id, unit_id: dna.id, status: 'ACTIVE' } }), 1)
-  assert.equal((await prisma.starLedger.aggregate({ where: { user_id: dual.id }, _sum: { amount: true } }))._sum.amount, 9)
-  assert.equal(await initializeLearningCutover(), false, 'cutover retry is a no-op')
-  console.log('PASS: legacy import, stable deadlines, concurrent submissions, frozen questions, monthly replay, disconnected heartbeat, atomic transfer, retry, omitted roster, outbox exclusive DNA membership, shared-deadline publish retries and legacy supplemental reset history, delayed month close, historical roles, KPI completion, immutable term/month snapshots and atomic legacy dual-affiliation cutover.')
+  // Without a policy row the learning model still starts a native cycle.
+  await prisma.learningPolicy.deleteMany({ where: { id: 'default' } })
+  const fresh = await createOwnedUser({ data: { email: `fresh-${suffix}@example.invalid`, password_hash: '-', role: 'MEMBER' } })
+  const freshContext = await prisma.$transaction((tx) => learningContext(tx, fresh.id, new Date()))
+  assert.equal(freshContext.cycle.provenance, 'NATIVE')
+  assert.equal(await prisma.learningCycle.count({ where: { user_id: fresh.id } }), 1)
+  console.log('PASS: legacy import, stable deadlines, concurrent submissions, frozen questions, monthly replay, disconnected heartbeat, atomic transfer, retry, omitted roster, outbox exclusive DNA membership, shared-deadline publish retries and legacy supplemental reset history, delayed month close, historical roles, KPI completion, immutable term/month snapshots and policy-free native cycles.')
 }
 main().catch((error) => { console.error(error); process.exitCode = 1 }).finally(async () => {
   try { await cleanupOwnedFixtures() }

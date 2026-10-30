@@ -28,7 +28,7 @@ flowchart TD
 | `auth.ts`, `authorization.ts`, `chapter-lead.ts`, `affiliation-access.ts` | Status, chức vụ và resource scope |
 | `video-*`, `progression.ts`, `learning-unlocks.ts` | Playback đã ACK, progress/replay và mở bài |
 | `quiz-submission.ts`, `quiz-attempt-rules.ts`, `quiz-pool-selection.ts` | Chấm bài, snapshot, high-water, auto-submit |
-| `learning-*`, `shared-learning-path.ts`, `course-requirements.ts` | Cycle/cutover/readiness, nghĩa vụ/deadline, bổ sung bài |
+| `learning-*`, `shared-learning-path.ts`, `course-requirements.ts` | Cycle/readiness, nghĩa vụ/deadline, bổ sung bài |
 | `chapter-*`, `organization-transition.ts` | Roster, Lead binding, transfer, affiliation/history |
 | `competition-snapshots.ts`, `period-leaderboard.ts`, `chapter-term-results.ts` | Facts thời gian, snapshot và phân bổ kết quả |
 | `scripts/db`, `scripts/audit`, `scripts/test`, `scripts/perf` | Công cụ nhóm theo mục đích, giữ tên npm commands |
@@ -61,8 +61,8 @@ Cookie login/refresh có HttpOnly, Secure ở production; client hiện vẫn l�
 
 ## Learning và transaction
 
-1. Legacy hoạt động trước cutover; Admin duyệt mapping/rules/aliases/season/readiness trước đặt future cutover.
-2. Sau cutover, context gồm tháng UTC+7, cycle học và cửa sổ thưởng. Cửa sổ chuyển giao nhiệm kỳ là `01/01–30/06` (mốc `01/04`) và `01/07–31/12` (mốc `01/10`); mọi thời điểm chuyển giao chuẩn hóa về mốc gần nhất. Theo quy tắc chuẩn, nhiệm kỳ thi đua là mốc + 6 tháng; việc mở nhiệm kỳ tại thời điểm apply vẫn nằm ngoài phạm vi P0–P4 và được ghi ở [known-issues](known-issues.md). Training completion, monthly replay và sao là facts riêng.
+1. Mô hình deadline chung luôn chạy; Admin duyệt mapping/rules/aliases/season trước khi cấu hình có hiệu lực. Dữ liệu legacy chỉ còn là đường đọc lịch sử, không có cờ kích hoạt.
+2. Context gồm tháng UTC+7, cycle học và cửa sổ thưởng. Cửa sổ chuyển giao nhiệm kỳ là `01/01–30/06` (mốc `01/04`) và `01/07–31/12` (mốc `01/10`); mọi thời điểm chuyển giao chuẩn hóa về mốc gần nhất. Theo quy tắc chuẩn, nhiệm kỳ thi đua là mốc + 6 tháng; việc mở nhiệm kỳ tại thời điểm apply vẫn nằm ngoài phạm vi P0–P4 và được ghi ở [known-issues](known-issues.md). Training completion, monthly replay và sao là facts riêng.
 3. Heartbeat kiểm tra video/session, lock user/context, tăng furthest theo elapsed bounded. ENDED có dung sai nhỏ, không bỏ chứng cứ watch time.
 4. Manual/auto submit dùng chung service, snapshot đề/grading, bảo vệ expiry/cycle cũ và high-water idempotency.
 5. Apply transfer snapshot/reset atomic rồi enqueue từng người; retry outbox không reset lại. DNA boundary riêng; scheduler trễ dùng DB clock thực.
@@ -76,4 +76,4 @@ Server cache riêng theo role/scope/loại dữ liệu: course list TTL 15 giây
 
 ## Scheduler
 
-Worker phút gọi internal endpoints cho cutover tới hạn, apply transfer, DNA reset, outbox/retirement, đóng tháng/kỳ, auto-submit/deadline. Vercel daily cron là fallback, không bảo đảm cadence phút. Overlap guard trong process phối hợp DB lock/idempotency; cần provision/giám sát lag và lỗi. Xem [operations](operations.md) và [business-rules](business-rules.md).
+Worker phút gọi internal endpoints cho apply transfer, DNA reset, outbox/retirement, đóng tháng/kỳ, auto-submit/deadline. Vercel daily cron là fallback, không bảo đảm cadence phút. Overlap guard trong process phối hợp DB lock/idempotency; cần provision/giám sát lag và lỗi. Xem [operations](operations.md) và [business-rules](business-rules.md).

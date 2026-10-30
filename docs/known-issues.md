@@ -18,7 +18,7 @@ Lần chạy sau sửa fixture trong đợt cleanup: **8 PASS / 3 FAIL**, gồm 
 
 ## Hiệu năng và dữ liệu lớn
 
-GET chuyển giao hiện có side effect: `reorganizations`, `current-roster` và `dashboard/members` gọi `applyDueChapterReorganizations`. Fixture có batch `SCHEDULED` đã đến hạn chuyển thành `APPLIED` sau các GET Admin. Đây là hành vi source hiện hữu, được giữ trong cleanup; nếu muốn GET chỉ đọc cần thay đổi riêng với kiểm chứng scheduler/cutover/retry. Browser countdown chỉ chứng minh client không gửi POST apply, không chứng minh backend GET không thay dữ liệu.
+GET chuyển giao hiện có side effect: `reorganizations`, `current-roster` và `dashboard/members` gọi `applyDueChapterReorganizations`. Fixture có batch `SCHEDULED` đã đến hạn chuyển thành `APPLIED` sau các GET Admin. Đây là hành vi source hiện hữu, được giữ trong cleanup; nếu muốn GET chỉ đọc cần thay đổi riêng với kiểm chứng scheduler/retry. Admin không còn quyền đặt lịch/áp dụng/hủy (các endpoint trả `403 AdminReadOnly`); GET tự áp dụng là catch-up của hệ thống, không phải quyết định của Admin. Browser countdown chỉ chứng minh client không gửi POST apply, không chứng minh backend GET không thay dữ liệu.
 
 - Local→Supabase mới đo **1 VU**, latency login/progress/quiz cao; chưa xác nhận 100/300/500/1.000 người hoặc SLA production. Xem [performance](performance.md).
 - Legacy `src/app/api/v1/leaderboard/chapters/[chapterId]/route.ts` còn `take:500` trước tính/sort standings. Cần fixture >500 phù hợp scope; đây là source risk chưa tái hiện bằng cohort đó.
@@ -29,8 +29,8 @@ GET chuyển giao hiện có side effect: `reorganizations`, `current-roster` v�
 
 | Phạm vi | Giới hạn / bước tiếp |
 |---|---|
-| Production | Đối chiếu read-only revision/policy/mapping/season, provenance month/cycle và snapshots. Supabase timeout không có SELECT không chứng minh data đúng/sai; báo cáo phiên cũ không phải snapshot hiện tại. |
-| Cutover | Xác nhận readiness/approval; tài liệu không khẳng định production đang bật/tắt. Không tự tạo policy/đổi position để bypass. |
+| Production | Đối chiếu read-only revision/policy/mapping/season, index `chapter_transfers_one_applied_season`, provenance month/cycle và snapshots. Supabase timeout không có SELECT không chứng minh data đúng/sai; báo cáo phiên cũ không phải snapshot hiện tại. |
+| Readiness | API readiness không còn chặn theo policy/cutover; chỉ phản ánh kỳ hiện tại. Cần kiểm tra mapping/season thực tế trước khi vận hành; không tự tạo policy/đổi position để bypass. |
 | Lịch sử | Chưa chứng nhận đủ evidence mọi tháng/kỳ; thiếu trả reason, không dựng lại frozen snapshot theo affiliation hôm nay. |
 | Điện thoại thật | Android/iPhone Safari/Chrome native/theater, xoay/Back/tab, browser chrome, rate/seek/buffer/session cần máy thật. Touch emulation không thay nghiệm thu thiết bị. |
 | Video/DB/browser | Mock browser bảo vệ UI contract, không thay YouTube thật + learner DB thật. PASS chỉ đúng phạm vi đã chạy. |

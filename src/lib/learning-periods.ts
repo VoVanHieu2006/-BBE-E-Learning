@@ -11,18 +11,17 @@ export async function lockLearningUser(tx: LearningTx, userId: string) {
   return clock.now
 }
 
-export async function activeLearningPolicy(tx: LearningTx, now: Date) {
-  const policy = await tx.learningPolicy.findUnique({ where: { id: 'default' } })
-  return policy?.cutover_at && policy.mapping_approved_at && policy.cutover_at <= now ? policy : null
+/** The policy row is historical data now: cutover_at is only a legacy floor, never a gate. */
+export async function loadLearningPolicy(tx: LearningTx) {
+  return tx.learningPolicy.findUnique({ where: { id: 'default' } })
 }
 
 /** Lock a competition period before sampling the business timestamp. */
-export async function lockCompetitionScope(tx: LearningTx, now: Date): Promise<{ policy: LearningPolicy; month: CompetitionMonth; now: Date } | null> {
+export async function lockCompetitionScope(tx: LearningTx, now: Date): Promise<{ policy: LearningPolicy | null; month: CompetitionMonth; now: Date }> {
   const [initialClock] = await tx.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`
   now = initialClock.now
-  const policy = await activeLearningPolicy(tx, now)
-  if (!policy?.cutover_at) return null
-  const bounds = competitionMonthBounds(now, policy.cutover_at)
+  const policy = await loadLearningPolicy(tx)
+  const bounds = competitionMonthBounds(now, policy?.cutover_at)
   const month = await tx.competitionMonth.upsert({
     where: { key: bounds.key }, update: {},
     create: { key: bounds.key, starts_at: bounds.startsAt, ends_at: bounds.endsAt },
@@ -36,10 +35,9 @@ export async function lockCompetitionScope(tx: LearningTx, now: Date): Promise<{
 }
 
 /** Caller holds the user's lock. Transition import never infers historical terms. */
-export async function learningContext(tx: LearningTx, userId: string, now: Date): Promise<{ month: CompetitionMonth; cycle: LearningCycle; now: Date } | null> {
-  const policy = await activeLearningPolicy(tx, now)
-  if (!policy?.cutover_at) return null
-  const bounds = competitionMonthBounds(now, policy.cutover_at)
+export async function learningContext(tx: LearningTx, userId: string, now: Date): Promise<{ month: CompetitionMonth; cycle: LearningCycle; now: Date }> {
+  const policy = await loadLearningPolicy(tx)
+  const bounds = competitionMonthBounds(now, policy?.cutover_at)
   let month = await tx.competitionMonth.findUnique({ where: { key: bounds.key } })
   if (!month) {
     month = await tx.competitionMonth.upsert({
@@ -51,7 +49,7 @@ export async function learningContext(tx: LearningTx, userId: string, now: Date)
   // The month row is immutable for the purpose of a heartbeat. This avoids an
   // upsert + FOR SHARE + two clock queries on every video heartbeat.
   if (month.ends_at <= now) {
-    const next = competitionMonthBounds(month.ends_at, policy.cutover_at)
+    const next = competitionMonthBounds(month.ends_at, policy?.cutover_at)
     month = await tx.competitionMonth.findUnique({ where: { key: next.key } })
       || await tx.competitionMonth.upsert({ where: { key: next.key }, update: {}, create: { key: next.key, starts_at: next.startsAt, ends_at: next.endsAt } })
   }
@@ -59,10 +57,11 @@ export async function learningContext(tx: LearningTx, userId: string, now: Date)
   if (!cycle) {
     const chapter = await tx.chapterMember.findUnique({ where: { user_id: userId } })
     const user = await tx.user.findUniqueOrThrow({ where: { id: userId }, select: { created_at: true } })
-    const legacy = user.created_at <= policy.cutover_at!
+    const cutoverAt = policy?.cutover_at || null
+    const legacy = Boolean(cutoverAt && user.created_at <= cutoverAt)
     cycle = await tx.learningCycle.create({ data: {
-      user_id: userId, chapter_id: chapter?.chapter_id, trigger_key: `cutover:${userId}`,
-      starts_at: legacy ? policy.cutover_at! : now, provenance: legacy ? 'LEGACY' : 'NATIVE',
+      user_id: userId, chapter_id: chapter?.chapter_id, trigger_key: `initial:${userId}:${now.toISOString()}`,
+      starts_at: legacy ? cutoverAt! : now, provenance: legacy ? 'LEGACY' : 'NATIVE',
     } })
     const progress = await tx.lessonProgress.findMany({ where: { user_id: userId } })
     if (progress.length) await tx.cycleLessonProgress.createMany({ data: progress.map((row) => ({

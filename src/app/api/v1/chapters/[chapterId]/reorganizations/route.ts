@@ -1,4 +1,3 @@
-import { activeLearningPolicy } from '@/lib/learning-periods'
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { canAccessChapterPermission } from '@/lib/authorization'
@@ -65,8 +64,10 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
 export async function POST(request: NextRequest, { params }: { params: { chapterId: string } }) {
   const auth = await authenticate(request)
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: 401 })
+  if (auth.context!.role === 'ADMIN') {
+    return NextResponse.json({ error: { code: 'AdminReadOnly', message: 'Admin chỉ được xem chuyển giao nhiệm kỳ; việc đặt lịch do Chapter Quản lý thực hiện.' } }, { status: 403 })
+  }
   if (
-    auth.context!.role !== 'ADMIN' &&
     !(await canAccessChapterPermission(auth.context!, params.chapterId, 'MANAGE_CHAPTER_MEMBERS'))
   ) {
     return NextResponse.json({ error: { code: 'AccessDenied' } }, { status: 403 })
@@ -178,9 +179,8 @@ export async function POST(request: NextRequest, { params }: { params: { chapter
   }
 
   const transferWindow = windowOf(effectiveAt)
-  const policyActive = Boolean(await activeLearningPolicy(prisma, effectiveAt))
   let transferSeasonId: string | null = null
-  if (policyActive) {
+  {
     const resolution = await resolveSeasonForWindow(prisma, effectiveAt)
     if (!resolution.ok || !resolution.season) {
       return NextResponse.json({
@@ -220,13 +220,11 @@ export async function POST(request: NextRequest, { params }: { params: { chapter
     const queued = await tx.chapterReorganization.findFirst({ where: { chapter_id: params.chapterId, status: 'SCHEDULED' } })
     if (queued) return { conflict: 'ScheduledReorganizationExists' as const }
     let useSeasonId = transferSeasonId
-    if (policyActive) {
-      // Re-check inside the transaction so a season edited after the first
-      // lookup cannot silently attribute this transfer to another window.
-      const resolution = await resolveSeasonForWindow(tx, effectiveAt)
-      if (!resolution.ok || !resolution.season) return { conflict: resolution.reason, message: resolution.message } as const
-      useSeasonId = resolution.season.id
-    }
+    // Re-check inside the transaction so a season edited after the first
+    // lookup cannot silently attribute this transfer to another window.
+    const resolution = await resolveSeasonForWindow(tx, effectiveAt)
+    if (!resolution.ok || !resolution.season) return { conflict: resolution.reason, message: resolution.message } as const
+    useSeasonId = resolution.season.id
     if (await tx.chapterReorganization.count({
       where: {
         chapter_id: params.chapterId,

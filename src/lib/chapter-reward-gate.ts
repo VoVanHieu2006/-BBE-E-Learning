@@ -34,8 +34,6 @@ interface RewardState {
 
 /** Caller holds the user lock. Missing season configuration never pauses a Chapter by itself. */
 export async function chapterRewardState(tx: Prisma.TransactionClient, userId: string, at: Date): Promise<RewardState> {
-  const policy = await tx.learningPolicy.findUnique({ where: { id: 'default' } })
-  if (!policy?.cutover_at || !policy.mapping_approved_at || at < policy.cutover_at) return { paused: false, reason: null }
   const dna = await tx.organizationMembership.count({ where: { user_id: userId, status: 'ACTIVE', starts_at: { lte: at }, OR: [{ ends_at: null }, { ends_at: { gt: at } }], unit: { type: { in: ['DNA', 'DNA_GROUP'] } } } })
   if (dna) return { paused: false, reason: null }
   const member = await tx.chapterMember.findUnique({ where: { user_id: userId } })

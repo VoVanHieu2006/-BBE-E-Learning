@@ -19,11 +19,11 @@ Typecheck dùng `tsconfig.json`, hợp nhất config check trùng lặp. Unit d�
 | Formula regression | `test:formula-audit` | Hành vi kế thừa, không thay audit sổ tay độc lập |
 | Bootstrap | `test:baseline-safety` | Explicit destination/confirmation, populated/mismatch rejection, retry |
 | DB integration runner | `npm run test:integration -- <tên-suite>`, ví dụ `npm run test:integration -- admin-program` | Bắt buộc chọn đúng một suite trước khi ghi; không filter sẽ liệt kê và exit 1; mỗi suite có DB/app env riêng |
-| Learning DB/API | `test:learning-flow-integration`, `test:learning-security`, `test:learning-cycles-integration`, `test:reward-pause-integration` | Submission concurrency, snapshots/replay/cutover/reset, no-backpay, resource scope |
+| Learning DB/API | `test:learning-flow-integration`, `test:learning-security`, `test:learning-cycles-integration`, `test:reward-pause-integration` | Submission concurrency, snapshots/replay/readiness/reset, no-backpay, resource scope |
 | Chapter/BXH | `test:leaderboard-integration` và `scripts/test` | Roster/period/actual term, completed lessons, transfer/star history |
 | Tổ chức | `test:organization-integrity`, `test:organization-repair` | Single affiliation, Lead binding/tenure/import/concurrency, dry-run/repair/history |
 | Migration | `test:migration-rehearsal` | Apply/compatibility synthetic, không thay production-backup rehearsal |
-| FB fixes | `test:fb-fixes` | Invitation, duration, roster/history, readiness/rewards; DB riêng chặt |
+| FB fixes | `test:fb-fixes` | Invitation, duration, roster/history, readiness không cần cutover, rewards; DB riêng chặt |
 | Browser | `test:browser`, `test:video-player-browser`, `test:tab-cache`, `test:sidebar` | Player, cache/dedupe, navigation/motion; config riêng |
 | Load harness | `node --test load-tests/tests/safety.test.mjs load-tests/tests/profiler.test.mjs`, `node load-tests/tests/inspect.mjs`, `node load-tests/tests/harness-smoke.mjs` | Guards/profiler/k6 inspect/stub, không phải capacity evidence |
 

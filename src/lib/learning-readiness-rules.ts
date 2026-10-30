@@ -1,7 +1,6 @@
 export const learningReasonMessages: Record<string, string> = {
-  READY: 'Cấu hình sẵn sàng.', POLICY_MISSING: 'Chưa có cấu hình chính sách học tập.',
-  MAPPING_NOT_APPROVED: 'Mapping chương trình và đối tượng chưa được duyệt.', CUTOVER_NOT_SET: 'Chưa đặt thời điểm kích hoạt.',
-  CUTOVER_FUTURE: 'Chưa đến thời điểm kích hoạt đã đặt.', MONTH_NOT_CONFIGURED: 'Chưa khởi tạo tháng thi đua phù hợp.',
+  READY: 'Cấu hình sẵn sàng.',
+  MONTH_NOT_CONFIGURED: 'Chưa khởi tạo tháng thi đua phù hợp.',
   TERM_NOT_CONFIGURED: 'Chưa khởi tạo nhiệm kỳ Chapter phù hợp.', SEASON_NOT_CONFIGURED: 'Chưa khởi tạo mùa chuyển giao phù hợp.',
   SNAPSHOT_MISSING: 'Kỳ đã kết thúc nhưng chưa có snapshot.', CYCLE_NOT_STARTED: 'Chưa có chu kỳ học; tiến độ lịch sử được giữ riêng.',
   REPLAY_INCOMPLETE: 'Chưa xem đủ video trong lượt xem tháng này.', REPLAY_NOT_STARTED: 'Chưa bắt đầu lượt xem tháng này.',
@@ -13,8 +12,4 @@ export const learningReasonMessages: Record<string, string> = {
 
 export function readinessForReason(reasonCode: string) {
   return { ready: reasonCode === 'READY', reasonCode, message: learningReasonMessages[reasonCode] || reasonCode }
-}
-
-export function policyReadiness(policy: { mapping_approved_at: Date | null; cutover_at: Date | null } | null, at: Date) {
-  return readinessForReason(!policy ? 'POLICY_MISSING' : !policy.mapping_approved_at ? 'MAPPING_NOT_APPROVED' : !policy.cutover_at ? 'CUTOVER_NOT_SET' : policy.cutover_at > at ? 'CUTOVER_FUTURE' : 'READY')
 }

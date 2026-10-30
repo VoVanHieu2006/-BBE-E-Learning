@@ -45,10 +45,10 @@ Các lệnh chuyên biệt vẫn nằm trong [package.json](package.json). Khôn
 
 | Tài liệu | Nội dung |
 |---|---|
-| [Nghiệp vụ](docs/business-rules.md) | Quy tắc, quyết định thay thế, khác biệt legacy/cutover |
+| [Nghiệp vụ](docs/business-rules.md) | Quy tắc, quyết định thay thế, dữ liệu legacy |
 | [Kiến trúc](docs/architecture.md) | Module, dữ liệu, quyền, cache và scheduler |
 | [API](docs/api.md) | 96 route, method, guard, request/response và lỗi |
-| [Vận hành](docs/operations.md) | Cấu hình, bootstrap, triển khai, mapping, cutover, phục hồi |
+| [Vận hành](docs/operations.md) | Cấu hình, bootstrap, triển khai, mapping, mùa chuyển giao, phục hồi |
 | [Kiểm thử](docs/testing.md) | Suite duy trì, DB riêng và nghiệm thu thủ công |
 | [Vấn đề còn mở](docs/known-issues.md) | Bằng chứng, cách tái hiện và giới hạn kiểm chứng |
 | [Hiệu năng](docs/performance.md) | Số đo thực, mô hình tải và giới hạn kết luận |

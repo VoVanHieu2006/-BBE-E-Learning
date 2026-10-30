@@ -517,12 +517,6 @@ export default function UnifiedLeaderboard({
             Thử lại
           </button>
         </Card>
-      ) : leaderboardState === 'AWAITING_CUTOVER' ? (
-        <Card className="p-12 text-center text-sm text-slate-600 rounded-3xl space-y-2">
-          <div className="text-4xl">⏳</div>
-          <h3 className="text-base font-bold text-[#172554]">Kỳ chưa được kích hoạt</h3>
-          <p className="text-xs text-slate-500">{readinessMessage || 'Bảng xếp hạng đang chờ Quản trị viên kích hoạt chu kỳ học tập.'}</p>
-        </Card>
       ) : leaderboardState === 'PERIOD_UNAVAILABLE' ? (
         <Card className="p-12 text-center text-sm text-slate-600 rounded-3xl space-y-2">
           <div className="text-4xl">🔍</div>

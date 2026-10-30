@@ -26,7 +26,7 @@ describe('Chapter overdue transfer reward pause', () => {
 
 describe('Vietnam competition months', () => {
   const cutover = new Date('2026-09-15T05:00:00Z')
-  it('uses the actual cutover for the first shortened official month', () => {
+  it('uses the historical cutover floor for the first shortened official month', () => {
     assert.deepEqual(competitionMonthBounds(cutover, cutover), { key: '2026-09', startsAt: cutover, endsAt: new Date('2026-09-30T17:00:00Z') })
   })
   it('changes months exactly at midnight UTC+7, including December', () => {

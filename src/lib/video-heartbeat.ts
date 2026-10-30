@@ -1,6 +1,7 @@
 import { prisma } from './prisma'
 import {
   capVideoProgress,
+  displayVideoProgressPercent,
   endedCompletionToleranceSeconds,
   hasCompletedVideoAtEnd,
   normalizePlaybackRate,
@@ -13,7 +14,6 @@ import { syncCourseAssignmentCompletion } from './learning-assignments'
 import { persistLearningUnlocks } from './learning-unlocks'
 import { checkLessonProgression } from './progression'
 import { chapterRewardState } from './chapter-reward-gate'
-import { readLearningReadiness } from './learning-readiness'
 import { readinessForReason } from './learning-readiness-rules'
 
 export type VideoHeartbeatEvent = 'PLAY' | 'HEARTBEAT' | 'PAUSE' | 'ENDED'
@@ -54,33 +54,25 @@ export async function recordVideoHeartbeat(
     })
     if (!lesson?.video) return null
     const context = await learningContext(tx, userId, now)
-    now = context?.now || now
+    now = context.now
 
     const duration = Number(lesson.video.duration_seconds)
     const safeDuration = Number.isFinite(duration) && duration > 0 ? duration : 0
     const key = { user_id: userId, lesson_id: lessonId }
     const existing = await tx.lessonProgress.findUnique({ where: { user_id_lesson_id: key } })
-    const replayKey = context
-      ? {
-          user_id: userId,
-          video_id: lesson.video.id,
-          competition_month_id: context.month.id,
-          learning_cycle_id: context.cycle.id,
-        }
-      : null
-    const replay = replayKey
-      ? await tx.monthlyVideoReplay.findUnique({
-          where: { user_id_video_id_competition_month_id_learning_cycle_id: replayKey },
-        })
-      : null
-    const cycleProgressKey = context
-      ? { user_id: userId, lesson_id: lessonId, learning_cycle_id: context.cycle.id }
-      : null
-    const existingCycleProgress = cycleProgressKey
-      ? await tx.cycleLessonProgress.findUnique({
-          where: { user_id_lesson_id_learning_cycle_id: cycleProgressKey },
-        })
-      : null
+    const replayKey = {
+      user_id: userId,
+      video_id: lesson.video.id,
+      competition_month_id: context.month.id,
+      learning_cycle_id: context.cycle.id,
+    }
+    const replay = await tx.monthlyVideoReplay.findUnique({
+      where: { user_id_video_id_competition_month_id_learning_cycle_id: replayKey },
+    })
+    const cycleProgressKey = { user_id: userId, lesson_id: lessonId, learning_cycle_id: context.cycle.id }
+    const existingCycleProgress = await tx.cycleLessonProgress.findUnique({
+      where: { user_id_lesson_id_learning_cycle_id: cycleProgressKey },
+    })
     // Once a lesson has been earned/unlocked, do not re-run the full ordered
     // curriculum gate on every heartbeat. The first heartbeat (or a genuinely
     // locked lesson) still receives the authoritative server-side check.
@@ -135,9 +127,7 @@ export async function recordVideoHeartbeat(
               user_id: userId,
               assessment_id: lesson.assessment.id,
               passed: true,
-              ...(context
-                ? { OR: [{ learning_cycle_id: context.cycle.id }, ...(context.cycle.provenance === 'LEGACY' ? [{ learning_cycle_id: null }] : [])] }
-                : {}),
+              OR: [{ learning_cycle_id: context.cycle.id }, ...(context.cycle.provenance === 'LEGACY' ? [{ learning_cycle_id: null }] : [])],
               status: { in: ['SUBMITTED', 'AUTO_SUBMITTED'] },
             },
           }))
@@ -156,7 +146,7 @@ export async function recordVideoHeartbeat(
     const trainingFurthest = safeDuration > 0
       ? Math.min(safeDuration, Math.max(training.furthestWatchedPositionSeconds, finalCycleFurthest))
       : Math.max(training.furthestWatchedPositionSeconds, finalCycleFurthest)
-    const trainingVideoComplete = alreadyTrainingVideoComplete || (context ? cycleVideoComplete : hasCompletedVideoAtEnd(trainingFurthest, safeDuration, event))
+    const trainingVideoComplete = alreadyTrainingVideoComplete || cycleVideoComplete
     const finalTrainingFurthest = trainingVideoComplete && safeDuration > 0 ? safeDuration : trainingFurthest
     const lifetimeCompleted = Boolean(existing?.completed || cycleCompleted)
     const lifetimeCompletedAt = lifetimeCompleted ? existing?.completed_at || cycleCompletedAt || now : null
@@ -183,7 +173,7 @@ export async function recordVideoHeartbeat(
     // ---- Monthly replay progress (independent from training completion) ----
     let replayFurthest = 0
     let rewardComplete = false
-    if (context && replayKey) {
+    {
       // A brand-new monthly replay starts at zero. The first heartbeat after it
       // is created establishes last_heartbeat_at; the next heartbeat is the
       // first one that may advance content. This prevents importing old watch
@@ -215,16 +205,14 @@ export async function recordVideoHeartbeat(
         update: replayData,
       })
       await tx.cycleLessonProgress.upsert({
-        where: { user_id_lesson_id_learning_cycle_id: cycleProgressKey! },
+        where: { user_id_lesson_id_learning_cycle_id: cycleProgressKey },
         create: {
-          ...cycleProgressKey!,
+          ...cycleProgressKey,
           furthest_seconds: Math.floor(finalCycleFurthest),
           completed_at: cycleCompletedAt,
         },
         update: { furthest_seconds: Math.floor(finalCycleFurthest), completed_at: cycleCompletedAt },
       })
-    } else {
-      rewardComplete = trainingVideoComplete
     }
 
     // A reward is only paid when the backend has accepted enough fresh viewing
@@ -232,9 +220,9 @@ export async function recordVideoHeartbeat(
     let amount = 0
     let rewardKey: string | null = null
     let rewardBalance: number | null = null
-    let rewardReason = context ? 'REPLAY_INCOMPLETE' : (await readLearningReadiness(tx, now)).reasonCode
+    let rewardReason = 'REPLAY_INCOMPLETE'
     let rewardSuppressed = Boolean(replay?.reward_suppressed_at)
-    if (rewardComplete && context) {
+    if (rewardComplete) {
       const rewardState = await chapterRewardState(tx, userId, now)
       rewardReason = rewardSuppressed ? 'SUPPRESSED' : 'REWARD_NOT_ELIGIBLE'
       if (rewardState.paused) {
@@ -242,7 +230,7 @@ export async function recordVideoHeartbeat(
         rewardSuppressed = true
         if (!replay?.reward_suppressed_at) {
           await tx.monthlyVideoReplay.update({
-            where: { user_id_video_id_competition_month_id_learning_cycle_id: replayKey! },
+            where: { user_id_video_id_competition_month_id_learning_cycle_id: replayKey },
             data: { reward_suppressed_at: now },
           })
         }
@@ -271,40 +259,18 @@ export async function recordVideoHeartbeat(
         rewardReason = entry.count ? 'AWARDED' : 'ALREADY_AWARDED'
         if (amount > 0) rewardKey = candidateKey
       }
-    } else if (rewardComplete) {
-      // Transitional compatibility when cutover has not been enabled yet.
-      const chapter = await tx.chapterMember.findUnique({ where: { user_id: userId } })
-      const stars = starsForVideoDuration(safeDuration)
-      const candidateKey = `video:${userId}:${lesson.video.id}`
-      const entry = await tx.starLedger.createMany({
-        data: [{
-          user_id: userId,
-          amount: stars,
-          reason: 'VIDEO_COMPLETION',
-          reward_key: candidateKey,
-          source_type: 'VIDEO',
-          source_id: lesson.video.id,
-          awarded_at: now,
-          chapter_at_award_id: chapter?.chapter_id ?? null,
-          provenance: 'LEGACY',
-          metadata: { lessonId, durationSeconds: safeDuration, playbackRate },
-        }],
-        skipDuplicates: true,
-      })
-      amount = entry.count ? stars : 0
-      if (amount > 0) rewardKey = candidateKey
     }
 
-    const effectivelyCompleted = context ? cycleCompleted : updated.completed
+    const effectivelyCompleted = cycleCompleted
     if (effectivelyCompleted) {
       await syncCourseAssignmentCompletion(userId, lesson.session.course_id, tx)
       await enqueueAssignmentSync(
         tx,
         userId,
-        `video-complete:${context?.cycle.id || 'legacy'}:${userId}:${lessonId}`,
+        `video-complete:${context.cycle.id}:${userId}:${lessonId}`,
       )
     }
-    if (context && (!existingCycleProgress?.unlocked_at || cycleVideoComplete || cycleCompleted)) {
+    if (!existingCycleProgress?.unlocked_at || cycleVideoComplete || cycleCompleted) {
       await persistLearningUnlocks(tx, userId, lesson.session.course_id, context.cycle.id, now)
     }
 
@@ -312,10 +278,8 @@ export async function recordVideoHeartbeat(
       const balance = await tx.starLedger.aggregate({ where: { user_id: userId }, _sum: { amount: true } })
       rewardBalance = balance._sum.amount || 0
     }
-    const effectiveVideoCompleted = context ? cycleVideoComplete : trainingVideoComplete
-    const progressPercentage = safeDuration > 0
-      ? (effectiveVideoCompleted ? 100 : Math.min(100, Math.max(0, Math.round((context ? finalCycleFurthest : finalTrainingFurthest) / safeDuration * 100))))
-      : 0
+    const effectiveVideoCompleted = cycleVideoComplete
+    const progressPercentage = displayVideoProgressPercent(finalCycleFurthest, safeDuration, effectiveVideoCompleted)
 
     return {
       lessonId,
@@ -323,18 +287,18 @@ export async function recordVideoHeartbeat(
       videoId: lesson.video.id,
       viewSessionId,
       progressContext: {
-        learningCycleId: context?.cycle.id || null,
-        competitionMonthId: context?.month.id || null,
-        monthlyReplayRequired: Boolean(context),
+        learningCycleId: context.cycle.id,
+        competitionMonthId: context.month.id,
+        monthlyReplayRequired: true,
       },
       lifetime: { completed: updated.completed, completedAt: updated.completed_at, furthestWatchedPositionSeconds: updated.furthest_watched_position_seconds },
-      cycleProgress: context ? { learningCycleId: context.cycle.id, completed: cycleCompleted, videoCompleted: cycleVideoComplete, completedAt: cycleCompletedAt, furthestWatchedPositionSeconds: Math.floor(finalCycleFurthest) } : null,
+      cycleProgress: { learningCycleId: context.cycle.id, completed: cycleCompleted, videoCompleted: cycleVideoComplete, completedAt: cycleCompletedAt, furthestWatchedPositionSeconds: Math.floor(finalCycleFurthest) },
       rewardStatus: readinessForReason(rewardReason),
       videoCompleted: effectiveVideoCompleted,
-      completed: context ? cycleCompleted : updated.completed,
-      completedAt: context ? cycleCompletedAt : updated.completed_at,
+      completed: cycleCompleted,
+      completedAt: cycleCompletedAt,
       lastPositionSeconds: updated.last_position_seconds,
-      furthestWatchedPositionSeconds: context ? Math.floor(finalCycleFurthest) : updated.furthest_watched_position_seconds,
+      furthestWatchedPositionSeconds: Math.floor(finalCycleFurthest),
       progressPercentage,
       durationSeconds: safeDuration,
       videoDurationMismatch,
@@ -342,21 +306,19 @@ export async function recordVideoHeartbeat(
       event,
       training: {
         videoCompleted: effectiveVideoCompleted,
-        completed: context ? cycleCompleted : updated.completed,
-        completedAt: context ? cycleCompletedAt : updated.completed_at,
-        furthestWatchedPositionSeconds: Math.floor(context ? finalCycleFurthest : finalTrainingFurthest),
+        completed: cycleCompleted,
+        completedAt: cycleCompletedAt,
+        furthestWatchedPositionSeconds: Math.floor(finalCycleFurthest),
         progressPercentage,
       },
-      replay: context
-        ? {
-            competitionMonth: context.month.key,
-            competitionMonthId: context.month.id,
-            learningCycleId: context.cycle.id,
-            watchedSeconds: Math.floor(rewardComplete && safeDuration > 0 ? safeDuration : replayFurthest),
-            completed: rewardComplete,
-            suppressed: rewardSuppressed,
-          }
-        : null,
+      replay: {
+        competitionMonth: context.month.key,
+        competitionMonthId: context.month.id,
+        learningCycleId: context.cycle.id,
+        watchedSeconds: Math.floor(rewardComplete && safeDuration > 0 ? safeDuration : replayFurthest),
+        completed: rewardComplete,
+        suppressed: rewardSuppressed,
+      },
       starReward: {
         awarded: amount > 0,
         amount,

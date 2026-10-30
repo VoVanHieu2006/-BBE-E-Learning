@@ -35,7 +35,6 @@ const unitRootIds = []
 const courseIds = []
 const positionIds = []
 const permissionIds = []
-const previousPolicy = await prisma.learningPolicy.findUnique({ where: { id: 'default' } })
 
 async function issueAccessToken(userId, role) {
   return new SignJWT({ role })
@@ -164,9 +163,6 @@ async function cleanupFixtures() {
 }
 
 try {
-  // This suite verifies the retained legacy path. Post-cutover cycle/replay behavior
-  // is covered by learning-cycles, reward-pause and FB video integration suites.
-  if (previousPolicy) await prisma.learningPolicy.update({ where: { id: 'default' }, data: { cutover_at: null, mapping_approved_at: null } })
   const [databaseInfo] = await prisma.$queryRaw`SELECT current_database() AS name, inet_server_addr()::text AS address`
   assert.equal(databaseInfo.name, 'bbe_test_learning_flow', 'Prisma must be connected to the dedicated learning-flow test database')
   const databaseAddress = databaseInfo.address ? databaseInfo.address.split('/')[0] : null
@@ -447,8 +443,8 @@ try {
   assert.equal(finalRetry.response.status, 429, 'the final exam also enforces its retry cooldown')
   await prisma.attempt.update({ where: { id: finalAttempt.data.attemptId }, data: { submitted_at: new Date(Date.now() - 25 * 60 * 60 * 1000) } })
   const passedFinalRetry = await startAttempt(finalAssessment.assessmentId, learnerToken)
-  assert.equal(passedFinalRetry.response.status, 409, 'before cutover a passed final remains closed after cooldown')
-  assert.equal(passedFinalRetry.data.error.code, 'FinalExamAlreadyPassed')
+  assert.equal(passedFinalRetry.response.status, 201, 'a passed final can be retaken after the cooldown')
+  assert.equal(passedFinalRetry.data.attemptNumber, 2)
   assert.equal(await prisma.starLedger.aggregate({ where: { user_id: learnerId, source_type: 'ASSESSMENT', source_id: finalAssessment.assessmentId }, _sum: { amount: true } }).then((row) => row._sum.amount), 2)
   const assignment = await prisma.userLearningAssignment.findFirst({ where: { user_id: learnerId, course_id: course.id, ended_at: null } })
   assert.equal(assignment.status, 'COMPLETED', 'passing the final exam materializes course assignment completion')
@@ -583,6 +579,5 @@ try {
     console.error(error instanceof Error ? error.message : 'Unknown cleanup error')
     process.exitCode = 1
   }
-  if (previousPolicy) await prisma.learningPolicy.update({ where: { id: 'default' }, data: { cutover_at: previousPolicy.cutover_at, mapping_approved_at: previousPolicy.mapping_approved_at } })
   await prisma.$disconnect()
 }

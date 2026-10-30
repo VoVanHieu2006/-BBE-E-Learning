@@ -9,7 +9,6 @@ import { getLearningManagerKind } from './manager-learning-access'
 import { listAccessibleChapterIds, listManagedOrganizationUnits } from './authorization'
 import { listChapterLearners } from './chapter-members'
 import { currentLearningAffiliation } from './affiliation-access'
-import { readLearningReadiness } from './learning-readiness'
 import { readinessForReason } from './learning-readiness-rules'
 
 async function currentChapterMetadata(chapterIds: string[], asOf: Date) {
@@ -93,11 +92,8 @@ export async function periodLeaderboard(request: NextRequest) {
   }
 
   const now = new Date()
-  const readiness = await readLearningReadiness(prisma, now)
-  const policy = readiness.policy
-  // A public board may still be viewed before cutover (it will simply be empty);
-  // authenticated managers get an explicit state instead of a misleading zero.
-  if (!readiness.ready) return NextResponse.json({ items: [], state: 'AWAITING_CUTOVER', group, periodType, readiness, reasonCode: readiness.reasonCode, message: readiness.message })
+  const policy = await prisma.learningPolicy.findUnique({ where: { id: 'default' } })
+  const cutoverAt = policy?.cutover_at || null
 
   const periodId = query.get('periodId')
   if (periodId && (periodType === 'MONTH' ? !/^\d{4}-(0[1-9]|1[0-2])$/.test(periodId) : !/^[0-9a-f-]{36}$/i.test(periodId))) {
@@ -139,10 +135,10 @@ export async function periodLeaderboard(request: NextRequest) {
         orderBy: { reward_boundary_at: 'desc' },
       })
     : null
-  const dnaPeriod = group === 'DNA' && season?.reward_boundary_at && policy?.cutover_at
+  const dnaPeriod = group === 'DNA' && season?.reward_boundary_at
     ? {
         ...season,
-        starts_at: new Date(Math.max(season.reward_boundary_at.getTime(), policy.cutover_at.getTime())),
+        starts_at: cutoverAt ? new Date(Math.max(season.reward_boundary_at.getTime(), cutoverAt.getTime())) : season.reward_boundary_at,
         ends_at: dnaSeasonEnd(season.reward_boundary_at),
       }
     : null

@@ -23,14 +23,14 @@ export default function LearningPolicyPage() {
     setBusy(true); setMessage('')
     const response = await apiFetch('/api/v1/admin/learning-policy', { method: 'PUT', body: JSON.stringify({ courses: Object.entries(mapping).map(([courseId, programCode]) => ({ courseId, programCode: programCode || null })) }) })
     setBusy(false)
-    if (response.ok) { await load(); setMessage('Đã lưu mapping được chọn. Cutover chưa được kích hoạt.') }
+    if (response.ok) { await load(); setMessage('Đã lưu mapping được chọn.') }
     else setMessage(response.error?.message || 'Không lưu được mapping. Hãy thử lại.')
   }
   async function normalizeOrganization() {
     setBusy(true)
     const response = await apiFetch('/api/v1/admin/learning-policy', { method: 'PUT', body: JSON.stringify({ normalizeOrganization: true }) })
     setBusy(false)
-    setMessage(response.ok ? 'Đã gán mã chuẩn, bổ sung Ban còn thiếu và giữ các liên kết hiện có. Chức vụ Chủ tịch sẽ chuyển đổi ở cutover.' : response.error?.message || 'Chưa chuẩn hóa được. Kiểm tra Ban trùng và thử lại.')
+    setMessage(response.ok ? 'Đã gán mã chuẩn, bổ sung Ban còn thiếu và giữ các liên kết hiện có.' : response.error?.message || 'Chưa chuẩn hóa được. Kiểm tra Ban trùng và thử lại.')
     if (response.ok) await load()
   }
   async function retrySynchronization() {

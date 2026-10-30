@@ -28,12 +28,10 @@ async function reconcileAssignments(
 ): Promise<{ created: number; ended: number }> {
   const now = await lockLearningUser(db, userId)
   const context = await learningContext(db, userId, now)
-  if (context) {
-    const dna = await db.organizationMembership.findFirst({ where: { user_id: userId, status: 'ACTIVE', starts_at: { lte: now }, OR: [{ ends_at: null }, { ends_at: { gt: now } }], unit: { type: { in: ['DNA', 'DNA_GROUP'] } } } })
-    if (dna) {
-      await prepareOrganizationTransition(db, userId, dna.unit_id)
-      if (context.cycle.provenance === 'LEGACY') await db.learningCycle.update({ where: { id: context.cycle.id }, data: { chapter_id: null } })
-    }
+  const dna = await db.organizationMembership.findFirst({ where: { user_id: userId, status: 'ACTIVE', starts_at: { lte: now }, OR: [{ ends_at: null }, { ends_at: { gt: now } }], unit: { type: { in: ['DNA', 'DNA_GROUP'] } } } })
+  if (dna) {
+    await prepareOrganizationTransition(db, userId, dna.unit_id)
+    if (context.cycle.provenance === 'LEGACY') await db.learningCycle.update({ where: { id: context.cycle.id }, data: { chapter_id: null } })
   }
   const [memberships, positions, rules, activeAssignments] = await Promise.all([
     db.organizationMembership.findMany({ where: { user_id: userId, status: 'ACTIVE', starts_at: { lte: now }, OR: [{ ends_at: null }, { ends_at: { gt: now } }] }, select: { unit_id: true } }),
@@ -83,97 +81,38 @@ async function reconcileAssignments(
       rule.organization_unit_id ? eligibleUnitsByRule.get(rule.organization_unit_id) : undefined,
     )
   )
-  if (context) {
-    const byCourse = new Map<string, typeof applicable>()
-    for (const rule of applicable) byCourse.set(rule.course_id, [...(byCourse.get(rule.course_id) || []), rule])
-    const current = await db.userLearningAssignment.findMany({ where: { user_id: userId, learning_cycle_id: context.cycle.id } })
-    let created = 0, ended = 0
-    for (const assignment of current) if (!byCourse.has(assignment.course_id) && !assignment.ended_at) {
-      await db.userLearningAssignment.update({ where: { id: assignment.id }, data: { mandatory: false, ended_at: now, status: assignment.completed_at ? 'COMPLETED' : 'ENDED' } })
-      ended++
-    }
-    for (const [courseId, sources] of Array.from(byCourse)) {
-      const existing = current.find((row) => row.course_id === courseId)
-      const imported = !existing && context.cycle.provenance === 'LEGACY'
-        ? activeAssignments.find((row) => row.course_id === courseId && !row.ended_at) : null
-      const data = {
-        learning_cycle_id: context.cycle.id, rule_id: sources[0].id, source_rule_ids: sources.map((row) => row.id),
-        mandatory: sources.some((row) => row.mandatory), can_view: sources.every((row) => row.can_view),
-        can_assess: sources.every((row) => row.can_assess), can_earn_stars: sources.every((row) => row.can_earn_stars), ended_at: null,
-      }
-      if (existing || imported) {
-        const row = existing || imported!
-        await db.userLearningAssignment.update({ where: { id: row.id }, data: { ...data, status: row.completed_at ? 'COMPLETED' : row.status === 'OVERDUE' ? 'OVERDUE' : 'ASSIGNED' } })
-      } else {
-        await db.userLearningAssignment.create({ data: { ...data, user_id: userId, course_id: courseId, assigned_at: now } })
-        created++
-      }
-    }
-    // Legacy duplicates remain available as history, but never enforce a second deadline.
-    await db.userLearningAssignment.updateMany({ where: { user_id: userId, learning_cycle_id: null, ended_at: null }, data: { ended_at: now } })
-    for (const courseId of Array.from(byCourse.keys())) await syncCourseAssignmentCompletion(userId, courseId, db)
-    const requiredCourseIds = Array.from(byCourse).filter(([, sources]) => sources.some((row) => row.mandatory)).map(([courseId]) => courseId)
-    await db.supplementalLearningRequirement.updateMany({ where: { user_id: userId, learning_cycle_id: context.cycle.id, ended_at: null, course_id: { notIn: requiredCourseIds } }, data: { ended_at: now } })
-    await reconcileSharedPath(db, userId, context.cycle.id, now)
-    return { created, ended }
+  const byCourse = new Map<string, typeof applicable>()
+  for (const rule of applicable) byCourse.set(rule.course_id, [...(byCourse.get(rule.course_id) || []), rule])
+  const current = await db.userLearningAssignment.findMany({ where: { user_id: userId, learning_cycle_id: context.cycle.id } })
+  let created = 0, ended = 0
+  for (const assignment of current) if (!byCourse.has(assignment.course_id) && !assignment.ended_at) {
+    await db.userLearningAssignment.update({ where: { id: assignment.id }, data: { mandatory: false, ended_at: now, status: assignment.completed_at ? 'COMPLETED' : 'ENDED' } })
+    ended++
   }
-  const applicableIds = new Set(applicable.map((rule) => rule.id))
-  const obsolete = activeAssignments.filter((assignment) => !assignment.ended_at && assignment.rule_id && !applicableIds.has(assignment.rule_id))
-  if (obsolete.length) {
-    const obsoleteIds = obsolete.map((assignment) => assignment.id)
-    // The requirement ends, while the earned capability remains available.
-    // This lets former LT members keep learning, testing and earning stars.
-    await db.userLearningAssignment.updateMany({ where: { id: { in: obsoleteIds } }, data: { mandatory: false, due_at: null } })
-    await db.userLearningAssignment.updateMany({
-      where: { id: { in: obsoleteIds }, status: { in: ['ASSIGNED', 'IN_PROGRESS', 'OVERDUE'] } },
-      data: { status: 'ENDED' },
-    })
-  }
-  const activeRuleIds = new Set(activeAssignments.filter((assignment) => !assignment.ended_at).map((assignment) => assignment.rule_id).filter(Boolean))
-  for (const rule of applicable) {
-    const existing = activeAssignments.find((assignment) => !assignment.ended_at && (assignment.rule_id === rule.id || assignment.course_id === rule.course_id))
-    if (!existing) continue
-    const completed = existing.status === 'COMPLETED' || Boolean(existing.completed_at)
-    // Rule: Không cộng thêm thời gian nếu khóa học đã có trong danh sách bắt buộc (dù đang học dở)
-    const preservedDueAt = completed ? null : (existing.due_at || (rule.due_days ? new Date(now.getTime() + rule.due_days * 86400000) : null))
-    await db.userLearningAssignment.update({
-      where: { id: existing.id },
-      data: {
-        mandatory: rule.mandatory,
-        rule_id: rule.id,
-        can_view: rule.can_view,
-        can_assess: rule.can_assess,
-        can_earn_stars: rule.can_earn_stars,
-        status: completed ? 'COMPLETED' : (existing.status || 'ASSIGNED'),
-        due_at: preservedDueAt,
-      },
-    })
-  }
-  const missing = applicable.filter((rule) => !activeRuleIds.has(rule.id))
-  const completedCourseIds = new Set(activeAssignments.filter((assignment) => assignment.status === 'COMPLETED' || assignment.completed_at).map((assignment) => assignment.course_id))
-  const coursesToCheck = Array.from(new Set(missing.map((rule) => rule.course_id).filter((courseId) => !completedCourseIds.has(courseId))))
-  await Promise.all(coursesToCheck.map(async (courseId) => {
-    const lessons = await db.lesson.findMany({ where: { session: { course_id: courseId } }, select: { id: true, assessment: { select: { id: true } } } })
-    if (!lessons.length) return
-    const completedLessons = await db.lessonProgress.count({ where: { user_id: userId, lesson_id: { in: lessons.map((lesson) => lesson.id) }, completed: true } })
-    if (completedLessons !== lessons.length) return
-    const final = await db.assessment.findFirst({ where: { course_id: courseId, type: 'COURSE_FINAL' }, select: { id: true } })
-    const assessmentIds = [...lessons.flatMap((lesson) => lesson.assessment ? [lesson.assessment.id] : []), ...(final ? [final.id] : [])]
-    if (assessmentIds.length) {
-      const passed = await db.attempt.findMany({ where: { user_id: userId, assessment_id: { in: assessmentIds }, passed: true, status: { in: ['SUBMITTED', 'AUTO_SUBMITTED'] } }, select: { assessment_id: true }, distinct: ['assessment_id'] })
-      if (new Set(passed.map((attempt) => attempt.assessment_id)).size !== assessmentIds.length) return
+  for (const [courseId, sources] of Array.from(byCourse)) {
+    const existing = current.find((row) => row.course_id === courseId)
+    const imported = !existing && context.cycle.provenance === 'LEGACY'
+      ? activeAssignments.find((row) => row.course_id === courseId && !row.ended_at) : null
+    const data = {
+      learning_cycle_id: context.cycle.id, rule_id: sources[0].id, source_rule_ids: sources.map((row) => row.id),
+      mandatory: sources.some((row) => row.mandatory), can_view: sources.every((row) => row.can_view),
+      can_assess: sources.every((row) => row.can_assess), can_earn_stars: sources.every((row) => row.can_earn_stars), ended_at: null,
     }
-    completedCourseIds.add(courseId)
-  }))
-  if (missing.length) await db.userLearningAssignment.createMany({ data: missing.map((rule) => ({
-    status: completedCourseIds.has(rule.course_id) ? 'COMPLETED' as const : 'ASSIGNED' as const,
-    completed_at: completedCourseIds.has(rule.course_id) ? now : null,
-    user_id: userId, course_id: rule.course_id, rule_id: rule.id, mandatory: rule.mandatory,
-    can_view: rule.can_view, can_assess: rule.can_assess, can_earn_stars: rule.can_earn_stars,
-    due_at: completedCourseIds.has(rule.course_id)
-      ? null : rule.due_days ? new Date(now.getTime() + rule.due_days * 24 * 60 * 60 * 1000) : null,
-  })) })
-  return { created: missing.length, ended: obsolete.length }
+    if (existing || imported) {
+      const row = existing || imported!
+      await db.userLearningAssignment.update({ where: { id: row.id }, data: { ...data, status: row.completed_at ? 'COMPLETED' : row.status === 'OVERDUE' ? 'OVERDUE' : 'ASSIGNED' } })
+    } else {
+      await db.userLearningAssignment.create({ data: { ...data, user_id: userId, course_id: courseId, assigned_at: now } })
+      created++
+    }
+  }
+  // Legacy duplicates remain available as history, but never enforce a second deadline.
+  await db.userLearningAssignment.updateMany({ where: { user_id: userId, learning_cycle_id: null, ended_at: null }, data: { ended_at: now } })
+  for (const courseId of Array.from(byCourse.keys())) await syncCourseAssignmentCompletion(userId, courseId, db)
+  const requiredCourseIds = Array.from(byCourse).filter(([, sources]) => sources.some((row) => row.mandatory)).map(([courseId]) => courseId)
+  await db.supplementalLearningRequirement.updateMany({ where: { user_id: userId, learning_cycle_id: context.cycle.id, ended_at: null, course_id: { notIn: requiredCourseIds } }, data: { ended_at: now } })
+  await reconcileSharedPath(db, userId, context.cycle.id, now)
+  return { created, ended }
 }
 
 /** Materializes course completion onto active assignments for deadline enforcement. */

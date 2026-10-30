@@ -82,7 +82,7 @@ export async function reconcileNewChapters() {
   console.log(`User ${user.email} (${user.id}), chapter: ${chapterId}`)
 
   const context = await learningContext(prisma, user.id, now)
-  console.log(`Learning context active:`, context ? { month: context.month.id, cycle: context.cycle.id } : 'None (pre-cutover)')
+  console.log(`Learning context active:`, { month: context.month.key, cycle: context.cycle.id })
 
   const completedProgressWithVideos = user.lessonProgress.filter(
     (lp) => lp.completed && lp.lesson?.video && Number(lp.lesson.video.duration_seconds) > 0

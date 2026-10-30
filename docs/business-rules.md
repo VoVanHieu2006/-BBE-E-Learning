@@ -35,7 +35,7 @@ Một người chỉ có một tư cách Chapter/DNA đang hoạt động. Chapt
 
 Course → Session → Lesson, video YouTube và 0..n tài liệu. DRAFT/PUBLISHED độc lập PUBLIC/PRIVATE. Admin quản lý; xuất bản phải đáp ứng validation session/lesson/video/assessment. Nội dung đang dùng và version/bank có guard riêng; không dùng BA cũ để suy ra được xóa/recreate attempt.
 
-**Video phải xem hết**, không còn ngưỡng hoàn thành 85% của BA cũ. Backend xác nhận continuous observed time, tốc độ tối đa 2×, chống seek trước, kiểm tra viewing session/video identity. ENDED được chấp nhận có dung sai cuối video nhỏ theo duration; client tự khai completed hoặc seek tới cuối không đủ. Duration không hợp lệ/không biết không chứng minh hoàn thành. ACK chỉ tiến khi server xác nhận; request cũ không được ghi đè session/bài mới.
+**Video phải xem hết**, không còn ngưỡng hoàn thành 85% của BA cũ. Backend xác nhận continuous observed time, tốc độ tối đa 2×, chống seek trước, kiểm tra viewing session/video identity. ENDED được chấp nhận có dung sai cuối video nhỏ theo duration; video trên 10 phút dùng dung sai 1% thời lượng (tương đương xem đủ >=99%), video ngắn hơn giữ tối đa 3s/2%. Client tự khai completed hoặc seek tới cuối không đủ. Duration không hợp lệ/không biết không chứng minh hoàn thành. ACK chỉ tiến khi server xác nhận; request cũ không được ghi đè session/bài mới. UI chỉ hiển thị 100% khi server xác nhận videoCompleted, không làm tròn từ 99.x%.
 
 Bài sau mở khi video và quiz bài trước (nếu có) hoàn thành. Quiz dưới 85% vẫn khóa bài sau. Lifetime progress, training cycle completion và replay thưởng tháng là trạng thái riêng; không lấy lifetime completion thay cycle completion. Khách xem công khai tự do, không ghi tiến độ.
 
@@ -52,11 +52,11 @@ Video thưởng một lần cho `(user,video,month,learningCycle)`. Quiz dùng `
 
 Tháng mới tạo cửa sổ thưởng mới, giữ progress. Apply chuyển giao thành công tạo cycle mới và học lại mọi khóa kể cả mở rộng, giữ history. Suppressed activity khi pause không được cộng bù sau mở thưởng/chuyển DNA trong cùng cửa sổ. Reset thành công cho phép hoạt động học mới trong cycle mới nhận sao.
 
-## Chương trình, deadline và cutover
+## Chương trình, deadline và dữ liệu legacy
 
 Bốn chương trình: CORE_MEMBER, CORE_LEADER, CORE_DNA, EXTENDED. Có 18 target: bảy Ban × Thành viên/LT, President và DNA TT/SGDC/LDC. Extended không vào mẫu số bài lõi. Admin phải duyệt theo nội dung thật; gợi ý tên/mapping audit chưa phải phê duyệt. Không bịa số bài 8/8/4 từ catalog không đủ bằng chứng.
 
-Sau cutover, lộ trình bắt buộc dùng **một deadline chung**. Khi đổi tập nghĩa vụ:
+Lộ trình bắt buộc dùng **một deadline chung**. Khi đổi tập nghĩa vụ:
 
 ```text
 D_new = max(D_start + T_new, D_change + T_added)
@@ -68,7 +68,7 @@ Admin giảm ngân sách có sàn ba ngày: `max(D_assigned+T_new,D_adminChange+
 
 Thêm `k` bài vào khóa bắt buộc đã hoàn thành có thời gian bổ sung `k × max(ceil(T_course/L_after),3)` ngày **từ publish** theo đặc tả, không cộng trùng khi retry. Mã còn lệch mốc; xem known-issues, không coi là đã sửa.
 
-Legacy tồn tại trước cutover, có sao thiếu month/cycle provenance. Policy mới chỉ áp sau mapping/release gate được duyệt và timestamp cutover tới hạn. Không tự sửa ledger/history, policy hoặc kích hoạt cutover trong đợt dọn. Tháng đầu có thể ngắn từ cutover tới đầu tháng UTC+7 tiếp theo khi thiếu chứng cứ lịch sử.
+Dữ liệu legacy trước mốc lịch sử có sao thiếu month/cycle provenance và chỉ còn là đường đọc. Mô hình deadline chung, mapping và season áp dụng ngay khi cấu hình; không còn thao tác kích hoạt cutover. Không tự sửa ledger/history hay tạo snapshot ngược trước mốc; tháng đầu của dữ liệu lịch sử có thể ngắn từ mốc tới đầu tháng UTC+7 tiếp theo.
 
 ## Chapter và bảng xếp hạng
 

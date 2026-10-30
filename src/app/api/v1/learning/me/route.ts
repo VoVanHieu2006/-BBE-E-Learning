@@ -15,12 +15,11 @@ export async function GET(request: NextRequest) {
   await reconcileLearnerReadThrough(userId).catch(() => false)
   const now = new Date()
   const rewardState = await chapterRewardState(prisma, userId, now)
-  const [cycle, month, allStars, user, policy] = await Promise.all([
+  const [cycle, month, allStars, user] = await Promise.all([
     prisma.learningCycle.findFirst({ where: { user_id: userId, ends_at: null } }),
     prisma.competitionMonth.findFirst({ where: { starts_at: { lte: now }, ends_at: { gt: now } } }),
     prisma.starLedger.aggregate({ where: { user_id: userId }, _sum: { amount: true } }),
     prisma.user.findUnique({ where: { id: userId }, select: { role: true, status: true } }),
-    prisma.learningPolicy.findUnique({ where: { id: 'default' } }),
   ])
   const [path, monthStars, cycleStars, replay, programs, notices, supplements, unfinished] = await Promise.all([
     cycle ? prisma.learningPath.findUnique({ where: { learning_cycle_id: cycle.id } }) : null,
@@ -39,7 +38,7 @@ export async function GET(request: NextRequest) {
   const unlockedLessonIds = Object.keys(lessonStates).filter(id => lessonStates[id].unlocked)
 
   const payload = {
-    cutoverAt: policy?.cutover_at || null, active: Boolean(cycle), cycle, month,
+    active: Boolean(cycle), cycle, month,
     stars: { history: allStars._sum.amount || 0, month: monthStars?._sum.amount || 0, cycle: cycleStars?._sum.amount || 0 },
     rewardsPaused: user?.status !== 'ACTIVE' || user?.role !== 'MEMBER' || rewardState.paused,
     rewardState,

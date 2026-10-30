@@ -28,12 +28,12 @@ export async function submitQuiz(input: { attemptId: string; userId?: string; au
     }
     const userId = attempt.user_id
     const context = await learningContext(tx, userId, now)
-    now = context?.now || now
-    if (context && attempt.learning_cycle_id !== context.cycle.id && attempt.started_at >= context.cycle.starts_at) {
-      // Transitional attempts begun before cutover may finish in the transition cycle.
+    now = context.now
+    if (attempt.learning_cycle_id !== context.cycle.id && attempt.started_at >= context.cycle.starts_at) {
+      // Transitional attempts begun before the cycle swap may finish in the transition cycle.
       return { error: 'AttemptCycleChanged' as const }
     }
-    if (context && attempt.started_at < context.cycle.starts_at && context.cycle.provenance !== 'LEGACY') {
+    if (attempt.started_at < context.cycle.starts_at && context.cycle.provenance !== 'LEGACY') {
       await tx.attempt.update({ where: { id: attempt.id }, data: { status: 'CANCELLED', cancellation_reason: 'LEARNING_CYCLE_RESET', submitted_at: now } })
       return { error: 'AttemptCycleChanged' as const }
     }
@@ -83,21 +83,13 @@ export async function submitQuiz(input: { attemptId: string; userId?: string; au
         const videoDuration = assessment.lesson?.video?.duration_seconds || 0
         let videoDone = true
         if (videoDuration > 0) {
-          const cycleProg = context
-            ? await tx.cycleLessonProgress.findUnique({
-                where: { user_id_lesson_id_learning_cycle_id: { user_id: userId, lesson_id: assessment.lesson_id, learning_cycle_id: context.cycle.id } },
-                select: { furthest_seconds: true, completed_at: true },
-              })
-            : null
-          const lp = cycleProg
-            ? null
-            : await tx.lessonProgress.findUnique({
-                where: { user_id_lesson_id: { user_id: userId, lesson_id: assessment.lesson_id } },
-                select: { furthest_watched_position_seconds: true, completed: true },
-              })
-          const furthest = cycleProg ? cycleProg.furthest_seconds : (lp?.furthest_watched_position_seconds || 0)
+          const cycleProg = await tx.cycleLessonProgress.findUnique({
+            where: { user_id_lesson_id_learning_cycle_id: { user_id: userId, lesson_id: assessment.lesson_id, learning_cycle_id: context.cycle.id } },
+            select: { furthest_seconds: true, completed_at: true },
+          })
+          const furthest = cycleProg?.furthest_seconds || 0
           const tolerance = endedCompletionToleranceSeconds(videoDuration)
-          videoDone = Boolean(cycleProg?.completed_at || lp?.completed) || hasWatchedFullVideo(furthest, videoDuration) || (videoDuration > 0 && furthest >= videoDuration - tolerance)
+          videoDone = Boolean(cycleProg?.completed_at) || hasWatchedFullVideo(furthest, videoDuration) || (videoDuration > 0 && furthest >= videoDuration - tolerance)
         }
 
         if (videoDone) {
@@ -106,7 +98,7 @@ export async function submitQuiz(input: { attemptId: string; userId?: string; au
             create: { user_id: userId, lesson_id: assessment.lesson_id, completed: true, completed_at: now },
             update: { completed: true, completed_at: now },
           })
-          if (context) await tx.cycleLessonProgress.upsert({
+          await tx.cycleLessonProgress.upsert({
             where: { user_id_lesson_id_learning_cycle_id: { user_id: userId, lesson_id: assessment.lesson_id, learning_cycle_id: context.cycle.id } },
             create: { user_id: userId, lesson_id: assessment.lesson_id, learning_cycle_id: context.cycle.id, completed_at: now },
             update: { completed_at: now },
@@ -116,48 +108,37 @@ export async function submitQuiz(input: { attemptId: string; userId?: string; au
         }
       }
       const eligible = await rewardEligibility(tx, userId, courseId, now)
-      const paused = context && (await chapterRewardState(tx, userId, now)).paused
+      const paused = (await chapterRewardState(tx, userId, now)).paused
       if (eligible || paused) {
         const correctCount = grading.results.filter((row) => row.isCorrect).length
         const reason = assessment.type === 'COURSE_FINAL' ? 'COURSE_FINAL_PASS' as const : 'MODULE_QUIZ_PASS' as const
         const chapter = await tx.chapterMember.findUnique({ where: { user_id: userId } })
-        if (context) {
-          const key = { user_id: userId, assessment_id: assessment.id, competition_month_id: context.month.id, learning_cycle_id: context.cycle.id }
-          const mark = await tx.quizRewardHighWaterMark.upsert({
-            where: { user_id_assessment_id_competition_month_id_learning_cycle_id: key }, update: {},
-            create: { ...key, reward_question_count: grading.results.length, reward_config: { questions: grading.results.map((row) => ({ id: row.questionId, points: row.points })) } },
-          })
-          // One star per correct answer, normalized to the first configuration's budget.
-          const earned = Math.floor(correctCount / grading.results.length * mark.reward_question_count + 1e-9)
-          const increment = highWaterIncrement(mark.maximum_stars, earned)
-          amount = eligible ? increment : 0
-          if (increment) {
-            await tx.quizRewardHighWaterMark.update({ where: { id: mark.id }, data: { maximum_stars: earned } })
-          }
-          if (amount) {
-            rewardKey = `quiz:${mark.id}:${earned}`
-            await tx.starLedger.create({ data: {
-              user_id: userId, amount, reason, reward_key: rewardKey,
-              source_type: 'ASSESSMENT', source_id: assessment.id, awarded_at: now,
-              competition_month_id: context.month.id, learning_cycle_id: context.cycle.id,
-              chapter_at_award_id: chapter?.chapter_id, provenance: 'NATIVE', metadata: { attemptId: attempt.id },
-            } })
-          }
-        } else {
-          const previous = await tx.starLedger.aggregate({ where: { user_id: userId, source_type: 'ASSESSMENT', source_id: assessment.id, amount: { gt: 0 }, reason: { in: ['MODULE_QUIZ_PASS', 'MODULE_QUIZ_BONUS', 'COURSE_FINAL_PASS', 'COURSE_FINAL_BONUS'] } }, _sum: { amount: true } })
-          const alreadyPaid = previous._sum.amount || 0
-          const result = await tx.starLedger.createMany({ data: Array.from({ length: Math.max(0, correctCount - alreadyPaid) }, (_, index) => ({
-            user_id: userId, amount: 1, reason, reward_key: `quiz-correct:${userId}:${assessment.id}:${alreadyPaid + index + 1}`,
-            source_type: 'ASSESSMENT', source_id: assessment.id, awarded_at: now, metadata: { attemptId: attempt.id },
-          })), skipDuplicates: true })
-          amount = result.count
-          if (amount > 0) rewardKey = `quiz-attempt:${attempt.id}:${amount}`
+        const key = { user_id: userId, assessment_id: assessment.id, competition_month_id: context.month.id, learning_cycle_id: context.cycle.id }
+        const mark = await tx.quizRewardHighWaterMark.upsert({
+          where: { user_id_assessment_id_competition_month_id_learning_cycle_id: key }, update: {},
+          create: { ...key, reward_question_count: grading.results.length, reward_config: { questions: grading.results.map((row) => ({ id: row.questionId, points: row.points })) } },
+        })
+        // One star per correct answer, normalized to the first configuration's budget.
+        const earned = Math.floor(correctCount / grading.results.length * mark.reward_question_count + 1e-9)
+        const increment = highWaterIncrement(mark.maximum_stars, earned)
+        amount = eligible ? increment : 0
+        if (increment) {
+          await tx.quizRewardHighWaterMark.update({ where: { id: mark.id }, data: { maximum_stars: earned } })
+        }
+        if (amount) {
+          rewardKey = `quiz:${mark.id}:${earned}`
+          await tx.starLedger.create({ data: {
+            user_id: userId, amount, reason, reward_key: rewardKey,
+            source_type: 'ASSESSMENT', source_id: assessment.id, awarded_at: now,
+            competition_month_id: context.month.id, learning_cycle_id: context.cycle.id,
+            chapter_at_award_id: chapter?.chapter_id, provenance: 'NATIVE', metadata: { attemptId: attempt.id },
+          } })
         }
       }
       // Completion reconciliation is durable even if the worker fails after commit.
       if (isLessonFullyComplete) {
         await syncCourseAssignmentCompletion(userId, courseId, tx)
-        if (context) await persistLearningUnlocks(tx, userId, courseId, context.cycle.id, now)
+        await persistLearningUnlocks(tx, userId, courseId, context.cycle.id, now)
       }
       await enqueueAssignmentSync(tx, userId, `submit:${attempt.id}`)
     }

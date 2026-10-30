@@ -273,7 +273,7 @@ async function rawTransaction(fn, isolation = 'READ COMMITTED') {
     await prisma.positionAssignment.create({ data: { user_id: f.user.id, unit_id: f.otherUnit.id, position_id: f.position.id } })
     assert.equal(await prisma.chapterLeadBinding.count({ where: { user_id: f.user.id } }), 0)
   })
-  await check('Chapter/DNA exclusivity works before cutover, including raw import', async () => {
+  await check('Chapter/DNA exclusivity is enforced, including raw import', async () => {
     const f = await fixture()
     await prisma.chapterMember.create({ data: { user_id: f.user.id, chapter_id: f.chapter.id } })
     await assert.rejects(() => prisma.organizationMembership.create({ data: { user_id: f.user.id, unit_id: f.dna.id } }), /SingleOrganizationAffiliationRequired/)

@@ -233,16 +233,19 @@ async function readiness() {
   const admin = await user('ADMIN')
   const catalog = require('../../src/app/api/v1/learning/periods/route')
   const { periodLeaderboard } = require('../../src/lib/period-leaderboard')
+  const { competitionMonthBounds } = require('../../src/lib/learning-cycle-rules')
   const old = await prisma.learningPolicy.findUnique({ where: { id: 'default' } })
+  const bounds = competitionMonthBounds(new Date())
+  await prisma.competitionMonth.upsert({ where: { key: bounds.key }, update: {}, create: { key: bounds.key, starts_at: bounds.startsAt, ends_at: bounds.endsAt } })
   try {
-    for (const [data, reason] of [[null, 'POLICY_MISSING'], [{}, 'MAPPING_NOT_APPROVED'], [{ mapping_approved_at: new Date() }, 'CUTOVER_NOT_SET'], [{ mapping_approved_at: new Date(), cutover_at: new Date(Date.now() + 86400000) }, 'CUTOVER_FUTURE']]) {
+    for (const data of [null, {}, { mapping_approved_at: new Date() }, { mapping_approved_at: new Date(), cutover_at: new Date(Date.now() + 86400000) }]) {
       await prisma.learningPolicy.deleteMany()
       if (data) await prisma.learningPolicy.create({ data: { id: 'default', ...data } })
-      await check(`FB08 catalog and board agree on ${reason}; GET creates no periods`, async () => {
+      await check(`FB08 catalog and board are READY without cutover activation (${JSON.stringify(data)}); GET creates no periods`, async () => {
         const before = await prisma.competitionMonth.count()
         const a = await (await catalog.GET(await req(admin, '/api/v1/learning/periods'))).json()
         const b = await (await periodLeaderboard(await req(admin, '/api/v1/leaderboard?group=CHAPTER&periodType=MONTH'))).json()
-        assert.equal(a.readiness.reasonCode, reason); assert.equal(b.reasonCode, reason)
+        assert.equal(a.readiness.reasonCode, 'READY'); assert.equal(b.reasonCode, 'READY')
         assert.equal(await prisma.competitionMonth.count(), before)
       })
     }
@@ -282,13 +285,13 @@ async function videoRewards() {
   const route = require('../../src/app/api/v1/lessons/[lessonId]/progress/route')
   try {
     await prisma.learningPolicy.deleteMany()
-    await check('FB07 lifetime completion with no policy/cycle is labelled separately', async () => {
+    await check('FB07 lifetime completion with no cycle is labelled separately', async () => {
       const f = await videoFixture()
       await prisma.lessonProgress.create({ data: { user_id: f.member.id, lesson_id: f.lesson.id, completed: true, completed_at: new Date(), furthest_watched_position_seconds: 862 } })
       const body = await (await route.GET(await req(f.member, `/api/v1/lessons/${f.lesson.id}/progress`), { params: { lessonId: f.lesson.id } })).json()
       assert.equal(body.progressContext.learningCycleId, null)
       assert.equal(body.lifetime.completed, true); assert.equal(body.cycleProgress, null)
-      assert.equal(body.rewardStatus.reasonCode, 'POLICY_MISSING')
+      assert.equal(body.rewardStatus.reasonCode, 'CYCLE_NOT_STARTED')
       assert.equal(await prisma.learningCycle.count({ where: { user_id: f.member.id } }), 0)
     })
     const now = new Date(), cutover = new Date(Date.now() - 86400000)

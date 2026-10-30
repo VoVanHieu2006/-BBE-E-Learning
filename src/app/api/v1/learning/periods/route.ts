@@ -84,7 +84,7 @@ export async function GET(request: NextRequest) {
     term: readinessForReason(terms.some(term => term.starts_at <= now && (!term.ends_at || term.ends_at > now)) ? 'READY' : 'TERM_NOT_CONFIGURED'),
     season: readinessForReason(seasons.some(season => season.starts_at <= now && season.ends_at > now) ? 'READY' : 'SEASON_NOT_CONFIGURED'),
   }
-  const readiness = !base.ready ? base : !periodReadiness.month.ready ? { ...base, ...periodReadiness.month } : base
+  const readiness = periodReadiness.month.ready ? base : { ...base, ...periodReadiness.month }
 
   return NextResponse.json({
     readiness: { ...readiness, periods: periodReadiness },

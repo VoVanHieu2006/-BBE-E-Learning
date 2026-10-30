@@ -1,16 +1,14 @@
 import { prisma } from './prisma'
-import { activeLearningPolicy, enqueueAssignmentSync, learningContext, lockLearningUser } from './learning-periods'
+import { enqueueAssignmentSync, learningContext, lockLearningUser } from './learning-periods'
 import { chapterRewardBoundary } from './chapter-reward-gate'
 
 /** DNA resets at the fixed April/October Vietnam boundary, independent of Chapter transfers. */
 export async function applyDueDnaCycleResets() {
   const now = new Date()
-  const policy = await activeLearningPolicy(prisma, now)
-  if (!policy?.cutover_at) return 0
   const boundary = chapterRewardBoundary(now)
-  const seasons = boundary >= policy.cutover_at ? [{ id: boundary.toISOString(), starts_at: boundary }] : []
   let applied = 0
-  for (const season of seasons) await prisma.$transaction(async (tx) => {
+  await prisma.$transaction(async (tx) => {
+    const season = { id: boundary.toISOString(), starts_at: boundary }
     await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`dna-reset:${season.id}`}))::text`
     const key = `dna-reset:${season.id}`
     if (await tx.learningSnapshot.findUnique({ where: { key } })) return
@@ -23,7 +21,7 @@ export async function applyDueDnaCycleResets() {
     for (const userId of userIds) {
       actual = await lockLearningUser(tx, userId)
       const context = await learningContext(tx, userId, actual)
-      if (!context || context.cycle.starts_at >= season.starts_at) continue
+      if (context.cycle.starts_at >= season.starts_at) continue
       before.push({ userId, previousCycleId: context.cycle.id })
       await tx.learningCycle.update({ where: { id: context.cycle.id }, data: { ends_at: actual } })
       await tx.learningCycle.create({ data: { user_id: userId, starts_at: actual, trigger_key: `dna:${season.id}:${userId}` } })
