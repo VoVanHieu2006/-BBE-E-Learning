@@ -12,6 +12,27 @@ export function hasWatchedFullVideo(positionSeconds: number, durationSeconds: nu
     && positionSeconds >= durationSeconds
 }
 
+/** Student-facing percent: 100 is reserved for a server-confirmed completion. */
+export function displayVideoProgressPercent(
+  furthestWatchedPositionSeconds: number,
+  durationSeconds: number,
+  videoCompleted: boolean,
+): number {
+  if (!(Number.isFinite(durationSeconds) && durationSeconds > 0)) return 0
+  if (videoCompleted) return 100
+  const furthest = Number.isFinite(furthestWatchedPositionSeconds)
+    ? Math.max(0, furthestWatchedPositionSeconds)
+    : 0
+  return Math.min(99, Math.max(0, Math.floor((furthest / durationSeconds) * 100)))
+}
+
+/** Completion must come from an explicit server flag, never a rounded percent. */
+export function isServerVideoCompleted(
+  response: { videoCompleted?: unknown; completed?: unknown } | null | undefined,
+): boolean {
+  return response?.videoCompleted === true || response?.completed === true
+}
+
 /** The client may report a rate, but progress is always capped at the supported maximum. */
 export function normalizePlaybackRate(value: unknown): number {
   const rate = typeof value === 'number' ? value : Number(value)
@@ -38,15 +59,22 @@ export function endedReachAllowanceSeconds(playbackRate: number): number {
 }
 
 /**
- * Completion tolerance for an explicit ENDED event. The backend stores the
- * duration as an integer written by an administrator, while the player reports
- * fractional seconds — a strict equality would strand honest viewers at 99.x%.
- * Never exceeds 10% of the duration so short videos stay proportionally strict.
+ * Completion tolerance for end-of-video progress. It is used by both the
+ * ENDED write path and the read-path completion gates (canAssess, attempts,
+ * unlocks), so a player that stops just short of the final second is not
+ * stranded while the UI rounds the same progress up to 100%.
+ *
+ * Short videos keep the conservative 2% / 3s rule. Videos longer than
+ * 10 minutes follow the 99% viewing rule (1% of duration), which removes the
+ * dead band between the 0.5% display-rounding boundary and the 3s cap.
  */
 export function endedCompletionToleranceSeconds(durationSeconds: number): number {
   const duration = Number.isFinite(durationSeconds) && durationSeconds > 0 ? durationSeconds : 0
   if (duration <= 0) return 0
-  return Math.min(3, duration * 0.1, duration / 3, Math.max(0.6, Math.round(duration * 0.02 * 100) / 100))
+  const longVideo = duration > 600
+  const ratio = longVideo ? 0.01 : 0.02
+  const cap = longVideo ? duration * 0.01 : 3
+  return Math.min(cap, duration * 0.1, duration / 3, Math.max(0.6, Math.round(duration * ratio * 100) / 100))
 }
 
 /**

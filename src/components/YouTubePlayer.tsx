@@ -5,6 +5,7 @@ import { VideoPlaybackGuard } from '@/lib/video-playback-guard';
 import { VideoControls } from '@/lib/video-controls';
 import { VideoFullscreen, type FullscreenMode } from '@/lib/video-fullscreen';
 import { VideoProgressSession, type PlaybackEvent, type VideoProgressPayload } from '@/lib/video-progress-session';
+import { isServerVideoCompleted } from '@/lib/video-progress-rules';
 
 declare global {
   interface Window {
@@ -552,7 +553,7 @@ export default function YouTubePlayer({
       serverConfirmedFurthestRef.current = guardRef.current.serverConfirmedFurthest;
       setServerConfirmedFurthest(guardRef.current.serverConfirmedFurthest);
     }
-    if (result.videoCompleted || result.completed || Number(result.progressPercentage) >= 100) {
+    if (isServerVideoCompleted(result)) {
       setIsCompleted(true);
       setVerificationState('COMPLETED');
       completedFiredRef.current = true;
@@ -593,7 +594,7 @@ export default function YouTubePlayer({
         if (guardRef.current.viewSessionId !== currentSession || lessonId !== currentLesson) {
           return;
         }
-        if (result?.videoCompleted || result?.completed || Number(result?.progressPercentage) >= 100) {
+        if (isServerVideoCompleted(result)) {
           applyServerProgress(result);
           setIsCompleted(true);
           setVerificationState('COMPLETED');

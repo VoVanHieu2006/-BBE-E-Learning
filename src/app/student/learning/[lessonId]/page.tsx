@@ -464,6 +464,9 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
   const cycleVideoFull = hasCycle && Boolean(progress?.cycleProgress?.videoCompleted ?? progress?.videoCompleted);
   const cycleVideoPercent = Number(progress?.progressPercentage ?? 0);
   const cycleLessonFull = hasCycle && Boolean(progress?.cycleProgress?.completed ?? progress?.lessonCompleted);
+  const cycleFurthest = Number(progress?.cycleProgress?.furthestWatchedPositionSeconds ?? progress?.furthestWatchedPositionSeconds ?? 0);
+  const lessonDuration = Number(progress?.durationSeconds ?? lesson?.video?.durationSeconds ?? 0);
+  const remainingVideoSeconds = lessonDuration > 0 ? Math.max(0, Math.ceil(lessonDuration - cycleFurthest)) : 0;
 
   const totalLessonsCount = allCourseLessons.length || 1;
   const completedLessonsCount = courseProgress?.completedLessons ?? (progress?.completed ? 1 : 0);
@@ -669,7 +672,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3">
                 <div className={`rounded-xl border px-3 py-2 text-xs ${cycleVideoFull ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-[#cbdbf5] bg-[#f8f9ff] text-[#172554]'}`}>
-                  <p className="font-bold">{!hasCycle ? 'Chưa có chu kỳ học' : cycleVideoFull ? '✓ Đã xem đủ video (chu kỳ này)' : `Đang xem: ${Math.round(cycleVideoPercent)}% video`}</p>
+                  <p className="font-bold">{!hasCycle ? 'Chưa có chu kỳ học' : cycleVideoFull ? '✓ Đã xem đủ video (chu kỳ này)' : `Đang xem: ${cycleVideoPercent}% video`}</p>
                   <p className="text-[10px] opacity-80 mt-0.5">
                     Tiến độ lịch sử: {Math.round(progress?.lifetime?.furthestWatchedPositionSeconds ?? progress?.furthestWatchedPositionSeconds ?? 0)}/{lesson?.video?.durationSeconds || 0}s
                   </p>
@@ -957,10 +960,14 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                         disabled
                         className="!bg-slate-100 !text-slate-400 !border-slate-200 cursor-not-allowed font-bold"
                       >
-                        🔒 Cần xem video trước ({progress?.progressPercentage || 0}%/100%)
+                        {remainingVideoSeconds > 0 && remainingVideoSeconds <= 15
+                          ? `🔒 Còn thiếu ${remainingVideoSeconds} giây — hãy để video phát hết`
+                          : `🔒 Cần xem video trước (${cycleVideoPercent}%)`}
                       </Button>
                       <span className="text-[10px] text-amber-700 font-medium">
-                        Cần xem hết 100% video để mở khóa bài kiểm tra
+                        {remainingVideoSeconds > 0 && remainingVideoSeconds <= 15
+                          ? 'Video sẽ tự xác nhận hoàn thành khi phát đến cuối.'
+                          : 'Cần xem hết video để mở khóa bài kiểm tra.'}
                       </span>
                     </div>
                   )}

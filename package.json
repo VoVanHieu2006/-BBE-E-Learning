@@ -25,6 +25,7 @@
     "db:seed": "ts-node -P prisma/tsconfig.seed.json prisma/seed.ts",
     "db:seed-demo": "ts-node -P prisma/tsconfig.seed.json scripts/db/seed-demo-safe.ts",
     "db:fix-durations": "ts-node -P scripts/tsconfig.json scripts/db/fix-video-durations.ts",
+    "db:remediate-video": "node scripts/db/remediate-video-completion.cjs",
     "db:reset": "prisma migrate reset --force",
     "db:generate": "prisma generate",
     "db:audit-strict-video": "ts-node -P scripts/tsconfig.json scripts/audit/audit-strict-video-migration.ts",

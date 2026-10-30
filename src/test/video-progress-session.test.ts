@@ -315,3 +315,26 @@ test('probe playback logs remain bounded during seek stress', () => {
     assert.equal(guard.logEntries.at(-1)?.currentTime, 799);
   } finally { (globalThis as any).window = oldWindow; }
 });
+
+test('a rounded 100% heartbeat does not complete the guard; an explicit videoCompleted response does', async () => {
+  const guard = makeGuard();
+  let calls = 0;
+  let updates = 0;
+  const session = new VideoProgressSession(guard, async () => {
+    calls++;
+    return { ok: true, status: 200, data: {
+      ...reply(guard, 713).data,
+      progressPercentage: 100,
+      videoCompleted: calls > 1,
+    } };
+  }, () => true, () => updates++);
+  try {
+    await session.send(713, 713, 1, 'HEARTBEAT');
+    assert.equal(guard.isCompleted, false, 'Rounded 100% without server confirmation must not complete');
+    assert.equal(updates, 1);
+
+    await session.send(713, 713, 1, 'ENDED');
+    assert.equal(guard.isCompleted, true, 'Explicit server completion must complete the guard');
+    assert.equal(updates, 2);
+  } finally { session.dispose(); }
+});

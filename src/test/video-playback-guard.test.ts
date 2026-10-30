@@ -420,3 +420,39 @@ describe('SECTION 6 — MANDATORY ACCEPTANCE TESTS (Test mới quan trọng nh�
     assert.equal(correctedTo, 20);
   })
 })
+
+describe('SECTION 7 — Completion requires an explicit server flag', () => {
+  it('does not latch completion from a rounded 100% heartbeat response', () => {
+    const guard = new VideoPlaybackGuard({
+      lessonId: 'lesson-complete',
+      videoId: 'yt-complete',
+      duration: 862,
+      initialPosition: 858,
+      initialFurthest: 858,
+    });
+
+    const rounded = guard.onServerProgressResponse(1, {
+      lessonId: 'lesson-complete',
+      videoId: 'yt-complete',
+      furthestWatchedPositionSeconds: 858,
+      progressPercentage: 100,
+      videoCompleted: false,
+    });
+
+    assert.equal(rounded.applied, true);
+    assert.equal(guard.isCompleted, false, 'A rounded 100% must not complete the lesson');
+    assert.equal(rounded.isCompleted, false);
+
+    const confirmed = guard.onServerProgressResponse(2, {
+      lessonId: 'lesson-complete',
+      videoId: 'yt-complete',
+      furthestWatchedPositionSeconds: 862,
+      progressPercentage: 100,
+      videoCompleted: true,
+    });
+
+    assert.equal(confirmed.applied, true);
+    assert.equal(guard.isCompleted, true, 'Explicit server completion must complete the lesson');
+    assert.equal(confirmed.isCompleted, true);
+  })
+})

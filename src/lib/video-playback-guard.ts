@@ -10,6 +10,8 @@
  * 6. Sequence Ordering: Drops stale or out-of-order heartbeat responses so furthest never decreases.
  */
 
+import { isServerVideoCompleted } from './video-progress-rules'
+
 export interface PlaybackGuardConfig {
   lessonId: string;
   videoId: string;
@@ -432,7 +434,7 @@ export class VideoPlaybackGuard {
       this.serverConfirmedFurthest = Math.max(this.serverConfirmedFurthest, serverFurthest);
     }
 
-    if (response.videoCompleted || response.completed || Number(response.progressPercentage) >= 100) {
+    if (isServerVideoCompleted(response)) {
       this.isCompleted = true;
     }
 

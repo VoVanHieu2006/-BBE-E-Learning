@@ -10,10 +10,10 @@ import {
 import { starsForVideoDuration } from '../lib/reward-rules'
 
 describe('Prompt 1 — Video Completion Tolerance Across Durations and Speeds', () => {
-  const durations = [10, 30, 60, 115, 168, 600]
+  const durations = [10, 30, 60, 115, 168, 600, 862]
   const rates = [1, 1.25, 1.5, 1.75, 2]
 
-  it('calculates tolerance as min(3s, 2% duration) with safe floor', () => {
+  it('calculates tolerance with the 99% rule for videos over 10 minutes', () => {
     // 10s: 2% is 0.2s, clamped to safe floor 0.6s
     assert.equal(endedCompletionToleranceSeconds(10), 0.6)
     // 30s: 2% is 0.6s
@@ -24,8 +24,11 @@ describe('Prompt 1 — Video Completion Tolerance Across Durations and Speeds', 
     assert.equal(endedCompletionToleranceSeconds(115), 2.3)
     // 168s: 2% is 3.36s, capped at 3.0s
     assert.equal(endedCompletionToleranceSeconds(168), 3)
-    // 600s: capped at 3.0s
+    // 600s (exactly 10 minutes): capped at 3.0s
     assert.equal(endedCompletionToleranceSeconds(600), 3)
+    // 601s and 862s: over 10 minutes, 1% tolerance
+    assert.equal(endedCompletionToleranceSeconds(601), 6.01)
+    assert.equal(endedCompletionToleranceSeconds(862), 8.62)
   })
 
   it('completes video played to end within tolerance across all tested speeds (1x to 2x)', () => {

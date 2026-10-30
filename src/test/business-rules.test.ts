@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { capVideoProgress, endedCompletionToleranceSeconds, endedReachAllowanceSeconds, hasCompletedVideoAtEnd, hasWatchedFullVideo, videoHeartbeatGraceSeconds } from '../lib/video-progress-rules'
+import { capVideoProgress, displayVideoProgressPercent, endedCompletionToleranceSeconds, endedReachAllowanceSeconds, hasCompletedVideoAtEnd, hasWatchedFullVideo, isServerVideoCompleted, videoHeartbeatGraceSeconds } from '../lib/video-progress-rules'
 import { starsForCourseFinalScore, starsForQuizScore, starsForVideoDuration } from '../lib/reward-rules'
 import { matchesLearningRulePositionScope } from '../lib/learning-rule-scope'
 import { orderOrganizationTree, organizationParentTypeMatches, organizationSubtreeIds, positionScopeMatchesUnitType, validateOrganizationMove } from '../lib/organization-scope'
@@ -412,7 +412,24 @@ describe('strict video progress', () => {
     assert.equal(endedCompletionToleranceSeconds(15), 0.6)
     assert.equal(endedCompletionToleranceSeconds(168), 3)
     assert.equal(endedCompletionToleranceSeconds(600), 3)
+    assert.equal(endedCompletionToleranceSeconds(601), 6.01)
+    assert.equal(endedCompletionToleranceSeconds(862), 8.62)
     assert.equal(endedCompletionToleranceSeconds(Number.NaN), 0)
+  })
+
+  it('uses a 99% threshold for long videos without rounding the display to 100%', () => {
+    assert.equal(hasCompletedVideoAtEnd(858, 862, 'ENDED'), true)
+    assert.equal(hasCompletedVideoAtEnd(853, 862, 'ENDED'), false)
+    assert.equal(hasCompletedVideoAtEnd(858, 862, 'HEARTBEAT'), false)
+    assert.equal(displayVideoProgressPercent(858, 862, false), 99)
+    assert.equal(displayVideoProgressPercent(858, 862, true), 100)
+    assert.equal(displayVideoProgressPercent(862, 862, false), 99)
+    assert.equal(displayVideoProgressPercent(0, 0, false), 0)
+    assert.equal(displayVideoProgressPercent(Number.NaN, 862, false), 0)
+    assert.equal(isServerVideoCompleted({ progressPercentage: 100, videoCompleted: false } as any), false)
+    assert.equal(isServerVideoCompleted({ videoCompleted: true }), true)
+    assert.equal(isServerVideoCompleted({ completed: true }), true)
+    assert.equal(isServerVideoCompleted(null), false)
   })
 
   it('relaxes the completion threshold only for an explicit ENDED event', () => {
