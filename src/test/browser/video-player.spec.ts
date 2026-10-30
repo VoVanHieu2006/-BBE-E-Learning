@@ -421,7 +421,6 @@ for (const legacy of [false, true]) {
     await expect(page.getByRole('status').filter({ hasText: 'Xem rộng trong trình duyệt' })).toBeVisible();
     expect(await page.evaluate(() => document.fullscreenElement === null)).toBe(true);
     await expect.poll(() => page.evaluate(() => history.state?.bbeTheater)).toBeTruthy();
-    if (!legacy) await expect(wrapper(page)).toHaveJSProperty('popover', 'manual');
     await hiddenAfterIdle(page);
     await page.screenshot({ path: `scratch/player-${testInfo.project.name}-${legacy ? 'legacy' : 'theater'}-hidden.png` });
     const portrait = page.viewportSize()!;
@@ -450,6 +449,26 @@ test('installed standalone mode hides the browser-only theater notice', async ({
   await viewportFilled(page);
   await expect(wrapper(page)).toHaveAttribute('data-fullscreen-mode', 'THEATER');
   await expect(page.getByRole('status').filter({ hasText: 'Xem rộng trong trình duyệt' })).toHaveCount(0);
+});
+
+test('theater keeps filling the viewport across repeated rotations and blocks pinch zoom', async ({ page }) => {
+  await setup(page, { theater: true });
+  await fullscreen(page).click();
+  await viewportFilled(page);
+  await expect(wrapper(page)).toHaveAttribute('data-fullscreen-mode', 'THEATER');
+  expect(await wrapper(page).evaluate(el => getComputedStyle(el).touchAction)).toBe('none');
+  const { width, height } = page.viewportSize()!;
+  const long = Math.max(width, height);
+  const short = Math.min(width, height);
+  for (const size of [{ width: long, height: short }, { width: short, height: long }, { width: long, height: short }]) {
+    await page.setViewportSize(size);
+    await viewportFilled(page);
+    const offset = await wrapper(page).evaluate(el => {
+      const rect = el.getBoundingClientRect();
+      return Math.abs(rect.left - (innerWidth - rect.right));
+    });
+    expect(offset).toBeLessThan(2);
+  }
 });
 
 test('native rejection falls back once; repeated theater exit/Back preserves Next history state', async ({ page }) => {

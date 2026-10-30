@@ -13,6 +13,7 @@
     "test:fb-fixes": "node scripts/test/test-fb-fixes.cjs",
     "test:video-controls": "ts-node -P tsconfig.test.json src/test/video-fullscreen-controls.test.ts",
     "test:pwa": "ts-node -P tsconfig.test.json src/test/pwa-standalone.test.ts",
+    "test:viewport-reset": "ts-node -P tsconfig.test.json src/test/viewport-reset.test.ts",
     "test:video-youtube-ux": "ts-node -P tsconfig.test.json src/test/video-controls-youtube-ux.test.ts",
     "test:video-switching-leak": "ts-node -P tsconfig.test.json src/test/video-switching-leak.test.ts",
     "test:baseline-safety": "node --test scripts/test/baseline-empty-database.test.mjs",

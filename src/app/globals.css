@@ -194,9 +194,11 @@ body.bbe-fullscreen-locked {
   position: fixed !important;
   inset: 0 !important;
   z-index: 99999;
-  width: 100vw !important;
-  height: 100vh !important;
-  height: 100dvh !important;
+  /* Size comes from position:fixed + inset:0 (the real layout viewport). 100vw/100dvh can disagree
+     with it on iOS standalone after rotation and shift the player sideways. */
+  width: auto !important;
+  height: auto !important;
+  touch-action: none;
   max-width: none !important;
   max-height: none !important;
   margin: 0 !important;

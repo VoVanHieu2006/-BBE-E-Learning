@@ -1,3 +1,5 @@
+import { resetViewportZoom, watchViewportReset } from './viewport-reset';
+
 export type FullscreenMode = 'NONE' | 'NATIVE' | 'THEATER' | 'UNAVAILABLE';
 
 // A video replacement can create a controller before the previous entry finishes popping.
@@ -15,6 +17,7 @@ export class VideoFullscreen {
   private historyToken = '';
   private historyUrl = '';
   private ancestors: HTMLElement[] = [];
+  private stopViewportWatch: (() => void) | null = null;
   private readonly doc: Document;
   private readonly events = ['fullscreenchange', 'webkitfullscreenchange', 'mozfullscreenchange', 'MSFullscreenChange'];
   private readonly errors = ['fullscreenerror', 'webkitfullscreenerror'];
@@ -54,6 +57,11 @@ export class VideoFullscreen {
   }
 
   private removeTheater() {
+    if (this.stopViewportWatch) {
+      this.stopViewportWatch();
+      this.stopViewportWatch = null;
+      resetViewportZoom(this.win);
+    }
     this.ancestors.forEach(element => element.classList.remove('bbe-theater-ancestor'));
     this.ancestors = [];
     this.doc.documentElement.classList.remove('bbe-fullscreen-locked');
@@ -83,6 +91,7 @@ export class VideoFullscreen {
         // Preserve Next.js's router state. Only theater needs a synthetic Back entry.
         this.win.history.pushState({ ...this.win.history.state, bbeTheater: this.historyToken }, '');
       } catch { this.historyToken = ''; }
+      this.stopViewportWatch = watchViewportReset(this.win);
       this.update('THEATER');
     } catch {
       this.removeTheater();
