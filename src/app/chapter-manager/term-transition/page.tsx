@@ -22,6 +22,7 @@ export default function ChapterManagerTermTransitionPage() {
     user,
     viewMode,
   } = state;
+  const readOnly = mounted && user?.role === 'ADMIN';
 
   return (
     <div className="space-y-8 max-w-7xl pb-20">
@@ -58,14 +59,16 @@ export default function ChapterManagerTermTransitionPage() {
             📜 Lịch sử nhiệm kỳ
           </Button>
           {!scheduledBatch ? (
-            <Button
-              variant="primary"
-              onClick={scrollToImport}
-              size="sm"
-              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
-            >
-              📥 Nạp Google Sheet nhiệm kỳ mới
-            </Button>
+            !readOnly && (
+              <Button
+                variant="primary"
+                onClick={scrollToImport}
+                size="sm"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+              >
+                📥 Nạp Google Sheet nhiệm kỳ mới
+              </Button>
+            )
           ) : (
             <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-100 text-[#2563EB] rounded-xl text-xs font-bold border border-blue-200">
               📅 Đã có 1 đợt chuyển giao lên lịch
@@ -74,22 +77,28 @@ export default function ChapterManagerTermTransitionPage() {
         </div>
       </div>
 
+      {readOnly && (
+        <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          Admin chỉ được xem chuyển giao nhiệm kỳ. Việc nạp sheet, đặt lịch, áp dụng hoặc hủy do Chapter Quản lý thực hiện.
+        </p>
+      )}
+
       {/* VIEW MODE: Nhiệm kỳ hiện tại (8 Cột rộng rãi + Cuộn ngang) */}
       {viewMode === 'current' && (
         <div className="space-y-6">
           <CurrentRoster {...state} />
           {/* ĐỢT CHUYỂN GIAO NHIỆM KỲ ĐÃ LÊN LỊCH (ĐẶT DƯỚI THÀNH VIÊN CHƯA CÓ BAN) */}
-          <ScheduledTransfer {...state} />
+          <ScheduledTransfer {...state} readOnly={readOnly} />
           {/* ═══════════════════════════════════════════════════════════════════
               KHU VỰC NHẬP GOOGLE SHEET CHUYỂN GIAO NHIỆM KỲ MỚI (NẰM PHÍA DƯỚI)
               CHỈ HIỂN THỊ KHI CHƯA CÓ ĐỢT CHUYỂN GIAO NÀO ĐANG LÊN LỊCH
              ═══════════════════════════════════════════════════════════════════ */}
-          <TransferDraft {...state} />
+          {!readOnly && <TransferDraft {...state} />}
         </div>
       )}
 
       <TransferHistory {...state} />
-      <TransferConfirmations {...state} />
+      {!readOnly && <TransferConfirmations {...state} />}
     </div>
   );
 }

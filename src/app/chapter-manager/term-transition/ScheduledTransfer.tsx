@@ -15,7 +15,7 @@ type Props = Pick<
   | 'scheduledBatch'
   | 'setShowApplyBatchModal'
   | 'setShowCancelBatchModal'
->;
+> & { readOnly?: boolean };
 
 export default function ScheduledTransfer({
   applyingBatch,
@@ -24,6 +24,7 @@ export default function ScheduledTransfer({
   scheduledBatch,
   setShowApplyBatchModal,
   setShowCancelBatchModal,
+  readOnly = false,
 }: Props) {
   return (
     <>
@@ -49,25 +50,27 @@ export default function ScheduledTransfer({
                   {scheduledBatch.lastError && <p role="alert" className="text-xs text-red-700">Chưa áp dụng thành công: {scheduledBatch.lastError}. Bản nhập vẫn được giữ; có thể thử áp dụng lại hoặc hủy lịch.</p>}
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <Button
-                    size="sm"
-                    onClick={() => setShowApplyBatchModal(true)}
-                    loading={applyingBatch}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
-                  >
-                    ⚡ Áp dụng ngay bây giờ
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setShowCancelBatchModal(true)}
-                    loading={cancelingBatch}
-                    className="text-red-600 border-red-200 hover:bg-red-50"
-                  >
-                    ✕ Hủy lịch này
-                  </Button>
-                </div>
+                {!readOnly && (
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      onClick={() => setShowApplyBatchModal(true)}
+                      loading={applyingBatch}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+                    >
+                      ⚡ Áp dụng ngay bây giờ
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setShowCancelBatchModal(true)}
+                      loading={cancelingBatch}
+                      className="text-red-600 border-red-200 hover:bg-red-50"
+                    >
+                      ✕ Hủy lịch này
+                    </Button>
+                  </div>
+                )}
               </div>
 
               {/* Sơ đồ 8 cột dự kiến */}

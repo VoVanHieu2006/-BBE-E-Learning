@@ -145,7 +145,7 @@ paused(t) = chapter ĐÃ TỪNG chuyển giao
 
 > Điều kiện đầu tiên — **"chapter đã từng chuyển giao"** — là bắt buộc. Thiếu nó thì một chapter mới thành lập sẽ bị coi là "đã bỏ lỡ cửa sổ" ngay từ ngày đầu, trái với quy tắc nhiệm kỳ đầu. Xem [2.2](#22-chapter-chưa-từng-chuyển-giao-thì-không-bao-giờ-ngừng-cộng-sao).
 
-Bảng kiểm chứng (giả sử policy đã qua cutover):
+Bảng kiểm chứng (mô hình hiện hành):
 
 | Thời điểm xét `t` | Lần apply gần nhất | `A_last(t)` | `S(t)`     | Có apply trong `[S(t), t]`? | Kết quả                                                               |
 | ----------------------- | --------------------- | ------------- | ------------ | ------------------------------ | ----------------------------------------------------------------------- |
@@ -282,19 +282,18 @@ Worker gọi **3 đường dẫn nội bộ**, song song, mỗi đường bảo 
 
 ✅ `scripts/learning-scheduler.mjs:7`
 
-Riêng đường dẫn đầu tiên chạy **9 việc theo thứ tự cố định**:
+Riêng đường dẫn đầu tiên chạy **8 việc theo thứ tự cố định**:
 
-1. Khởi tạo mốc cutover hệ thống học mới (nếu chưa có)
-2. **Áp dụng các đợt chuyển giao đã tới giờ** ← phần chính của mục này
-3. Áp dụng reset chu kỳ DNA đã tới mốc
-4. Đẩy các sự kiện đồng bộ lộ trình đang chờ (outbox)
-5. Nghỉ hưu các tài khoản không còn hoạt động
-6. Đóng các tháng thi đua đã hết
-7. Hoàn tất KPI còn treo của các tháng đã đóng
-8. Đóng các nhiệm kỳ đã hết
-9. Trả về kết quả của cả 9 việc
+1. **Áp dụng các đợt chuyển giao đã tới giờ** ← phần chính của mục này
+2. Áp dụng reset chu kỳ DNA đã tới mốc
+3. Đẩy các sự kiện đồng bộ lộ trình đang chờ (outbox)
+4. Nghỉ hưu các tài khoản không còn hoạt động
+5. Đóng các tháng thi đua đã hết
+6. Hoàn tất KPI còn treo của các tháng đã đóng
+7. Đóng các nhiệm kỳ đã hết
+8. Trả về kết quả của cả 8 việc
 
-✅ `src/app/api/internal/organization/reorganizations/apply/route.ts:10-22`
+✅ `src/app/api/internal/organization/reorganizations/apply/route.ts:12-21`
 
 #### 1.9.3 Nó "kiểm tra nhiệm kỳ" như thế nào?
 
@@ -331,7 +330,7 @@ Với **mỗi đợt** lấy được, hệ thống khoá dòng đó lại (`FOR
 
 #### 1.9.5 Đặt lịch chuyển giao thì đặt như thế nào, và chạy lúc nào?
 
-**Đặt như thế nào:** Lead Chapter vào trang chuyển giao nhiệm kỳ, chọn **ngày + giờ hiệu lực** trong ô `datetime-local`, điền sheet phân ban/vị trí mới, rồi gửi. Hệ thống kiểm tra rồi lưu một đợt ở trạng thái `SCHEDULED`.
+**Đặt như thế nào:** Lead Chapter vào trang chuyển giao nhiệm kỳ, chọn **ngày + giờ hiệu lực** trong ô `datetime-local`, điền sheet phân ban/vị trí mới, rồi gửi. Hệ thống kiểm tra rồi lưu một đợt ở trạng thái `SCHEDULED`. Admin chỉ được xem; ba thao tác đặt lịch, áp dụng ngay và hủy lịch đều trả `403 AdminReadOnly` nếu người gọi là Admin (`src/app/api/v1/chapters/[chapterId]/reorganizations/route.ts`, `[batchId]/route.ts`).
 
 **Chạy lúc nào — có hai trường hợp:**
 
@@ -340,7 +339,7 @@ Với **mỗi đợt** lấy được, hệ thống khoá dòng đó lại (`FOR
 | **≤ 60 giây** kể từ bây giờ (kể cả "bây giờ") | **Áp dụng ngay trong chính lần gửi đó** — không chờ worker. Đây là biến `isImmediate`                 |
 | **Xa hơn 60 giây**                                    | Lưu `SCHEDULED`; **worker áp dụng ở lượt quét đầu tiên sau thời điểm đó** — trễ tối đa ~60 giây |
 
-✅ `src/app/api/v1/chapters/[chapterId]/reorganizations/route.ts:185`, `:219-221`
+✅ `src/app/api/v1/chapters/[chapterId]/reorganizations/route.ts:216`, `:273-275`
 
 **Vì sao có ngưỡng 60 giây?** Để người dùng bấm "chuyển giao ngay" thấy kết quả **ngay trên màn hình**, không phải chờ tới lượt quét kế tiếp. Ngưỡng này khớp đúng nhịp quét.
 
@@ -349,6 +348,7 @@ Với **mỗi đợt** lấy được, hệ thống khoá dòng đó lại (`FOR
 - Mỗi chapter chỉ được có **1 đợt `SCHEDULED`** tại một thời điểm. Muốn đặt đợt mới phải **áp dụng hoặc huỷ** đợt cũ — nếu không sẽ nhận `409 ScheduledReorganizationExists`: *"Đã có đợt chuyển giao nhiệm kỳ đang được lên lịch. Vui lòng áp dụng hoặc hủy đợt hiện tại trước khi lên lịch đợt mới."*
 - Thời điểm chọn phải nằm trong **một cửa sổ chuẩn** và cửa sổ đó phải có **đúng một mùa** hợp lệ. Nếu chưa có, trùng mùa, mùa cũ 6 tháng hoặc mốc lệch, hệ thống trả `409` kèm **đúng lý do** theo bảng ở [1.6](#16-mùa-do-admin-cấu-hình), không còn câu chung "Admin cần cấu hình mùa".
 - Mỗi cửa sổ chỉ có **một lần chuyển giao `APPLIED`**. Nếu đã có, hệ thống trả `409 WINDOW_ALREADY_APPLIED` và nêu cửa sổ kế tiếp.
+- Tầng DB có partial unique index `chapter_transfers_one_applied_season` trên `(chapter_id, transfer_season_id)` khi `status = 'APPLIED'` (migration `prisma/migrations/20261022_learning_guards/migration.sql`). Vì mỗi mùa hợp lệ ứng với đúng một cửa sổ, index chặn lần `APPLIED` thứ hai ở tầng dữ liệu; kiểm tra cửa sổ trong transaction vẫn là lớp chính. Bản ghi `APPLIED` cũ chưa có `transfer_season_id` không nằm trong index (NULL không tham gia unique index), nhưng không có đường API nào tạo mới trạng thái đó. Vi phạm index được ghi thành thông điệp nghiệp vụ trong `last_error` và batch vẫn `SCHEDULED` để thử lại.
 
 ✅ `src/app/api/v1/chapters/[chapterId]/reorganizations/route.ts`
 
@@ -367,6 +367,9 @@ Hệ quả cần nhớ:
 - Nếu đợt được áp dụng **sớm hơn giờ hẹn**, `T_thực` là **giờ áp dụng thật**; không có chuyện ghi nhận một thời điểm ở tương lai.
 - Đợt đã gắn sẵn một mùa (kể cả mùa 6 tháng cũ) **giữ nguyên liên kết** khi worker áp dụng, để dữ liệu lịch sử vẫn đọc được. Đợt mới không có liên kết sẽ được tra theo **cửa sổ của `effective_at`**.
 - Không còn lỗi `TransferOutsideSeasonWindow` chỉ vì worker chạy sau `ends_at`. Lỗi bất kỳ → giữ `SCHEDULED` + `last_error` (cắt 2000 ký tự) + tăng `apply_attempts`; **không có đợt nào bị "mất" im lặng.**
+- Trang Admin `/admin/transfer-seasons` đọc `GET /api/v1/admin/transfer-seasons/progress` và hiển thị `pendingOverdue`/`overdueMinutes` cho đợt `SCHEDULED` đã quá hạn, `appliedDelayMinutes` cho đợt áp dụng trễ, cùng `applyAttempts`/`lastError`. Quá 60 giây so với `effective_at` bị coi là trễ.
+- Tab Admin chỉ tải **một giai đoạn** mỗi lần (`window`), lọc theo tên chapter (`q`), trạng thái (`status=APPLIED|SCHEDULED|NONE|OVERDUE`) và phân trang (`page`, `pageSize` tối đa 100). API trả tối đa 36 bản tóm tắt giai đoạn trong `windows` (`windowsTruncated` báo khi cắt bớt), nên không còn tải toàn bộ chapter của mọi giai đoạn trong một response.
+- Mỗi dòng chapter có `totalAppliedCount` (tổng số lần đã chuyển giao trong toàn bộ lịch sử) và `lastAppliedAt`. Nút "Xem lịch sử" gọi `GET /api/v1/admin/transfer-seasons/chapters/[chapterId]` để xem tối đa 50 bản ghi gần nhất kèm tổng số lần theo trạng thái. Cả hai endpoint chỉ đọc, không có thao tác ghi.
 
 ✅ `src/lib/chapter-reorganizations.ts`, `src/lib/transfer-windows.ts`
 
@@ -403,8 +406,8 @@ Cron này gọi **cùng** đường dẫn `/api/internal/organization/reorganiza
 | Đường                           | Cơ chế                                                                                                      | Nguồn                                                                           |
 | ---------------------------------- | ------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
 | **Worker** (chính)          | Gọi `GET /api/internal/organization/reorganizations/apply` mỗi 60 giây                                   | ✅ `scripts/learning-scheduler.mjs:7`                                          |
-| **Nút "⚡ Áp dụng ngay"** | `POST /reorganizations/[batchId]` → `applyDueChapterReorganizations(now, batchId, true)`                 | ✅ `src/app/api/v1/chapters/[chapterId]/reorganizations/[batchId]/route.ts:35` |
-| **Tác dụng phụ của GET** | `GET /reorganizations`, `/current-roster`, `dashboard/members` **tự áp dụng** đợt đến hạn | ⚠️ `reorganizations/route.ts:20`, `docs/known-issues.md:21`                |
+| **Nút "⚡ Áp dụng ngay"** | `POST /reorganizations/[batchId]` → `applyDueChapterReorganizations(now, batchId, true)`; Admin bị từ chối `403 AdminReadOnly` | ✅ `src/app/api/v1/chapters/[chapterId]/reorganizations/[batchId]/route.ts:38` |
+| **Tác dụng phụ của GET** | `GET /reorganizations`, `/current-roster`, `dashboard/members` **tự áp dụng** đợt đến hạn | ⚠️ `reorganizations/route.ts:21`, `docs/known-issues.md:21`                |
 
 #### 1.9.10 Ví dụ thật, xuyên suốt
 
@@ -437,9 +440,9 @@ Nếu chapter **chưa từng** chuyển giao lần nào thì ngược lại: `1/
 
 ### 1.10 DNA reset độc lập
 
-DNA reset chạy ở **mốc đã qua gần nhất** do `chapterRewardBoundary(now)` trả về — hiện là `1/4` và `1/10` — và **hoàn toàn độc lập** với việc chapter có chuyển giao hay không: reset tiến độ bài học, hủy attempt `IN_PROGRESS` (lý do `DNA_SEASON_RESET`), kết thúc assignment. Hàm này **không đọc** bảng `transfer_seasons`; nó tự dựng `season = { id, starts_at }` từ mốc. DNA reset **cần** `policy.cutover_at`, dùng advisory lock `dna-reset:{mốc}`, và chỉ áp dụng nếu `context.cycle.starts_at < mốc`.
+DNA reset chạy ở **mốc đã qua gần nhất** do `chapterRewardBoundary(now)` trả về — hiện là `1/4` và `1/10` — và **hoàn toàn độc lập** với việc chapter có chuyển giao hay không: reset tiến độ bài học, hủy attempt `IN_PROGRESS` (lý do `DNA_SEASON_RESET`), kết thúc assignment. Hàm này **không đọc** bảng `transfer_seasons`; nó tự dựng `season = { id, starts_at }` từ mốc. DNA reset dùng advisory lock `dna-reset:{mốc}` và chỉ áp dụng nếu `context.cycle.starts_at < mốc`; không cần policy/cutover.
 
-✅ `src/lib/dna-cycle-resets.ts:10-11`, `:26`
+✅ `src/lib/dna-cycle-resets.ts:10-11`, `:24`
 
 ✅ **Đã tách helper:** `anchorElapsed(at)` / `chapterRewardBoundary(at)` giữ nghĩa **mốc đã qua** cho DNA reset và ngừng cộng sao; `anchorNearest(at)` / `windowOf(at)` dùng nghĩa **mốc gần nhất** cho đặt lịch và tra mùa. DNA reset không bị ảnh hưởng bởi việc đổi cách tính cửa sổ.
 
@@ -556,13 +559,13 @@ Chapter chưa chuyển giao **vẫn đóng kết quả thi đua** ở cuối m�
 1. **Tới hạn**: worker gọi `applyDueChapterReorganizations()` **mỗi 60 giây** ([1.9](#19-ai-chạy-khi-tới-hạn--worker-cron-và-lịch-chuyển-giao)), chọn các đợt `SCHEDULED` có `effective_at <= now`, sắp xếp sớm nhất trước.
 2. **Áp dụng ngay**: bấm "⚡ Áp dụng ngay bây giờ" → `applyDueChapterReorganizations(new Date(), batchId, true)` — bỏ qua điều kiện `effective_at <= now`.
 
-✅ `src/lib/chapter-reorganizations.ts:7-12`, `src/app/api/v1/chapters/[chapterId]/reorganizations/[batchId]/route.ts:31-42`
+✅ `src/lib/chapter-reorganizations.ts:9-15`, `src/app/api/v1/chapters/[chapterId]/reorganizations/[batchId]/route.ts:34-43`
 
 Nếu batch đã `APPLIED`, API trả thành công ngay (idempotent). Nếu batch không phải `SCHEDULED` → `409 TransferNotScheduled`.
 
 ### 3.2 Diễn biến trong **một giao dịch** (Serializable, timeout 30s)
 
-✅ `src/lib/chapter-reorganizations.ts:7-126`
+✅ `src/lib/chapter-reorganizations.ts:16-131`
 
 | Bước | Việc làm                                                                                                                                                                                                                                                              | Dòng        |
 | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
@@ -571,22 +574,22 @@ Nếu batch đã `APPLIED`, API trả thành công ngay (idempotent). Nếu batc
 | 3      | Đọc roster hiện tại của chapter                                                                                                                                                                                                                                    | `:21-22`   |
 | 4      | Khoá từng người trong roster                                                                                                                                                                                                                                        | `:24`      |
 | 5      | Lấy **giờ đồng hồ DB thật** (`clock_timestamp()`), **không backdate**                                                                                                                                                                              | `:26-31`   |
-| 6      | Nếu có người trong sheet **đã rời chapter** → `TransferMemberNoLongerInChapter`                                                                                                                                                                         | `:32`      |
-| 7      | Nếu policy học tập đã kích hoạt: mùa phải khớp **duy nhất**, `appliedAt` phải nằm trong `[starts_at, ends_at)`, mỗi chapter/mùa chỉ 1 lần apply                                                                                              | `:33-41`   |
-| 8      | Ghi snapshot `BEFORE_TRANSFER` (khoá `transfer:{batchId}`): roster, chức vụ đang mở, tiến độ bài học                                                                                                                                                      | `:42-48`   |
-| 9      | Batch → `APPLIED`, gán `applied_at`, `transfer_season_id`, xoá `last_error`, tăng `apply_attempts`                                                                                                                                                        | `:49`      |
-| 10     | Chốt thống kê nhiệm kỳ thực tế (`captureChapterActualTerm`)                                                                                                                                                                                                    | `:51`      |
-| 11     | Đóng nhiệm kỳ thi đua đang mở (`ends_at = appliedAt`), mở nhiệm kỳ mới bắt đầu `appliedAt` (`ends_at` để trống) 🔧 xem [1.5](#15-nhiệm-kỳ-khác-cửa-sổ)                                                                                       | `:52-53`   |
-| 12     | **Với từng thành viên**: đóng chu kỳ học cũ → mở chu kỳ mới (khoá `transfer:{batchId}:{userId}`) → hủy attempt `IN_PROGRESS` (`LEARNING_CYCLE_RESET`) → xoá tiến độ bài học hiển thị → kết thúc assignment + yêu cầu bổ trợ | `:54-63`   |
-| 13     | Đẩy sự kiện đồng bộ lộ trình qua outbox cho từng người                                                                                                                                                                                                      | `:65`      |
-| 14     | Lấy `now = appliedAt` để **không backdate** phần còn lại                                                                                                                                                                                                 | `:66-67`   |
-| 15     | Cập nhật `current_term_number` của chapter theo `term_number` của batch                                                                                                                                                                                         | `:68-73`   |
-| 16     | Kiểm tra Ban/vị trí còn hợp lệ; tối đa **1 `PRESIDENT`**/chapter; `PRESIDENT` phải đúng vị trí `PRESIDENT` 🔧                                                                                                                                  | `:74-90`   |
-| 17     | Cập nhật `display_name` nếu sheet có tên mới                                                                                                                                                                                                                    | `:92-100`  |
-| 18     | Kết thúc **toàn bộ** Ban và chức vụ cũ trong các Ban của chapter                                                                                                                                                                                        | `:104-112` |
-| 19     | Kết thúc vị trí `PRESIDENT` cũ của chapter                                                                                                                                                                                                                      | `:114`     |
-| 20     | Tạo membership Ban mới + position assignment mới theo sheet                                                                                                                                                                                                          | `:115-117` |
-| 21     | Lỗi bất kỳ → ghi `last_error` (cắt 2000 ký tự) + tăng `apply_attempts`; batch **vẫn `SCHEDULED`** để thử lại                                                                                                                                   | `:121-123` |
+| 6      | Nếu có người trong sheet **đã rời chapter** → `TransferMemberNoLongerInChapter`                                                                                                                                                                         | `:34`      |
+| 7      | Mỗi cửa sổ chuyển giao chỉ có **một** batch `APPLIED`; batch chưa gắn mùa phải khớp **duy nhất** một mùa đang phủ `effective_at`; DB có partial unique index `chapter_transfers_one_applied_season` làm lớp chặn thứ hai                                                       | `:36-55`   |
+| 8      | Ghi snapshot `BEFORE_TRANSFER` (khoá `transfer:{batchId}`): roster, chức vụ đang mở, tiến độ bài học                                                                                                                                                      | `:56-62`   |
+| 9      | Batch → `APPLIED`, gán `applied_at`, `transfer_season_id`, xoá `last_error`, tăng `apply_attempts`                                                                                                                                                        | `:63`      |
+| 10     | Chốt thống kê nhiệm kỳ thực tế (`captureChapterActualTerm`)                                                                                                                                                                                                    | `:64`      |
+| 11     | Đóng nhiệm kỳ thi đua đang mở (`ends_at = appliedAt`), mở nhiệm kỳ mới bắt đầu `appliedAt` (`ends_at` để trống) 🔧 xem [1.5](#15-nhiệm-kỳ-khác-cửa-sổ)                                                                                       | `:65-66`   |
+| 12     | **Với từng thành viên**: đóng chu kỳ học cũ → mở chu kỳ mới (khoá `transfer:{batchId}:{userId}`) → hủy attempt `IN_PROGRESS` (`LEARNING_CYCLE_RESET`) → xoá tiến độ bài học hiển thị → kết thúc assignment + yêu cầu bổ trợ | `:67-76`   |
+| 13     | Đẩy sự kiện đồng bộ lộ trình qua outbox cho từng người                                                                                                                                                                                                      | `:77`      |
+| 14     | Lấy `now = appliedAt` để **không backdate** phần còn lại                                                                                                                                                                                                 | `:78-79`   |
+| 15     | Cập nhật `current_term_number` của chapter theo `term_number` của batch                                                                                                                                                                                         | `:80-85`   |
+| 16     | Kiểm tra Ban/vị trí còn hợp lệ; tối đa **1 `PRESIDENT`**/chapter; `PRESIDENT` phải đúng vị trí `PRESIDENT` 🔧                                                                                                                                  | `:86-102`  |
+| 17     | Cập nhật `display_name` nếu sheet có tên mới                                                                                                                                                                                                                    | `:104-112` |
+| 18     | Kết thúc **toàn bộ** Ban và chức vụ cũ trong các Ban của chapter                                                                                                                                                                                        | `:114-125` |
+| 19     | Kết thúc vị trí `PRESIDENT` cũ của chapter                                                                                                                                                                                                                      | `:126`     |
+| 20     | Tạo membership Ban mới + position assignment mới theo sheet                                                                                                                                                                                                          | `:127-129` |
+| 21     | Lỗi bất kỳ → ghi `last_error` (cắt 2000 ký tự; riêng vi phạm unique index đổi thành thông điệp nghiệp vụ) + tăng `apply_attempts`; batch **vẫn `SCHEDULED`** để thử lại                                                                                                                                   | `:133-135` |
 
 ### 3.3 Hệ quả với người học
 
@@ -599,10 +602,13 @@ Nếu batch đã `APPLIED`, API trả thành công ngay (idempotent). Nếu batc
 | Video đã xem                  | Phải **xem lại từ đầu** trong chu kỳ mới mới nhận sao tháng mới                 |
 | Cộng bù (backpay)             | **Không có**                                                                             |
 
-✅ `src/lib/chapter-reorganizations.ts:56-62`, 📄 `docs/business-rules.md` (dòng 101-102)
+✅ `src/lib/chapter-reorganizations.ts:65-76`, 📄 `docs/business-rules.md` (dòng 101-102)
 
 ### 3.4 Chống trùng lặp và an toàn khi lỗi
 
+- 🔒 **Rào chắn DB**: partial unique index `chapter_transfers_one_applied_season` trên `(chapter_id, transfer_season_id)` khi `status = 'APPLIED'` (migration `prisma/migrations/20261022_learning_guards/migration.sql`). Index bảo vệ thêm sau kiểm tra cửa sổ trong transaction; batch cũ `APPLIED` chưa gắn mùa không nằm trong index nhưng không có đường API tạo mới trạng thái đó.
+- 🧪 `scripts/test/test-transfer-guard.cjs` — P2002 từ index được đổi thành thông điệp "Giai đoạn này đã có một lần chuyển giao..." trong `last_error`, không lộ chuỗi Prisma thô; lỗi khác giữ nguyên nội dung.
+- 🧪 `scripts/test/test-transfer-admin-view.cjs` — progress chỉ trả một giai đoạn đã chọn kèm phân trang/lọc, lịch sử chapter trả tổng số lần và tối đa 50 bản ghi; non-ADMIN nhận `403 AccessDenied` ở cả hai endpoint.
 - 🧪 `scripts/test/test-chapter-transfer-integration.cjs:30` — lịch ở tương lai **không** reset (`= 0`).
 - 🧪 `:33` — hai lời gọi "áp dụng ngay" **song song** chỉ cho 1 lần thành công.
 - 🧪 `:37` — gọi lại lần ba trả `0`, **không reset lần hai**.
@@ -635,12 +641,11 @@ Nó thoát sớm **không ngừng thưởng** (`paused: false`) trong các trư�
 
 | Trường hợp                                                     | Dòng      |
 | ----------------------------------------------------------------- | ---------- |
-| Chưa có policy, chưa duyệt mapping, hoặc `at < cutover_at` | `:23`    |
-| Người dùng có tư cách DNA đang hoạt động                | `:24-25` |
-| Người dùng không có dòng `chapter_members`                | `:26-27` |
-| Không tìm thấy chapter                                         | `:28-29` |
+| Người dùng có tư cách DNA đang hoạt động                | `:37-38` |
+| Người dùng không có dòng `chapter_members`                | `:39-40` |
+| Không tìm thấy chapter                                         | `:41-42` |
 
-Nghĩa là: **trước cutover thì không ai bị ngừng thưởng**; **thành viên DNA không bao giờ bị ngừng thưởng**; và cơ chế ngừng thưởng chỉ áp cho người đang thuộc một chapter.
+Nghĩa là: **thành viên DNA không bao giờ bị ngừng thưởng**; và cơ chế ngừng thưởng chỉ áp cho người đang thuộc một chapter. Không còn điều kiện policy/cutover.
 
 ### 4.2 Chưa từng chuyển giao → **vẫn nhận sao**
 
@@ -666,7 +671,7 @@ Nếu đã có lần apply `APPLIED` với **thời gian chuyển giao thực t�
 | Cộng bù sau khi chuyển giao | **Không** — sao trong khoảng bị ngừng **mất vĩnh viễn**                               |
 | Thông điệp hiển thị       | `CHAPTER_TRANSFER_OVERDUE`: *"Chapter chưa hoàn tất chuyển giao nên thưởng đang tạm dừng."* |
 
-✅ `src/lib/learning-readiness-rules.ts:10`, `src/lib/learning-periods.ts:95`, `src/app/api/v1/lessons/[lessonId]/progress/route.ts:202`, `src/app/api/v1/learning/me/route.ts:17`
+✅ `src/lib/learning-readiness-rules.ts:10`, `src/lib/learning-periods.ts:94`, `src/app/api/v1/lessons/[lessonId]/progress/route.ts:202`, `src/app/api/v1/learning/me/route.ts:17`
 
 ### 4.5 Lỗi / phi cấu hình mùa
 
@@ -676,12 +681,10 @@ Nếu đã có lần apply `APPLIED` với **thời gian chuyển giao thực t�
 | `CHAPTER_TRANSFER_OVERDUE`       | "Chapter chưa hoàn tất chuyển giao nên thưởng đang tạm dừng." |
 | `TERM_NOT_CONFIGURED`            | "Chưa khởi tạo nhiệm kỳ Chapter phù hợp."                        |
 | `SEASON_NOT_CONFIGURED`          | "Chưa khởi tạo mùa chuyển giao phù hợp."                         |
-| `POLICY_MISSING`                 | "Chưa có cấu hình chính sách học tập."                          |
-| `MAPPING_NOT_APPROVED`           | "Mapping chương trình và đối tượng chưa được duyệt."       |
-| `CUTOVER_NOT_SET`                | "Chưa đặt thời điểm kích hoạt."                                 |
-| `CUTOVER_FUTURE`                 | "Chưa đến thời điểm kích hoạt đã đặt."                      |
+| `CYCLE_NOT_STARTED`              | "Chưa có chu kỳ học; tiến độ lịch sử được giữ riêng."       |
+| `MONTH_NOT_CONFIGURED`           | "Chưa khởi tạo tháng thi đua phù hợp."                             |
 
-✅ `src/lib/learning-readiness-rules.ts:1-12`
+✅ `src/lib/learning-readiness-rules.ts:1-15`
 
 ### 4.6 Có lịch nhưng chưa tới giờ / bị hủy
 
@@ -689,7 +692,7 @@ Nếu đã có lần apply `APPLIED` với **thời gian chuyển giao thực t�
 | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | Batch `SCHEDULED`, chưa tới `effective_at`          | Chưa reset gì; UI hiện đếm ngược. 🧪 `test-chapter-transfer-integration.cjs:30`                                       |
 | Mỗi chapter chỉ được **1** lịch `SCHEDULED` | Tạo lịch thứ hai → `409 ScheduledReorganizationExists` ✅ `reorganizations/route.ts`                                   |
-| Hủy lịch (`DELETE /reorganizations/[batchId]`)        | Batch → `CANCELLED` + `cancelled_at`; **không reset gì** ✅ `[batchId]/route.ts:70-77`                          |
+| Hủy lịch (`DELETE /reorganizations/[batchId]`)        | Batch → `CANCELLED` + `cancelled_at`; **không reset gì** ✅ `[batchId]/route.ts:76-79`                          |
 | Apply thất bại                                          | Batch **vẫn `SCHEDULED`**, ghi `last_error`, UI hiện lỗi để thử lại ✅ `chapter-reorganizations.ts:121-123` |
 
 ### 4.7 Ví dụ số
@@ -907,9 +910,6 @@ Chapter bị loại với lý do `CORE_COMPLETION_BELOW_50_PERCENT`, **dù stage
 Chapter có tư cách DNA?  ── Có ──►  Không bao giờ ngừng thưởng; vào BXH nhóm DNA
         │ Không
         ▼
-Có policy + đã qua cutover?  ── Không ──►  Không ngừng thưởng
-        │ Có
-        ▼
 Người dùng thuộc Chapter?  ── Không ──►  Không ngừng thưởng
         │ Có
         ▼
@@ -1003,7 +1003,7 @@ Tổng hợp mọi điểm đã đánh dấu 🔧 trong tài liệu. **Đợt P0
 | 9  | `src/test/chapter-six-month-transfer.test.ts` | ✅ Đã viết lại theo cửa sổ chuẩn | mốc `1/4`/`1/10` 00:00 — [2.4](#24-ví-dụ-số) | ✅ Xong |
 | 10 | `docs/business-rules.md` | ✅ Đã sửa 29/10/2026 | `1/1–30/6`, `1/7–31/12` — [1.2](#12-cửa-sổ-chuyển-giao) | ✅ Xong |
 | 11 | `src/lib/dna-cycle-resets.ts` | ✅ Dùng helper `anchorElapsed` / `chapterRewardBoundary` | tách helper mốc đã qua — [1.10](#110-dna-reset-độc-lập) | ✅ Xong |
-| 12 | `src/app/api/v1/admin/learning-policy/route.ts` | ✅ Kiểm tra theo cửa sổ chứa `cutoverAt` | như mô tả — [1.6](#16-mùa-do-admin-cấu-hình) | ✅ Xong |
+| 12 | `src/app/api/v1/admin/learning-policy/route.ts` | ✅ Đã bỏ nhánh cutover; chỉ còn cấu hình season/mapping | như mô tả — [1.6](#16-mùa-do-admin-cấu-hình) | ✅ Xong |
 | 13 | `src/test/learning-cycles.test.ts` + `src/test/transfer-windows.test.ts` | ✅ Giữ test mốc đã qua; thêm test riêng cho mốc gần nhất | như mô tả | ✅ Xong |
 | 14 | `src/lib/chapter-term-rules.ts` | ✅ Đã xoá `firstEligibleAt` + `INITIAL_SEASON_SKIPPED` | chapter mới chuyển giao ngay — [2.1](#21-chapter-mới-chuyển-giao-được-ngay-không-phải-chờ) | ✅ Xong |
 | 15 | `CHAPTER_PRESIDENT` → `PRESIDENT` (7 file mã + 2 migration + 3 test + 1 component + 1 trang admin)                                                                                | hai mã cho cùng một vị trí: `CHAPTER_PRESIDENT` trong dữ liệu, `PRESIDENT` ở vài danh sách                                                          | **một mã duy nhất `PRESIDENT`** — [5.6](#56-ai-được-vào-bảng-xếp-hạng)                                                                                                      | 🟠 Vừa   |
@@ -1047,7 +1047,7 @@ Hệ quả: người giữ `CHAPTER_MANAGER` **không** được coi là learnin
 
 - Toàn bộ nội dung tài liệu này dựa trên **đọc mã + test tự động**, **chưa** đối chiếu dữ liệu production.
 - Supabase không truy cập được từ môi trường soạn tài liệu (lỗi TLS), nên không xác minh được cấu hình policy/mùa thật.
-- Chưa xác nhận production đang bật hay tắt cutover.
+- Cutover đã bỏ khỏi runtime; chưa đối chiếu dữ liệu legacy thật với mốc `learning_policy.cutover_at` trên production.
   ⚠️ `docs/known-issues.md:32-33`
 
 ---
@@ -1081,16 +1081,16 @@ Hệ quả: người giữ `CHAPTER_MANAGER` **không** được coi là learnin
 | Nhiệm kỳ thực tế chỉ thống kê                                            | `src/lib/chapter-actual-terms.ts`                                                                                                                                                                                                                                 |
 | DNA reset độc lập                                                            | ✅ `src/lib/dna-cycle-resets.ts` dùng `chapterRewardBoundary` (mốc **đã qua**) — xem [1.10](#110-dna-reset-độc-lập)                                                                                                                                       |
 | Thông điệp lý do hiển thị                                                 | `src/lib/learning-readiness-rules.ts:1-12`                                                                                                                                                                                                                        |
-| Cổng chặn ở video/quiz/tiến độ                                            | `src/lib/video-heartbeat.ts:238`, `src/lib/quiz-submission.ts:119`, `src/app/api/v1/lessons/[lessonId]/progress/route.ts:202`, `src/lib/learning-periods.ts:95`                                                                                             |
+| Cổng chặn ở video/quiz/tiến độ                                            | `src/lib/video-heartbeat.ts:238`, `src/lib/quiz-submission.ts:119`, `src/app/api/v1/lessons/[lessonId]/progress/route.ts:202`, `src/lib/learning-periods.ts:94`                                                                                             |
 | Validate cấu hình mùa của Admin                                             | ✅ `src/lib/transfer-season-lookup.ts` (`checkSeasonConfiguration`), `src/app/api/v1/admin/learning-policy/route.ts`                                                                                                                                   |
-| Tạo lịch chuyển giao (validate)                                              | `src/app/api/v1/chapters/[chapterId]/reorganizations/route.ts:86-185`                                                                                                                                                                                             |
+| Tạo lịch chuyển giao (validate)                                              | `src/app/api/v1/chapters/[chapterId]/reorganizations/route.ts:64-216`                                                                                                                                                                                             |
 | Áp dụng ngay / hủy lịch                                                     | `src/app/api/v1/chapters/[chapterId]/reorganizations/[batchId]/route.ts`                                                                                                                                                                                          |
 | Cron apply                                                                      | `vercel.json:11`, `src/app/api/internal/organization/reorganizations/apply/route.ts`                                                                                                                                                                            |
 | Worker 60 giây, chống chồng lấn, timeout 55s                                | `scripts/learning-scheduler.mjs:7-24` — xem [1.9](#19-ai-chạy-khi-tới-hạn--worker-cron-và-lịch-chuyển-giao)                                                                                                                                                 |
 | Chọn đợt đến hạn (`effective_at <= now`, sớm nhất trước)            | `src/lib/chapter-reorganizations.ts:7-12`                                                                                                                                                                                                                         |
-| "Áp dụng ngay" khi lịch ≤ 60 giây                                          | `src/app/api/v1/chapters/[chapterId]/reorganizations/route.ts:185`, `:219-221`                                                                                                                                                                                  |
+| "Áp dụng ngay" khi lịch ≤ 60 giây                                          | `src/app/api/v1/chapters/[chapterId]/reorganizations/route.ts:216`, `:273-275`                                                                                                                                                                                  |
 | Không backdate `applied_at`                                                  | `src/lib/chapter-reorganizations.ts`; thời gian nghiệp vụ = `min(effective_at, applied_at)` trong `src/lib/transfer-windows.ts`                                                                                                                      |
-| Chỉ 1 đợt `SCHEDULED` mỗi chapter                                         | `src/app/api/v1/chapters/[chapterId]/reorganizations/route.ts:158-175`                                                                                                                                                                                            |
+| Chỉ 1 đợt `SCHEDULED` mỗi chapter                                         | `src/app/api/v1/chapters/[chapterId]/reorganizations/route.ts:162-179`                                                                                                                                                                                            |
 | Seed mùa (đã dùng cửa sổ chuẩn)                                           | ✅ `scripts/db/seed-rich-demo.ts`                                                                                                                                                                                                                                |
 | Test 6 tháng / nhiệm kỳ đầu (đã viết lại)                                | ✅ `src/test/chapter-six-month-transfer.test.ts`, `src/test/chapter-initial-rewards.test.ts`, `src/test/transfer-windows.test.ts`                                                                                                                          |
 | Test apply nguyên tử                                                          | `scripts/test/test-chapter-transfer-integration.cjs`                                                                                                                                                                                                              |

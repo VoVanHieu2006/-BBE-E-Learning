@@ -14,6 +14,9 @@ export async function POST(
 ) {
   const auth = await authenticate(request)
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: 401 })
+  if (auth.context!.role === 'ADMIN') {
+    return NextResponse.json({ error: { code: 'AdminReadOnly', message: 'Admin chỉ được xem chuyển giao nhiệm kỳ; việc áp dụng do Chapter Quản lý thực hiện.' } }, { status: 403 })
+  }
 
   const hasPerm = await canAccessChapterPermission(auth.context!, params.chapterId, 'MANAGE_CHAPTER_MEMBERS')
   if (!hasPerm) {
@@ -52,6 +55,9 @@ export async function DELETE(
 ) {
   const auth = await authenticate(request)
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: 401 })
+  if (auth.context!.role === 'ADMIN') {
+    return NextResponse.json({ error: { code: 'AdminReadOnly', message: 'Admin chỉ được xem chuyển giao nhiệm kỳ; việc hủy lịch do Chapter Quản lý thực hiện.' } }, { status: 403 })
+  }
 
   const hasPerm = await canAccessChapterPermission(auth.context!, params.chapterId, 'MANAGE_CHAPTER_MEMBERS')
   if (!hasPerm) {

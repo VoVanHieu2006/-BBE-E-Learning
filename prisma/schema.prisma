@@ -915,6 +915,7 @@ model ChapterReorganization {
 
   items             ChapterReorganizationItem[]
 
+  // DB-only partial unique index chapter_transfers_one_applied_season (20261022_learning_guards).
   @@index([chapter_id, status, effective_at])
   @@map("chapter_reorganizations")
 }
