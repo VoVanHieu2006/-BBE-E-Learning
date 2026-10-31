@@ -8,7 +8,8 @@ import { randomInt } from 'crypto'
 import { isLearningManager } from '@/lib/manager-learning-access'
 import { selectBalancedFinalExamQuestions } from '@/lib/final-exam-selection'
 import { lockCourseExamBank } from '@/lib/final-exam-bank'
-import { learningContext, lockLearningUser } from '@/lib/learning-periods'
+import { learningContext, lockLearningUser, loadLearningPolicy } from '@/lib/learning-periods'
+import { competitionMonthBounds } from '@/lib/learning-cycle-rules'
 
 function shuffleSecurely<T>(items: readonly T[]): T[] {
   const shuffled = [...items]
@@ -74,22 +75,25 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
   if (!resumableAttempt && assessment.lesson_id && assessment.lesson) {
     const now = new Date()
     const cycle = await prisma.learningCycle.findFirst({ where: { user_id: userId, ends_at: null }, select: { id: true } })
-    const currentMonth = await prisma.competitionMonth.findFirst({ where: { starts_at: { lte: now }, ends_at: { gt: now } } })
+    // The month comes from the calendar, not from whether its row exists yet:
+    // early in a new month nobody may have created the row, and the gate must still apply.
+    const monthBounds = competitionMonthBounds(now, (await loadLearningPolicy(prisma))?.cutover_at)
 
-    if (cycle && currentMonth && assessment.lesson.video) {
+    if (cycle && assessment.lesson.video) {
       const priorAttemptInEarlierMonth = await prisma.attempt.findFirst({
         where: {
           assessment_id: assessmentId,
           user_id: userId,
           learning_cycle_id: cycle.id,
           status: { in: ['SUBMITTED', 'AUTO_SUBMITTED'] },
-          submitted_at: { lt: currentMonth.starts_at },
+          submitted_at: { lt: monthBounds.startsAt },
         },
         select: { id: true },
       })
 
       if (priorAttemptInEarlierMonth) {
-        const replay = await prisma.monthlyVideoReplay.findUnique({
+        const currentMonth = await prisma.competitionMonth.findUnique({ where: { key: monthBounds.key }, select: { id: true } })
+        const replay = currentMonth && await prisma.monthlyVideoReplay.findUnique({
           where: {
             user_id_video_id_competition_month_id_learning_cycle_id: {
               user_id: userId,

@@ -159,6 +159,19 @@ async function main() {
   const frozen = await makeAttempt()
   assert.equal((await submitQuiz({ attemptId: frozen.id, userId: user.id })).grading.passed, true, 'start snapshots survive later bank edits')
 
+  // Month rollover: an attempt started last month earns this month's stars only after a replay this month.
+  const { month: rolloverMonth } = await prisma.$transaction((tx) => learningContext(tx, user.id, new Date()))
+  async function makeCarriedAttempt() {
+    const attempt = await makeAttempt()
+    await prisma.attempt.update({ where: { id: attempt.id }, data: { started_at: new Date(rolloverMonth.starts_at.getTime() - 60_000) } })
+    return attempt
+  }
+  await prisma.quizRewardHighWaterMark.deleteMany({ where: { user_id: user.id } })
+  const carried = await submitQuiz({ attemptId: (await makeCarriedAttempt()).id, userId: user.id })
+  assert.equal(carried.grading.passed, true)
+  assert.equal(carried.amount, 0, 'an attempt carried over from last month needs a replay this month before earning stars')
+  assert.equal(await prisma.quizRewardHighWaterMark.count({ where: { user_id: user.id } }), 0)
+
   const first = await recordVideoHeartbeat(user.id, lesson.id, 10, 10)
   assert.equal(first.starReward.amount, 0, 'training completion cannot pay for a new monthly replay')
   await prisma.monthlyVideoReplay.updateMany({ where: { user_id: user.id, video_id: video.id }, data: { last_heartbeat_at: new Date(Date.now() - 301_000) } })
@@ -174,6 +187,8 @@ async function main() {
   await prisma.monthlyVideoReplay.updateMany({ where: { user_id: user.id, video_id: video.id }, data: { last_heartbeat_at: new Date(Date.now() - 6000), view_session_id: 'COMPAT' } })
   const heartbeats = await Promise.all([recordVideoHeartbeat(user.id, lesson.id, 10, 10), recordVideoHeartbeat(user.id, lesson.id, 10, 10)])
   assert.equal(heartbeats.reduce((sum, result) => sum + result.starReward.amount, 0), 1)
+  const replayedCarry = await submitQuiz({ attemptId: (await makeCarriedAttempt()).id, userId: user.id })
+  assert.equal(replayedCarry.amount, 2, 'after a completed replay this month the carried attempt earns this month\'s stars')
 
   await publishCourseRequirements(course.id)
   const oldDeadline = (await prisma.userLearningAssignment.findFirstOrThrow({ where: { user_id: user.id, ended_at: null } })).due_at
@@ -220,7 +235,7 @@ async function main() {
   assert.equal(await prisma.chapterMember.count({ where: { user_id: user.id } }), 0)
   await assert.rejects(prisma.chapterMember.create({ data: { user_id: user.id, chapter_id: chapter.id } }), /SingleOrganizationAffiliationRequired|constraint/i)
   assert.equal((await prisma.learningCycle.findFirstOrThrow({ where: { user_id: user.id, ends_at: null } })).id, newCycle.id, 'DNA appointment preserves the current training cycle')
-  assert.equal((await prisma.starLedger.aggregate({ where: { user_id: user.id }, _sum: { amount: true } }))._sum.amount, 102, 'history and existing rewards survive transfer and DNA appointment')
+  assert.equal((await prisma.starLedger.aggregate({ where: { user_id: user.id }, _sum: { amount: true } }))._sum.amount, 104, 'history and existing rewards survive transfer and DNA appointment')
   assert.equal(await prisma.userLearningAssignment.count({ where: { user_id: user.id, mandatory: true, ended_at: null } }), 0)
   // A deliberately shortened test period lets a delayed closer prove historical state.
   const testMonthKey = `${6000 + Math.floor(Math.random() * 3000)}-${String(1 + Math.floor(Math.random() * 12)).padStart(2, '0')}`

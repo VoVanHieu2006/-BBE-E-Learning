@@ -17,7 +17,7 @@ export async function submitQuiz(input: { attemptId: string; userId?: string; au
     let now = await lockLearningUser(tx, owner.user_id)
     await tx.$queryRaw`SELECT id FROM attempts WHERE id = ${input.attemptId}::uuid FOR UPDATE`
     const attempt = await tx.attempt.findUnique({ where: { id: input.attemptId }, include: {
-      assessment: { include: { lesson: { select: { session: { select: { course_id: true } }, video: { select: { duration_seconds: true } } } } } },
+      assessment: { include: { lesson: { select: { session: { select: { course_id: true } }, video: { select: { id: true, duration_seconds: true } } } } } },
       attempt_questions: { include: { question: { include: { options: true } } }, orderBy: { display_order: 'asc' } },
       attempt_answers: true,
     } })
@@ -112,7 +112,15 @@ export async function submitQuiz(input: { attemptId: string; userId?: string; au
       }
       const eligible = await rewardEligibility(tx, userId, courseId, now)
       const paused = (await chapterRewardState(tx, userId, now)).paused
-      if (eligible || paused) {
+      // An attempt started before this month passed the replay gate for the old month only.
+      // Stars of the new month still need a completed replay in this month (business rule).
+      const lessonVideoId = assessment.lesson_id ? assessment.lesson?.video?.id : undefined
+      const needsMonthlyReplay = Boolean(lessonVideoId && attempt.started_at < context.month.starts_at)
+      const monthlyReplayDone = !needsMonthlyReplay || Boolean((await tx.monthlyVideoReplay.findUnique({
+        where: { user_id_video_id_competition_month_id_learning_cycle_id: { user_id: userId, video_id: lessonVideoId!, competition_month_id: context.month.id, learning_cycle_id: context.cycle.id } },
+        select: { completed_at: true },
+      }))?.completed_at)
+      if (monthlyReplayDone && (eligible || paused)) {
         const correctCount = grading.results.filter((row) => row.isCorrect).length
         const reason = assessment.type === 'COURSE_FINAL' ? 'COURSE_FINAL_PASS' as const : 'MODULE_QUIZ_PASS' as const
         const chapter = await tx.chapterMember.findUnique({ where: { user_id: userId } })
