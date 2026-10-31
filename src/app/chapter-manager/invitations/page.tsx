@@ -5,6 +5,23 @@ import Button from '@/components/ui/Button';
 import Toast, { ToastMessage } from '@/components/ui/Toast';
 import Modal from '@/components/ui/Modal';
 import { apiFetch, clearApiCache, getCachedApiData } from '@/lib/api/client';
+import {
+  BULK_INVITE_MAX_EMAILS,
+  BULK_INVITE_STATUS_LABELS,
+  BulkInviteResultItem,
+  BulkInviteStatus,
+  parseBulkInviteEmails,
+} from '@/lib/bulk-invite';
+
+const BULK_STATUS_STYLES: Record<BulkInviteStatus, string> = {
+  SENT: 'bg-green-100 text-green-800',
+  SENT_EMAIL_FAILED: 'bg-amber-100 text-amber-800',
+  INVALID: 'bg-red-100 text-red-800',
+  DUPLICATE: 'bg-slate-100 text-slate-700',
+  ALREADY_MEMBER: 'bg-blue-100 text-blue-800',
+  ALREADY_INVITED: 'bg-violet-100 text-violet-800',
+  FAILED: 'bg-red-100 text-red-800',
+};
 
 export default function ChapterManagerInvitationsPage() {
   const [user, setUser] = useState<any>(null);
@@ -14,6 +31,9 @@ export default function ChapterManagerInvitationsPage() {
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteMode, setInviteMode] = useState<'single' | 'bulk'>('single');
+  const [bulkText, setBulkText] = useState('');
+  const [bulkResults, setBulkResults] = useState<BulkInviteResultItem[] | null>(null);
   const [sending, setSending] = useState(false);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
@@ -83,6 +103,45 @@ export default function ChapterManagerInvitationsPage() {
       showToast('error', res.error?.message || 'Lỗi khi gửi lời mời');
     }
     setSending(false);
+  }
+
+  const bulkPreview = parseBulkInviteEmails(bulkText);
+  const bulkTotal = bulkPreview.valid.length + bulkPreview.invalid.length;
+
+  function openInviteModal() {
+    setInviteMode('single');
+    setBulkResults(null);
+    setShowInviteModal(true);
+  }
+
+  async function handleBulkInvite(e: React.FormEvent) {
+    e.preventDefault();
+    if (!bulkPreview.valid.length) {
+      showToast('error', 'Danh sách chưa có email hợp lệ nào.');
+      return;
+    }
+    if (bulkTotal > BULK_INVITE_MAX_EMAILS) {
+      showToast('error', `Mỗi lần chỉ mời tối đa ${BULK_INVITE_MAX_EMAILS} email.`);
+      return;
+    }
+    setSending(true);
+    clearApiCache('/api/v1/invitations');
+    try {
+      const res = await apiFetch('/api/v1/invitations/member/bulk', {
+        method: 'POST',
+        body: JSON.stringify({ emails: bulkText, chapterId: user?.chapterId }),
+      });
+      if (res.ok && res.data?.results) {
+        setBulkResults(res.data.results);
+        const sent = Number(res.data.summary?.sent || 0);
+        showToast(sent > 0 ? 'success' : 'info', `Đã gửi ${sent}/${res.data.results.length} lời mời. Xem chi tiết từng email bên dưới.`);
+        if (sent > 0) loadInvitations(undefined, true);
+      } else {
+        showToast('error', res.error?.message || 'Lỗi khi gửi lời mời hàng loạt');
+      }
+    } finally {
+      setSending(false);
+    }
   }
 
   async function handleResend(invitationId: string) {
@@ -175,7 +234,7 @@ export default function ChapterManagerInvitationsPage() {
               Chapter: <span suppressHydrationWarning className="font-semibold text-[#172554]">{mounted && user?.chapterName ? user.chapterName : 'Chapter của bạn'}</span> • Mời thành viên mới và theo dõi trạng thái kích hoạt
             </p>
           </div>
-          <Button onClick={() => setShowInviteModal(true)}>
+          <Button onClick={openInviteModal}>
             ＋ Mời thành viên mới
           </Button>
         </div>
@@ -272,7 +331,7 @@ export default function ChapterManagerInvitationsPage() {
         <Modal
           isOpen={showInviteModal}
           onClose={() => setShowInviteModal(false)}
-          maxWidth="max-w-md"
+          maxWidth={inviteMode === 'bulk' ? 'max-w-xl' : 'max-w-md'}
         >
           <div className="p-6 space-y-4">
             <h3 className="text-xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
@@ -281,6 +340,75 @@ export default function ChapterManagerInvitationsPage() {
             <p className="text-xs text-[#737686]">
               Gửi email lời mời tham gia Chapter <span suppressHydrationWarning>{mounted && user?.chapterName ? user.chapterName : ''}</span>. Lời mời có hiệu lực trong 24 giờ.
             </p>
+            <div className="flex gap-2" role="tablist" aria-label="Cách mời">
+              {([
+                { key: 'single', label: 'Một email' },
+                { key: 'bulk', label: 'Nhiều email' },
+              ] as const).map((tab) => (
+                <button
+                  key={tab.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={inviteMode === tab.key}
+                  disabled={sending}
+                  onClick={() => setInviteMode(tab.key)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition ${
+                    inviteMode === tab.key ? 'bg-[#2563EB] text-white' : 'bg-white text-[#434655] border border-[#cbdbf5] hover:bg-[#eff4ff]'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+            {inviteMode === 'bulk' ? (
+            <form onSubmit={handleBulkInvite} className="space-y-4">
+              <div>
+                <label htmlFor="bulk-invite-emails" className="block text-sm font-semibold text-[#172554] mb-1">Danh sách email *</label>
+                <textarea
+                  id="bulk-invite-emails"
+                  rows={6}
+                  value={bulkText}
+                  onChange={(e) => { setBulkText(e.target.value); setBulkResults(null); }}
+                  placeholder={'a@bbe.vn\nb@bbe.vn, c@bbe.vn; d@bbe.vn'}
+                  className="w-full px-4 py-2.5 border border-[#cbdbf5] rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                />
+                <p className="text-[11px] text-[#737686] mt-1">
+                  Phân tách bằng xuống dòng, dấu phẩy, dấu chấm phẩy hoặc khoảng trắng. Tối đa {BULK_INVITE_MAX_EMAILS} email mỗi lần.
+                </p>
+                {bulkText.trim() && (
+                  <p className="text-xs mt-1 text-[#434655]" data-testid="bulk-invite-preview">
+                    <strong className="text-green-700">{bulkPreview.valid.length}</strong> hợp lệ
+                    {bulkPreview.invalid.length > 0 && <> · <strong className="text-red-700">{bulkPreview.invalid.length}</strong> không hợp lệ</>}
+                    {bulkPreview.duplicates.length > 0 && <> · <strong>{bulkPreview.duplicates.length}</strong> trùng lặp (bỏ qua)</>}
+                    {bulkTotal > BULK_INVITE_MAX_EMAILS && <span className="text-red-700"> · vượt quá {BULK_INVITE_MAX_EMAILS} email</span>}
+                  </p>
+                )}
+              </div>
+              {bulkResults && (
+                <div className="max-h-64 overflow-y-auto border border-[#eff4ff] rounded-xl divide-y divide-[#eff4ff]" data-testid="bulk-invite-results">
+                  {bulkResults.map((row) => (
+                    <div key={`${row.status}:${row.email}`} className="flex items-start justify-between gap-3 px-3 py-2 text-xs">
+                      <span className="font-semibold text-[#172554] break-all">{row.email}</span>
+                      <span className="text-right">
+                        <span className={`inline-block whitespace-nowrap px-2 py-0.5 rounded-full font-bold ${BULK_STATUS_STYLES[row.status]}`}>
+                          {BULK_INVITE_STATUS_LABELS[row.status]}
+                        </span>
+                        {row.message && row.status !== 'ALREADY_MEMBER' && <span className="block text-[10px] text-[#737686] mt-0.5">{row.message}</span>}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="flex justify-end gap-3 pt-2">
+                <Button variant="outline" type="button" disabled={sending} onClick={() => setShowInviteModal(false)}>
+                  {bulkResults ? 'Đóng' : 'Hủy'}
+                </Button>
+                <Button type="submit" loading={sending} loadingText="Đang gửi..." disabled={!bulkPreview.valid.length || bulkTotal > BULK_INVITE_MAX_EMAILS}>
+                  Gửi {bulkPreview.valid.length || ''} lời mời
+                </Button>
+              </div>
+            </form>
+            ) : (
             <form onSubmit={handleSendInvite} className="space-y-4">
               <div>
                 <label className="block text-sm font-semibold text-[#172554] mb-1">Email học viên *</label>
@@ -307,6 +435,7 @@ export default function ChapterManagerInvitationsPage() {
                 </Button>
               </div>
             </form>
+            )}
           </div>
         </Modal>
     </div>
