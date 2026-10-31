@@ -13,7 +13,7 @@ const suites = {
     ...['test-learning-flow-integration.mjs','test-chapter-leaderboard-integration.mjs','test-learning-security.mjs','test-learning-cycles-integration.cjs','test-reward-pause-integration.cjs','test-organization-integrity.cjs','test-organization-repair.mjs','test-chapter-transfer-integration.cjs','test-completed-lessons-integration.cjs','test-star-history-integration.cjs','test-fb-fixes.cjs'].map(file => [`scripts/test/${file}`]),
     ...['admin-program-and-lead-dept','quiz-and-refresh-integration','chapter-six-month-transfer'].map(name => ['-r','./scripts/test/require-test-database.cjs',...ts(`src/test/${name}.test.ts`)]),
   ],
-  browser: ['player','tabs','sidebar','fb','refactor'].map(name => ['node_modules/@playwright/test/cli.js','test','-c',`playwright.${name}.config.ts`]),
+  browser: ['player','tabs','sidebar','fb','refactor','quiz'].map(name => ['node_modules/@playwright/test/cli.js','test','-c',`playwright.${name}.config.ts`]),
 }
 const group = process.argv[2] || 'unit'
 if (!Object.hasOwn(suites, group)) throw new Error('Choose unit, integration or browser')
