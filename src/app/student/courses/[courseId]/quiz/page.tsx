@@ -72,7 +72,7 @@ export default function StudentCourseFinalExamPage({ params }: { params: { cours
     <div className="min-h-screen bg-[#f8f9ff] text-[#0b1c30]">
       <Toast toast={toast} onClose={() => setToast(null)} />
       {starReward && <StarRewardCelebration amount={starReward} message="Bạn đã vượt qua bài thi cuối khóa!" />}
-      <header className="sticky top-0 z-30 flex items-center justify-between border-b border-[#e5eeff] bg-white px-5 py-4 shadow-sm">
+      <header data-quiz-header className="sticky top-0 z-30 flex items-center justify-between border-b border-[#e5eeff] bg-white px-5 py-4 shadow-sm">
         <div>
           <h1 className="font-bold text-[#172554]">Bài thi cuối khóa</h1>
           <p className="text-xs text-slate-500">{data?.courseTitle || 'Khóa học'}</p>
@@ -80,7 +80,7 @@ export default function StudentCourseFinalExamPage({ params }: { params: { cours
         {!started && <Link href={`/student/courses/${params.courseId}`} className="text-sm font-semibold text-blue-700">← Về khóa học</Link>}
       </header>
 
-      <main className="mx-auto max-w-3xl p-4 md:p-8">
+      <main className={`mx-auto ${started ? 'max-w-5xl' : 'max-w-3xl'} p-4 md:p-8`}>
         {loadError ? (
           <Card className="space-y-4 p-8 text-center">
             <h2 className="font-bold text-[#172554]">Chưa thể tải bài thi</h2>

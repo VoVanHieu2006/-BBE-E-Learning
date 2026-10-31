@@ -1,6 +1,6 @@
 import { prisma } from './prisma'
 import { QUIZ_PASS_PERCENT } from './config/quiz'
-import { gradeQuizAttempt, validateAttemptAnswerSelections, GradingQuestion } from './quiz-attempt-rules'
+import { gradeQuizAttempt, validateAttemptAnswerSelections, GradingQuestion, submissionTiming } from './quiz-attempt-rules'
 import { learningContext, lockLearningUser, rewardEligibility, enqueueAssignmentSync } from './learning-periods'
 import { highWaterIncrement } from './learning-cycle-rules'
 import { syncCourseAssignmentCompletion } from './learning-assignments'
@@ -38,10 +38,13 @@ export async function submitQuiz(input: { attemptId: string; userId?: string; au
       return { error: 'AttemptCycleChanged' as const }
     }
     const repeated = attempt.status !== 'IN_PROGRESS'
-    if (!repeated && input.auto && attempt.expires_at > now) return { error: 'AttemptNotExpired' as const }
-    if (!repeated && !input.auto && attempt.expires_at <= now) return { error: 'AttemptExpired' as const }
+    const timing = submissionTiming(attempt.expires_at, now)
+    if (!repeated && input.auto && timing === 'ON_TIME') return { error: 'AttemptNotExpired' as const }
+    // Time-up submits are finalized like the scheduled auto-submit instead of being rejected.
+    // Request answers count only within the grace window; later, only answers saved before expiry.
+    const timeUp = timing !== 'ON_TIME'
     if (!attempt.attempt_questions.length) return { error: 'AttemptHasNoQuestions' as const }
-    if (!repeated && input.answers) {
+    if (!repeated && input.answers && timing !== 'TOO_LATE') {
       const optionQuestionIds = new Map<string, string>()
       for (const row of attempt.attempt_questions) {
         const snapshot = row.question_snapshot as any
@@ -69,7 +72,7 @@ export async function submitQuiz(input: { attemptId: string; userId?: string; au
     // Repeated submissions are read-only: they cannot re-grade against later bank edits.
     if (repeated) return { grading: { ...grading, scoreRatio: Number(attempt.score), passed: Boolean(attempt.passed) }, amount: 0, rewardKey: null, balance: null, repeated: true }
     await tx.attempt.update({ where: { id: attempt.id }, data: {
-      status: input.auto ? 'AUTO_SUBMITTED' : 'SUBMITTED', submitted_at: now,
+      status: input.auto || timeUp ? 'AUTO_SUBMITTED' : 'SUBMITTED', submitted_at: now,
       score: grading.scoreRatio, passed: grading.passed,
       grading_snapshot: JSON.parse(JSON.stringify(grading)),
     } })

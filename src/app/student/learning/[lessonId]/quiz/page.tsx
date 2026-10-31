@@ -252,7 +252,7 @@ export default function LessonQuizPage({ params }: { params: { lessonId: string 
       <Toast toast={toast} onClose={() => setToast(null)} />
 
       {/* Header: Khi đang làm bài (started === true), ẨN TOÀN BỘ nút quay lại */}
-      <header className="bg-white border-b border-[#e5eeff] px-6 py-3.5 flex items-center justify-between sticky top-0 z-30 shadow-xs">
+      <header data-quiz-header className="bg-white border-b border-[#e5eeff] px-6 py-3.5 flex items-center justify-between sticky top-0 z-30 shadow-xs">
         <div className="min-w-0">
           <h1 className="text-sm md:text-base font-bold text-[#172554] truncate" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
             📝 {assessment.title || 'Bài kiểm tra bài học'}
@@ -287,7 +287,7 @@ export default function LessonQuizPage({ params }: { params: { lessonId: string 
         )}
       </header>
 
-      <div className="max-w-3xl mx-auto p-4 md:p-8">
+      <div className={`${started ? 'max-w-5xl' : 'max-w-3xl'} mx-auto p-4 md:p-8`}>
         {started ? (
           <div className="space-y-4">
             <LessonQuiz

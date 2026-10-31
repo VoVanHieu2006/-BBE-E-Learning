@@ -81,3 +81,19 @@ export function gradeQuizAttempt(
     results,
   }
 }
+
+/**
+ * A submit sent when the countdown hits zero reaches the server slightly after
+ * expires_at (latency, a modal waiting for the learner). Inside this window the
+ * answers in the request are still graded; after it only answers already saved
+ * on the server count, exactly like the scheduled auto-submit.
+ */
+export const QUIZ_SUBMIT_GRACE_MS = 60_000
+
+export type SubmissionTiming = 'ON_TIME' | 'LATE_WITHIN_GRACE' | 'TOO_LATE'
+
+export function submissionTiming(expiresAt: Date, now: Date, graceMs = QUIZ_SUBMIT_GRACE_MS): SubmissionTiming {
+  const late = now.getTime() - expiresAt.getTime()
+  if (late < 0) return 'ON_TIME'
+  return late <= graceMs ? 'LATE_WITHIN_GRACE' : 'TOO_LATE'
+}
