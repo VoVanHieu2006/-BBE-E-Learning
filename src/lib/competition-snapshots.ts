@@ -144,7 +144,8 @@ export async function individualPeriodRows(
   group: string,
   chapterId?: string,
   dnaUnitIds?: string[],
-  seasonId?: string
+  seasonId?: string,
+  options: { chapterTerms?: boolean } = {}
 ) {
   const allowedDna = dnaUnitIds && dnaUnitIds.length ? new Set(dnaUnitIds) : null
   const cohort = (await competitionCohortAt(tx, endsAt)).filter((row) =>
@@ -153,8 +154,10 @@ export async function individualPeriodRows(
     && (!allowedDna || (row.dnaUnitId ? allowedDna.has(row.dnaUnitId) : false)),
   )
 
+  // Per-chapter term windows only apply to a TERM board. A MONTH board always
+  // counts stars from the month start, so stars never carry over between months.
   let termByChapter = new Map<string, { starts_at: Date; ends_at: Date | null }>()
-  if ((group === 'MEMBER' || group === 'LT') && !chapterId) {
+  if (options.chapterTerms && (group === 'MEMBER' || group === 'LT') && !chapterId) {
     const terms = await tx.chapterCompetitionTerm.findMany({
       where: seasonId
         ? { season_id: seasonId }

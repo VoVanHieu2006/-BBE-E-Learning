@@ -249,6 +249,7 @@ export async function periodLeaderboard(request: NextRequest) {
     group === 'DNA' ? undefined : term?.chapter_id || chapterId || undefined,
     group === 'DNA' ? managedDnaUnitIds : undefined,
     season?.id,
+    { chapterTerms: periodType === 'TERM' },
   )
   const individualPayload = await hydrateRanking({
     items,
