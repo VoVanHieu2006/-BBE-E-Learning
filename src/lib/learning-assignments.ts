@@ -2,7 +2,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { matchesLearningRulePositionScope } from '@/lib/learning-rule-scope'
 import { learningContext, lockLearningUser, currentCycleAttemptFilter } from './learning-periods'
-import { reconcileSharedPath } from './shared-learning-path'
+import { reconcileSharedPath, type RevivedAssignment } from './shared-learning-path'
 import { learningTargetsForUser } from './learning-targets'
 import { prepareOrganizationTransition } from './organization-transition'
 
@@ -36,7 +36,8 @@ async function reconcileAssignments(
   const [memberships, positions, rules, activeAssignments] = await Promise.all([
     db.organizationMembership.findMany({ where: { user_id: userId, status: 'ACTIVE', starts_at: { lte: now }, OR: [{ ends_at: null }, { ends_at: { gt: now } }] }, select: { unit_id: true } }),
     db.positionAssignment.findMany({ where: { user_id: userId, starts_at: { lte: now }, OR: [{ ends_at: null }, { ends_at: { gt: now } }] }, select: { position_id: true, unit_id: true } }),
-    db.learningRule.findMany({ where: { effective_from: { lte: now }, OR: [{ effective_until: null }, { effective_until: { gt: now } }] } }),
+    // Khóa không còn PUBLISHED tạm rời khỏi bộ khóa (KHBB 6.3): coi như bị gỡ, ô tick và tiến độ giữ nguyên.
+    db.learningRule.findMany({ where: { effective_from: { lte: now }, OR: [{ effective_until: null }, { effective_until: { gt: now } }], course: { status: 'PUBLISHED' } } }),
     db.userLearningAssignment.findMany({ where: { user_id: userId }, select: { id: true, rule_id: true, course_id: true, status: true, due_at: true, completed_at: true, ended_at: true } }),
   ])
   const unitIds = new Set<string>()
@@ -85,6 +86,8 @@ async function reconcileAssignments(
   for (const rule of applicable) byCourse.set(rule.course_id, [...(byCourse.get(rule.course_id) || []), rule])
   const current = await db.userLearningAssignment.findMany({ where: { user_id: userId, learning_cycle_id: context.cycle.id } })
   let created = 0, ended = 0
+  // Assignment đã kết thúc trong cùng chu kỳ mà nay được hồi sinh: dùng cho cửa sổ 3 ngày (KHBB 5.7).
+  const revived: RevivedAssignment[] = []
   for (const assignment of current) if (!byCourse.has(assignment.course_id) && !assignment.ended_at) {
     await db.userLearningAssignment.update({ where: { id: assignment.id }, data: { mandatory: false, ended_at: now, status: assignment.completed_at ? 'COMPLETED' : 'ENDED' } })
     ended++
@@ -100,6 +103,7 @@ async function reconcileAssignments(
     }
     if (existing || imported) {
       const row = existing || imported!
+      if (existing?.ended_at) revived.push({ courseId, endedAt: existing.ended_at })
       await db.userLearningAssignment.update({ where: { id: row.id }, data: { ...data, status: row.completed_at ? 'COMPLETED' : row.status === 'OVERDUE' ? 'OVERDUE' : 'ASSIGNED' } })
     } else {
       await db.userLearningAssignment.create({ data: { ...data, user_id: userId, course_id: courseId, assigned_at: now } })
@@ -111,7 +115,7 @@ async function reconcileAssignments(
   for (const courseId of Array.from(byCourse.keys())) await syncCourseAssignmentCompletion(userId, courseId, db)
   const requiredCourseIds = Array.from(byCourse).filter(([, sources]) => sources.some((row) => row.mandatory)).map(([courseId]) => courseId)
   await db.supplementalLearningRequirement.updateMany({ where: { user_id: userId, learning_cycle_id: context.cycle.id, ended_at: null, course_id: { notIn: requiredCourseIds } }, data: { ended_at: now } })
-  await reconcileSharedPath(db, userId, context.cycle.id, now)
+  await reconcileSharedPath(db, userId, context.cycle.id, now, revived)
   return { created, ended }
 }
 

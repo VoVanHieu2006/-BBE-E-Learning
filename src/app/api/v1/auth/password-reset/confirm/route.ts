@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
 import { invalidateUserAuthCache } from '@/lib/auth'
 import { hasActiveAccountRestrictions } from '@/lib/account-restrictions'
+import { accountAfterPasswordReset } from '@/lib/account-restriction-rules'
 
 /**
  * POST /api/v1/auth/password-reset/confirm
@@ -52,16 +53,22 @@ export async function POST(request: NextRequest) {
     // Success — update password
     const passwordHash = await bcrypt.hash(newPassword, 12)
 
-    // A password reset can clear a brute-force lock, but must never bypass an
-    // auditable Admin/deadline/Chapter restriction. Only the Admin restriction
-    // endpoint is allowed to lift those restrictions.
+    // A password reset only clears the brute-force (PASSWORD_LOCK) lock. It must never
+    // bypass an overdue lock or an auditable Admin/Chapter restriction (KHBB 7.2, 7.3):
+    // those are lifted only by "Mở khóa & Gia hạn" or the Admin restriction endpoint.
     await prisma.$transaction(async (tx) => {
       const hasActiveRestrictions = await hasActiveAccountRestrictions(resetRecord.user_id, tx)
+      const hasDeadlineRestriction = Boolean(await tx.accessRestriction.findFirst({
+        where: { user_id: resetRecord.user_id, type: 'DEADLINE', lifted_at: null },
+        select: { id: true },
+      }))
+      const after = accountAfterPasswordReset(resetRecord.user, hasDeadlineRestriction, hasActiveRestrictions)
       await tx.user.update({
         where: { id: resetRecord.user_id },
         data: {
           password_hash: passwordHash,
-          status: hasActiveRestrictions ? 'LOCKED' : resetRecord.user.status === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE',
+          status: after.status,
+          lock_reason: after.lockReason,
           failed_login_count: 0,
           locked_until: null,
           auth_version: { increment: 1 },

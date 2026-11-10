@@ -67,7 +67,7 @@ async function check(id, expected, run, validate) {
         updateMany: async args => { updated = args.data.due_at; return { count: 2 } },
       },
       learningPath: { upsert: async () => ({ id: 'path', starts_at: at(0), due_at: at(20), budget_fingerprint: 'A:10|B:10', budget: [{ courseId: 'A', days: 10, completed: false }, { courseId: 'B', days: 10, completed: false }] }), update: async () => ({}) },
-      learningPathChange: { count: async () => 1, create: async () => ({}) },
+      learningPathChange: { count: async () => 1, create: async () => ({}), findFirst: async () => null },
     }
     await reconcileSharedPath(tx, 'user', 'cycle', at(5))
     return (updated - at(0)) / DAY_MS

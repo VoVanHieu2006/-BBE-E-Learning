@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { guardCourseEditableByDocument, invalidateCourseContentCaches } from '@/lib/course-edit-guard'
 import { S3Client, DeleteObjectCommand } from '@aws-sdk/client-s3'
 
 const s3 = new S3Client({
@@ -19,6 +20,8 @@ export async function DELETE(request: NextRequest, { params }: { params: { docum
 
   const doc = await prisma.document.findUnique({ where: { id: params.documentId } })
   if (!doc) return NextResponse.json({ error: { code: 'DocumentNotFound', message: 'Tài liệu không tồn tại' } }, { status: 404 })
+  const blocked = await guardCourseEditableByDocument(params.documentId)
+  if (blocked) return blocked
 
   // Delete from R2
   try {
@@ -30,6 +33,7 @@ export async function DELETE(request: NextRequest, { params }: { params: { docum
 
   // Delete DB record
   await prisma.document.delete({ where: { id: params.documentId } })
+  invalidateCourseContentCaches(undefined, doc.lesson_id)
 
   return NextResponse.json({ documentId: params.documentId, deleted: true }, { status: 200 })
 }

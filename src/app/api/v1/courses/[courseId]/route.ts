@@ -190,7 +190,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { course
   // If course is published, prevent editing content title/description, but allow categorizing program and visibility
   if (course.status === 'PUBLISHED' && (title !== undefined || description !== undefined)) {
     return NextResponse.json(
-      { error: { code: 'CoursePublished', message: 'Khóa học đang được công khai. Hãy Bỏ công khai trước rồi mới chỉnh sửa tiêu đề/mô tả.' } },
+      { error: { code: 'CoursePublished', message: 'Khóa học đã xuất bản. Hãy sửa tiêu đề/mô tả trong bản nháp thay đổi rồi bấm "Cập nhật khóa học".' } },
       { status: 409 }
     )
   }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { guardCourseEditableByLesson, invalidateCourseContentCaches } from '@/lib/course-edit-guard'
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
 
 const s3 = new S3Client({
@@ -27,6 +28,8 @@ export async function POST(request: NextRequest, { params }: { params: { lessonI
   if (!lesson) {
     return NextResponse.json({ error: { code: 'LessonNotFound', message: 'Bài học không tồn tại' } }, { status: 404 })
   }
+  const blocked = await guardCourseEditableByLesson(params.lessonId)
+  if (blocked) return blocked
 
   try {
     const formData = await request.formData()
@@ -65,6 +68,7 @@ export async function POST(request: NextRequest, { params }: { params: { lessonI
       },
     })
 
+    invalidateCourseContentCaches(undefined, params.lessonId)
     return NextResponse.json({
       documentId: document.id,
       id: document.id,

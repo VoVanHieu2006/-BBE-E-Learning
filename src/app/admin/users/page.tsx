@@ -54,6 +54,7 @@ export default function AdminUsersPage() {
   const [unlockExtensionModal, setUnlockExtensionModal] = useState<{
     user: any;
     extensionDays: number;
+    reason: string;
   } | null>(null);
 
   const [toast, setToast] = useState<ToastMessage | null>(null);
@@ -164,8 +165,17 @@ export default function AdminUsersPage() {
 
   const handleExecuteUnlockExtension = async () => {
     if (!unlockExtensionModal) return;
-    const { user: targetUser, extensionDays } = unlockExtensionModal;
+    const { user: targetUser, extensionDays, reason } = unlockExtensionModal;
     const userId = targetUser.userId || targetUser.id;
+    const trimmedReason = reason.trim();
+    if (!Number.isInteger(extensionDays) || extensionDays < 1 || extensionDays > 365) {
+      showToast('error', 'Số ngày gia hạn phải là số nguyên từ 1 đến 365.', 'Dữ liệu chưa hợp lệ');
+      return;
+    }
+    if (!trimmedReason) {
+      showToast('error', 'Vui lòng nhập lý do gia hạn.', 'Dữ liệu chưa hợp lệ');
+      return;
+    }
 
     setActionUserId(userId);
     setUnlockExtensionModal(null);
@@ -175,8 +185,8 @@ export default function AdminUsersPage() {
     const res = await apiFetch(`/api/v1/admin/users/${userId}/extend-deadline`, {
       method: 'POST',
       body: JSON.stringify({
-        extensionDays: Number(extensionDays) || 7,
-        reason: 'Admin mở khóa gia hạn',
+        extensionDays,
+        reason: trimmedReason,
       }),
     });
 
@@ -656,7 +666,7 @@ export default function AdminUsersPage() {
                               <span className="whitespace-nowrap inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-900 border border-amber-300 shadow-2xs">
                                 <span>🔒</span> Khóa: Quên/Sai MK
                               </span>
-                              <div className="text-[10px] text-amber-700 mt-0.5">Quên hoặc sai MK quá 10 lần</div>
+                              <div className="text-[10px] text-amber-700 mt-0.5">Sai MK 5 lần: chỉ mở bằng mail đặt lại MK</div>
                             </div>
                           ) : isActive ? (
                             <span className="whitespace-nowrap inline-flex items-center text-xs font-bold px-2.5 py-1 rounded-full bg-green-100 text-green-700">
@@ -704,7 +714,7 @@ export default function AdminUsersPage() {
                               <>
                                 <button
                                   disabled={isBusy || loading}
-                                  onClick={() => setUnlockExtensionModal({ user: u, extensionDays: 7 })}
+                                  onClick={() => setUnlockExtensionModal({ user: u, extensionDays: 7, reason: '' })}
                                   className="whitespace-nowrap px-2.5 py-1 text-xs font-bold text-white bg-[#2563EB] hover:bg-blue-700 rounded-lg shadow-2xs transition disabled:opacity-50"
                                 >
                                   Mở khóa & Gia hạn
@@ -719,13 +729,16 @@ export default function AdminUsersPage() {
                               </>
                             ) : u.accountState === 'PASSWORD_LOCK' ? (
                               <>
-                                <button
-                                  disabled={isBusy || loading}
-                                  onClick={() => handleOpenConfirmModal(u, 'ACTIVE')}
-                                  className="whitespace-nowrap px-2.5 py-1 text-xs font-semibold text-green-700 hover:bg-green-50 rounded-lg transition disabled:opacity-50"
-                                >
-                                  Mở khóa
-                                </button>
+                                {/* Khóa mật khẩu chỉ mở bằng mail đặt lại MK; các khóa khác (Admin/Chapter) vẫn mở được ở đây. */}
+                                {u.lockReason !== 'PASSWORD_LOCK' && (
+                                  <button
+                                    disabled={isBusy || loading}
+                                    onClick={() => handleOpenConfirmModal(u, 'ACTIVE')}
+                                    className="whitespace-nowrap px-2.5 py-1 text-xs font-semibold text-green-700 hover:bg-green-50 rounded-lg transition disabled:opacity-50"
+                                  >
+                                    Mở khóa
+                                  </button>
+                                )}
                                 <button
                                   disabled={isBusy || loading}
                                   onClick={() => handleOpenConfirmModal(u, 'INACTIVE')}
@@ -998,6 +1011,21 @@ export default function AdminUsersPage() {
                 </div>
               </div>
 
+              <div className="space-y-1.5">
+                <label htmlFor="unlock-extension-reason" className="block text-xs font-bold text-[#172554]">
+                  Lý do gia hạn (bắt buộc):
+                </label>
+                <textarea
+                  id="unlock-extension-reason"
+                  value={unlockExtensionModal.reason}
+                  maxLength={500}
+                  rows={2}
+                  onChange={(e) => setUnlockExtensionModal({ ...unlockExtensionModal, reason: e.target.value })}
+                  placeholder="Ví dụ: Học viên nghỉ ốm, đã trao đổi với Lead"
+                  className="w-full px-3 py-2 text-xs border border-[#cbdbf5] rounded-xl text-[#172554]"
+                />
+              </div>
+
               <div className="flex justify-end gap-3 pt-2">
                 <Button
                   variant="outline"
@@ -1012,6 +1040,7 @@ export default function AdminUsersPage() {
                   size="sm"
                   loading={Boolean(actionUserId)}
                   loadingText="Đang mở khóa..."
+                  disabled={!unlockExtensionModal.reason.trim()}
                   onClick={handleExecuteUnlockExtension}
                 >
                   Xác nhận Mở khóa (+{unlockExtensionModal.extensionDays} ngày)
@@ -1093,7 +1122,7 @@ export default function AdminUsersPage() {
                       onClick={() => {
                         const target = selectedUserDetail;
                         handleCloseUserDetail();
-                        setUnlockExtensionModal({ user: target, extensionDays: 7 });
+                        setUnlockExtensionModal({ user: target, extensionDays: 7, reason: '' });
                       }}
                     >
                       Mở khóa & Gia hạn
@@ -1110,15 +1139,18 @@ export default function AdminUsersPage() {
                   </>
                 ) : selectedUserDetail.accountState === 'PASSWORD_LOCK' ? (
                   <>
-                    <Button
-                      variant="primary"
-                      onClick={() => {
-                        handleOpenConfirmModal(selectedUserDetail, 'ACTIVE');
-                        handleCloseUserDetail();
-                      }}
-                    >
-                      Mở khóa tài khoản
-                    </Button>
+                    {/* Khóa mật khẩu chỉ mở bằng mail đặt lại MK; các khóa khác (Admin/Chapter) vẫn mở được ở đây. */}
+                    {selectedUserDetail.lockReason !== 'PASSWORD_LOCK' && (
+                      <Button
+                        variant="primary"
+                        onClick={() => {
+                          handleOpenConfirmModal(selectedUserDetail, 'ACTIVE');
+                          handleCloseUserDetail();
+                        }}
+                      >
+                        Mở khóa tài khoản
+                      </Button>
+                    )}
                     <Button
                       variant="danger"
                       onClick={() => {

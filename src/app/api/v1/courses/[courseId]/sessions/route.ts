@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
+import { invalidateCourseContentCaches } from '@/lib/course-edit-guard'
 import { prisma } from '@/lib/prisma'
 
 export async function POST(request: NextRequest, { params }: { params: { courseId: string } }) {
@@ -44,6 +45,7 @@ export async function POST(request: NextRequest, { params }: { params: { courseI
     })
   })
 
+  invalidateCourseContentCaches(courseId)
   return NextResponse.json({
     sessionId: session.id,
     id: session.id,

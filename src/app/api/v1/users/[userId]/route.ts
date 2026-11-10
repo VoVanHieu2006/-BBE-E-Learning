@@ -9,6 +9,7 @@ import { invalidateChapterLeaderboardCache } from '@/lib/chapter-leaderboard-cac
 import { invalidateMemberLeaderboardCache } from '@/lib/member-leaderboard-cache'
 
 import { assertCanChangeUserStatus } from '@/lib/user-status-rules'
+import { ordinaryActivationBlock } from '@/lib/account-restriction-rules'
 
 export async function PATCH(request: NextRequest, { params }: { params: { userId: string } }) {
   const auth = await authenticate(request)
@@ -19,7 +20,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { userId
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
     return NextResponse.json({ error: { code: 'ValidationError', message: 'Request body không hợp lệ' } }, { status: 400 })
   }
-  const { status, chapterId, extensionDays } = body as { status?: unknown; chapterId?: unknown; extensionDays?: unknown }
+  const { status, chapterId } = body as { status?: unknown; chapterId?: unknown }
 
   if (typeof status !== 'string' || !['ACTIVE', 'INACTIVE'].includes(status)) {
     return NextResponse.json({ error: { code: 'ValidationError', message: 'status phải là ACTIVE hoặc INACTIVE' } }, { status: 400 })
@@ -44,6 +45,13 @@ export async function PATCH(request: NextRequest, { params }: { params: { userId
   const guard = assertCanChangeUserStatus(actor, target, status as 'ACTIVE' | 'INACTIVE')
   if (!guard.allowed) {
     return NextResponse.json({ error: { code: guard.code, message: guard.message } }, { status: 403 })
+  }
+
+  // Nút kích hoạt thường không mở khóa quá hạn hay khóa mật khẩu (KHBB 7.1, 7.2):
+  // khóa quá hạn chỉ mở bằng "Mở khóa & Gia hạn", khóa mật khẩu chỉ mở bằng mail đặt lại mật khẩu.
+  if (status === 'ACTIVE') {
+    const block = ordinaryActivationBlock(target, target.restrictions.map((restriction) => restriction.type))
+    if (block) return NextResponse.json({ error: { code: block.code, message: block.message } }, { status: 409 })
   }
 
   // If actor is not Admin (i.e. Chapter Leader or Unit Manager)
@@ -162,19 +170,6 @@ export async function PATCH(request: NextRequest, { params }: { params: { userId
         }
       }
 
-      // If user was locked due to DEADLINE / Overdue learning: extend deadlines if requested
-      const hasDeadlineLock = target.restrictions.some((r) => r.type === 'DEADLINE')
-      if (isAdmin && (target.status === 'LOCKED' || hasDeadlineLock)) {
-        const extDays = Math.max(1, Math.min(365, Number(extensionDays) || 7))
-        const newDueAt = new Date(Date.now() + extDays * 24 * 60 * 60 * 1000)
-
-        // Extend all overdue mandatory assignments for this user
-        await tx.userLearningAssignment.updateMany({
-          where: { user_id: userId, status: 'OVERDUE' },
-          data: { status: 'IN_PROGRESS', due_at: newDueAt },
-        })
-      }
-
       // Lift all active restrictions for this user
       await tx.accessRestriction.updateMany({
         where: { user_id: userId, lifted_at: null },
@@ -208,7 +203,6 @@ export async function PATCH(request: NextRequest, { params }: { params: { userId
         metadata: JSON.stringify({
           oldStatus: target.status,
           newStatus: status,
-          extensionDays: status === 'ACTIVE' ? extensionDays : undefined,
           cascadedCount: affectedUserIds.length - 1,
         }),
       },

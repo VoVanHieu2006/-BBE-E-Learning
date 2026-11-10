@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { invalidateSystemDataCache } from '@/lib/progress/calculator'
+import { invalidateCoursesServerCache } from '@/lib/server-cache'
+import { enqueueCourseStatusReconcile } from '@/lib/course-status-outbox'
 
 export async function POST(request: NextRequest, { params }: { params: { courseId: string } }) {
   const auth = await authenticate(request)
@@ -43,11 +45,17 @@ export async function POST(request: NextRequest, { params }: { params: { courseI
   })
 
   // We allow unpublish but warn admin about learners
-  const updated = await prisma.course.update({
-    where: { id: courseId },
-    data: { status: 'DRAFT', published_at: null },
-  })
+  // Khóa tạm rời khỏi bộ khóa bắt buộc của mọi người (KHBB 6.3): tính lại hạn qua outbox.
+  const updated = await prisma.$transaction(async (tx) => {
+    const row = await tx.course.update({
+      where: { id: courseId },
+      data: { status: 'DRAFT', published_at: null },
+    })
+    await enqueueCourseStatusReconcile(tx, courseId, 'DRAFT', new Date())
+    return row
+  }, { timeout: 30_000 })
   invalidateSystemDataCache()
+  invalidateCoursesServerCache()
 
   return NextResponse.json({
     courseId: updated.id,

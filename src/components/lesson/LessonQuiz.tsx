@@ -25,6 +25,10 @@ interface LessonQuizProps {
   forceNew?: boolean;
   assessmentLabel?: string;
   returnHref?: string;
+  /** Label of the button shown under the result (default: back to the lesson). */
+  returnLabel?: string;
+  /** Replace the finished quiz in history so the browser Back button does not return to it. */
+  returnReplace?: boolean;
   onQuizPassed: () => void;
   onCancel?: (cooldownInfo?: any) => void;
   onSubmitted?: (result?: any) => void;
@@ -55,6 +59,8 @@ export default function LessonQuiz({
   forceNew = false,
   assessmentLabel = 'Bài kiểm tra bài học',
   returnHref,
+  returnLabel = '← Trở về lớp học',
+  returnReplace = false,
   onQuizPassed,
   onCancel,
   onSubmitted,
@@ -699,6 +705,7 @@ export default function LessonQuiz({
               <div className="flex justify-center pt-4 border-t border-[#eff4ff]">
                 <Link
                   href={returnHref || `/student/learning/${lessonId}`}
+                  replace={returnReplace}
                   onClick={() => {
                     clearApiCache('/api/v1/courses');
                     clearApiCache('/api/v1/lessons');
@@ -714,7 +721,7 @@ export default function LessonQuiz({
                   }}
                   className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-[#2563EB] hover:bg-[#1d4ed8] text-white text-xs font-bold shadow-md transition hover:scale-[1.02] active:scale-[0.98]"
                 >
-                  <span>← Trở về lớp học</span>
+                  <span>{returnLabel}</span>
                 </Link>
               </div>
             )}

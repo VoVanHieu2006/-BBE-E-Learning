@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { sendPasswordResetEmail } from '@/lib/email'
 import crypto from 'crypto'
+import { isPasswordLocked } from '@/lib/account-restriction-rules'
 
 /**
  * POST /api/v1/auth/password-reset/request
@@ -16,13 +17,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: { code: 'ValidationError', message: 'email là bắt buộc' } }, { status: 400 })
   }
 
-  // Check if user exists and is ACTIVE (we can tell internally, but never reveal)
+  // Check if user exists and is ACTIVE or password-locked (we can tell internally, but never reveal)
   const user = await prisma.user.findUnique({ where: { email: email.toLowerCase().trim() } })
 
   // Always return the same message to prevent email enumeration
   const message = 'Nếu email tồn tại, link đặt lại mật khẩu đã được gửi.'
 
-  if (!user || user.status !== 'ACTIVE') {
+  // Tài khoản bị khóa mật khẩu phải tự yêu cầu được mail đặt lại (đây là cách duy nhất để mở khóa này).
+  if (!user || (user.status !== 'ACTIVE' && !isPasswordLocked(user))) {
     // Return same message
     console.log('[PASSWORD_RESET] Email not found or not active, returning generic message.')
     return NextResponse.json({ message, sent: false }, { status: 200 })

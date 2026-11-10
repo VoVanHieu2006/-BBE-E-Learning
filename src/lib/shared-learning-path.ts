@@ -1,16 +1,29 @@
 import { Prisma } from '@prisma/client'
-import { CourseBudget, SharedDeadlineReason, budgetFingerprint, calculateSharedDeadline } from './learning-cycle-rules'
+import { CourseBudget, SharedDeadlineReason, budgetFingerprint, calculateSharedDeadline, isWithinRestoreWindow } from './learning-cycle-rules'
+
+/** Assignment đã kết thúc trong cùng chu kỳ và vừa được hồi sinh (thêm lại khóa). */
+export interface RevivedAssignment { courseId: string; endedAt: Date }
 
 /** Caller holds the learning user lock and passes the complete new required set. */
-export async function reconcileSharedPath(tx: Prisma.TransactionClient, userId: string, cycleId: string, now: Date) {
+export async function reconcileSharedPath(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  cycleId: string,
+  now: Date,
+  revived: RevivedAssignment[] = [],
+) {
   const assignments = await tx.userLearningAssignment.findMany({ where: {
     user_id: userId, learning_cycle_id: cycleId, mandatory: true, ended_at: null,
   }, include: { course: { select: { mandatory_default_due_days: true } } } })
+  // KHBB 5.7: khóa thêm lại trong 3 ngày kể từ lúc bị gỡ không được làm mới hạn.
+  const restoredEndedAt = new Map<string, Date>()
+  for (const row of revived) if (isWithinRestoreWindow(row.endedAt, now)) restoredEndedAt.set(row.courseId, row.endedAt)
   const next: CourseBudget[] = assignments.map((row) => ({
     courseId: row.course_id,
     days: row.course.mandatory_default_due_days,
     completed: Boolean(row.completed_at),
     assignedAt: row.assigned_at,
+    ...(restoredEndedAt.has(row.course_id) ? { restored: true } : {}),
   }))
   const path = await tx.learningPath.upsert({ where: { learning_cycle_id: cycleId }, update: {}, create: {
     user_id: userId, learning_cycle_id: cycleId, starts_at: now,
@@ -35,6 +48,26 @@ export async function reconcileSharedPath(tx: Prisma.TransactionClient, userId: 
     // A changed required set uses the agreed shared deadline, measured from
     // the original start and this change, rather than appending to the old due date.
 
+    // Gia hạn tay gần nhất: hạn mới không bao giờ thấp hơn nó (KHBB 5.5).
+    const lastManual = await tx.learningPathChange.findFirst({
+      where: { path_id: path.id, reason: 'ADMIN_MANUAL_EXTENSION' },
+      orderBy: { changed_at: 'desc' },
+      select: { due_at: true },
+    })
+    // Hạn đứng ngay trước lúc gỡ của khóa được thêm lại trong 3 ngày (KHBB 5.7).
+    // Lấy mức thấp nhất giữa các khóa thêm lại để chuỗi gỡ/thêm lại không tích lũy thêm ngày.
+    let restoredPriorDueAt: Date | null = null
+    for (const course of next) {
+      const endedAt = course.restored ? restoredEndedAt.get(course.courseId) : undefined
+      if (!endedAt) continue
+      const before = await tx.learningPathChange.findFirst({
+        where: { path_id: path.id, changed_at: { lt: endedAt } },
+        orderBy: { changed_at: 'desc' },
+        select: { due_at: true },
+      })
+      if (before?.due_at && (!restoredPriorDueAt || before.due_at < restoredPriorDueAt)) restoredPriorDueAt = before.due_at
+    }
+
     due = calculateSharedDeadline({
       startsAt: path.starts_at,
       changedAt: now,
@@ -43,6 +76,8 @@ export async function reconcileSharedPath(tx: Prisma.TransactionClient, userId: 
       next,
       reason,
       budgetReduction: reduced,
+      manualExtensionDueAt: lastManual?.due_at ?? null,
+      restoredPriorDueAt,
     })
     // Imported deadlines are a floor for the transition import only.
     const priorChanges = await tx.learningPathChange.count({ where: { path_id: path.id } })

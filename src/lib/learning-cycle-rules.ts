@@ -21,7 +21,21 @@ export type SharedDeadlineReason =
   | 'ADMIN_MANUAL_EXTENSION'     // Admin mở khóa / gia hạn thời gian
   | 'LESSONS_ADDED_TO_COURSE'    // Admin bổ sung bài học mới vào khóa đã xuất bản
 
-export interface CourseBudget { courseId: string; days: number; completed: boolean; assignedAt?: Date }
+/** Sàn an toàn (KHBB 5.4) và cửa sổ chống "làm mới hạn" (KHBB 5.7), đều bằng 3 ngày. */
+export const SAFETY_FLOOR_DAYS = 3
+export const RESTORE_WINDOW_MS = SAFETY_FLOOR_DAYS * DAY_MS
+
+export interface CourseBudget {
+  courseId: string
+  days: number
+  completed: boolean
+  assignedAt?: Date
+  /**
+   * Khóa này vừa được thêm lại trong cửa sổ 3 ngày kể từ lúc bị gỡ (KHBB 5.7):
+   * không tính vào "khóa mới thêm" (C + T).
+   */
+  restored?: boolean
+}
 
 export interface CalculateSharedDeadlineInput {
   startsAt: Date;
@@ -33,11 +47,23 @@ export interface CalculateSharedDeadlineInput {
   budgetReduction?: boolean;
   manualExtensionDays?: number;
   extraDays?: number;
+  /** Hạn của lần gia hạn tay gần nhất. Chỉ có tác dụng khi còn ở tương lai so với `changedAt`. */
+  manualExtensionDueAt?: Date | null;
+  /** Hạn đứng ngay trước lúc gỡ, dùng làm sàn khi có khóa được thêm lại trong cửa sổ 3 ngày. */
+  restoredPriorDueAt?: Date | null;
 }
+
+/** Thêm lại trong vòng 3 ngày (tính cả đúng 3 ngày) kể từ `endedAt` thì không được làm mới hạn. */
+export function isWithinRestoreWindow(endedAt: Date, now: Date): boolean {
+  const elapsed = now.getTime() - endedAt.getTime()
+  return elapsed >= 0 && elapsed <= RESTORE_WINDOW_MS
+}
+
+const sumDays = (courses: CourseBudget[]) => courses.reduce((sum, course) => sum + course.days, 0)
 
 /** Only a changed set/budget may invoke this calculation. Persist its fingerprint. */
 export function calculateSharedDeadline(input: CalculateSharedDeadlineInput): Date | null {
-  const { startsAt, changedAt, currentDueAt, previous, next, reason, budgetReduction, manualExtensionDays, extraDays } = input
+  const { startsAt, changedAt, currentDueAt, previous, next, reason, budgetReduction, manualExtensionDays, extraDays, manualExtensionDueAt, restoredPriorDueAt } = input
   for (const course of [...previous, ...next]) {
     if (!Number.isInteger(course.days) || course.days < 1) throw new Error('InvalidCourseBudget')
   }
@@ -45,72 +71,71 @@ export function calculateSharedDeadline(input: CalculateSharedDeadlineInput): Da
 
   const previousIds = new Set(previous.map((course) => course.courseId))
   const added = next.filter((course) => !previousIds.has(course.courseId))
-  const addedDays = added.filter((course) => !course.completed).reduce((sum, course) => sum + course.days, 0)
-  const totalNewDays = next.reduce((sum, course) => sum + course.days, 0)
+  // Khóa đã xong không kéo dài hạn (KHBB 5.2); khóa thêm lại trong cửa sổ 3 ngày không được cộng như khóa mới (5.7).
+  const addedDays = sumDays(added.filter((course) => !course.completed && !course.restored))
+  const unfinished = next.filter((course) => !course.completed)
+  const unfinishedDays = sumDays(unfinished)
 
-  if (reason) {
-    switch (reason) {
-      case 'CYCLE_INITIALIZED':
-        return new Date(startsAt.getTime() + totalNewDays * DAY_MS)
+  switch (reason) {
+    case 'CYCLE_INITIALIZED':
+      return new Date(startsAt.getTime() + sumDays(next) * DAY_MS)
 
-      case 'MANDATORY_COURSE_ADDED':
-        if (!currentDueAt) {
-          return new Date(changedAt.getTime() + addedDays * DAY_MS)
-        }
-        return new Date(currentDueAt.getTime() + addedDays * DAY_MS)
-
-      case 'LESSONS_ADDED_TO_COURSE': {
-        const days = extraDays && extraDays > 0 ? extraDays : 0
-        const baseTime = currentDueAt ? currentDueAt.getTime() : changedAt.getTime()
-        return new Date(baseTime + days * DAY_MS)
+    case 'MANDATORY_COURSE_ADDED':
+      if (!currentDueAt) {
+        return new Date(changedAt.getTime() + addedDays * DAY_MS)
       }
+      return new Date(currentDueAt.getTime() + addedDays * DAY_MS)
 
-      case 'ADMIN_BUDGET_SHORTENED': {
-        // Mục 19: D_assigned is the moment the course was assigned, not
-        // necessarily the start of the whole learning path. A course added
-        // later must keep at least its own new budget from that assignment.
-        const shortened = next.filter((course) => {
-          const before = previous.find((old) => old.courseId === course.courseId)
-          return Boolean(before && course.days < before.days)
-        })
-        const assignedTargetDue = Math.max(
-          startsAt.getTime() + totalNewDays * DAY_MS,
-          ...shortened.map((course) =>
-            (course.assignedAt?.getTime() ?? startsAt.getTime()) + course.days * DAY_MS,
-          ),
-        )
-        const safe3DayFloor = changedAt.getTime() + 3 * DAY_MS
-        return new Date(Math.max(assignedTargetDue, safe3DayFloor))
-      }
-
-      case 'ROLE_CHANGED': {
-        const calculatedDue = Math.max(
-          startsAt.getTime() + totalNewDays * DAY_MS,
-          changedAt.getTime() + addedDays * DAY_MS
-        )
-        return new Date(calculatedDue)
-      }
-
-      case 'ADMIN_MANUAL_EXTENSION': {
-        if (!manualExtensionDays || manualExtensionDays < 1) throw new Error('InvalidExtensionDays')
-        const baseTime = currentDueAt && currentDueAt.getTime() > changedAt.getTime()
-          ? currentDueAt.getTime()
-          : changedAt.getTime()
-        return new Date(baseTime + manualExtensionDays * DAY_MS)
-      }
-
-      case 'MANDATORY_COURSE_REMOVED':
-        return currentDueAt || new Date(changedAt.getTime() + totalNewDays * DAY_MS)
-
-      default:
-        return currentDueAt || new Date(startsAt.getTime() + totalNewDays * DAY_MS)
+    case 'LESSONS_ADDED_TO_COURSE': {
+      const days = extraDays && extraDays > 0 ? extraDays : 0
+      const baseTime = currentDueAt ? currentDueAt.getTime() : changedAt.getTime()
+      return new Date(baseTime + days * DAY_MS)
     }
-  }
 
-  let due = Math.max(startsAt.getTime() + totalNewDays * DAY_MS, changedAt.getTime() + addedDays * DAY_MS)
-  const removed = previous.some((course) => !next.some((item) => item.courseId === course.courseId))
-  if ((removed && !added.length) || budgetReduction) due = Math.max(due, changedAt.getTime() + 3 * DAY_MS)
-  return new Date(due)
+    case 'ADMIN_MANUAL_EXTENSION': {
+      if (!manualExtensionDays || manualExtensionDays < 1) throw new Error('InvalidExtensionDays')
+      const baseTime = currentDueAt && currentDueAt.getTime() > changedAt.getTime()
+        ? currentDueAt.getTime()
+        : changedAt.getTime()
+      return new Date(baseTime + manualExtensionDays * DAY_MS)
+    }
+
+    case 'MANDATORY_COURSE_REMOVED':
+      return currentDueAt || new Date(changedAt.getTime() + sumDays(next) * DAY_MS)
+
+    case 'ROLE_CHANGED':
+    case 'ADMIN_BUDGET_SHORTENED':
+    case undefined: {
+      // Đổi tập khóa / thêm khóa / đổi ban / giảm ngày / gỡ khóa (đường đi thật của production).
+      const shortening = reason === 'ADMIN_BUDGET_SHORTENED' || Boolean(budgetReduction)
+      // Mục 19: D_assigned là lúc khóa được giao, không nhất thiết là lúc bắt đầu lộ trình.
+      const shortenedTargets = shortening
+        ? next.filter((course) => {
+            const before = previous.find((old) => old.courseId === course.courseId)
+            return Boolean(before && course.days < before.days && !course.completed)
+          }).map((course) => (course.assignedAt?.getTime() ?? startsAt.getTime()) + course.days * DAY_MS)
+        : []
+      // Vế 2 (C + tổng ngày khóa mới chưa xong) chỉ có nghĩa khi thật sự có khóa mới chưa xong.
+      let due = Math.max(
+        startsAt.getTime() + unfinishedDays * DAY_MS,
+        ...(addedDays > 0 ? [changedAt.getTime() + addedDays * DAY_MS] : []),
+        ...shortenedTargets,
+      )
+      // Sàn 3 ngày: gỡ khóa (không kèm khóa mới chưa xong) hoặc giảm số ngày (KHBB 5.2, 5.4).
+      const removed = previous.some((course) => !next.some((item) => item.courseId === course.courseId))
+      if (shortening || (removed && addedDays === 0)) due = Math.max(due, changedAt.getTime() + SAFETY_FLOOR_DAYS * DAY_MS)
+      // Chỉ tăng số ngày (không thêm, không gỡ, không giảm): không làm hạn hiện tại ngắn đi (KHBB 6, dòng "Tăng số ngày").
+      if (!removed && !shortening && added.length === 0 && currentDueAt) due = Math.max(due, currentDueAt.getTime())
+      // Thêm lại trong cửa sổ 3 ngày: không thấp hơn hạn trước lúc gỡ (KHBB 5.7).
+      if (restoredPriorDueAt && unfinished.some((course) => course.restored)) due = Math.max(due, restoredPriorDueAt.getTime())
+      // Gia hạn tay không bao giờ bị rút ngắn (KHBB 5.5).
+      if (manualExtensionDueAt && manualExtensionDueAt.getTime() > changedAt.getTime()) due = Math.max(due, manualExtensionDueAt.getTime())
+      return new Date(due)
+    }
+
+    default:
+      return currentDueAt || new Date(startsAt.getTime() + sumDays(next) * DAY_MS)
+  }
 }
 
 export function budgetFingerprint(courses: CourseBudget[]): string {

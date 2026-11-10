@@ -558,15 +558,22 @@ try {
     body: { action: 'LIFT', targetType: 'USER', targetId: deadlineUserId },
   })
   assert.equal(managerCannotUnlockDeadline.status, 403, 'only Admin may reopen a deadline-locked account')
+  // KHBB 7.1: khóa quá hạn chỉ mở bằng "Mở khóa & Gia hạn", không mở được bằng LIFT trực tiếp.
   const adminLiftDeadline = await callApi('/api/v1/admin/restrictions', {
     method: 'POST', token: adminToken, body: { action: 'LIFT', targetType: 'USER', targetId: deadlineUserId },
   })
-  assert.equal(adminLiftDeadline.status, 200)
-  assert.equal((await readJson(adminLiftDeadline)).unlocked, true)
-  const deadlineAuditAfterLift = await prisma.accessRestriction.findUnique({ where: { id: deadlineRestriction.id }, select: { lifted_at: true, lifted_by_user_id: true } })
-  assert.ok(deadlineAuditAfterLift.lifted_at && deadlineAuditAfterLift.lifted_by_user_id === adminId, 'deadline audit records Admin lift actor and time')
+  assert.equal(adminLiftDeadline.status, 409, 'a direct LIFT must not reopen a deadline-locked account')
+  assert.equal((await readJson(adminLiftDeadline)).error.code, 'OverdueUnlockRequiresExtension')
+  const stillOpenDeadline = await prisma.accessRestriction.findUnique({ where: { id: deadlineRestriction.id }, select: { lifted_at: true } })
+  assert.equal(stillOpenDeadline.lifted_at, null, 'the deadline restriction stays open after the rejected LIFT')
+  assert.equal((await prisma.user.findUnique({ where: { id: deadlineUserId }, select: { status: true } })).status, 'LOCKED')
+  // The fixture user has no learning cycle, so the extension endpoint must answer with a 4xx, never a 500.
+  const extendWithoutCycle = await callApi(`/api/v1/admin/users/${deadlineUserId}/extend-deadline`, {
+    method: 'POST', token: adminToken, body: { extensionDays: 7, reason: 'Integration: no learning cycle' },
+  })
+  assert.equal(extendWithoutCycle.status, 409, 'extend-deadline reports a missing learning cycle as 409')
 
-  console.log('Learning-flow API integration passed: local DB isolation; Admin-only exam authoring and cover-upload validation; 100% video and anti-seek cap; sequential video and quiz gates; answer validation/reset; immutable submit, grading, retry cooldown/numbering/results; lesson/final Stars idempotency; course completion; view-only assignment; Chapter/DNA scope enforcement; Admin-only direct, Chapter-cascade, and deadline lock/unlock with overlapping-cause audit.')
+  console.log('Learning-flow API integration passed: local DB isolation; Admin-only exam authoring and cover-upload validation; 100% video and anti-seek cap; sequential video and quiz gates; answer validation/reset; immutable submit, grading, retry cooldown/numbering/results; lesson/final Stars idempotency; course completion; view-only assignment; Chapter/DNA scope enforcement; Admin-only direct and Chapter-cascade lock/unlock with overlapping-cause audit; deadline locks reject direct LIFT.')
 } catch (error) {
   console.error('Learning-flow integration failed. Only disposable local fixtures are used and will be cleaned up.')
   console.error(error instanceof Error ? error.stack || error.message : 'Unknown test error')

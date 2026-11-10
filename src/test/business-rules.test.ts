@@ -32,10 +32,15 @@ describe('Account restriction rules', () => {
     assert.equal(canActivateAfterRestrictionLift(false), true)
   })
 
-  it('never lets automatic course deadlines disable Admin accounts', () => {
+  it('never lets automatic course deadlines disable Admin or LEAD accounts (KHBB 7.1)', () => {
     assert.equal(canDeadlineLockAccount('ADMIN'), false)
     assert.equal(canDeadlineLockAccount('MEMBER'), true)
-    assert.equal(canDeadlineLockAccount('CHAPTER_LEADER'), true)
+    // In the current code the LEAD role is still named CHAPTER_LEADER.
+    assert.equal(canDeadlineLockAccount('CHAPTER_LEADER'), false)
+    assert.equal(canDeadlineLockAccount('MEMBER', ['DNA_LEAD']), false, 'a DNA lead holds a position, not a role')
+    assert.equal(canDeadlineLockAccount('MEMBER', ['CHAPTER_MANAGER']), false)
+    assert.equal(canDeadlineLockAccount('MEMBER', ['DEPARTMENT_MEMBER_BTV']), true)
+    assert.equal(canDeadlineLockAccount('MEMBER', [], 'INACTIVE'), false, 'a deactivated account is never turned into LOCKED')
   })
 })
 

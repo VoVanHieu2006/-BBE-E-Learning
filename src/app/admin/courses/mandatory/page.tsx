@@ -190,8 +190,15 @@ export default function MandatoryCourseMatrixPage() {
     [data, rowDays]
   )
 
+  // Chỉ tick được khóa đã xuất bản (KHBB 6.4). Khóa nháp vẫn cho bỏ tick ô đã tick từ trước.
+  const isDraftCourse = (course: any) => course?.status !== 'PUBLISHED'
+  const wasTicked = (courseId: string, targetKey: string) => Boolean(data?.cells?.[courseId]?.[targetKey]?.enabled)
+  const cannotTick = (course: any, targetKey: string) => isDraftCourse(course) && !wasTicked(course.id, targetKey)
+
   const setCell = (courseId: string, targetKey: string, patch: any) => {
     if (catalogBroken) return
+    const cellCourse = data?.courses?.find((item: any) => item.id === courseId)
+    if (patch?.enabled === true && cellCourse && cannotTick(cellCourse, targetKey)) return
     const target = orderedTargets.find((item: any) => item.key === targetKey)
     if (target && (target.scopeCount ?? 1) === 0) return
     setDraft((current: any) => ({
@@ -214,6 +221,7 @@ export default function MandatoryCourseMatrixPage() {
         orderedTargets.map((target: any) => {
           const cell = current[course.id][target.key]
           if ((target.scopeCount ?? 1) === 0) return [target.key, cell]
+          if (enabled && cannotTick(course, target.key)) return [target.key, cell]
           return [
             target.key,
             {
@@ -236,6 +244,7 @@ export default function MandatoryCourseMatrixPage() {
       ...Object.fromEntries(
         data.courses.map((course: any) => {
           const cell = current[course.id][targetKey]
+          if (enabled && cannotTick(course, targetKey)) return [course.id, current[course.id]]
           return [
             course.id,
             {
@@ -344,6 +353,7 @@ export default function MandatoryCourseMatrixPage() {
           <details key={course.id} className="rounded-2xl border bg-white p-4.5 shadow-xs">
             <summary className="cursor-pointer font-bold text-slate-900 text-sm">
               {course.title}
+              {isDraftCourse(course) && <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800">Khóa chưa xuất bản</span>}
             </summary>
             <div className="mt-3.5 pt-3 border-t border-slate-100 flex items-center gap-2">
               <span className="text-xs font-semibold text-slate-600">Thời hạn hoàn thành:</span>
@@ -364,12 +374,12 @@ export default function MandatoryCourseMatrixPage() {
             </div>
             <div className="mt-3 space-y-1.5 max-h-60 overflow-y-auto">
               {orderedTargets.map((target: any) => {
-                const unavailable = (target.scopeCount ?? 1) === 0
+                const unavailable = (target.scopeCount ?? 1) === 0 || cannotTick(course, target.key)
                 return (
                   <label
                     key={target.key}
                     className={`flex items-center gap-3 rounded-xl p-2.5 text-xs ${unavailable ? 'bg-slate-100 cursor-not-allowed opacity-60' : 'bg-slate-50 hover:bg-slate-100/70 cursor-pointer'}`}
-                    title={unavailable ? 'Chưa cấu hình đơn vị hoặc chức vụ cho đối tượng này' : undefined}
+                    title={cannotTick(course, target.key) ? 'Khóa chưa xuất bản' : unavailable ? 'Chưa cấu hình đơn vị hoặc chức vụ cho đối tượng này' : undefined}
                   >
                     <input
                       type="checkbox"
@@ -438,9 +448,10 @@ export default function MandatoryCourseMatrixPage() {
             <tr className="bg-[#1e293b] text-slate-200 border-b border-slate-700">
               {orderedTargets.map((target: any) => {
                 const unavailable = (target.scopeCount ?? 1) === 0
+                const tickableCourses = data.courses.filter((course: any) => !cannotTick(course, target.key))
                 const allEnabled =
-                  data.courses.length > 0 &&
-                  data.courses.every((course: any) => draft?.[course.id]?.[target.key]?.enabled)
+                  tickableCourses.length > 0 &&
+                  tickableCourses.every((course: any) => draft?.[course.id]?.[target.key]?.enabled)
                 const columnLabel = getTargetColumnLabel(target)
 
                 return (
@@ -475,9 +486,10 @@ export default function MandatoryCourseMatrixPage() {
           {/* DỮ LIỆU CÁC KHÓA HỌC */}
           <tbody className="bg-white">
             {data?.courses?.map((course: any, idx: number) => {
+              const rowTargets = eligibleTargets.filter((target: any) => !cannotTick(course, target.key))
               const allEnabled =
-                eligibleTargets.length > 0 &&
-                eligibleTargets.every((target: any) => draft?.[course.id]?.[target.key]?.enabled)
+                rowTargets.length > 0 &&
+                rowTargets.every((target: any) => draft?.[course.id]?.[target.key]?.enabled)
 
               return (
                 <tr
@@ -489,6 +501,11 @@ export default function MandatoryCourseMatrixPage() {
                     <p className="font-bold text-xs text-[#172554] line-clamp-2 leading-snug" title={course.title}>
                       {course.title}
                     </p>
+                    {isDraftCourse(course) && (
+                      <p className="mt-1 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800">
+                        Khóa chưa xuất bản: chưa thể tick
+                      </p>
+                    )}
                     <div className="mt-2 flex items-center gap-2 flex-wrap">
                       <div className="inline-flex items-center gap-1 bg-slate-100 px-2 py-1 rounded-xl border border-slate-200">
                         <input
@@ -525,7 +542,7 @@ export default function MandatoryCourseMatrixPage() {
                   {/* 18 CỘT CHECKBOX CĂN GIỮA ĐỒNG ĐỀU */}
                   {orderedTargets.map((target: any) => {
                     const isChecked = Boolean(draft?.[course.id]?.[target.key]?.enabled)
-                    const unavailable = (target.scopeCount ?? 1) === 0
+                    const unavailable = (target.scopeCount ?? 1) === 0 || cannotTick(course, target.key)
                     return (
                       <td
                         key={target.key}
@@ -535,7 +552,7 @@ export default function MandatoryCourseMatrixPage() {
                       >
                         <label
                           className={`inline-flex items-center justify-center p-1 rounded-lg transition ${unavailable ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:bg-blue-100/60'}`}
-                          title={unavailable ? 'Chưa cấu hình đơn vị hoặc chức vụ cho đối tượng này' : `${course.title} - ${target.label}`}
+                          title={cannotTick(course, target.key) ? 'Khóa chưa xuất bản' : unavailable ? 'Chưa cấu hình đơn vị hoặc chức vụ cho đối tượng này' : `${course.title} - ${target.label}`}
                         >
                           <input
                             type="checkbox"

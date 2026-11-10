@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
+import { guardCourseEditableByAssessment, invalidateCourseContentCaches } from '@/lib/course-edit-guard'
 import { prisma } from '@/lib/prisma'
 import { validateQuizPoolAssignments } from '@/lib/quiz-pool-selection'
 
@@ -27,6 +28,8 @@ export async function PUT(request: NextRequest, { params }: { params: { assessme
   const assessment = await prisma.assessment.findUnique({ where: { id: params.assessmentId }, select: { id: true, type: true } })
   if (!assessment) return NextResponse.json({ error: { code: 'AssessmentNotFound' } }, { status: 404 })
   if (assessment.type === 'COURSE_FINAL') return NextResponse.json({ error: { code: 'UseFinalExamEditor', message: 'Bài thi cuối khóa phải được cập nhật bằng phiên bản mới.' } }, { status: 409 })
+  const blocked = await guardCourseEditableByAssessment(params.assessmentId)
+  if (blocked) return blocked
 
   const questions = await prisma.question.findMany({
     where: { assessment_id: assessment.id },
@@ -65,5 +68,6 @@ export async function PUT(request: NextRequest, { params }: { params: { assessme
     }
     return createdPools
   })
+  invalidateCourseContentCaches()
   return NextResponse.json({ items: result.map((pool) => ({ poolId: pool.id, name: pool.name, sortOrder: pool.sort_order })) })
 }

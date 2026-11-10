@@ -207,6 +207,8 @@ export async function PUT(request: NextRequest) {
     relationLoadStrategy: 'join',
     select: {
       id: true,
+      title: true,
+      status: true,
       mandatory_default_due_days: true,
       learning_rules: {
         where: { effective_until: null },
@@ -290,6 +292,20 @@ export async function PUT(request: NextRequest) {
         rulesByScope.set(key, [first])
       }
     }
+  }
+
+  // Chỉ tick được khóa đã xuất bản (KHBB 6.4). Bỏ tick và sửa số ngày của ô đã tick vẫn cho phép.
+  const draftTicks = Array.from(new Set(rulesToCreate
+    .filter((rule) => courseMap.get(rule.course_id)?.status !== 'PUBLISHED')
+    .map((rule) => courseMap.get(rule.course_id)?.title || rule.course_id)))
+  if (draftTicks.length) {
+    return NextResponse.json({
+      error: {
+        code: 'CourseNotPublished',
+        message: `Khóa chưa xuất bản nên chưa thể tick: ${draftTicks.join(', ')}.`,
+        courses: draftTicks,
+      },
+    }, { status: 409 })
   }
 
   // Check for No-Op

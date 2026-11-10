@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { DAY_MS, budgetFingerprint, calculateSharedDeadline, competitionMonthBounds, firstReachedFinalBalance, heartbeatElapsed, highWaterIncrement } from '../lib/learning-cycle-rules'
+import { DAY_MS, budgetFingerprint, calculateSharedDeadline, isWithinRestoreWindow, competitionMonthBounds, firstReachedFinalBalance, heartbeatElapsed, highWaterIncrement } from '../lib/learning-cycle-rules'
 import { chapterCompetitionScore, competitionGroup } from '../lib/competition-ranking-rules'
 import { chapterRewardBoundary, isChapterRewardPaused } from '../lib/chapter-reward-gate'
 
@@ -54,8 +54,8 @@ describe('Shared deadlines', () => {
   it('subtracts even a completed removed course, with three days of grace', () => {
     assert.equal(calculateSharedDeadline({ startsAt: start, changedAt: atDay(25), previous: [a, { ...b, completed: true }], next: [a] })?.getTime(), atDay(28).getTime())
   })
-  it('does not award new study time for a valid completed course', () => {
-    assert.equal(calculateSharedDeadline({ startsAt: start, changedAt: atDay(25), previous: [a, b], next: [a, c(5, true)] })?.getTime(), atDay(25).getTime())
+  it('does not award new study time for a valid completed course (removing B still gives the C+3 floor)', () => {
+    assert.equal(calculateSharedDeadline({ startsAt: start, changedAt: atDay(25), previous: [a, b], next: [a, c(5, true)] })?.getTime(), atDay(28).getTime())
   })
   it('keeps the original start across completely different sets and returns', () => {
     assert.equal(calculateSharedDeadline({ startsAt: start, changedAt: atDay(3), previous: [c(5)], next: [a, b] })?.getTime(), atDay(33).getTime())
@@ -66,6 +66,60 @@ describe('Shared deadlines', () => {
   })
   it('gives unfinished work three days when Admin reduces a budget', () => {
     assert.equal(calculateSharedDeadline({ startsAt: start, changedAt: atDay(25), previous: [b], next: [{ ...b, days: 5 }], budgetReduction: true })?.getTime(), atDay(28).getTime())
+  })
+  describe('KHBB 5.2 - 5.7 (production reasons ROLE_CHANGED / ADMIN_BUDGET_SHORTENED)', () => {
+    const base = { startsAt: start }
+    const done = (budget: { courseId: string; days: number; completed: boolean }) => ({ ...budget, completed: true })
+    const A10 = { courseId: 'A', days: 10, completed: false }
+    const B5 = { courseId: 'B', days: 5, completed: false }
+    const C10 = { courseId: 'C', days: 10, completed: false }
+    it('5.3 main example: day 12, A done, A+B -> A+C gives day 22', () => {
+      assert.equal(calculateSharedDeadline({ ...base, changedAt: atDay(12), previous: [A10, B5], next: [done(A10), C10], reason: 'ROLE_CHANGED' })?.getTime(), atDay(22).getTime())
+    })
+    it('5.3 side example: day 2, nothing done, gives day 20', () => {
+      assert.equal(calculateSharedDeadline({ ...base, changedAt: atDay(2), previous: [A10, B5], next: [A10, C10], reason: 'ROLE_CHANGED' })?.getTime(), atDay(20).getTime())
+    })
+    it('5.3 everything done, then C10 at day 5 -> day 15 (finished A100 adds nothing)', () => {
+      const A100 = { courseId: 'A', days: 100, completed: true }
+      assert.equal(calculateSharedDeadline({ ...base, changedAt: atDay(5), previous: [A100], next: [A100, C10], reason: 'ROLE_CHANGED' })?.getTime(), atDay(15).getTime())
+    })
+    it('5.3 changing Chapter: A10+B40 (day 50) -> C11 at day 20 gives day 31, shorter than the old deadline', () => {
+      const B40 = { courseId: 'B', days: 40, completed: false }
+      assert.equal(calculateSharedDeadline({ ...base, changedAt: atDay(20), previous: [A10, B40], next: [{ courseId: 'C', days: 11, completed: false }], reason: 'ROLE_CHANGED', currentDueAt: atDay(50) })?.getTime(), atDay(31).getTime())
+    })
+    it('5.4 removing a course while another is unfinished: max(0 + 10, 20 + 3) = day 23', () => {
+      const B40 = { courseId: 'B', days: 40, completed: false }
+      assert.equal(calculateSharedDeadline({ ...base, changedAt: atDay(20), previous: [A10, B40], next: [A10], reason: 'ROLE_CHANGED' })?.getTime(), atDay(23).getTime())
+    })
+    it('5.4 removing the last unfinished course -> no deadline', () => {
+      assert.equal(calculateSharedDeadline({ ...base, changedAt: atDay(20), previous: [A10, B5], next: [done(A10)], reason: 'ROLE_CHANGED' }), null)
+      assert.equal(calculateSharedDeadline({ ...base, changedAt: atDay(20), previous: [A10], next: [], reason: 'ROLE_CHANGED' }), null)
+    })
+    it('5.2 shortening counts only unfinished courses: 30 -> 10 at day 20 gives day 23', () => {
+      assert.equal(calculateSharedDeadline({ ...base, changedAt: atDay(20), previous: [{ ...A10, days: 30 }], next: [A10], reason: 'ADMIN_BUDGET_SHORTENED' })?.getTime(), atDay(23).getTime())
+      // A shortened course that is already done contributes nothing: only the unfinished B counts: max(0 + 5, 1 + 3) = day 5.
+      assert.equal(calculateSharedDeadline({ ...base, changedAt: atDay(1), previous: [{ ...A10, days: 30 }, B5], next: [done(A10), B5], reason: 'ADMIN_BUDGET_SHORTENED' })?.getTime(), atDay(5).getTime())
+    })
+    it('5.5 a manual extension (day 30) wins over a recalculated day 25', () => {
+      assert.equal(calculateSharedDeadline({ ...base, changedAt: atDay(3), previous: [A10, B5], next: [A10, { courseId: 'C', days: 15, completed: false }], reason: 'ROLE_CHANGED', manualExtensionDueAt: atDay(30) })?.getTime(), atDay(30).getTime())
+    })
+    it('5.5 a manual extension already in the past is ignored', () => {
+      assert.equal(calculateSharedDeadline({ ...base, changedAt: atDay(40), previous: [A10], next: [A10, C10], reason: 'ROLE_CHANGED', manualExtensionDueAt: atDay(30) })?.getTime(), atDay(50).getTime())
+    })
+    it('5.7 a course re-added inside the window is not new: deadline falls back to the old day 20', () => {
+      const X10 = { courseId: 'X', days: 10, completed: false }
+      assert.equal(calculateSharedDeadline({ ...base, changedAt: atDay(18), previous: [A10], next: [A10, { ...X10, restored: true }], reason: 'ROLE_CHANGED', restoredPriorDueAt: atDay(20) })?.getTime(), atDay(20).getTime())
+      // The same call without the restored flag is the exploit: 18 + 10 = 28.
+      assert.equal(calculateSharedDeadline({ ...base, changedAt: atDay(18), previous: [A10], next: [A10, X10], reason: 'ROLE_CHANGED' })?.getTime(), atDay(28).getTime())
+    })
+    it('increasing a budget never shortens the current deadline', () => {
+      assert.equal(calculateSharedDeadline({ ...base, changedAt: atDay(5), previous: [done({ ...A10, days: 30 }), B5], next: [done({ ...A10, days: 30 }), { ...B5, days: 7 }], reason: 'ROLE_CHANGED', currentDueAt: atDay(35) })?.getTime(), atDay(35).getTime())
+    })
+  })
+  it('isWithinRestoreWindow includes exactly three days and excludes later or negative gaps', () => {
+    assert.equal(isWithinRestoreWindow(atDay(18), atDay(21)), true)
+    assert.equal(isWithinRestoreWindow(atDay(18), new Date(atDay(21).getTime() + 1)), false)
+    assert.equal(isWithinRestoreWindow(atDay(18), atDay(17)), false)
   })
   it('fingerprints ignore rule order and completion, but detect actual budget changes', () => {
     assert.equal(budgetFingerprint([a, b]), budgetFingerprint([{ ...b, completed: true }, a]))

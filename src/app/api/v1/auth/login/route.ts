@@ -5,6 +5,8 @@ import { SignJWT } from 'jose'
 import crypto from 'crypto'
 import { hasActiveAffiliation } from '@/lib/affiliation-access'
 import { getLearningManagerKind } from '@/lib/manager-learning-access'
+import { invalidateUserAuthCache } from '@/lib/auth'
+import { MAX_LOGIN_ATTEMPTS, failedLoginState, isOverdueLocked, isPasswordLocked } from '@/lib/account-restriction-rules'
 
 const JWT_ACCESS_SECRET = process.env.JWT_ACCESS_SECRET || ''
 const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || ''
@@ -45,8 +47,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: { code: 'AccountInactive', message: 'Tài khoản đã bị vô hiệu hóa' } }, { status: 403 })
     }
 
+    // Tài khoản LOCKED không đăng nhập được kể cả khi nhập đúng mật khẩu, và không tự mở theo thời gian.
+    // Khóa mật khẩu chỉ mở bằng mail đặt lại mật khẩu; khóa quá hạn chỉ mở bằng "Mở khóa & Gia hạn" của Admin.
     if (user.status === 'LOCKED') {
-      return NextResponse.json({ error: { code: 'AccountLocked', message: 'Tài khoản đã bị khóa do nhập sai quá nhiều lần' } }, { status: 403 })
+      const lockReason = isPasswordLocked(user) ? 'PASSWORD_LOCK' : isOverdueLocked(user, []) ? 'OVERDUE_LOCK' : null
+      const message = lockReason === 'PASSWORD_LOCK'
+        ? `Tài khoản đã bị khóa do nhập sai mật khẩu ${MAX_LOGIN_ATTEMPTS} lần. Hãy dùng "Quên mật khẩu" để đặt lại mật khẩu.`
+        : lockReason === 'OVERDUE_LOCK'
+          ? 'Tài khoản đã bị khóa do quá hạn học. Vui lòng liên hệ Admin để được mở khóa và gia hạn.'
+          : 'Tài khoản đang bị khóa. Vui lòng liên hệ Admin.'
+      return NextResponse.json({ error: { code: 'AccountLocked', message, lockReason } }, { status: 403 })
     }
 
     if (!await hasActiveAffiliation(user.id, user.role)) {
@@ -57,21 +67,38 @@ export async function POST(request: NextRequest) {
     const valid = await bcrypt.compare(password, user.password_hash)
 
     if (!valid) {
-      // Increment failed_login_count
-      const newCount = user.failed_login_count + 1
-      const isLocked = newCount >= 10
-      
-      await prisma.user.update({
+      // Cộng nguyên tử để hai lần thử đồng thời không bị tính thành một.
+      const { failed_login_count: newCount } = await prisma.user.update({
         where: { id: user.id },
-        data: { 
-          failed_login_count: newCount, 
-          status: isLocked ? 'LOCKED' : user.status,
-          lock_reason: isLocked ? 'PASSWORD_LOCK' : user.lock_reason,
-          locked_until: isLocked ? new Date(Date.now() + 30 * 60 * 1000) : null,
-        },
+        data: { failed_login_count: { increment: 1 } },
+        select: { failed_login_count: true },
       })
+      const attempt = failedLoginState(newCount)
 
-      return NextResponse.json({ error: { code: 'InvalidCredentials', message: 'Tài khoản hoặc mật khẩu không đúng' } }, { status: 401 })
+      if (attempt.locked) {
+        // Khóa mật khẩu không tự mở theo thời gian (không đặt locked_until).
+        await prisma.user.updateMany({
+          where: { id: user.id, status: 'ACTIVE' },
+          data: { status: 'LOCKED', lock_reason: 'PASSWORD_LOCK', auth_version: { increment: 1 } },
+        })
+        invalidateUserAuthCache(user.id)
+        return NextResponse.json({
+          error: {
+            code: 'AccountLocked',
+            lockReason: 'PASSWORD_LOCK',
+            remainingAttempts: 0,
+            message: `Bạn đã nhập sai mật khẩu ${MAX_LOGIN_ATTEMPTS} lần nên tài khoản bị khóa. Hãy dùng "Quên mật khẩu" để đặt lại mật khẩu.`,
+          },
+        }, { status: 403 })
+      }
+
+      return NextResponse.json({
+        error: {
+          code: 'InvalidCredentials',
+          message: 'Tài khoản hoặc mật khẩu không đúng',
+          remainingAttempts: attempt.remainingAttempts,
+        },
+      }, { status: 401 })
     }
 
     // Generate JWT tokens concurrently
@@ -109,11 +136,12 @@ export async function POST(request: NextRequest) {
       }),
     ]
 
-    if (user.failed_login_count > 0 || user.status !== 'ACTIVE') {
+    // Đăng nhập đúng chỉ đếm lại số lần sai; không bao giờ đổi `status` (không mở nhầm khóa nào).
+    if (user.failed_login_count > 0) {
       dbOps.push(
         prisma.user.update({
           where: { id: user.id },
-          data: { failed_login_count: 0, status: 'ACTIVE' },
+          data: { failed_login_count: 0 },
         })
       )
     }

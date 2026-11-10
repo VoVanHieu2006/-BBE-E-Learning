@@ -173,3 +173,21 @@ export function invalidateScopesCache() {
   cachedTargetCatalog = null
   cachedScopes = null
 }
+
+// 8. Lesson detail cache (shared so content-write routes can invalidate it)
+const lessonDetailServerCache = new Map<string, CacheEntry>()
+
+export function getLessonDetailServerCache(lessonId: string, ttlMs: number) {
+  const entry = lessonDetailServerCache.get(lessonId)
+  return entry && Date.now() - entry.timestamp < ttlMs ? entry.data : null
+}
+
+export function setLessonDetailServerCache(lessonId: string, data: any) {
+  lessonDetailServerCache.set(lessonId, { data, timestamp: Date.now() })
+}
+
+/** Không truyền `lessonId` thì xóa toàn bộ cache chi tiết bài học. */
+export function invalidateLessonDetailServerCache(lessonId?: string) {
+  if (lessonId) lessonDetailServerCache.delete(lessonId)
+  else lessonDetailServerCache.clear()
+}

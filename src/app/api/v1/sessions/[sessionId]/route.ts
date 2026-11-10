@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
+import { guardCourseEditableBySession, invalidateCourseContentCaches } from '@/lib/course-edit-guard'
 import { prisma } from '@/lib/prisma'
 import { assertFinalExamBankCapacity, finalExamBankError, lockCourseExamBank } from '@/lib/final-exam-bank'
 
@@ -60,6 +61,8 @@ export async function PATCH(request: NextRequest, { params }: { params: { sessio
   const sessionId = params.sessionId
   const session = await prisma.session.findUnique({ where: { id: sessionId } })
   if (!session) return NextResponse.json({ error: { code: 'SessionNotFound', message: 'Session không tồn tại' } }, { status: 404 })
+  const blocked = await guardCourseEditableBySession(sessionId)
+  if (blocked) return blocked
 
   const body = await request.json().catch(() => ({}))
   const updates: any = {}
@@ -71,6 +74,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { sessio
     where: { id: sessionId },
     data: updates,
   })
+  invalidateCourseContentCaches(session.course_id)
 
   return NextResponse.json({
     sessionId: updated.id,
@@ -96,6 +100,8 @@ export async function DELETE(request: NextRequest, { params }: { params: { sessi
   const sessionId = params.sessionId
   const session = await prisma.session.findUnique({ where: { id: sessionId } })
   if (!session) return NextResponse.json({ error: { code: 'SessionNotFound', message: 'Session không tồn tại' } }, { status: 404 })
+  const blocked = await guardCourseEditableBySession(sessionId)
+  if (blocked) return blocked
 
   try {
     await prisma.$transaction(async (tx) => {
@@ -112,5 +118,6 @@ export async function DELETE(request: NextRequest, { params }: { params: { sessi
     throw error
   }
 
+  invalidateCourseContentCaches(session.course_id)
   return NextResponse.json({ success: true, message: 'Đã xóa session thành công' }, { status: 200 })
 }

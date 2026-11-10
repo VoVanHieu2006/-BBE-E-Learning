@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { authenticate } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { invalidateCoursesServerCache } from '@/lib/server-cache';
-import { invalidateSystemDataCache } from '@/lib/progress/calculator';
+import { guardCourseEditableByLesson, invalidateCourseContentCaches } from '@/lib/course-edit-guard';
 import { assertFinalExamBankCapacity, finalExamBankError, lockCourseExamBank } from '@/lib/final-exam-bank';
 
 export const dynamic = 'force-dynamic';
@@ -140,6 +139,9 @@ export async function POST(
         { status: 404 }
       );
     }
+
+    const blocked = await guardCourseEditableByLesson(lessonId);
+    if (blocked) return blocked;
 
     const body = await request.json().catch(() => ({}));
     const { title, description, questions, pools } = body || {};
@@ -314,8 +316,7 @@ export async function POST(
       }
     );
 
-    invalidateCoursesServerCache(lesson.session.course_id);
-    invalidateSystemDataCache();
+    invalidateCourseContentCaches(lesson.session.course_id, lessonId);
     return NextResponse.json(
       {
         assessmentId,
@@ -382,6 +383,9 @@ export async function DELETE(
     );
   }
 
+  const blocked = await guardCourseEditableByLesson(lessonId);
+  if (blocked) return blocked;
+
   const existing = await prisma.assessment.findUnique({
     where: { lesson_id: lessonId },
     select: { id: true, _count: { select: { attempts: true } } },
@@ -420,6 +424,7 @@ export async function DELETE(
     throw error;
   }
 
+  invalidateCourseContentCaches(lesson.session.course_id, lessonId);
   return NextResponse.json({
     success: true,
     message: 'Đã xóa bài kiểm tra thành công',

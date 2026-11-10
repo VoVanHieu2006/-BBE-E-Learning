@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
+import { guardCourseEditableBySession, invalidateCourseContentCaches } from '@/lib/course-edit-guard'
 import { prisma } from '@/lib/prisma'
 import { MAX_VIDEO_DURATION_SECONDS, MIN_VIDEO_DURATION_SECONDS, normalizeDurationSeconds } from '@/lib/validation/duration'
 
@@ -83,6 +84,7 @@ export async function POST(request: NextRequest, { params }: { params: { session
     return { lesson, video: vid }
   })
 
+  invalidateCourseContentCaches(session.course_id)
   return NextResponse.json({
     lessonId: result.lesson.id,
     id: result.lesson.id,
@@ -116,6 +118,9 @@ export async function PATCH(request: NextRequest, { params }: { params: { sessio
     return NextResponse.json({ error: { code: 'ValidationError', message: 'lessons array bắt buộc' } }, { status: 400 })
   }
 
+  const blocked = await guardCourseEditableBySession(sessionId)
+  if (blocked) return blocked
+
   await prisma.$transaction(
     lessons.map((item: any, idx: number) => {
       const lessonId = item.lessonId || item.id
@@ -126,5 +131,6 @@ export async function PATCH(request: NextRequest, { params }: { params: { sessio
     })
   )
 
+  invalidateCourseContentCaches()
   return NextResponse.json({ success: true }, { status: 200 })
 }

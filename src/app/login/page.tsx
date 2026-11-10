@@ -9,6 +9,8 @@ export default function LoginPage() {
   const [form, setForm] = useState({ email: '', password: '' });
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [remainingAttempts, setRemainingAttempts] = useState<number | null>(null);
+  const [passwordLocked, setPasswordLocked] = useState(false);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -30,6 +32,8 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     setError('');
+    setRemainingAttempts(null);
+    setPasswordLocked(false);
 
     try {
       const res = await fetch('/api/v1/auth/login', {
@@ -41,9 +45,14 @@ export default function LoginPage() {
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
+        // KHBB 7.2: sai 5 lần thì khóa; mỗi lần sai báo số lần còn lại, khóa mật khẩu chỉ mở bằng mail đặt lại.
+        if (data.error?.code === 'AccountLocked' && data.error?.lockReason === 'PASSWORD_LOCK') setPasswordLocked(true);
+        if (data.error?.code === 'InvalidCredentials' && Number.isInteger(data.error?.remainingAttempts)) {
+          setRemainingAttempts(data.error.remainingAttempts);
+        }
         setError(
           res.status === 423
-            ? 'Tài khoản bị tạm khóa do đăng nhập sai quá nhiều lần. Vui lòng dùng tính năng quên mật khẩu.'
+            ? 'Tài khoản bị khóa do đăng nhập sai quá nhiều lần. Vui lòng dùng tính năng quên mật khẩu để đặt lại mật khẩu.'
             : res.status >= 500
             ? (data.error?.message || 'Lỗi máy chủ nội bộ (500). Vui lòng thử lại sau hoặc kiểm tra cấu hình Vercel.')
             : data.error?.message || 'Tài khoản hoặc mật khẩu không đúng.'
@@ -129,7 +138,17 @@ export default function LoginPage() {
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm flex items-start gap-2">
               <span className="shrink-0 mt-0.5">⚠️</span>
-              <span>{error}</span>
+              <div>
+                <span>{error}</span>
+                {remainingAttempts !== null && (
+                  <div className="mt-1 font-semibold">Bạn còn {remainingAttempts} lần thử.</div>
+                )}
+                {passwordLocked && (
+                  <div className="mt-1">
+                    <Link href="/forgot-password" className="font-semibold underline">Đặt lại mật khẩu</Link>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 

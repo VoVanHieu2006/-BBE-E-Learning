@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { authenticate, invalidateUserAuthCache } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { createChapterCascadeRestrictions, getChapterAccountUserIds, getUserManagedChapterScopes, getUsersWithActiveAccountRestrictions } from '@/lib/account-restrictions'
-import { canActivateAfterRestrictionLift } from '@/lib/account-restriction-rules'
+import { canActivateAfterRestrictionLift, isOverdueLocked, isPasswordLocked, ordinaryActivationBlock } from '@/lib/account-restriction-rules'
 import { isOrganizationId } from '@/lib/organization-admin-rules'
 
 /** Admin-only account locking with an auditable cause. BĐHU/DNA managers never unlock accounts. */
@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
   if (!isOrganizationId(targetId)) return NextResponse.json({ error: { code: 'ValidationError', message: 'targetId must be a valid ID.' } }, { status: 400 })
 
   if (targetType === 'USER') {
-    const target = await prisma.user.findUnique({ where: { id: targetId }, select: { id: true, role: true } })
+    const target = await prisma.user.findUnique({ where: { id: targetId }, select: { id: true, role: true, status: true, lock_reason: true } })
     if (!target) return NextResponse.json({ error: { code: 'NotFound', message: 'User not found.' } }, { status: 404 })
     if (action === 'LOCK') {
       if (target.role === 'ADMIN') return NextResponse.json({ error: { code: 'InvalidTransition', message: 'Admin accounts cannot be locked through this endpoint.' } }, { status: 403 })
@@ -87,18 +87,30 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ restriction: result.restriction, status: 'LOCKED', cascadedChapterIds: cascadeChapters.map((chapter) => chapter.chapterId), lockedUsers: result.lockedUserIds.length }, { status: 201 })
     }
 
+    // Khóa quá hạn (restriction DEADLINE) chỉ mở bằng "Mở khóa & Gia hạn" (KHBB 7.1): đường này từ chối.
+    const openTypes = (await prisma.accessRestriction.findMany({ where: { user_id: targetId, lifted_at: null }, select: { type: true } })).map((row) => row.type)
+    if (isOverdueLocked(target, openTypes)) {
+      const block = ordinaryActivationBlock(target, openTypes)
+      return NextResponse.json({ error: { code: block?.code ?? 'OverdueUnlockRequiresExtension', message: block?.message ?? 'Tài khoản đang bị khóa do quá hạn học. Hãy dùng nút "Mở khóa & Gia hạn" để mở khóa.' } }, { status: 409 })
+    }
     await prisma.$transaction(async (tx) => {
       await tx.accessRestriction.updateMany({ where: { user_id: targetId, lifted_at: null }, data: { lifted_at: new Date(), lifted_by_user_id: actor.userId } })
       // A Chapter cascade also covers OrganizationMembership and active tenures,
       // not only the legacy chapter_members join table.
       const stillRestricted = await getUsersWithActiveAccountRestrictions([targetId], tx)
-      if (canActivateAfterRestrictionLift(stillRestricted.has(targetId))) {
+      // Khóa mật khẩu chỉ mở bằng mail đặt lại mật khẩu (KHBB 7.2).
+      if (canActivateAfterRestrictionLift(stillRestricted.has(targetId)) && !isPasswordLocked(target)) {
         await tx.user.update({ where: { id: targetId }, data: { status: 'ACTIVE', auth_version: { increment: 1 } } })
       }
     })
     invalidateUserAuthCache(targetId)
     const stillRestricted = await getUsersWithActiveAccountRestrictions([targetId])
-    return NextResponse.json({ userId: targetId, unlocked: !stillRestricted.has(targetId), remainingRestriction: stillRestricted.has(targetId) ? 'CHAPTER_CASCADE' : null })
+    const passwordLocked = isPasswordLocked(target)
+    return NextResponse.json({
+      userId: targetId,
+      unlocked: !stillRestricted.has(targetId) && !passwordLocked,
+      remainingRestriction: stillRestricted.has(targetId) ? 'CHAPTER_CASCADE' : passwordLocked ? 'PASSWORD_LOCK' : null,
+    })
   }
 
   const chapter = await prisma.chapter.findUnique({ where: { id: targetId }, select: { id: true, organization_unit_id: true } })
@@ -126,7 +138,12 @@ export async function POST(request: NextRequest) {
   const unlockedUserIds = await prisma.$transaction(async (tx) => {
     await tx.accessRestriction.updateMany({ where: { organization_unit_id: chapter.organization_unit_id!, type: 'CHAPTER_CASCADE', lifted_at: null }, data: { lifted_at: new Date(), lifted_by_user_id: actor.userId } })
     const stillRestricted = await getUsersWithActiveAccountRestrictions(memberAccountIds, tx)
-    const canUnlock = memberAccountIds.filter((id) => !stillRestricted.has(id))
+    // Tài khoản đang khóa quá hạn hoặc khóa mật khẩu không được mở qua đường này (KHBB 7.1, 7.2).
+    const selfLocked = new Set((await tx.user.findMany({
+      where: { id: { in: memberAccountIds }, status: 'LOCKED', lock_reason: { in: ['OVERDUE_LOCK', 'DEADLINE', 'PASSWORD_LOCK'] } },
+      select: { id: true },
+    })).map((row) => row.id))
+    const canUnlock = memberAccountIds.filter((id) => !stillRestricted.has(id) && !selfLocked.has(id))
     await tx.user.updateMany({ where: { id: { in: canUnlock } }, data: { status: 'ACTIVE', auth_version: { increment: 1 } } })
     return canUnlock
   })

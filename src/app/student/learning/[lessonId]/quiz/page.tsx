@@ -10,6 +10,7 @@ import LessonQuiz from '@/components/lesson/LessonQuiz';
 import StarRewardCelebration from '@/components/StarRewardCelebration';
 import { apiFetch, clearApiCache } from '@/lib/api/client';
 import { QUIZ_COOLDOWN_MS, QUIZ_COOLDOWN_MINUTES } from '@/lib/config/quiz';
+import { getNextLearningTarget, NextLearningTarget } from '@/lib/lesson-navigation';
 
 interface AttemptItem {
   attemptId: string;
@@ -39,6 +40,22 @@ export default function LessonQuizPage({ params }: { params: { lessonId: string 
   const [cooldownRemainingMs, setCooldownRemainingMs] = useState<number>(0);
   const [starReward, setStarReward] = useState<number | null>(null);
   const seenRewardKeysRef = useRef<Set<string>>(new Set());
+  const [nextTarget, setNextTarget] = useState<NextLearningTarget | null>(null);
+
+  const courseId: string = lesson?.session?.courseId || '';
+
+  // Once the lesson is completed, work out where "next" is so the back button can skip the finished quiz.
+  useEffect(() => {
+    if (!quizCompleted || !courseId || !token) return;
+    let cancelled = false;
+    apiFetch(`/api/v1/courses/${courseId}`, { token }).then((res: any) => {
+      if (cancelled || !res?.ok || !res.data) return;
+      setNextTarget(getNextLearningTarget(res.data, courseId, params.lessonId));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [quizCompleted, courseId, token, params.lessonId]);
 
   const showToast = (type: 'success' | 'error' | 'info', message: string, title?: string) => {
     setToast({ type, message, title });
@@ -297,6 +314,9 @@ export default function LessonQuizPage({ params }: { params: { lessonId: string 
               lessonTitle={lesson.title}
               accessToken={token}
               isCompleted={quizCompleted}
+              returnHref={quizCompleted && nextTarget ? nextTarget.href : undefined}
+              returnLabel={quizCompleted && nextTarget ? `${nextTarget.label} →` : undefined}
+              returnReplace={Boolean(quizCompleted && nextTarget)}
               forceNew={isNewAttempt}
               onQuizPassed={() => {
                 setQuizCompleted(true);
@@ -443,11 +463,19 @@ export default function LessonQuizPage({ params }: { params: { lessonId: string 
                 </Button>
               )}
 
-              <Link href={`/student/learning/${params.lessonId}`} className="flex-1">
-                <Button variant="outline" size="lg" className="w-full font-bold">
-                  ← Quay lại bài học
-                </Button>
-              </Link>
+              {quizCompleted && nextTarget ? (
+                <Link href={nextTarget.href} replace className="flex-1">
+                  <Button variant="outline" size="lg" className="w-full font-bold">
+                    {nextTarget.label} →
+                  </Button>
+                </Link>
+              ) : (
+                <Link href={`/student/learning/${params.lessonId}`} className="flex-1">
+                  <Button variant="outline" size="lg" className="w-full font-bold">
+                    ← Quay lại bài học
+                  </Button>
+                </Link>
+              )}
             </div>
           </Card>
         )}

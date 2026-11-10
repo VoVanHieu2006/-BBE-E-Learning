@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { guardCourseEditableByLesson, invalidateCourseContentCaches } from '@/lib/course-edit-guard'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -10,6 +11,9 @@ export async function POST(request: NextRequest, { params }: { params: { lessonI
     const auth = await authenticate(request)
     if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: 401 })
     if ((auth as any).context!.role !== 'ADMIN') return NextResponse.json({ error: { code: 'AccessDenied', message: 'Chỉ Admin' } }, { status: 403 })
+
+    const blocked = await guardCourseEditableByLesson(params.lessonId)
+    if (blocked) return blocked
 
     const body = await request.json().catch(() => ({}))
     const { fileName, storageKey, mimeType, fileSize } = body || {}
@@ -28,6 +32,7 @@ export async function POST(request: NextRequest, { params }: { params: { lessonI
       },
     })
 
+    invalidateCourseContentCaches(undefined, params.lessonId)
     return NextResponse.json({
       documentId: document.id,
       fileName: document.file_name,

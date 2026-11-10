@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { invalidateSystemDataCache } from '@/lib/progress/calculator'
+import { invalidateCoursesServerCache } from '@/lib/server-cache'
 import { publishCourseRequirements } from '@/lib/course-requirements'
 
 export async function POST(request: NextRequest, { params }: { params: { courseId: string } }) {
@@ -31,6 +32,7 @@ export async function POST(request: NextRequest, { params }: { params: { courseI
     throw error
   }
   invalidateSystemDataCache()
+  invalidateCoursesServerCache()
 
   return NextResponse.json({ courseId: updated.id, status: updated.status, publishedAt: updated.published_at }, { status: 200 })
 }

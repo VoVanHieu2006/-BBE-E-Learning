@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { authenticate } from '@/lib/auth'
+import { guardCourseEditableByAssessment, invalidateCourseContentCaches } from '@/lib/course-edit-guard'
 import { prisma } from '@/lib/prisma'
 import { assertFinalExamBankCapacity, finalExamBankError, lockCourseExamBank } from '@/lib/final-exam-bank'
 
@@ -90,6 +91,8 @@ export async function PATCH(request: NextRequest, { params }: { params: { assess
   const existing = await prisma.assessment.findUnique({ where: { id: assessmentId } })
   if (!existing) return NextResponse.json({ error: { code: 'AssessmentNotFound', message: 'Bài kiểm tra không tồn tại' } }, { status: 404 })
   if (existing.type === 'COURSE_FINAL') return NextResponse.json({ error: { code: 'UseFinalExamEditor', message: 'Hãy cập nhật bài thi cuối khóa tại trang cấu hình để tạo phiên bản mới.' } }, { status: 409 })
+  const blocked = await guardCourseEditableByAssessment(assessmentId)
+  if (blocked) return blocked
   const lesson = await prisma.lesson.findUnique({ where: { id: existing.lesson_id! }, select: { session: { select: { course_id: true } } } })
   if (!lesson) return NextResponse.json({ error: { code: 'LessonNotFound' } }, { status: 404 })
   const courseId = lesson.session.course_id
@@ -182,6 +185,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { assess
     throw error
   }
 
+  invalidateCourseContentCaches(courseId, existing.lesson_id || undefined)
   return NextResponse.json({
     assessmentId,
     questionCount: Array.isArray(questions) ? questions.length : 0,
@@ -214,6 +218,8 @@ export async function DELETE(request: NextRequest, { params }: { params: { asses
   if (existing._count.attempts > 0) {
     return NextResponse.json({ error: { code: 'AssessmentVersionRequired', message: 'Không thể xóa bài thi đã có attempt; lịch sử và kết quả cần được bảo toàn.' } }, { status: 409 })
   }
+  const blockedDelete = await guardCourseEditableByAssessment(assessmentId)
+  if (blockedDelete) return blockedDelete
 
   // Child question/option rows cascade; no learner attempts are deleted.
   if (existing.type === 'LESSON' && existing.lesson_id) {
@@ -233,6 +239,7 @@ export async function DELETE(request: NextRequest, { params }: { params: { asses
       throw error
     }
   } else await prisma.assessment.delete({ where: { id: assessmentId } })
+  invalidateCourseContentCaches(existing.course_id || undefined, existing.lesson_id || undefined)
 
   return NextResponse.json({
     success: true,

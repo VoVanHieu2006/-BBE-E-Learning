@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
+import { guardCourseEditable, invalidateCourseContentCaches } from '@/lib/course-edit-guard'
 import { prisma } from '@/lib/prisma'
 
 export async function PATCH(request: NextRequest, { params }: { params: { courseId: string } }) {
@@ -18,6 +19,8 @@ export async function PATCH(request: NextRequest, { params }: { params: { course
   // Verify course
   const course = await prisma.course.findUnique({ where: { id: courseId } })
   if (!course) return NextResponse.json({ error: { code: 'CourseNotFound', message: 'Không tồn tại' } }, { status: 404 })
+  const blocked = await guardCourseEditable(courseId)
+  if (blocked) return blocked
 
   // Update in transaction
   await prisma.$transaction(
@@ -26,5 +29,6 @@ export async function PATCH(request: NextRequest, { params }: { params: { course
     )
   )
 
+  invalidateCourseContentCaches(courseId)
   return NextResponse.json({ success: true }, { status: 200 })
 }

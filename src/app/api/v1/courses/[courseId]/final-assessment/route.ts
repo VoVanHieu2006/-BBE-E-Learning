@@ -3,9 +3,10 @@ import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { checkCourseFinalProgression } from '@/lib/progression'
 import { QUIZ_COOLDOWN_MINUTES, QUIZ_COOLDOWN_MS } from '@/lib/config/quiz'
-import { randomUUID } from 'crypto'
+import { guardCourseEditable, invalidateCourseContentCaches } from '@/lib/course-edit-guard'
 import { currentCycleAttemptFilter } from '@/lib/learning-periods'
-import { availableFinalQuestions, finalExamBankError, lessonQuestionWhere, lockCourseExamBank, FinalExamBankTooSmall } from '@/lib/final-exam-bank'
+import { finalExamBankError, lessonQuestionWhere, lockCourseExamBank } from '@/lib/final-exam-bank'
+import { createFinalExamVersion } from '@/lib/final-exam-version'
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const jsonError = (code: string, message: string, status: number) =>
@@ -139,6 +140,8 @@ export async function POST(request: NextRequest, { params }: { params: { courseI
   if ((auth as any).context!.role !== 'ADMIN') return jsonError('AccessDenied', 'Chỉ Admin được cấu hình bài thi cuối khóa.', 403)
   const course = await prisma.course.findUnique({ where: { id: params.courseId }, select: { id: true } })
   if (!course) return jsonError('CourseNotFound', 'Khóa học không tồn tại.', 404)
+  const blocked = await guardCourseEditable(course.id)
+  if (blocked) return blocked
 
   const body = await request.json().catch(() => null)
   const title = typeof body?.title === 'string' ? body.title.trim() : ''
@@ -151,35 +154,9 @@ export async function POST(request: NextRequest, { params }: { params: { courseI
   }
   try {
     const result = await prisma.$transaction(async (tx) => {
-      await lockCourseExamBank(tx, course.id)
-      const availableQuestions = await availableFinalQuestions(tx, course.id)
-      if (questionCount > availableQuestions) throw new FinalExamBankTooSmall(questionCount, availableQuestions)
-      const sourceQuestions = await tx.question.findMany({ where: lessonQuestionWhere(course.id), include: { options: true }, orderBy: { id: 'asc' } })
-      if (sourceQuestions.some((question) => question.options.length < 2 || !question.options.some((option) => option.is_correct))) {
-        throw new Error('InvalidFinalExamSourceQuestion')
-      }
-      const assessment = await tx.assessment.upsert({
-        where: { course_id: course.id },
-        update: { title, description: description || null, question_count: questionCount, duration_minutes: durationMinutes },
-        create: { type: 'COURSE_FINAL', course_id: course.id, lesson_id: null, title, description: description || null, question_count: questionCount, duration_minutes: durationMinutes, created_by: (auth as any).context!.userId },
-      })
-      const latest = await tx.finalExamVersion.findFirst({ where: { assessment_id: assessment.id }, orderBy: { version_number: 'desc' }, select: { version_number: true } })
-      await tx.finalExamVersion.updateMany({ where: { assessment_id: assessment.id, is_active: true }, data: { is_active: false } })
-      const version = await tx.finalExamVersion.create({ data: {
-        assessment_id: assessment.id, version_number: (latest?.version_number || 0) + 1, is_active: true,
-        question_count: questionCount, duration_minutes: durationMinutes, title, description: description || null,
-      } })
-      const copies = sourceQuestions.map((question) => ({ source: question, id: randomUUID() }))
-      await tx.question.createMany({ data: copies.map(({ source, id }) => ({
-        id, assessment_id: assessment.id, final_exam_version_id: version.id, source_assessment_id: source.assessment_id,
-        question_text: source.question_text, question_type: source.question_type, points: source.points,
-        sort_order: source.sort_order, explanation: source.explanation,
-      })) })
-      await tx.questionOption.createMany({ data: copies.flatMap(({ source, id }) => source.options.map((option) => ({
-        id: randomUUID(), question_id: id, option_text: option.option_text, is_correct: option.is_correct, sort_order: option.sort_order,
-      }))) })
-      return { assessment, version, availableQuestions }
+      return createFinalExamVersion(tx, course.id, { title, description: description || null, questionCount, durationMinutes }, (auth as any).context!.userId)
     }, { timeout: 30000, maxWait: 5000 })
+    invalidateCourseContentCaches(course.id)
     return NextResponse.json({ assessmentId: result.assessment.id, id: result.assessment.id, assessmentType: 'COURSE_FINAL', courseId: course.id, title, description: description || null, questionCount, availableQuestions: result.availableQuestions, versionNumber: result.version.version_number }, { status: 200 })
   } catch (error) {
     const bankError = finalExamBankError(error)
@@ -194,6 +171,8 @@ export async function DELETE(request: NextRequest, { params }: { params: { cours
   const auth = await authenticate(request)
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: 401 })
   if ((auth as any).context!.role !== 'ADMIN') return jsonError('AccessDenied', 'Chỉ Admin được xóa bài thi cuối khóa.', 403)
+  const blockedDelete = await guardCourseEditable(params.courseId)
+  if (blockedDelete) return blockedDelete
   const result = await prisma.$transaction(async (tx) => {
     await lockCourseExamBank(tx, params.courseId)
     const existing = await tx.assessment.findUnique({ where: { course_id: params.courseId }, select: { id: true, _count: { select: { attempts: true } } } })
@@ -205,5 +184,6 @@ export async function DELETE(request: NextRequest, { params }: { params: { cours
   if ('code' in result) return result.code === 'FinalAssessmentNotFound'
     ? jsonError(result.code, 'Khóa học chưa có bài thi cuối khóa.', 404)
     : jsonError(result.code!, 'Không thể xóa bài thi đã có attempt; lịch sử phải được bảo toàn.', 409)
+  invalidateCourseContentCaches(params.courseId)
   return NextResponse.json({ success: true, assessmentId: result.id, assessmentType: 'COURSE_FINAL' })
 }

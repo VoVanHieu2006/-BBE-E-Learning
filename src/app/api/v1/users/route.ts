@@ -230,7 +230,7 @@ export async function GET(request: NextRequest) {
         ? 'INACTIVE'
         : u.restrictions[0]?.type === 'DEADLINE' || u.lock_reason === 'OVERDUE_LOCK'
           ? 'OVERDUE_LOCK'
-          : u.status === 'LOCKED' || u.failed_login_count >= 10 || u.lock_reason === 'PASSWORD_LOCK'
+          : u.status === 'LOCKED' || u.lock_reason === 'PASSWORD_LOCK'
             ? 'PASSWORD_LOCK'
             : 'ACTIVE',
       deactivatedByUserId: u.deactivated_by_user_id,
