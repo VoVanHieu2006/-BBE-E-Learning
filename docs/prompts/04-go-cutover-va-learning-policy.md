@@ -33,5 +33,9 @@ Chủ sản phẩm quyết định **bỏ khái niệm cutover**; `learning_poli
 ## Nghiệm thu
 `rg "learning_policy|cutover"` trong `src` chỉ còn ở migration cũ và migration mới; tất cả test unit pass; kế hoạch triển khai hai bản phát hành được ghi rõ; liệt kê dữ liệu production cần người dùng tự kiểm tra.
 
+## Phối hợp với worker khác (đang chạy song song)
+- Prompt 02b sửa editor khóa học, `draft/publish`, các trang học viên. Prompt 05 sửa route xóa khóa, cache, quyền xem ngân hàng đề và đối chiếu xếp hạng (chỉ đọc `competition-snapshots.ts` và `period-leaderboard.ts` trừ khi có lỗi chứng minh được). Hai việc đó không phải của bạn.
+- Bạn sở hữu mọi chỗ liên quan mốc sàn cutover trong `competition-snapshots.ts` và `period-leaderboard.ts`.
+
 ## Không được đụng tới
 Công thức hạn (01), cập nhật khóa (02), đổi tên role/nhóm học (03), xóa khóa học (05), cột `provenance` của `star_ledger` và `learning_cycles`, mọi migration cũ.

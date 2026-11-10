@@ -30,8 +30,12 @@ Quy tắc: một người xuất hiện trong bảng nếu còn hoạt động �
 3. Sửa nếu lệch; thêm test; nếu thấy trường hợp mơ hồ (tài khoản ẩn danh hóa hiển thị tên gì, điểm tháng của người rời giữa nhiệm kỳ) thì ghi vào báo cáo để hỏi người dùng, không tự quyết.
 4. Cập nhật mục cuối `📄 Chưa kiểm chứng trong code` của `CKNK.md` 5.10 thành kết quả thật.
 
-### E. Thuật ngữ trên giao diện
-Chuẩn hóa "xuất bản / bản nháp" ở giao diện admin và học viên (nhãn nút, badge, thông báo, tooltip); "công khai / riêng tư" chỉ dùng cho quyền khách xem. Tìm bằng Grep các chuỗi như "Công khai", "Hạ về nháp", "Bản nháp" trong `src/app` và `src/components`.
+### E. Thuật ngữ trên giao diện — KHÔNG làm trong lượt này
+Việc chuẩn hóa "xuất bản / bản nháp" trên giao diện bị bỏ qua ở đây vì trùng file với prompt 02b (đang chạy song song); người điều phối sẽ làm sau khi gộp nhánh.
+
+### Phối hợp với worker khác (đang chạy song song)
+- Prompt 02b sửa editor khóa học, `draft/publish`, các trang học viên: không sửa các file đó.
+- Prompt 04 sở hữu mọi chỗ liên quan mốc sàn cutover trong `src/lib/competition-snapshots.ts` và `src/lib/period-leaderboard.ts`: ở phần D chỉ **đọc** hai file này; chỉ sửa khi chứng minh được lỗi cụ thể và sửa tối thiểu, rồi ghi vào `HANDOFF.md` mục "xung đột có thể".
 
 ## Test và nghiệm thu
 Test cho: xóa khóa có/không có attempt, reorder sai `courseId`, pools PUT, quyền xem ngân hàng đề, bảng đã chốt/đang diễn ra với người đã rời. Chạy `npm run test:unit`, `npx tsc --noEmit`. Đóng dòng 19 của bảng mục 9 (hoặc ghi rõ còn lệch) và cập nhật `docs/known-issues.md`.
