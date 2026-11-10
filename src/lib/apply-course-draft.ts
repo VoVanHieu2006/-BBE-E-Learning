@@ -1,5 +1,5 @@
 import { Prisma } from '@prisma/client'
-import { CourseDraftContent, CourseDraftError, DraftAssessment, DRAFT_UUID, assertQuestionEditAllowed, needsFinalExamVersion, reconcileDraftIds } from './course-draft'
+import { CourseDraftContent, CourseDraftError, DraftAssessment, DRAFT_UUID, assertDraftPublishable, assertQuestionEditAllowed, needsFinalExamVersion, reconcileDraftIds } from './course-draft'
 import { courseDraftInclude, courseDraftSnapshot, draftAssessmentInclude, DraftAssessmentRow, questionSnapshot } from './course-draft-snapshot'
 import { createFinalExamVersion } from './final-exam-version'
 import { assertFinalExamBankCapacity } from './final-exam-bank'
@@ -25,6 +25,12 @@ async function applyAssessment(tx: Tx, lessonId: string, a: DraftAssessment | nu
     assertQuestionEditAllowed(questionSnapshot(q), a.questions.find(next => next.id === q.id) || null, q._count.attempt_questions + q._count.attempt_answers)
   }
   await tx.question.deleteMany({ where: { id: { in: removedQuestions }, assessment_id: assessment.id } })
+  await tx.questionPool.deleteMany({ where: { assessment_id: assessment.id, id: { in: removedPools } } })
+  // Free every final position before reordering; pool order is unique within the quiz.
+  const temporaryOrder = Math.max(-1, ...(before?.question_pools || []).map(p => p.sort_order), a.pools.length - 1) + 1
+  for (const [index, p] of Array.from((before?.question_pools || []).filter(p => !removedPools.includes(p.id)).entries())) {
+    await tx.questionPool.update({ where: { id: p.id }, data: { sort_order: temporaryOrder + index } })
+  }
   const poolIds = new Map<string, string>()
   for (const [index, p] of Array.from(a.pools.entries())) {
     const data = { name: p.name.trim(), sort_order: index }
@@ -49,11 +55,11 @@ async function applyAssessment(tx: Tx, lessonId: string, a: DraftAssessment | nu
       else await tx.questionOption.create({ data: { ...data, question_id: question.id } })
     }
   }
-  await tx.questionPool.deleteMany({ where: { assessment_id: assessment.id, id: { in: removedPools } } })
 }
 
 /** Caller holds catalog/course/user locks. No transaction, requirement publish or cache side effects here. */
 export async function applyCourseDraft(tx: Tx, courseId: string, content: CourseDraftContent, actor: string) {
+  assertDraftPublishable(content)
   const before = await tx.course.findUniqueOrThrow({ where: { id: courseId }, include: courseDraftInclude })
   const oldContent = courseDraftSnapshot(before)
   const removedSessions = reconcileDraftIds(before.sessions, content.sessions)

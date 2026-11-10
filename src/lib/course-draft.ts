@@ -32,7 +32,7 @@ const text = (v: unknown, min = 1, max = 255) => typeof v === 'string' && v.trim
 const integer = (v: unknown, min: number, max: number) => Number.isInteger(v) && Number(v) >= min && Number(v) <= max
 
 /** Accept a complete snapshot only: missing collections must never mean delete everything. */
-export function validateDraftContent(value: unknown): CourseDraftContent {
+export function validateDraftContent(value: unknown, before?: CourseDraftContent): CourseDraftContent {
   const c = structuredClone(value) as CourseDraftContent
   if (!c || typeof c !== 'object' || !text(c.title, 2) || !['PUBLIC', 'PRIVATE'].includes(c.visibility) || !Array.isArray(c.sessions) || !('finalAssessment' in c)) invalid('Nội dung bản nháp không đầy đủ hoặc không hợp lệ.')
   const seen = new Set<string>()
@@ -69,7 +69,11 @@ export function validateDraftContent(value: unknown): CourseDraftContent {
       }
       for (const d of l.documents) {
         id(d)
-        if (!text(d.fileName) || !text(d.storageKey, 1, 500) || !text(d.mimeType, 1, 100) || !integer(d.fileSize, 1, 100 * 1024 * 1024)) invalid('Tài liệu bản nháp không hợp lệ.')
+        const old = d.id && DRAFT_UUID.test(d.id)
+          ? before?.sessions.find(row => row.id === s.id)?.lessons.find(row => row.id === l.id)?.documents.find(row => row.id === d.id)
+          : undefined
+        const unchanged = old && old.fileName === d.fileName && old.storageKey === d.storageKey && old.mimeType === d.mimeType && old.fileSize === d.fileSize
+        if (!text(d.fileName) || !text(d.storageKey, 1, 500) || !text(d.mimeType, 1, 100) || (!unchanged && !integer(d.fileSize, 1, 100 * 1024 * 1024))) invalid('Tài liệu bản nháp không hợp lệ.')
       }
       const a = l.assessment
       if (!a) continue
@@ -92,6 +96,14 @@ export function validateDraftContent(value: unknown): CourseDraftContent {
   }
   if (c.finalAssessment) config(c.finalAssessment)
   return c
+}
+
+/** Incomplete outlines can be saved while editing, but cannot replace a published course. */
+export function assertDraftPublishable(content: CourseDraftContent) {
+  if (!content.sessions.length) throw new CourseDraftError('EmptyCourse', 'Không thể xuất bản khóa học không có buổi học nào.')
+  for (const session of content.sessions) {
+    if (!session.lessons.length) throw new CourseDraftError('EmptySession', `Buổi học "${session.title}" không có bài học nào.`)
+  }
 }
 
 /** UUIDs must refer to this exact parent; new records use temporary IDs. */

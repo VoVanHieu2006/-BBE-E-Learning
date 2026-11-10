@@ -85,10 +85,10 @@ test('concurrent admin conflict blocks further writes until reload', async ({ pa
   await expect(page.locator('input[type="text"]').first()).toHaveValue(initial().title)
 })
 
-async function learner(page: Page, withLockedNewLesson = false) {
+async function learner(page: Page, withLockedNewLesson = false, quizPassed = false) {
   await page.route('**/api/**', route => {
     const path = new URL(route.request().url()).pathname
-    const state = { id: lessonId, lessonId, completed: true, lessonCompleted: true, videoCompleted: true, canAssess: true, canView: true, assessmentPassed: false, isNew: false, quizIsNew: true, progressPercentage: 100 }
+    const state = { id: lessonId, lessonId, completed: true, lessonCompleted: true, videoCompleted: true, canAssess: true, canView: true, assessmentPassed: quizPassed, isNew: false, quizIsNew: !quizPassed, progressPercentage: 100 }
     const learnerCourse: any = course()
     const states: any[] = [state]
     if (withLockedNewLesson) {
@@ -111,9 +111,25 @@ test('course shows new quiz on completed lesson and keeps final exam locked', as
   await expect(page.getByText('Mới', { exact: true })).toHaveCount(2)
   await expect(page.getByText('Bài mới đang khóa', { exact: false })).toBeVisible()
   await expect(page.getByText('Chúc mừng! Bạn đã hoàn thành toàn bộ khóa học này')).toHaveCount(0)
-  await expect(page.getByRole('link', { name: /Làm bài thi cuối khóa/ })).toHaveCount(0)
+  await expect(page.getByRole('link', { name: /Bắt đầu làm bài thi cuối khóa/ })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /Chưa mở khóa bài thi/ })).toBeDisabled()
   await page.screenshot({ path: `test-results/p02b-course-${info.project.name}.png`, fullPage: true })
 })
+
+for (const quizPassed of [false, true]) {
+  test(`final exam access on a completed lesson requires quiz passed=${quizPassed}`, async ({ page, context }) => {
+    await auth(page, context, 'MEMBER'); await learner(page, false, quizPassed)
+    await page.goto(`/student/courses/${courseId}`)
+    const finalExamLink = page.getByRole('link', { name: /Bắt đầu làm bài thi cuối khóa/ })
+    if (quizPassed) {
+      await expect(finalExamLink).toBeVisible()
+      await expect(finalExamLink).toHaveAttribute('href', `/student/courses/${courseId}/quiz`)
+    } else {
+      await expect(page.getByRole('button', { name: /Chưa mở khóa bài thi/ })).toBeDisabled()
+      await expect(finalExamLink).toHaveCount(0)
+    }
+  })
+}
 
 test('program tree marks a new quiz on a completed video', async ({ page, context }) => {
   await auth(page, context, 'MEMBER'); await learner(page)

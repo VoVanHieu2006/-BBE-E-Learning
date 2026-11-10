@@ -1,5 +1,34 @@
 # HANDOFF — Prompt 02b
 
+## Sửa lỗi reviewer chéo — đã triển khai, nghiệm thu một phần
+- Phạm vi: (1), (3), (4), (5), (6), (7); thêm test hồi quy trước khi sửa, không đổi schema/nghiệp vụ.
+- Đã xác nhận đúng nhánh `feat/p02b-editor-nhan-moi`. Ban đầu có `.impeccable/` và browser artifacts chưa track; giữ ngoài commit.
+- Không push/install/generate/migrate/DB thật. Để thay đổi trong working tree nếu Git metadata không ghi được.
+- (6): chặn khóa/buổi rỗng khi publish trước mọi write; vẫn cho lưu draft đang soạn dở.
+- Rủi ro còn lại (2): race giữa bắt đầu quiz và xóa đáp án chưa sửa theo yêu cầu; cần xử lý riêng đồng bộ/khóa hai luồng và test cạnh tranh trên DB test.
+- Đã sửa (1): xóa pool bỏ đi trước, chuyển các pool giữ lại sang vị trí tạm rồi gán thứ tự cuối; bảo toàn câu/đáp án đã có attempt.
+- Đã sửa (3), (4): PATCH visibility và unpublish tăng OCC nguyên tử; capture requirement dùng version không thấp hơn content_version hiện tại để republish không khôi phục base version cũ. Không đổi công thức hạn/quyền/schema.
+- Đã sửa (5): so sánh tài liệu theo ID, đúng session/lesson và toàn bộ metadata với snapshot đang chạy, chỉ áp giới hạn size cho tài liệu mới/đổi; GET/PUT/publish đều dùng snapshot tin cậy, PUT đọc trong khóa course.
+- Đã sửa (6): kiểm tra EmptyCourse/EmptySession trước mọi write của applyCourseDraft.
+- Đã sửa (7): selector đúng “Bắt đầu làm bài thi cuối khóa”, thêm kiểm tra nút khóa disabled và hai case quiz chưa đạt/đã đạt để kiểm chứng selector dương tính.
+- Test RED đã tái hiện lỗi unique pool, version không tăng, legacy bị chặn, publish rỗng và version bị lùi. Sau sửa: course-draft 8/8, course-draft-publish 10/10, course-draft-routes 8/8 PASS (26/26); dùng alias-hook của runner, không DB.
+- Kiểm chứng cuối của lượt sửa này:
+  - `npx tsc --noEmit`: PASS, exit 0.
+  - `npm run test:unit`: exit 1, **605 PASS / 2 FAIL**, 42 suite đã chạy. Hai FAIL ở `scripts/test/database-safety.test.cjs`: “DB suites refuse missing, remote, application, schema override and rerouting targets before loading Prisma” và “DB suites select only the explicit disposable loopback URL”, cùng do `spawnSync C:\nvm4w\nodejs\node.exe EPERM`. Không sửa/vượt guard. Hai suite cuối `load-tests/tests/safety.test.mjs`, `load-tests/tests/profiler.test.mjs` chưa chạy do runner dừng.
+  - Ba suite liên quan trong unit tổng: `course-draft` 8/8, `course-draft-publish` 10/10, `course-draft-routes` 8/8 PASS; thêm 8 test unit hồi quy.
+  - `npx playwright test -c playwright.course-update.config.ts`: exit 1, `Error: spawn EPERM`; **0 test browser thực thi**. Cấu hình hiện có mock API và trỏ DB về loopback port 1, không DB thật. Thêm hai case browser (chưa chạy), tổng 9 spec × desktop/mobile = 18 case dự kiến.
+  - `git -c core.whitespace=cr-at-eol -c core.safecrlf=false diff --check`: PASS.
+  - Rà soát chỉ đọc độc lập: không tìm thấy lỗi correctness mới trong diff. Chưa kiểm chứng constraint/concurrency bằng DB test hoặc UI bằng browser.
+- Lệch/giới hạn: kiểm tra rỗng chỉ ở publish để giữ thao tác lưu draft trung gian; thêm một dòng bảo vệ version trong `course-requirements.ts` là phần cần thiết của (4), không đổi nghiệp vụ hạn. Mọi PATCH có trường visibility đều tăng version, kể cả DRAFT/no-op, để bao phủ trường hợp đua với publication.
+- Trạng thái Git: `git add -- <12 file chỉ định>` thất bại: không tạo được `C:/Users/Acer/Desktop/E-learning/.git/worktrees/p02b/index.lock` (`Permission denied`). Thay đổi còn trong working tree, chưa commit/push; `.impeccable/` và browser artifacts có sẵn không thuộc thay đổi cần commit. Không đổi quyền hoặc thao tác ở thư mục gốc/nhánh khác.
+- File thay đổi trong **lượt sửa reviewer này** (12 file):
+  - `HANDOFF.md`.
+  - `src/lib/apply-course-draft.ts`, `src/lib/course-draft.ts`, `src/lib/course-requirements.ts`.
+  - `src/app/api/v1/courses/[courseId]/route.ts`, `unpublish/route.ts`, `draft/route.ts`, `draft/publish/route.ts` (ba đường dẫn sau cùng chung thư mục courseId).
+  - `src/test/course-draft.test.ts`, `src/test/course-draft-publish.test.ts`, `src/test/course-draft-routes.test.ts`, `src/test/browser/course-update.spec.ts`.
+
+Phần dưới là lịch sử triển khai trước lượt sửa reviewer này; kết quả kiểm chứng hiện tại lấy ở mục trên.
+
 - Nhánh: `feat/p02b-editor-nhan-moi`; chỉ làm trong worktree hiện tại. Không push, cài dependencies, generate Prisma hoặc kết nối DB.
 - Trạng thái ban đầu: working tree sạch. Đã đọc quy tắc chung, worker ngoài và prompt 02b.
 

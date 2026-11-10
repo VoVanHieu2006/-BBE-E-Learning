@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { validateDraftContent, reconcileDraftIds, assertQuestionEditAllowed, needsFinalExamVersion, assertDraftVersion, assertDraftIdentity } from '../lib/course-draft'
+import { CourseDraftContent, validateDraftContent, reconcileDraftIds, assertQuestionEditAllowed, needsFinalExamVersion, assertDraftVersion, assertDraftIdentity } from '../lib/course-draft'
 
 const id = '00000000-0000-4000-8000-000000000001'
 const question = { id, questionText: 'Câu hỏi', questionType: 'SINGLE_CHOICE' as const, points: 1, durationSeconds: 120, explanation: null, poolId: id, options: [{ id: 'temp-a', optionText: 'Đúng', isCorrect: true }, { id: 'temp-b', optionText: 'Sai', isCorrect: false }] }
@@ -8,6 +8,31 @@ const assessment = { title: 'Quiz', description: null, questionCount: 1, duratio
 const content = () => ({ title: 'Khóa học', description: null, visibility: 'PRIVATE', sessions: [{ id: 'temp-session', title: 'Buổi học', lessons: [{ id: 'temp-lesson', title: 'Bài học', video: { youtubeVideoId: 'abc', durationSeconds: 60 }, documents: [], assessment }] }], finalAssessment: null })
 
 describe('course draft safety', () => {
+  it('retains unchanged legacy documents but checks size for new or edited documents', () => {
+    for (const fileSize of [0, 101 * 1024 * 1024]) {
+      const before = validateDraftContent(content())
+      before.sessions[0].lessons[0].documents = [{ id: '00000000-0000-4000-8000-000000000099', fileName: 'legacy.pdf', fileSize, mimeType: 'application/pdf', storageKey: 'docs/legacy' }]
+      const draft = structuredClone(before)
+      draft.title = 'Tiêu đề đã sửa'
+      assert.doesNotThrow(() => validateDraftContent(draft, before))
+      for (const change of [{ fileName: 'renamed.pdf' }, { storageKey: 'docs/new' }, { mimeType: 'text/plain' }, { fileSize: fileSize + 1 }, { id: 'temp-new' }]) {
+        const edited = structuredClone(draft)
+        Object.assign(edited.sessions[0].lessons[0].documents[0], change)
+        // A zero-byte legacy document edited to one byte becomes valid.
+        if (fileSize === 0 && 'fileSize' in change) continue
+        assert.throws(() => validateDraftContent(edited, before), (e: any) => e.code === 'ValidationError')
+      }
+      const moved = structuredClone(draft)
+      moved.sessions[0].lessons.push({ ...moved.sessions[0].lessons[0], id: 'temp-other', assessment: null, documents: draft.sessions[0].lessons[0].documents })
+      moved.sessions[0].lessons[0].documents = []
+      assert.throws(() => validateDraftContent(moved, before), (e: any) => e.code === 'ValidationError')
+    }
+    for (const fileSize of [1, 100 * 1024 * 1024]) {
+      const draft: CourseDraftContent = validateDraftContent(content())
+      draft.sessions[0].lessons[0].documents = [{ fileName: 'new.pdf', fileSize, mimeType: 'application/pdf', storageKey: 'docs/new' }]
+      assert.doesNotThrow(() => validateDraftContent(draft))
+    }
+  })
   it('validates full snapshots and normalizes video duration', () => {
     const draft = content()
     ;(draft.sessions[0].lessons[0].video as any).durationSeconds = '61'

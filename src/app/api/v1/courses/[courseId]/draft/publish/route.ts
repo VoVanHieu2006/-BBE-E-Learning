@@ -7,6 +7,7 @@ import { assertDraftIdentity, assertDraftVersion, CourseDraftError, validateDraf
 import { finalExamBankError } from '@/lib/final-exam-bank'
 import { executePublishCourseRequirements } from '@/lib/course-requirements'
 import { lockLearningUser, lockCompetitionScope } from '@/lib/learning-periods'
+import { courseDraftInclude, courseDraftSnapshot } from '@/lib/course-draft-snapshot'
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -37,7 +38,7 @@ export async function POST(request: NextRequest, { params }: { params: { courseI
         await lockLearningUser(tx, userId)
       }
       await tx.$queryRaw`SELECT id FROM courses WHERE id = ${courseId}::uuid FOR UPDATE`
-      const course = await tx.course.findUnique({ where: { id: courseId } })
+      const course = await tx.course.findUnique({ where: { id: courseId }, include: courseDraftInclude })
       if (!course) throw new CourseDraftError('CourseNotFound', 'Khóa học không tồn tại.', 404)
 
       // 4. Find draft and verify base version
@@ -48,7 +49,7 @@ export async function POST(request: NextRequest, { params }: { params: { courseI
       assertDraftIdentity(body.expectedDraftId, draft.id)
       assertDraftVersion(body.expectedDraftVersion, draft.draft_version, draft.base_content_version, course.content_version)
       if (course.status !== 'PUBLISHED') throw new CourseDraftError('CourseNotPublished', 'Khóa học chưa xuất bản. Hãy tải lại trình chỉnh sửa.', 409)
-      const content = validateDraftContent(draft.content)
+      const content = validateDraftContent(draft.content, courseDraftSnapshot(course))
       await applyCourseDraft(tx, courseId, content, auth.context!.userId)
 
       // 6. Execute atomic publish requirements (increments content_version once, extends deadlines)

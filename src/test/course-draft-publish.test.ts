@@ -5,6 +5,7 @@ import { applyCourseDraft } from '../lib/apply-course-draft'
 import { courseDraftSnapshot } from '../lib/course-draft-snapshot'
 import { CourseDraftError } from '../lib/course-draft'
 import { courseEditBlock } from '../lib/course-edit-guard'
+import { captureCourseRequirementVersion } from '../lib/course-requirements'
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`
 /** Records the real publisher's writes without loading a DB or replacing business rules. */
@@ -35,10 +36,66 @@ function fixture(attempted = true) {
   tx.course.findUniqueOrThrow = async () => row
   tx.assessment.findUnique = async () => null // no final exam configured
   const content = courseDraftSnapshot(row)
-  return { row, content, writes, publish: () => applyCourseDraft(tx as Prisma.TransactionClient, row.id, content, id(10)) }
+  return { row, content, writes, tx, publish: () => applyCourseDraft(tx as Prisma.TransactionClient, row.id, content, id(10)) }
 }
 
 describe('applyCourseDraft with in-memory transaction', () => {
+  it('capturing changed requirements cannot restore a stale draft base version', async () => {
+    const f = fixture(false)
+    f.row.content_version = 5 // unpublish advanced OCC beyond requirement version 3
+    let courseVersion = 5
+    f.tx.courseRequirementVersion = {
+      findFirst: async () => ({ version: 3, lesson_ids: [], assessment_ids: [], final_version_id: null, fingerprint: '{}' }),
+      create: async ({ data }: any) => ({ id: id(90), ...data }),
+    }
+    f.tx.course.update = async ({ data }: any) => { courseVersion = data.content_version; return f.row }
+    const result = await captureCourseRequirementVersion(f.tx, id(1), new Date())
+    assert.equal(result.changed, true)
+    assert.ok(courseVersion >= 5, 'must not roll back to stale base version 4')
+    assert.equal(result.version.version, courseVersion)
+  })
+  it('removes a pool and moves its question without violating pool order uniqueness', async () => {
+    const f = fixture()
+    const assessment = f.row.sessions[0].lessons[0].assessment
+    assessment.question_pools.push({ id: id(11), name: 'Nhóm còn lại', sort_order: 1 })
+    const pools = new Map<string, number>([[id(6), 0], [id(11), 1]])
+    f.tx.questionPool.update = async ({ where, data }: any) => {
+      assert.ok(!Array.from(pools).some(([key, order]) => key !== where.id && order === data.sort_order), 'unique (assessment_id, sort_order)')
+      pools.set(where.id, data.sort_order)
+      return { id: where.id }
+    }
+    f.tx.questionPool.deleteMany = async ({ where }: any) => { for (const key of where.id.in) pools.delete(key) }
+    const next = f.content.sessions[0].lessons[0].assessment!
+    next.pools = [{ id: id(11), name: 'Nhóm còn lại' }]
+    next.questions[0].poolId = id(11)
+    await f.publish()
+    assert.deepEqual(Array.from(pools), [[id(11), 0]])
+    assert.equal(f.writes.find(w => w.table === 'question' && w.op === 'update')?.args.data.pool_id, id(11))
+    assert.equal(f.writes.filter(w => w.table === 'questionOption').length, 0)
+  })
+  it('swaps existing pools without violating pool order uniqueness', async () => {
+    const f = fixture()
+    f.row.sessions[0].lessons[0].assessment.question_pools.push({ id: id(11), name: 'Nhóm hai', sort_order: 1 })
+    const pools = new Map<string, number>([[id(6), 0], [id(11), 1]])
+    f.tx.questionPool.update = async ({ where, data }: any) => {
+      assert.ok(!Array.from(pools).some(([key, order]) => key !== where.id && order === data.sort_order), 'unique (assessment_id, sort_order)')
+      pools.set(where.id, data.sort_order)
+      return { id: where.id }
+    }
+    f.content.sessions[0].lessons[0].assessment!.pools = [{ id: id(11), name: 'Nhóm hai' }, { id: id(6), name: 'Nhóm gốc' }]
+    await f.publish()
+    assert.equal(pools.get(id(11)), 0)
+    assert.equal(pools.get(id(6)), 1)
+  })
+  it('rejects empty courses and sessions before any writes', async () => {
+    for (const kind of ['course', 'session']) {
+      const f = fixture(false)
+      if (kind === 'course') f.content.sessions = []
+      else f.content.sessions[0].lessons = []
+      await assert.rejects(f.publish(), (e: any) => e instanceof CourseDraftError && e.status === 400 && e.code === (kind === 'course' ? 'EmptyCourse' : 'EmptySession'))
+      assert.equal(f.writes.length, 0)
+    }
+  })
   it('published courses reject direct editing while draft courses remain editable', () => {
     const block = courseEditBlock('PUBLISHED')
     assert.equal(block?.status, 409)
@@ -59,8 +116,10 @@ describe('applyCourseDraft with in-memory transaction', () => {
   it('rejects deletion of an attempted lesson or session', async () => {
     for (const kind of ['lesson', 'session']) {
       const f = fixture()
+      f.content.sessions.push({ id: 'temp-session', title: 'Buổi mới', lessons: [{ id: 'temp-lesson', title: 'Bài mới', video: null, documents: [], assessment: null }] })
       if (kind === 'lesson') f.content.sessions[0].lessons = []
-      else f.content.sessions = []
+      else f.content.sessions.shift()
+      if (kind === 'lesson') f.content.sessions[0].lessons.push({ id: 'temp-replacement', title: 'Bài thay thế', video: null, documents: [], assessment: null })
       await assert.rejects(f.publish(), (e: unknown) => e instanceof CourseDraftError && e.status === 409 && e.code === (kind === 'lesson' ? 'LessonHasAttempts' : 'SessionHasAttempts'))
     }
   })
@@ -82,7 +141,7 @@ describe('applyCourseDraft with in-memory transaction', () => {
     omitted.content.sessions[0].lessons[0].assessment!.questions = []
     await omitted.publish()
     assert.ok(omitted.writes.some(w => w.table === 'question' && w.op === 'deleteMany' && w.args.where.id.in.includes(id(5))))
-    const session = fixture(false); session.content.sessions = []
+    const session = fixture(false); session.content.sessions = [{ id: 'temp-session', title: 'Buổi thay thế', lessons: [{ title: 'Bài mới', video: null, documents: [], assessment: null }] }]
     await session.publish()
     assert.ok(session.writes.some(w => w.table === 'session' && w.op === 'deleteMany' && w.args.where.id.in.includes(id(2))))
   })

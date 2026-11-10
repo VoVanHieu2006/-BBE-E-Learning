@@ -24,14 +24,15 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
   const course = await prisma.course.findUnique({ where: { id: params.courseId }, include: { ...courseDraftInclude, draft: true } })
   if (!course) return jsonError('CourseNotFound', 'Khóa học không tồn tại.', 404)
   let draftError: string | null = null
+  const initialContent = courseDraftSnapshot(course)
   if (course.draft) {
-    try { validateDraftContent(course.draft.content) }
+    try { validateDraftContent(course.draft.content, initialContent) }
     catch (e) { if (!(e instanceof CourseDraftError)) throw e; draftError = e.message }
   }
   return NextResponse.json({
     draft: course.draft ? draftResponse(course.draft) : null,
     draftError,
-    initialContent: courseDraftSnapshot(course),
+    initialContent,
     course: { id: course.id, title: course.title, contentVersion: course.content_version, status: course.status },
   }, { headers: { 'Cache-Control': 'private, no-store' } })
 }
@@ -42,16 +43,16 @@ export async function PUT(request: NextRequest, { params }: { params: { courseId
   if (auth.response) return auth.response
   const body = await request.json().catch(() => ({}))
   try {
-    const content = validateDraftContent(body.content)
     const draft = await prisma.$transaction(async tx => {
       await tx.$queryRaw`SELECT id FROM courses WHERE id = ${params.courseId}::uuid FOR UPDATE`
-      const course = await tx.course.findUnique({ where: { id: params.courseId } })
+      const course = await tx.course.findUnique({ where: { id: params.courseId }, include: courseDraftInclude })
       if (!course) throw new CourseDraftError('CourseNotFound', 'Khóa học không tồn tại.', 404)
       if (course.status !== 'PUBLISHED') throw new CourseDraftError('CourseNotPublished', 'Khóa học chưa xuất bản. Hãy tải lại trình chỉnh sửa.', 409)
       const existing = await tx.courseDraft.findUnique({ where: { course_id: course.id } })
       assertDraftIdentity(body.expectedDraftId, existing?.id || null)
       assertDraftVersion(body.expectedDraftVersion, existing?.draft_version || 0, body.baseContentVersion, course.content_version)
       if (existing && existing.base_content_version !== course.content_version) throw new CourseDraftError('BaseVersionMismatch', 'Bản xuất bản đã đổi. Hãy tải lại và bỏ bản nháp cũ trước khi chỉnh sửa.', 409)
+      const content = validateDraftContent(body.content, courseDraftSnapshot(course))
       return existing
         ? tx.courseDraft.update({ where: { id: existing.id }, data: { content: content as unknown as Prisma.InputJsonValue, draft_version: { increment: 1 } } })
         : tx.courseDraft.create({ data: { course_id: course.id, base_content_version: course.content_version, draft_version: 1, content: content as unknown as Prisma.InputJsonValue, created_by_user_id: auth.userId! } })
