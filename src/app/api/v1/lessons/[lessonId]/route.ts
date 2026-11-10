@@ -1,7 +1,9 @@
+import { deleteUnusedContent, ContentDeleteError } from '@/lib/content-deletion'
+import { cleanupDeletedContentAssets } from '@/lib/deleted-content-assets'
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { assertFinalExamBankCapacity, finalExamBankError, lockCourseExamBank } from '@/lib/final-exam-bank'
+import { finalExamBankError } from '@/lib/final-exam-bank'
 import { MAX_VIDEO_DURATION_SECONDS, MIN_VIDEO_DURATION_SECONDS, normalizeDurationSeconds } from '@/lib/validation/duration'
 import { checkLessonProgression } from '@/lib/progression'
 import { getLessonDetailServerCache, setLessonDetailServerCache } from '@/lib/server-cache'
@@ -220,18 +222,14 @@ export async function DELETE(request: NextRequest, { params }: { params: { lesso
   if (blocked) return blocked
 
   try {
-    await prisma.$transaction(async (tx) => {
-      await lockCourseExamBank(tx, lesson.session.course_id)
-      const attempts = await tx.attempt.count({ where: { assessment: { lesson_id: lessonId } } })
-      if (attempts) throw new Error('LessonHasAttempts')
-      await tx.lesson.delete({ where: { id: lessonId } })
-      await assertFinalExamBankCapacity(tx, lesson.session.course_id)
-    })
+    const assets = await prisma.$transaction(tx => deleteUnusedContent(tx, { courseId: lesson.session.course_id, lessonId }, (auth as any).context!.userId), { isolationLevel: 'Serializable', timeout: 30_000 })
+    await cleanupDeletedContentAssets(assets)
   } catch (error) {
+    if (error instanceof ContentDeleteError) return NextResponse.json({ error: { code: error.code, message: error.message } }, { status: error.status })
+    if ((error as { code?: string }).code === 'P2034') return NextResponse.json({ error: { code: 'ContentChanged', message: 'D\u1eef li\u1ec7u v\u1eeba thay \u0111\u1ed5i. Vui l\u00f2ng t\u1ea3i l\u1ea1i v\u00e0 th\u1eed l\u1ea1i.' } }, { status: 409 })
     invalidateCourseContentCaches(lesson.session.course_id, lessonId)
     const bankError = finalExamBankError(error)
     if (bankError) return NextResponse.json(bankError, { status: 409 })
-    if (error instanceof Error && error.message === 'LessonHasAttempts') return NextResponse.json({ error: { code: 'AssessmentVersionRequired', message: 'Bài học đã có lượt làm quiz; không thể xóa lịch sử.' } }, { status: 409 })
     throw error
   }
 

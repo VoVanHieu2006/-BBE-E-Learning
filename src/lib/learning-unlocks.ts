@@ -52,6 +52,13 @@ export async function persistLearningUnlocks(tx: Prisma.TransactionClient, userI
     }
   }), anchor)
   if (!unlocked.length) return
-  await tx.cycleLessonProgress.createMany({ data: unlocked.map((id) => ({ user_id: userId, lesson_id: id, learning_cycle_id: cycleId, unlocked_at: now })), skipDuplicates: true })
-  await tx.cycleLessonProgress.updateMany({ where: { user_id: userId, learning_cycle_id: cycleId, lesson_id: { in: unlocked }, unlocked_at: null }, data: { unlocked_at: now } })
+  // Content can disappear while progress/attempts are being read. Recheck in
+  // this transaction immediately before writing the table without a lesson FK.
+  // This narrows the race; a delete after this read still needs a shared locking
+  // protocol (or FK) across every writer to guarantee no orphan progress.
+  const liveLessons = await tx.lesson.findMany({ where: { id: { in: unlocked }, session: { course_id: courseId } }, select: { id: true } })
+  const liveIds = liveLessons.map(lesson => lesson.id)
+  if (!liveIds.length) return
+  await tx.cycleLessonProgress.createMany({ data: liveIds.map((id) => ({ user_id: userId, lesson_id: id, learning_cycle_id: cycleId, unlocked_at: now })), skipDuplicates: true })
+  await tx.cycleLessonProgress.updateMany({ where: { user_id: userId, learning_cycle_id: cycleId, lesson_id: { in: liveIds }, unlocked_at: null }, data: { unlocked_at: now } })
 }

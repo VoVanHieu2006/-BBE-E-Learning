@@ -928,7 +928,15 @@ Chapter bị loại với lý do `CORE_COMPLETION_BELOW_50_PERCENT`, **dù stage
 - Tài khoản bị ẩn danh hóa (xóa thông tin cá nhân) hiện tên gì trong bảng cũ?
 - Người rời giữa nhiệm kỳ: điểm các tháng đã chốt nằm ở bảng tháng; bảng nhiệm kỳ của họ không có. Có cần cách xem tổng điểm nhiệm kỳ riêng cho họ không?
 
-📄 Chưa kiểm chứng trong code; cần đối chiếu `src/lib/competition-snapshots.ts` và `src/lib/period-leaderboard.ts` trước khi sửa mã.
+📄 Đã đối chiếu code và kiểm chứng bằng fixture trong bộ nhớ (prompt 05, 10/11/2026):
+
+- `competitionCohortAt` dùng lịch sử `account_state_intervals`/affiliation tại mốc chụp; `individualPeriodRows` loại người đã rời khỏi bảng đang diễn ra. `period-leaderboard.ts` trả snapshot trước nhánh tính live; không lọc snapshot theo trạng thái tài khoản hiện tại. Hydration tên/email không loại người `INACTIVE`.
+- Đã sửa `historicalChapterMonthRows`: sao và thời điểm sao cuối dùng cùng cohort với quân số của từng stage. Test tái hiện trước sửa: 100 sao/1 người (còn cộng 90 sao của người đã rời); sau sửa: 10 sao/1 người.
+- Route tương thích `leaderboard/chapters?month=...` nay đọc snapshot cho tháng đã đóng; thiếu snapshot trả `AWAITING_SNAPSHOT`, không dựng lại lịch sử. Không sửa hay backfill snapshot có sẵn.
+- `leaderboard/**` live, `organization/dna-leaderboard`, `chapters/[chapterId]/dashboard/members` và `current-roster` đã đối chiếu bộ lọc ACTIVE/current affiliation; hai route sau dùng `listChapterLearners`. Chuyển giao/reset giữ đường snapshot hiện có, không đổi ở prompt 05.
+- Test: `src/test/ranking-departures.test.ts` (3 ca), `scripts/test/test-p05-routes.cjs` (13 ca gồm snapshot, quyền ngân hàng đề và API nội dung). Chưa nghiệm thu DB/production, race đồng thời, mọi tình huống chuyển giao/reset hoặc tài khoản ẩn danh hóa. Full unit bị chặn ở test tạo tiến trình con, chi tiết trong `HANDOFF.md`.
+
+Hai câu hỏi nghiệp vụ phía trên vẫn mở. Code hiện có hiển thị “Tài khoản đã gỡ” khi hydration gặp `anonymized_at`; đây là hành vi sẵn có, chưa coi là chính sách được duyệt và không sửa trong lượt này.
 
 ---
 

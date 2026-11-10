@@ -18,6 +18,7 @@ export default function AdminChaptersProgressPage() {
   const [loading, setLoading] = useState(true);
   const [leaderboardMonth, setLeaderboardMonth] = useState('');
   const [availableMonths, setAvailableMonths] = useState<string[]>([]);
+  const [leaderboardStatus, setLeaderboardStatus] = useState<{ state: string; reasonCode?: string }>({ state: '' });
   const [selectedChapter, setSelectedChapter] = useState<any | null>(null);
 
   // Drill-down Modal state: Level 1 = Chapter detail, Level 2 = Member profile
@@ -57,6 +58,7 @@ export default function AdminChaptersProgressPage() {
       setExcludedChapters(cached.excluded || []);
       setLeaderboardMonth(cached.monthKey || String(cached.month || '').slice(0, 7));
       setAvailableMonths(cached.availableMonths || []);
+      setLeaderboardStatus({ state: cached.state || '', reasonCode: cached.reasonCode });
       setLoading(false);
     } else {
       void loadChapters();
@@ -73,6 +75,7 @@ export default function AdminChaptersProgressPage() {
         setExcludedChapters(res.data.excluded || []);
         setLeaderboardMonth(res.data.monthKey || String(res.data.month || '').slice(0, 7));
         setAvailableMonths(res.data.availableMonths || []);
+        setLeaderboardStatus({ state: res.data.state || '', reasonCode: res.data.reasonCode });
       }
     } finally {
       setLoading(false);
@@ -362,6 +365,11 @@ export default function AdminChaptersProgressPage() {
               {[1, 2, 3].map((n) => (
                 <div key={n} className="h-16 bg-slate-100 rounded-xl"></div>
               ))}
+            </div>
+          ) : leaderboardStatus.state === 'AWAITING_SNAPSHOT' ? (
+            <div role="status" data-reason-code={leaderboardStatus.reasonCode} className="text-center py-16 text-[#737686]">
+              <p className="text-lg font-semibold text-[#172554] mb-1">Tháng này chưa có dữ liệu lịch sử</p>
+              <p className="text-sm text-[#737686]">Vui lòng chọn tháng khác để xem bảng xếp hạng.</p>
             </div>
           ) : chapters.length === 0 ? (
             <div className="text-center py-16 text-[#737686]">
