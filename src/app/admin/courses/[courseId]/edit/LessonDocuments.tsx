@@ -22,13 +22,13 @@ export function LessonDocumentUpload({ handleDirectUploadDoc, uploadingDocForLes
   );
 }
 
-type LessonDocumentListProps = Pick<CourseEditorState, 'isPublished' | 'handleDeleteDocument'> & {
+type LessonDocumentListProps = Pick<CourseEditorState, 'editorLocked' | 'handleDeleteDocument'> & {
   sId: string;
   lId: string;
   lesson: any;
 };
 
-export function LessonDocumentList({ isPublished, handleDeleteDocument, sId, lId, lesson }: LessonDocumentListProps) {
+export function LessonDocumentList({ editorLocked, handleDeleteDocument, sId, lId, lesson }: LessonDocumentListProps) {
   return (lesson.documents?.length > 0 && (
                                     <div className="pt-2 border-t border-[#cbdbf5]/50 space-y-1.5">
                                       <span className="text-[11px] font-bold text-[#737686] uppercase tracking-wider">
@@ -44,7 +44,7 @@ export function LessonDocumentList({ isPublished, handleDeleteDocument, sId, lId
                                             >
                                               <span>📄</span>
                                               <span className="font-medium truncate max-w-[180px]">{doc.fileName}</span>
-                                              {!isPublished && (
+                                              {!editorLocked && (
                                                 <button
                                                   onClick={() => handleDeleteDocument(sId, lId, dId, doc.fileName)}
                                                   className="ml-1 text-slate-400 hover:text-red-600"

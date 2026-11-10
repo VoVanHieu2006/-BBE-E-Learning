@@ -3,6 +3,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
+import NewContentChip from '@/components/learning/NewContentChip';
 import Toast, { ToastMessage } from '@/components/ui/Toast';
 import YouTubePlayer from '@/components/YouTubePlayer';
 import type { VideoProgressPayload } from '@/lib/video-progress-session';
@@ -520,7 +521,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
             <p className="text-[11px] text-[#737686] truncate">
               {lesson?.session?.title && `${lesson.session.title} • `}
               <span className="text-[#2563EB] font-bold">
-                {loadingLesson ? 'Đang tải bài giảng...' : (lesson?.title || 'Bài học')}
+                {loadingLesson ? 'Đang tải bài giảng...' : (lesson?.title || 'Bài học')} <NewContentChip show={!loadingLesson && progress?.isNew} />
               </span>
             </p>
           </div>
@@ -855,15 +856,15 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                       : 'border-transparent text-[#737686] hover:text-[#172554]'
                   }`}
                 >
-                  <span>📝 Bài kiểm tra</span>
+                  <span>📝 Bài kiểm tra</span> <NewContentChip show={progress?.quizIsNew} />
                   <span
                     className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                      progress?.completed
+                      progress?.assessmentPassed
                         ? 'bg-emerald-100 text-emerald-800'
                         : 'bg-orange-100 text-orange-800'
                     }`}
                   >
-                    {progress?.completed ? '✓ Đã đạt' : 'Cần làm'}
+                    {progress?.assessmentPassed ? '✓ Đã đạt' : 'Cần làm'}
                   </span>
                 </button>
               )}
@@ -877,7 +878,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
             ) : activeTab === 'desc' ? (
               <Card className="p-6 border border-[#eff4ff] shadow-sm space-y-3">
                 <h2 className="text-xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
-                  {lesson?.title}
+                  {lesson?.title} <NewContentChip show={progress?.isNew} />
                 </h2>
                 <p className="text-sm text-[#434655] leading-relaxed whitespace-pre-line">
                   {lesson?.description || 'Bài học này không có mô tả chi tiết.'}
@@ -939,10 +940,10 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div className="space-y-1">
                     <h3 className="text-base font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
-                      📝 {lesson.assessment.title || 'Bài kiểm tra bài học'}
+                      📝 {lesson.assessment.title || 'Bài kiểm tra bài học'} <NewContentChip show={progress?.quizIsNew} />
                     </h3>
                     <p className="text-xs text-[#737686] leading-relaxed max-w-xl">
-                      {progress?.completed
+                      {progress?.assessmentPassed
                         ? 'Bạn đã vượt qua bài kiểm tra này. Có thể xem lại kết quả bất cứ lúc nào.'
                         : 'Hoàn thành bài kiểm tra (đạt từ 85%) để vượt qua bài học. Trang làm bài sẽ tách riêng để bạn tập trung.'}
                     </p>
@@ -950,7 +951,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                   {isAdmin || progress?.canAssess === true ? (
                     <Link href={`/student/learning/${currentLessonId}/quiz`} className="shrink-0">
                       <Button variant="primary">
-                        {progress?.completed ? 'Xem bài kiểm tra →' : 'Vào làm bài kiểm tra →'}
+                        {progress?.assessmentPassed ? 'Xem bài kiểm tra →' : 'Vào làm bài kiểm tra →'}
                       </Button>
                     </Link>
                   ) : (
@@ -1029,6 +1030,8 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                           const lId = l.lessonId || l.id;
                           const isCurrent = lId === currentLessonId;
                           const learningState = courseProgress?.sessions?.find((ps: any) => ps.sessionId === sId)?.lessons?.find((pl: any) => pl.lessonId === lId);
+                          const displayState = isCurrent && !loadingLesson && progress?.lessonId === lId ? progress : learningState;
+                          const isQuizPassed = isLeaderOrAdmin || displayState?.assessmentPassed === true;
                           const isLocked = !isLeaderOrAdmin && Boolean(token) && learningState?.canView === false;
                           const isLessonDone =
                             isLeaderOrAdmin ||
@@ -1069,17 +1072,17 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
 
                               <div className="min-w-0 flex-1">
                                 <p className={`font-semibold line-clamp-2 ${isCurrent ? 'text-[#2563EB]' : 'text-[#172554]'}`}>
-                                  Bài {lIdx + 1}: {l.title}
+                                  Bài {lIdx + 1}: {l.title} <NewContentChip show={displayState?.isNew} />
                                 </p>
                               <div className="flex items-center gap-2 text-[10px] text-[#737686] mt-1 font-normal flex-wrap">
                                   <span>📹 {l.video?.durationSeconds ? `${Math.floor(l.video.durationSeconds / 60)}:${(l.video.durationSeconds % 60).toString().padStart(2, '0')}` : 'Video'}</span>
                                   {l.assessment && (
                                     <span className={`font-semibold px-1.5 py-0.5 rounded text-[9px] ${
-                                      isLessonDone
+                                      isQuizPassed
                                         ? 'bg-emerald-100 text-emerald-700'
                                         : 'bg-amber-100 text-amber-700'
                                     }`}>
-                                      {isLessonDone ? '✓ Quiz đạt' : '📝 Quiz'}
+                                      {isQuizPassed ? '✓ Quiz đạt' : '📝 Quiz'} <NewContentChip show={displayState?.quizIsNew} />
                                     </span>
                                   )}
                                   {l.documents?.length > 0 && <span>• 📎 {l.documents.length} tài liệu</span>}

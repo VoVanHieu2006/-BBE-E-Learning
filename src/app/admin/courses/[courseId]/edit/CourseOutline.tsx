@@ -6,7 +6,7 @@ import type { CourseEditorState } from './useCourseEditor';
 
 type Props = Pick<CourseEditorState,
   'course' |
-  'isPublished' |
+  'editorLocked' |
   'openAddSessionModal' |
   'handleMoveSession' |
   'openEditSessionModal' |
@@ -23,7 +23,7 @@ type Props = Pick<CourseEditorState,
 
 export default function CourseOutline({
   course,
-  isPublished,
+  editorLocked,
   openAddSessionModal,
   handleMoveSession,
   openEditSessionModal,
@@ -50,7 +50,7 @@ export default function CourseOutline({
                 </div>
                 <Button
                   size="sm"
-                  disabled={isPublished}
+                  disabled={editorLocked}
                   onClick={openAddSessionModal}
                 >
                   ＋ Thêm buổi học
@@ -60,8 +60,8 @@ export default function CourseOutline({
               {course.sessions?.length === 0 ? (
                 <Card className="text-center py-12 border-dashed border-2 border-slate-200">
                   <p className="text-base font-semibold text-[#172554] mb-2">Chưa có buổi học nào</p>
-                  <p className="text-xs text-[#737686] mb-4">Khóa học cần ít nhất 1 buổi học trước khi có thể công khai.</p>
-                  <Button size="sm" disabled={isPublished} onClick={openAddSessionModal}>
+                  <p className="text-xs text-[#737686] mb-4">Khóa học cần ít nhất 1 buổi học trước khi có thể xuất bản.</p>
+                  <Button size="sm" disabled={editorLocked} onClick={openAddSessionModal}>
                     ＋ Tạo buổi học đầu tiên
                   </Button>
                 </Card>
@@ -85,7 +85,7 @@ export default function CourseOutline({
                             </div>
                           </div>
 
-                          {!isPublished && (
+                          {!editorLocked && (
                             <div className="flex items-center gap-2 shrink-0 flex-wrap" onClick={(event) => { event.preventDefault(); event.stopPropagation(); }}>
                               {sIdx > 0 && (
                                 <button
@@ -156,7 +156,7 @@ export default function CourseOutline({
                                         <span className="text-xs font-bold text-[#737686]">
                                           {sIdx + 1}.{lIdx + 1}
                                         </span>
-                                        {!isPublished && (
+                                        {!editorLocked && (
                                           <div className="flex flex-col gap-0.5">
                                             {lIdx > 0 && (
                                               <button
@@ -210,7 +210,7 @@ export default function CourseOutline({
                                       </div>
                                     </div>
 
-                                    {!isPublished && (
+                                    {!editorLocked && (
                                       <div className="flex items-center gap-2 flex-wrap shrink-0">
                                         <button
                                           type="button"
@@ -247,7 +247,7 @@ export default function CourseOutline({
                                   </div>
 
                                   {/* Documents List */}
-                                  <LessonDocumentList sId={sId} lId={lId} lesson={lesson} isPublished={isPublished} handleDeleteDocument={handleDeleteDocument} />
+                                  <LessonDocumentList sId={sId} lId={lId} lesson={lesson} editorLocked={editorLocked} handleDeleteDocument={handleDeleteDocument} />
                                 </div>
                               );
                             })}

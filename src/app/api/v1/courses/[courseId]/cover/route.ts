@@ -29,7 +29,8 @@ export async function POST(request: NextRequest, { params }: { params: { courseI
 
   const course = await prisma.course.findUnique({ where: { id: params.courseId }, select: { id: true, status: true } })
   if (!course) return NextResponse.json({ error: { code: 'CourseNotFound' } }, { status: 404 })
-  if (course.status === 'PUBLISHED') return NextResponse.json({ error: { code: 'CoursePublished', message: 'Unpublish the course before changing its cover.' } }, { status: 409 })
+  const draftOnly = request.nextUrl.searchParams.get('draft') === 'true'
+  if (course.status === 'PUBLISHED' && !draftOnly) return NextResponse.json({ error: { code: 'CoursePublished', message: 'Hãy lưu ảnh bìa vào bản nháp thay đổi.' } }, { status: 409 })
 
   const data = await request.formData().catch(() => null)
   const file = data?.get('file')
@@ -39,7 +40,8 @@ export async function POST(request: NextRequest, { params }: { params: { courseI
 
   const timestamp = Math.floor(Date.now() / 1000)
   const folder = process.env.CLOUDINARY_FOLDER || 'course-covers'
-  const publicId = `course-${course.id}`
+  // Draft uploads must not overwrite the image used by the published course.
+  const publicId = draftOnly ? `course-${course.id}-draft-${crypto.randomUUID()}` : `course-${course.id}`
   const signatureBase = `folder=${folder}&overwrite=true&public_id=${publicId}&timestamp=${timestamp}${config.apiSecret}`
   const signature = crypto.createHash('sha1').update(signatureBase).digest('hex')
   const upload = new FormData()
@@ -56,6 +58,8 @@ export async function POST(request: NextRequest, { params }: { params: { courseI
   if (!cloudinaryResponse.ok || !payload.secure_url || !payload.public_id) {
     return NextResponse.json({ error: { code: 'CloudinaryUploadFailed', message: payload.error?.message || 'Cloudinary rejected the image.' } }, { status: 502 })
   }
+
+  if (draftOnly) return NextResponse.json({ courseId: course.id, coverUrl: payload.secure_url, coverPublicId: payload.public_id })
 
   const updated = await prisma.course.update({
     where: { id: course.id }, data: { cover_url: payload.secure_url, cover_public_id: payload.public_id },

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
+import NewContentChip from '@/components/learning/NewContentChip';
 import Modal from '@/components/ui/Modal';
 import Toast, { ToastMessage } from '@/components/ui/Toast';
 import LessonQuiz from '@/components/lesson/LessonQuiz';
@@ -97,7 +98,7 @@ export default function LessonQuizPage({ params }: { params: { lessonId: string 
 
     if (progressRes.ok && progressRes.data) {
       setProgress(progressRes.data);
-      if (progressRes.data.completed) setQuizCompleted(true);
+      setQuizCompleted(progressRes.data.assessmentPassed === true);
     }
 
     const assessmentId = lessonRes.data.assessment?.assessmentId || lessonRes.data.assessment?.id;
@@ -127,7 +128,7 @@ export default function LessonQuizPage({ params }: { params: { lessonId: string 
 
     if (progressRes.ok && progressRes.data) {
       setProgress(progressRes.data);
-      if (progressRes.data.completed) setQuizCompleted(true);
+      setQuizCompleted(progressRes.data.assessmentPassed === true);
     }
 
     if (attemptsRes?.ok && attemptsRes.data?.items) {
@@ -272,11 +273,11 @@ export default function LessonQuizPage({ params }: { params: { lessonId: string 
       <header data-quiz-header className="bg-white border-b border-[#e5eeff] px-6 py-3.5 flex items-center justify-between sticky top-0 z-30 shadow-xs">
         <div className="min-w-0">
           <h1 className="text-sm md:text-base font-bold text-[#172554] truncate" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
-            📝 {assessment.title || 'Bài kiểm tra bài học'}
+            📝 {assessment.title || 'Bài kiểm tra bài học'} <NewContentChip show={progress?.quizIsNew && !quizCompleted} />
           </h1>
           <p className="text-[11px] text-[#737686] truncate">
             {lesson.session?.courseTitle ? `${lesson.session.courseTitle} • ` : ''}
-            <span className="text-[#2563EB] font-bold">{lesson.title}</span>
+            <span className="text-[#2563EB] font-bold">{lesson.title} <NewContentChip show={progress?.isNew} /></span>
           </p>
         </div>
 

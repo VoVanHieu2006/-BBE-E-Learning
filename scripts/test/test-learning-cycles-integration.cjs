@@ -191,11 +191,22 @@ async function main() {
   assert.equal(replayedCarry.amount, 2, 'after a completed replay this month the carried attempt earns this month\'s stars')
 
   await publishCourseRequirements(course.id)
-  const oldDeadline = (await prisma.userLearningAssignment.findFirstOrThrow({ where: { user_id: user.id, ended_at: null } })).due_at
-  await prisma.lesson.createMany({ data: [1, 2].map((index) => ({ session_id: session.id, title: `New ${index}`, sort_order: index })) })
+  // A completed course with an expired deadline must reopen from the update instant.
+  await prisma.userLearningAssignment.updateMany({ where: { user_id: user.id, course_id: course.id, ended_at: null }, data: { status: 'COMPLETED', completed_at: new Date(), due_at: new Date(Date.now() - 10 * 86_400_000) } })
+  await prisma.learningPath.update({ where: { learning_cycle_id: cycle.id }, data: { due_at: new Date(Date.now() - 10 * 86_400_000) } })
+  for (const index of [1, 2]) await prisma.lesson.create({ data: {
+    session_id: session.id, title: `New ${index}`, sort_order: index,
+    video: { create: { youtube_video_id: `new-video-${index}`, duration_seconds: 60 } },
+    assessment: { create: { created_by: admin.id, title: `New quiz ${index}`, question_count: 1 } },
+  } })
+  const updateStarted = Date.now()
   await publishCourseRequirements(course.id)
+  const updateEnded = Date.now()
   const extendedPath = await prisma.learningPath.findUniqueOrThrow({ where: { learning_cycle_id: cycle.id } })
-  assert.equal(extendedPath.due_at.getTime(), oldDeadline.getTime() + 8 * 86_400_000, '2 added lessons * max(ceil(10/3),3) extends the shared deadline by 8 days')
+  assert.ok(extendedPath.due_at.getTime() >= updateStarted + 8 * 86_400_000 && extendedPath.due_at.getTime() <= updateEnded + 8 * 86_400_000, 'completed assignment: update instant + 2 full lessons * max(ceil(10/3),3) = 8 days')
+  const reopened = await prisma.userLearningAssignment.findFirstOrThrow({ where: { user_id: user.id, course_id: course.id, ended_at: null } })
+  assert.equal(reopened.status, 'ASSIGNED')
+  assert.equal(reopened.completed_at, null)
   assert.deepEqual((await prisma.userLearningAssignment.findFirstOrThrow({ where: { user_id: user.id, ended_at: null } })).due_at, extendedPath.due_at, 'current mandatory assignments use the extended shared deadline')
   assert.equal(await prisma.supplementalLearningRequirement.count({ where: { user_id: user.id } }), 0, 'current publication updates the shared path instead of creating a separate obligation')
   const updatedVersion = await prisma.courseRequirementVersion.findFirstOrThrow({ where: { course_id: course.id }, orderBy: { version: 'desc' } })
