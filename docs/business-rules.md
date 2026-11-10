@@ -68,7 +68,9 @@ Admin giảm ngân sách có sàn ba ngày: `max(D_assigned+T_new,D_adminChange+
 
 Thêm `k` bài vào khóa bắt buộc đã hoàn thành có thời gian bổ sung `k × max(ceil(T_course/L_after),3)` ngày **tính từ lúc thêm**, không cộng trùng khi retry; khóa của người đã xong mở lại thành chưa xong (người đang học dở: cộng dồn vào hạn hiện tại). Bài/quiz mới có nhãn "Mới", không mất tiến trình và không chặn bài sau; điểm thi cuối khóa đã đạt vẫn tính. Mã còn lệch (cộng vào hạn cũ, không mở lại khóa); xem known-issues, không coi là đã sửa.
 
-Dữ liệu cũ có sao thiếu month/cycle provenance chỉ còn là đường đọc. Mô hình deadline chung, mapping và season áp dụng ngay khi cấu hình. Không tự sửa ledger/history hay tạo snapshot ngược cho giai đoạn cũ.
+Dữ liệu cũ có sao thiếu month/cycle provenance giữ đường đọc lịch sử. Mô hình deadline chung luôn chạy; mapping và season áp dụng ngay khi cấu hình, không có bước kích hoạt. Release1: người chưa có cycle nhận `NATIVE` từ `now`, nhập video progress, `imported_due_at` và giữ đường đọc lộ trình lịch sử như trước. Cycle `LEGACY` đã tồn tại vẫn đọc attempt null; không tự nhập attempt null cũ vào cycle `NATIVE` mới. Giữ các trường provenance, không sửa ledger/history.
+
+Tháng runtime dùng ranh giới tự nhiên `[00:00 đầu tháng, 00:00 đầu tháng kế tiếp)` UTC+7, không viết lại month rows/snapshots đã có. Mùa DNA xét `[reward_boundary_at, dnaSeasonEnd(season.reward_boundary_at))`, không có mốc cấu hình làm sàn. Mùa đã kết thúc không có ledger `NATIVE` trong cửa sổ **và không có đúng snapshot** `ranking:DNA:<season.id>` là lịch sử không khả dụng, không dựng snapshot ngược. Có `NATIVE` và chưa có snapshot thì đủ điều kiện cho scheduler chốt; snapshot đã có được giữ nguyên kể cả không có `NATIVE`.
 
 ## Chapter và bảng xếp hạng
 

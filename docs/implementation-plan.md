@@ -14,6 +14,8 @@
 > (A) sửa mã để nút "Lên lịch chuyển giao nhiệm kỳ" ở role Lead Chapter hết báo lỗi vô cớ và để mã khớp quy tắc đã thống nhất;
 > (B) viết lại `docs/CKNK.md` thành tài liệu non-tech đọc được, xoá hết phần dư.
 >
+> **Cập nhật prompt04 / release1:** trang `/admin/learning-config` và API `/api/v1/admin/learning-config` giữ toàn bộ cấu hình catalog, mapping, mùa, chuẩn hóa tổ chức và retry outbox; không phải trang cần xóa. `/admin/learning-policy` và `/api/v1/admin/learning-policy` chỉ là redirect/alias tương thích trong release1. GET cấu hình bỏ `policy`; readiness cơ sở là `READY`/`asOf`, vẫn có lý do thiếu kỳ trong API periods. Migration release1 chỉ định nghĩa lại hàm DB; bảng/model cũ giữ cho rollback. Drop và bỏ model chỉ ở release2 được duyệt sau — xem [runbook hai release](operations.md#prompt04--triển-khai-hai-release).
+>
 > **Ghi chú:** kế hoạch bên dưới giữ nguyên như bản lập ban đầu để đối chiếu. Tên file thực tế là `src/lib/transfer-windows.ts` (số nhiều) và `src/lib/transfer-season-lookup.ts`; một số mã lý do đã được tinh chỉnh so với bản dự thảo. `chapterRewardBoundary` vẫn là **mốc đã qua** (không đổi sang mốc gần nhất); đặt lịch dùng `anchorNearest`/`windowOf`. Response `POST` dùng `normalized` thay cho cặp `normalizedAnchor`/`window`; phần kiểm tra tra mùa nằm chung trong `src/test/transfer-windows.test.ts`.
 
 ---
@@ -123,7 +125,7 @@ Trong `POST` route, **trước** mọi kiểm tra:
 
 ### A7. Validate cấu hình mùa của Admin (chặn nguyên nhân gốc)
 
-`admin/learning-policy/route.ts:42-53`: `starts_at`/`ends_at` phải **bằng đúng** `00:00 1/1`, `00:00 1/7`, `00:00 1/1 năm sau` (giờ VN) — tức mùa = trọn một cửa sổ. Từ chối mùa khối 6 tháng và mùa chồng lấn **ngay lúc lưu**, kèm thông điệp nêu rõ cửa sổ hợp lệ. Nhờ đó `SEASON_OVERLAP` / `SEASON_NOT_COVERING_DATE` gần như không thể xảy ra trên dữ liệu mới.
+`admin/learning-config/route.ts:42-53`: `starts_at`/`ends_at` phải **bằng đúng** `00:00 1/1`, `00:00 1/7`, `00:00 1/1 năm sau` (giờ VN) — tức mùa = trọn một cửa sổ. Từ chối mùa khối 6 tháng và mùa chồng lấn **ngay lúc lưu**, kèm thông điệp nêu rõ cửa sổ hợp lệ. Nhờ đó `SEASON_OVERLAP` / `SEASON_NOT_COVERING_DATE` gần như không thể xảy ra trên dữ liệu mới.
 
 ### A8. Dữ liệu & test đi kèm
 
@@ -237,7 +239,7 @@ Trong `POST` route, **trước** mọi kiểm tra:
 | 3 | Sửa `POST` route: chuẩn hoá → tra mùa theo cửa sổ → 7 mã lý do; trả `normalized` | gọi thử các tình huống, mỗi tình huống ra đúng câu |
 | 4 | Sửa `applyDueChapterReorganizations`: kiểm mùa theo `effective_at`; chặn trùng theo cửa sổ | integration test apply |
 | 5 | Dùng chung `isChapterTransferPausedAt`; xoá nhánh 6 tháng | 3 bộ test nền 138/138 |
-| 6 | Validate mùa ở `admin/learning-policy/route.ts`; seed; 3 file test cũ | integration test |
+| 6 | Validate mùa ở `admin/learning-config/route.ts`; seed; 3 file test cũ | integration test |
 | 7 | UI `TransferDraft.tsx`/`useTermTransition.ts`: hiện "giai đoạn + mốc thưởng" trước khi gửi; hiện đúng câu lỗi theo mã | xem tay trên giao diện |
 | 8 | **Ngoài phạm vi P0–P4:** đổi tên `CHAPTER_PRESIDENT`→`PRESIDENT`, xoá `TRAINEE`, thêm `CHAPTER_MANAGER`, nhiệm kỳ cố định | để đợt riêng |
 | 9 | **Thay bằng:** cập nhật tại chỗ `docs/CKNK.md` theo hành vi P0–P4 (không viết lại toàn bộ) | đọc lại các mục đã sửa |

@@ -7,13 +7,14 @@
 - Không DB thật, không tìm `.env`, không install/generate/migrate/db push; không đổi package/lockfile, migration cũ, công thức hạn, provenance hoặc imported_due_at.
 - Đầu session có thay đổi của người dùng ở `docs/prompts/04-go-cutover-va-learning-policy.md`; giữ nguyên, không đưa vào checkpoint của worker.
 
-## Trạng thái checkpoint runtime
+## Trạng thái cuối và checkpoint
 - Đã đọc lại HANDOFF cũ, quy tắc chung/worker ngoài, prompt 04 cập nhật và các phần KHBB/CKNK/tài liệu kỹ thuật liên quan.
 - Bước 0: giữ truy vấn chỉ đọc bên dưới cho người dùng; chưa chạy DB, không chặn việc viết bản 1 vì thiếu audit.
 - Bản 1 mục 2: đã thêm `prisma/migrations/20261110_learning_affiliation_without_policy/migration.sql`, chỉ CREATE OR REPLACE FUNCTION và bỏ câu policy gate; phần còn lại giữ nguyên bản trên nhánh. Chưa áp dụng.
 - Bản 1 mục 3: bỏ mọi đọc policy trong src; tháng mới theo đầu tháng tự nhiên UTC+7, không sửa hàng tháng đã tồn tại. Chu kỳ thiếu được tạo NATIVE bắt đầu now; nhập video và bằng chứng đường học cũ như trước. Bỏ hàm awardStars không dùng và trường importedDueAt trong response, không bỏ cột.
 - Bản 1 mục 4: route/trang chuẩn `learning-config`; API cũ alias GET/PUT cùng handler, trang cũ redirect. GET không còn policy; giữ cấu hình chương trình, nhóm, mapping, mùa, chuẩn hóa tổ chức, outbox và quyền ADMIN.
-- Bản 1 mục 5–6: đang dọn test/script/load-test và tài liệu; đang bổ sung test hồi quy dữ liệu NATIVE/LEGACY.
+- Bản 1 mục 5: hoàn tất test unit tháng, khởi tạo NATIVE, chu kỳ LEGACY/null attempts, hạn/tiến độ nhập, mùa DNA cũ/NATIVE/snapshot chốt, API GET/PUT/alias/quyền và đối chiếu migration. Đã dọn/review script audit, test tích hợp, remediation và load-test; rehearsal giữ guard loopback, kiểm tra hàm/trigger/lịch sử và có --release-2 opt-in sao lưu trước drop. Chưa chạy các script cần DB.
+- Bản 1 mục 6: đã cập nhật/review 11 tài liệu hiện có về cấu hình, dữ liệu lịch sử và triển khai hai bản. Không sửa prompt gốc.
 - Bản 2: đã viết `prisma/release-2/20261110_drop_learning_policy/migration.sql`, DROP không CASCADE; không đưa vào `prisma/migrations`, không bỏ model trong schema bản 1.
 
 ## Ngữ nghĩa dữ liệu đã chọn
@@ -105,13 +106,74 @@ ROLLBACK;
 5. Sau drop, rollback code cũ cần khôi phục bảng/backup, không chỉ rollback binary. Không bỏ bất kỳ provenance nào.
 
 ## Kiểm tra tại checkpoint
-- `npx tsc --noEmit`: PASS, exit 0 sau runtime/route/migration và sửa test tháng.
-- Grep src cho learning_policy/learningPolicy/cutover/MODEL_START: không còn khớp tại checkpoint.
-- Unit: chưa chạy lại ở checkpoint này; baseline từ session trước không phải nghiệm thu.
+- `npx tsc --noEmit`: PASS, exit 0 sau toàn bộ thay đổi runtime, route, test, script và tài liệu.
+- `npm run test:unit`: PASS, exit 0, 40 suite trên cây mã cuối. Lần chạy đầu lỗi mock delegate động của Prisma; đã sửa mock module trong test, không sửa runtime để né lỗi, và chạy lại toàn bộ thành công.
+- Test riêng `npm run test:unit -- learning-cycles`: PASS, 42 test; `npm run test:unit -- monthly-reward-reset`: PASS, 20 test. Các test này thuộc lần chạy toàn bộ cuối.
+- `git diff --check`: PASS. Grep src cho learning_policy/learningPolicy/cutover/MODEL_START: không còn khớp; load-test cũng không còn phụ thuộc policy.
+- Script tích hợp/rehearsal đã được đọc/review nhưng chưa thực thi; không lấy syntax check hoặc mock làm nghiệm thu DB.
 - Không integration/audit/rehearsal/browser: không có DB/app test hay env và worker chỉ được chạy kiểm tra offline. Không vượt guard, không khẳng định UI đã nghiệm thu.
 
 ## Xung đột có thể / còn lại
 - Prompt 03 sẽ đổi role/nhóm và có thể sửa enforce_single_learning_affiliation, learning-periods/readiness/catalog/schema/tài liệu; tích hợp giữ logic mới của prompt 03, chỉ gỡ policy gate.
 - Prompt 02b/05 sửa editor/draft/publish/xóa khóa/caches; chỉ bỏ import awardStars không dùng ở progress, không đổi hành vi các luồng đó.
 - Worker 04 sở hữu sàn mùa DNA trong competition-snapshots/period-leaderboard. Không đổi công thức xếp hạng/quyền.
-- Còn hoàn tất test hồi quy, review script/docs, chạy unit/typecheck cuối và checkpoint.
+- Mục 3 danh sách việc trong prompt vẫn nhắc MODEL_START, trái phần cập nhật và chỉ dẫn trực tiếp của người dùng. Đã dùng quy tắc NATIVE ở phần khảo sát; không sửa prompt của người dùng.
+- Bản 2 chỉ chuẩn bị SQL; bỏ model/generate/apply/restore rehearsal chờ bản 2 được duyệt. Giữ provenance và imported_due_at, không thực hiện tùy chọn xóa provenance.
+- Phần code bản 1 và kiểm tra offline đã hoàn tất. Các release gate DB/audit/browser, kiểm kê deployment cũ và tích hợp worker khác vẫn cần người dùng thực hiện trước triển khai.
+
+## Checkpoint trên nhánh
+- `4a870b7 chore(learning): retire policy reads and use native season evidence`: runtime, route/alias, SQL hai bản và test khởi đầu.
+- Checkpoint hoàn tất có thông điệp `chore(learning): verify policy-free contracts and document rollout`; chứa test hồi quy cuối, script/load-test, tài liệu và HANDOFF này, không gồm thay đổi prompt sẵn có của người dùng. Tra `git log -2 --oneline` để lấy SHA. Không push.
+
+## Danh sách 49 file worker sửa hoặc thêm qua hai checkpoint
+```text
+HANDOFF.md
+prisma/migrations/20261110_learning_affiliation_without_policy/migration.sql
+prisma/release-2/20261110_drop_learning_policy/migration.sql
+src/app/admin/learning-config/page.tsx
+src/app/admin/learning-policy/page.tsx
+src/app/api/v1/admin/learning-config/route.ts
+src/app/api/v1/admin/learning-policy/route.ts
+src/app/api/v1/assessments/[assessmentId]/attempts/route.ts
+src/app/api/v1/learning/me/route.ts
+src/app/api/v1/learning/periods/route.ts
+src/app/api/v1/lessons/[lessonId]/progress/route.ts
+src/lib/chapter-actual-terms.ts
+src/lib/chapter-term-results.ts
+src/lib/competition-snapshots.ts
+src/lib/learning-cycle-rules.ts
+src/lib/learning-periods.ts
+src/lib/learning-readiness-rules.ts
+src/lib/learning-readiness.ts
+src/lib/period-leaderboard.ts
+src/lib/stars.ts
+src/test/chapter-initial-rewards.test.ts
+src/test/learning-cycles.test.ts
+src/test/monthly-reward-reset.test.ts
+scripts/test/test-learning-cycles-integration.cjs
+scripts/test/test-fb-fixes.cjs
+scripts/test/test-completed-lessons-integration.cjs
+scripts/test/test-reward-pause-integration.cjs
+scripts/test/test-chapter-transfer-integration.cjs
+scripts/test/test-chapter-period-api.cjs
+scripts/test/test-learning-security.mjs
+scripts/test/rehearse-learning-migration.mjs
+scripts/audit/audit-chapter-ranking-readonly.cjs
+scripts/audit/audit-organization-integrity.mjs
+scripts/audit/audit-handbook-formulas.cjs
+scripts/db/remediate-video-completion.ts
+load-tests/inspect-supabase.mjs
+load-tests/fixtures/seed.mjs
+load-tests/fixtures/seed-supabase-baseline.mjs
+docs/api.md
+docs/CKNK.md
+docs/operations.md
+docs/implementation-plan.md
+docs/KHBB-ky-thuat.md
+docs/KHBB.md
+docs/architecture.md
+docs/business-rules.md
+docs/known-issues.md
+docs/testing.md
+docs/reference/handbook-formulas.md
+```

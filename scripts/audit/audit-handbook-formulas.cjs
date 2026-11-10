@@ -77,7 +77,6 @@ async function check(id, expected, run, validate) {
     const course = { id: 'course', title: 'Course', program_id: 'core', content_version: 1, mandatory_default_due_days: 20, final_assessment: null, sessions: [{ lessons: Array.from({ length: 7 }, (_, i) => ({ id: `lesson${i}`, assessment: null })) }] }
     const tx = {
       course: { findUniqueOrThrow: async () => course, update: async () => course },
-      learningPolicy: { findUnique: async () => ({ cutover_at: at(-10), mapping_approved_at: at(-10) }) },
       courseRequirementVersion: { findFirst: async () => ({ id: 'v1', version: 1, fingerprint: 'previous', lesson_ids: ['lesson0', 'lesson1', 'lesson2', 'lesson3', 'lesson4'] }), create: async args => ({ id: 'v2', ...args.data }) },
       userLearningAssignment: { findMany: async () => [{ user_id: 'user', learning_cycle_id: 'cycle' }], updateMany: async () => ({ count: 1 }) },
       learningCycle: { findUnique: async () => ({ id: 'cycle', ends_at: null }) },
@@ -93,7 +92,6 @@ async function check(id, expected, run, validate) {
       user: { findUnique: async () => ({ role: 'MEMBER', status: 'ACTIVE', anonymized_at: null }) },
       positionAssignment: { count: async ({ where }) => where.position.code.in.includes('CHAPTER_MANAGER') ? 1 : 0 },
       course: { findUnique: async () => ({ status: 'PUBLISHED' }) },
-      learningPolicy: { findUnique: async () => null },
     }
     return rewardEligibility(tx, 'manager', 'course', at(20))
   }, actual => assert.equal(actual, false))

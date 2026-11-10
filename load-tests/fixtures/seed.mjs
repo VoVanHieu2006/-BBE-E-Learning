@@ -12,19 +12,16 @@ if(!/^[a-zA-Z0-9_-]+\.private\.json$/.test(outputName)) throw new Error('Invalid
 const out=ROOT+'/fixtures/'+outputName;
 if(fs.existsSync(out)) throw new Error('Fixture exists; never overwrite accounts/run evidence');
 const prisma=new PrismaClient({datasources:{db:{url:db}}});
-const run=crypto.randomUUID(), now=new Date(), old=new Date(Date.now()-86400000);
+const run=crypto.randomUUID(), now=new Date();
 const password=crypto.randomBytes(24).toString('base64url');
 const hash=await bcrypt.hash(password,12);
 const users=[];
 try {
   // Refuse real accounts. Repeats create a fresh cohort to preserve cooldown rules.
   if (await prisma.user.count({where:{NOT:{email:{endsWith:'@loadtest.invalid'}}}})) throw new Error('Non-synthetic accounts detected; use a dedicated DB');
-  const policy=await prisma.learningPolicy.findUnique({where:{id:'default'}});
-  if(policy && (!policy.cutover_at || !policy.mapping_approved_at || policy.cutover_at>now)) throw new Error('Existing policy incompatible; no policy overwrite');
-  if(!policy) await prisma.learningPolicy.create({data:{id:'default',cutover_at:old,mapping_approved_at:old}});
   const local=new Date(now.getTime()+7*3600000), y=local.getUTCFullYear(), m=local.getUTCMonth();
   const monthKey=`${y}-${String(m+1).padStart(2,'0')}`;
-  const month=await prisma.competitionMonth.findUnique({where:{key:monthKey}}) || await prisma.competitionMonth.create({data:{key:monthKey,starts_at:old,ends_at:new Date(Date.UTC(y,m+1,1)-7*3600000)}});
+  const month=await prisma.competitionMonth.findUnique({where:{key:monthKey}}) || await prisma.competitionMonth.create({data:{key:monthKey,starts_at:new Date(Date.UTC(y,m,1)-7*3600000),ends_at:new Date(Date.UTC(y,m+1,1)-7*3600000)}});
   if(month.state!=='OPEN')throw new Error('Competition month closed');
   const dna=await prisma.organizationUnit.create({data:{name:'LOADTEST '+run,type:'DNA',status:'ACTIVE'}});
   const chapter=await prisma.chapter.create({data:{name:'LOADTEST '+run,status:'ACTIVE'}});

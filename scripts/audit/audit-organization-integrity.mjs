@@ -43,17 +43,16 @@ try {
   const { rows: leadCodes } = await db.query("SELECT code,scope,is_manager FROM positions WHERE code ILIKE '%CHAPTER%' ORDER BY code")
   const { rows: triggers } = await db.query("SELECT c.relname AS table_name,t.tgname,t.tgenabled FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid WHERE NOT t.tgisinternal AND c.relname IN ('users','chapter_members','organization_memberships','position_assignments') ORDER BY c.relname,t.tgname")
   const { rows: indexes } = await db.query("SELECT tablename,indexname,indexdef FROM pg_indexes WHERE schemaname=current_schema() AND tablename IN ('users','chapter_members','organization_memberships','position_assignments')")
-  const { rows: policy } = await db.query("SELECT cutover_at,mapping_approved_at FROM learning_policy WHERE id='default'")
   await db.query('COMMIT')
   const report = {
     ...clock[0], mode: 'READ_ONLY_DRY_RUN',
     summary: { multiChapterLeadAccounts: leadConflicts.length, dualDnaChapterAccounts: affiliationConflicts.length, normalizedEmailCollisionGroups: emailConflicts.length, ...diagnostics[0] },
-    leadCodes, leadConflicts, affiliationConflicts, triggers, indexes, policy,
+    leadCodes, leadConflicts, affiliationConflicts, triggers, indexes,
     remediation: { applied: false, approvalRequired: [...leadConflicts, ...affiliationConflicts].map(row => ({ ...row, decision: 'REVIEW_REQUIRED', action: 'Choose intended scope and effective timestamp from evidence; do not guess or rewrite historical stars.' })) },
   }
   await mkdir('artifacts/audits', { recursive: true })
   await writeFile('artifacts/audits/organization-integrity.json', JSON.stringify(report, null, 2) + '\n')
-  console.log(JSON.stringify({ mode: report.mode, ...report.summary, leadCodes, triggers, policy, leadConflicts }))
+  console.log(JSON.stringify({ mode: report.mode, ...report.summary, leadCodes, triggers, leadConflicts }))
 } catch (error) {
   // Never log connection strings, credentials, real email addresses, or driver stacks.
   console.error(JSON.stringify({ outcome: 'NOT_VERIFIED', code: error.code || error.name }))

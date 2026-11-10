@@ -1,6 +1,6 @@
 # Vận hành và triển khai
 
-Runbook không có nghĩa các bước đã thực hiện trên production trong đợt cleanup. Giữ nguyên dữ liệu, quyền, policy, migration/history và snapshot.
+Runbook không có nghĩa các bước đã thực hiện trên production. Release1 bỏ phụ thuộc cấu hình kích hoạt cũ; giữ nguyên dữ liệu, quyền, migration history và snapshot.
 
 ## Cấu hình
 
@@ -34,16 +34,26 @@ Trước release:
 4. Chạy [testing](testing.md), phân biệt PASS/FAIL/BLOCKED/NOT VERIFIED.
 5. Deploy revision hiểu schema; kiểm tra cả dữ liệu legacy đọc được, manual/auto submit, permissions và cron auth.
 
+### Prompt04 — triển khai hai release
+
+- **Release1:** forward migration `prisma/migrations/20261110_learning_affiliation_without_policy/migration.sql` chỉ `CREATE OR REPLACE FUNCTION enforce_single_learning_affiliation()` để bỏ điều kiện đọc `learning_policy`; giữ phần kiểm tra còn lại, không đổi role/quy tắc affiliation, không drop bảng. Bảng `learning_policy` và model `LearningPolicy` chỉ giữ cho rollback; runtime và hàm DB không còn đọc chúng.
+- **Trước deploy release1:** audit read-only `affiliationConflicts` và kiểm kê `learning_paths` có `imported_due_at IS NOT NULL` nhưng chưa có `learning_path_changes`. Xung đột affiliation phải được duyệt/xử lý trước khi triển khai hàm không điều kiện; không sửa dữ liệu tự động. Sao lưu riêng kết quả `SELECT * FROM learning_policy;` bên cạnh full backup/restore rehearsal, giữ bản sao ngoài Git như dữ liệu nhạy cảm.
+- **Contract release1:** trang chính `/admin/learning-config`, API `/api/v1/admin/learning-config`; `/admin/learning-policy` chuyển hướng và `/api/v1/admin/learning-policy` là alias tương thích trong release1. GET giữ `programs, targets, courses, pending, failed, seasons`, bỏ `policy`; readiness cơ sở trả `READY` cùng `asOf`, không có `policy`; API periods vẫn bổ sung trạng thái theo cấu hình tháng/nhiệm kỳ/mùa. PUT giữ catalog/mapping/seasons/normalization/outbox, quyền và validation cũ; không có bước bật policy. Nghiệm thu đường mới lẫn alias với các quyền hiện có.
+- **Release2 chưa áp dụng:** SQL drop chỉ chuẩn bị tại `prisma/release-2/20261110_drop_learning_policy/migration.sql`, **ngoài** `prisma/migrations` nên không thuộc `prisma migrate deploy`. Chỉ chạy riêng khi release1 ổn định và release2 được duyệt sau; phải xác nhận không còn reader cũ trong app, worker, trigger/function, audit/load-test hay deployment cũ. Sao lưu riêng `SELECT * FROM learning_policy;` trước drop. Dùng `DROP TABLE learning_policy;`, **không `CASCADE`**; phụ thuộc còn sót là lý do dừng, không cưỡng ép xóa.
+- **Schema/client release2:** giữ model `LearningPolicy` trong release1; chỉ bỏ model và sinh lại Prisma client khi release2 được duyệt sau. Giữ mọi trường provenance và `imported_due_at`. Sau drop, muốn khôi phục code cũ phải restore bảng (schema và dữ liệu) trước, không chỉ rollback app; restore đồng bộ DB/app theo backup đã rehearsal.
+
 ## Mapping và mùa chuyển giao
 
-1. Admin `/admin/learning-policy`: duyệt nội dung thật mọi published course và bốn chương trình. `artifacts/learning/mapping-audit.json`/`mapping-proposals.md` chỉ là đề xuất; tái tạo bằng `db:audit-learning-mapping`, không tự apply.
+1. Admin `/admin/learning-config`: duyệt nội dung thật mọi published course và bốn chương trình. `artifacts/learning/mapping-audit.json`/`mapping-proposals.md` chỉ là đề xuất; tái tạo bằng `db:audit-learning-mapping`, không tự apply.
 2. Chuẩn hóa code/Ban chỉ khi rõ ràng. Trùng/mơ hồ phải quyết định chủ động, không đoán theo tên; giữ compatibility history.
 3. `/admin/courses/mandatory`: kiểm tra 18 target và mọi legacy rule ngoài target chuẩn. Một ngân sách ngày chung mỗi khóa; không âm thầm bỏ rule.
-4. Xử lý rõ alias `CHAPTER_MANAGER` thành **Lead Chapter** (không phải President — President là vị trí riêng, thuộc LT và vẫn nhận sao); kiểm tra binding, affiliation và readiness. Không bỏ gate để làm chạy.
+4. Xử lý rõ alias `CHAPTER_MANAGER` thành **Lead Chapter** (không phải President — President là vị trí riêng, thuộc LT và vẫn nhận sao); kiểm tra binding và affiliation. Readiness cơ sở release1 là `READY`/`asOf`; lý do thiếu kỳ không thay audit cấu hình/evidence hoặc quyền.
 5. Cấu hình season không chồng lấn: `code`, `startsAt`, `endsAt`, `rewardBoundaryAt`; boundary 00:00 ngày 01/04 hoặc 01/10 UTC+7 và nằm trong season. Season phải phủ đúng **cửa sổ chuyển giao**: `01/01–30/06` (mốc `01/04`) và `01/07–31/12` (mốc `01/10`) — mọi thời điểm chuyển giao chuẩn hóa về mốc gần nhất, và mỗi cửa sổ chỉ được chuyển giao 1 lần. Applied season bất biến; season đang được batch `SCHEDULED` tham chiếu cũng không sửa; API chỉ cho sửa season tương lai/chưa dùng.
 6. Duyệt content/history, Chapter→DNA và release gates. Cấu hình mapping/season có hiệu lực ngay khi lưu và scheduler áp dụng theo thời gian thực.
 
-Dữ liệu từ trước mô hình hạn chung chỉ được đọc để giữ lịch sử. Không phân bổ lại ledger, reset progress hoặc cấp lại reward budget để làm đẹp mapping. Ngoại lệ nhiệm kỳ đầu theo [business-rules](business-rules.md), không dùng runbook cũ ép pause.
+Người chưa có cycle nhận `NATIVE` bắt đầu từ `now`; nhập video progress, `imported_due_at` và giữ đường đọc/read-only lộ trình lịch sử như trước. Cycle `LEGACY` đã có vẫn đọc attempt `learning_cycle_id IS NULL`; không tự nhập attempt null cũ vào cycle `NATIVE` mới. Giữ các trường provenance; không phân bổ lại ledger, reset progress hoặc cấp lại reward budget để làm đẹp mapping. Ngoại lệ nhiệm kỳ đầu theo [business-rules](business-rules.md), không dùng runbook cũ ép pause.
+
+Tháng runtime là `[00:00 đầu tháng, 00:00 đầu tháng kế tiếp)` UTC+7; không sửa ranh giới các month rows/snapshots đã có. Mùa xếp hạng DNA dùng `[season.reward_boundary_at, dnaSeasonEnd(season.reward_boundary_at))`, không có mốc cấu hình làm sàn. Với mùa đã kết thúc: không có `star_ledger` `provenance = NATIVE` trong cửa sổ **và không có đúng** snapshot `ranking:DNA:<season.id>` thì lịch sử không khả dụng, không dựng snapshot ngược. Có `NATIVE` và chưa có snapshot thì scheduler được phép chốt. Snapshot đã có giữ nguyên kể cả không có `NATIVE`; không dựng lại hoặc thay bằng snapshot loại/key khác.
 
 ## Scheduler
 

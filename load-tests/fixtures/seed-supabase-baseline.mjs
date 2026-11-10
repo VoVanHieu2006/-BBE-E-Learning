@@ -18,12 +18,11 @@ const result=prior||{scope:'SUPABASE_BASELINE',run,createdAt:now,complete:false,
 let stage='read-prerequisites';
 function persist(){fs.writeFileSync(out,JSON.stringify(result,null,2),{flag:fs.existsSync(out)?'w':'wx'});}
 try {
-  const [policy,month,courses]=await Promise.all([
-    p.learningPolicy.findUnique({where:{id:'default'}}),
+  const [month,courses]=await Promise.all([
     p.competitionMonth.findFirst({where:{starts_at:{lte:now},ends_at:{gt:now},state:'OPEN'}}),
     p.course.findMany({where:{status:'PUBLISHED',visibility:'PUBLIC'},relationLoadStrategy:'join',include:{sessions:{orderBy:[{sort_order:'asc'},{id:'asc'}],include:{lessons:{orderBy:[{sort_order:'asc'},{id:'asc'}],include:{video:true,assessment:{include:{questions:{include:{options:true}},question_pools:true}}}}}}}}),
   ]);
-  if(!policy?.cutover_at || !policy.mapping_approved_at || policy.cutover_at>now || !month)throw new Error('Existing learning policy/month not ready; no changes made');
+  if(!month)throw new Error('Existing open competition month required; no changes made');
   const first=courses.map(c=>({course:c,lesson:c.sessions.flatMap(s=>s.lessons)[0]})).filter(r=>r.lesson?.video?.duration_seconds>30);
   function validQuiz(r) {
     const a=r.lesson.assessment;if(!a||a.question_count<1||a.question_count>10||a.questions.length<a.question_count)return false;

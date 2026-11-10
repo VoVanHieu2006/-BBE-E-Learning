@@ -3,6 +3,8 @@ import assert from 'node:assert/strict'
 import { DAY_MS, budgetFingerprint, calculateSharedDeadline, isWithinRestoreWindow, competitionMonthBounds, firstReachedFinalBalance, heartbeatElapsed, highWaterIncrement } from '../lib/learning-cycle-rules'
 import { chapterCompetitionScore, competitionGroup } from '../lib/competition-ranking-rules'
 import { chapterRewardBoundary, isChapterRewardPaused } from '../lib/chapter-reward-gate'
+import { learningContext, currentCycleAttemptFilter, lockCompetitionScope } from '../lib/learning-periods'
+import { readLearningReadiness } from '../lib/learning-readiness'
 
 describe('Chapter overdue transfer reward pause', () => {
   const boundary = new Date('2026-09-30T17:00:00Z')
@@ -35,6 +37,80 @@ describe('Vietnam competition months', () => {
   })
   it('keeps natural boundaries through leap February', () => {
     assert.deepEqual(competitionMonthBounds(new Date('2028-02-29T16:59:59.999Z')), { key: '2028-02', startsAt: new Date('2028-01-31T17:00:00Z'), endsAt: new Date('2028-02-29T17:00:00Z') })
+  })
+})
+
+describe('Learning cycle initialization and historical reads', () => {
+  const now = new Date('2026-11-10T05:00:00Z')
+  const month = { id: 'month', starts_at: new Date('2026-10-31T17:00:00Z'), ends_at: new Date('2026-11-30T17:00:00Z'), state: 'OPEN' }
+
+  it('initializes NATIVE at now while importing old video progress and deadline evidence', async () => {
+    const assignedAt = new Date('2025-02-01T05:00:00Z')
+    const completedAt = new Date('2025-02-10T05:00:00Z')
+    const importedDue = new Date('2026-12-01T05:00:00Z')
+    let cycleData: any, progressData: any, pathData: any, createdMonth: any
+    const tx: any = {
+      competitionMonth: {
+        findUnique: async () => null,
+        upsert: async (args: any) => { createdMonth = args; return month },
+      },
+      learningCycle: {
+        findFirst: async () => null,
+        create: async ({ data }: any) => { cycleData = data; return { id: 'cycle', ...data } },
+      },
+      chapterMember: { findUnique: async () => ({ chapter_id: 'chapter' }) },
+      lessonProgress: { findMany: async () => [{ lesson_id: 'lesson', furthest_watched_position_seconds: 77, completed_at: completedAt }] },
+      cycleLessonProgress: { createMany: async (args: any) => { progressData = args } },
+      userLearningAssignment: { findMany: async () => [{ assigned_at: assignedAt, due_at: new Date('2025-03-01') }, { assigned_at: now, due_at: importedDue }] },
+      learningPath: { create: async ({ data }: any) => { pathData = data } },
+    }
+    const context = await learningContext(tx, 'user', now)
+    assert.equal(context.cycle.provenance, 'NATIVE')
+    assert.equal(cycleData.starts_at, now)
+    assert.equal(cycleData.chapter_id, 'chapter')
+    assert.equal(cycleData.trigger_key, `initial:user:${now.toISOString()}`)
+    assert.deepEqual(progressData, { data: [{ user_id: 'user', lesson_id: 'lesson', learning_cycle_id: 'cycle', furthest_seconds: 77, completed_at: completedAt, provenance: 'NATIVE' }], skipDuplicates: true })
+    assert.equal(pathData.starts_at, assignedAt)
+    assert.deepEqual(pathData.imported_due_at, importedDue)
+    assert.deepEqual(pathData.due_at, importedDue)
+    assert.deepEqual(createdMonth.update, {})
+    assert.deepEqual(createdMonth.create.starts_at, month.starts_at)
+  })
+
+  it('keeps an existing LEGACY cycle and persisted month unchanged without importing again', async () => {
+    const cycle = { id: 'legacy', starts_at: new Date('2025-02-01'), provenance: 'LEGACY' }
+    const historicalMonth = { ...month, starts_at: new Date('2026-11-02T00:00:00Z') }
+    const tx: any = { competitionMonth: { findUnique: async () => historicalMonth }, learningCycle: { findFirst: async () => cycle } }
+    const context = await learningContext(tx, 'user', now)
+    assert.equal(context.cycle, cycle)
+    assert.equal(context.month, historicalMonth)
+  })
+
+  it('keeps null attempts available only for an existing LEGACY cycle', async () => {
+    const startsAt = new Date('2025-02-01')
+    const tx = (cycle: any) => ({ learningCycle: { findFirst: async () => cycle } }) as any
+    assert.deepEqual(await currentCycleAttemptFilter(tx({ id: 'legacy', provenance: 'LEGACY', starts_at: startsAt }), 'user'), { OR: [{ learning_cycle_id: 'legacy' }, { learning_cycle_id: null, started_at: { lt: startsAt } }] })
+    assert.deepEqual(await currentCycleAttemptFilter(tx({ id: 'native', provenance: 'NATIVE' }), 'user'), { learning_cycle_id: 'native' })
+    assert.deepEqual(await currentCycleAttemptFilter(tx(null), 'user'), {})
+  })
+
+  it('locks the month without rewriting an existing historical start', async () => {
+    const historicalMonth = { ...month, starts_at: new Date('2026-11-02T00:00:00Z') }
+    let upsert: any
+    const tx: any = {
+      $queryRaw: async () => [{ now }],
+      competitionMonth: {
+        upsert: async (args: any) => { upsert = args; return historicalMonth },
+        findUniqueOrThrow: async () => historicalMonth,
+      },
+    }
+    assert.equal((await lockCompetitionScope(tx, now)).month, historicalMonth)
+    assert.deepEqual(upsert.update, {})
+    assert.deepEqual(upsert.create.starts_at, month.starts_at)
+  })
+
+  it('readiness needs no database access', async () => {
+    assert.deepEqual(await readLearningReadiness(now), { ready: true, reasonCode: 'READY', message: 'Cấu hình sẵn sàng.', asOf: now })
   })
 })
 
