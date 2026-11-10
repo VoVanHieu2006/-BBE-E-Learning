@@ -1,3 +1,4 @@
+import { canHoldPosition } from '@/lib/roles'
 import { replaceUserPosition, assignMembershipPosition } from '@/lib/position-replacement'
 import { prepareOrganizationTransition } from '@/lib/organization-transition'
 import { assertLeadAppointment, OrganizationConflict } from '@/lib/chapter-lead'
@@ -496,4 +497,3 @@ export async function POST(request: NextRequest) {
     throw error
   }
 }
-import { canHoldPosition } from '@/lib/roles'

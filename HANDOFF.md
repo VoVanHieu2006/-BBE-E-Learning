@@ -17,10 +17,10 @@ Sau **mỗi mục**: chạy `npx tsc --noEmit`, test liên quan, ghi kết quả
 
 1. [x] **Role và tên chuẩn (prompt 1,3,4):** schema enum; helper `isLeadRole`; đổi các kiểm tra role, mã chức vụ/ban/18 target trong `src`, `prisma/seed.ts`, `scripts`, `load-tests`. Loại alias cũ và giá trị MEMBER dùng cho chức vụ. Generate Prisma; test business-rules và role/target mới.
 2. [x] **LEAD invitation và phiên đăng nhập (prompt 2):** `invitations.ts`, auth/login/refresh/middleware/layout; DNA lead role LEAD, phân tuyến theo chức vụ; chặn MEMBER → LEAD ở gửi/nhận lời mời và bổ nhiệm. Token có auth_version; tên role cũ không được tiếp tục dùng. Test role/routing/invitation.
-3. [ ] **Một chức vụ, thay thế (prompt 5):** các nhánh ADD_MEMBERSHIP, ADD_MEMBER, APPOINT_POSITION và luồng chuyển ban/DNA; kết thúc membership/position cũ trong cùng transaction, giữ lịch sử, bảo vệ lead binding. Test chuyển đổi và từ chối bổ nhiệm sai role.
-4. [ ] **Quản lý không học (prompt 6):** `learning-assignments.ts`, target/roster và enforce; ADMIN/LEAD không tạo nghĩa vụ, đóng nghĩa vụ hiện có và gỡ riêng khóa quá hạn/restriction DEADLINE. Test có nhiều lý do khóa để không mở nhầm khóa khác.
-5. [ ] **Migration một bản (prompt 1–6, thay bản 2):** thêm migration đổi enum, backfill DNA lead, tăng auth_version; gộp position/FK/permission; đổi target/rule/BDHU; cập nhật function/trigger và ràng buộc nhiều chức vụ/ban. Không xóa dữ liệu học, không chạy DB. Test tĩnh SQL và kiểm tra các FK/trigger liên quan; ghi rõ chưa nghiệm thu DB.
-6. [ ] **Tài liệu và kiểm chứng cuối:** KHBB mục 9 dòng 1–4, KHBB-ky-thuat, business-rules, CKNK; hướng dẫn triển khai một bản; rg tên cũ đúng phạm vi, toàn bộ unit, tsc, diff-check; rà soát cuối và hoàn thiện bàn giao đúng mẫu.
+3. [x] **Một chức vụ, thay thế (prompt 5):** các nhánh ADD_MEMBERSHIP, ADD_MEMBER, APPOINT_POSITION và luồng chuyển ban/DNA; kết thúc membership/position cũ trong cùng transaction, giữ lịch sử, bảo vệ lead binding. Test chuyển đổi và từ chối bổ nhiệm sai role.
+4. [x] **Quản lý không học (prompt 6):** `learning-assignments.ts`, target/roster và enforce; ADMIN/LEAD không tạo nghĩa vụ, đóng nghĩa vụ hiện có và gỡ riêng khóa quá hạn/restriction DEADLINE. Test có nhiều lý do khóa để không mở nhầm khóa khác.
+5. [x] **Migration một bản (prompt 1–6, thay bản 2):** thêm migration đổi enum, backfill DNA lead, tăng auth_version; gộp position/FK/permission; đổi target/rule/BDHU; cập nhật function/trigger và ràng buộc nhiều chức vụ/ban. Không xóa dữ liệu học, không chạy DB. Test tĩnh SQL và kiểm tra các FK/trigger liên quan; ghi rõ chưa nghiệm thu DB.
+6. [x] **Tài liệu và kiểm chứng cuối:** KHBB mục 9 dòng 1–4, KHBB-ky-thuat, business-rules, CKNK; hướng dẫn triển khai một bản; rg tên cũ đúng phạm vi, toàn bộ unit, tsc, diff-check; rà soát cuối và hoàn thiện bàn giao đúng mẫu.
 
 ## Điểm kiểm tra trọng yếu
 - DNA lead không bị đưa nhầm vào Chapter; JWT refresh giữ loại quản lý và phiên bị thu hồi không sống lại.
@@ -39,8 +39,13 @@ Sau **mỗi mục**: chạy `npx tsc --noEmit`, test liên quan, ghi kết quả
 - Prompt 06 phải cập nhật bootstrap snapshot/manifest sau migration mới và nghiệm thu seed/DB trống.
 
 ## Rủi ro / chưa kiểm chứng
-- Không có DB test; migration và integration DB chỉ đọc/viết, chưa thực thi.
-- Commit chưa thử; sẽ ghi rõ nếu sandbox chặn git metadata ở ngoài worktree.
+- Migration `20261110_standardize_roles_positions` đã được chạy thử trên Postgres 16 tạm (docker, đã xóa) nạp từ `prisma/bootstrap/20261110_schema.sql` + dữ liệu mẫu dùng tên cũ: rỗng và có dữ liệu đều chạy được; kiểm tra gộp chức vụ/permission/rule, đổi 18 target, BDH→BDHU, role LEAD, đóng nghĩa vụ + gỡ khóa DEADLINE của quản lý, và các ràng buộc mới (MEMBER→LEAD, hai chức vụ, hai ban, Chapter+DNA bị chặn). Chưa chạy trên DB thật/production, chưa chạy các test tích hợp DB (`scripts/test/test-*.cjs|mjs`).
+- Migration dừng và hoàn tác nếu dữ liệu có người giữ hai chức vụ/hai ban hoặc chức vụ sai role (cố ý: không tự chọn thay người dùng). Dữ liệu seed cũ cấp hai vị trí cùng lúc sẽ gặp lỗi này; người dùng xóa dữ liệu trước khi triển khai.
+- Các danh sách loại trừ trong mã vẫn có mã `TT`/`TRAINEE` (vô hại, mã đã gộp vào `DNA_MEMBER`; nhóm DNA TT vẫn bị loại BXH theo mã đơn vị).
+- Prompt 06 phải cắt lại snapshot/manifest baseline sau migration này.
 
-- M?c 4 ho?n t?t: reconcile ki?m tra role tr??c khi t?o cycle, ??ng assignment/supplement/h?n, ch? g? DEADLINE v? m? OVERDUE_LOCK khi kh?ng c?n restriction kh?c. Targets theo m?t position. tsc PASS, manager-learning-exemption 5/5, deadline-enforcement 8/8.
-- Ph?t hi?n v? kh?i ph?c fixture array tr?ng b? ??i nh?m t? l?n ??i t?n ban ??u (bulk-invite, deadline-enforcement, test-fb-fixes, monthly-reward-reset, test-p05-assets).
+## Ghi chú của Claude (tiếp quản sau khi Codex hết hạn mức)
+- Codex đã làm xong cả mục 1–5 và phần lớn mục 6 trong commit WIP; checkbox cũ chưa được tick.
+- Sửa lỗi phát hiện khi rà soát: (1) chữ Việt bị hỏng thành dấu `?` trong 8 file (migration, UI, thông báo lỗi) — đã khôi phục; (2) migration: `END $;` thiếu `$` và `status` mơ hồ trong UPDATE user_learning_assignments — đã sửa, kiểm chứng trên DB tạm; (3) `learning-cycles.test.ts` thiếu `user` trong DB giả — đã thêm.
+- Thêm `src/test/standardize-migration.test.ts` (kiểm tra tĩnh SQL, đăng ký trong `scripts/test/run-tests.cjs`).
+- Tài liệu đã cập nhật: KHBB mục 9 dòng 1–4, KHBB-ky-thuat (bảng tên + thứ tự triển khai), business-rules, CKNK, api.md, operations.md, known-issues.md.

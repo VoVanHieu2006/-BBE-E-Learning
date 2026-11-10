@@ -329,10 +329,10 @@ Danh sách này dùng để lên kế hoạch sửa code. Tài liệu này mô t
 
 | # | Quy tắc đã chốt | Code hiện tại |
 |---|---|---|
-| 1 | Role là ADMIN / LEAD / MEMBER; DNA lead cũng là LEAD | Role còn tên `CHAPTER_LEADER`; DNA lead đang là MEMBER có chức vụ `DNA_LEAD` |
-| 2 | LEAD và ADMIN không có khóa bắt buộc, không bị khóa quá hạn | LEAD vẫn có thể bị gán khóa và bị khóa quá hạn |
-| 3 | Tên chức vụ và 18 nhóm học theo mục 2-3 | Còn nhiều tên cũ (`MEMBER_BTV`, `LEADER_BTV`, `CHAPTER_PRESIDENT`, `CHAPTER_MANAGER`, `DEPARTMENT_LEADER`…) |
-| 4 | Một người chỉ một chức vụ | Cơ sở dữ liệu mới chặn “vừa Chapter vừa DNA”; **chưa** chặn hai ban hoặc nhiều chức vụ |
+| 1 | Role là ADMIN / LEAD / MEMBER; DNA lead cũng là LEAD | **Đã làm (prompt 03, 10/11/2026).** Enum `user_role` / `invitation_role` đổi `CHAPTER_LEADER` → `LEAD`; người giữ `DNA_LEAD` được nâng role `LEAD` trong migration `20261110_standardize_roles_positions`; mọi chỗ kiểm tra role dùng `isLeadRole` (`src/lib/roles.ts`); phiên cũ mất hiệu lực (`auth_version` tăng, token cũ bị từ chối). Chưa nghiệm thu trên DB thật. |
+| 2 | LEAD và ADMIN không có khóa bắt buộc, không bị khóa quá hạn | **Đã làm (prompt 03).** `reconcileAssignments` không tạo nghĩa vụ cho role khác MEMBER, đóng nghĩa vụ/khóa bổ sung hiện có và chỉ gỡ khóa `DEADLINE`/`OVERDUE_LOCK` (giữ khóa mật khẩu, thủ công, vô hiệu hóa); cron `enforce` bỏ qua ADMIN/LEAD; migration dọn dữ liệu hiện có. |
+| 3 | Tên chức vụ và 18 nhóm học theo mục 2-3 | **Đã làm (prompt 03).** Chức vụ `CHAPTER_LEAD`, `DNA_LEAD`, `PRESIDENT`, `DEPARTMENT_LEAD`, `DEPARTMENT_MEMBER`, `DNA_MEMBER`; 18 nhóm `DEPARTMENT_MEMBER_<ban>`, `DEPARTMENT_LEAD_<ban>`, `PRESIDENT`, `DNA_MEMBER_<TT\|SGDC\|LDC>`; ban Định Hướng là `BDHU`. Migration gộp mã cũ và đổi `learning_targets.code`, `learning_rules.target_code`, `organization_units.code`. |
+| 4 | Một người chỉ một chức vụ | **Đã làm (prompt 03).** `assert_organization_integrity` từ chối hai chức vụ, hai ban và chức vụ không hợp role/đơn vị; mọi đường thêm/đổi ban, bổ nhiệm, mời, chuyển giao đều **thay thế** trong một transaction (`replaceUserPosition`, `src/lib/position-replacement.ts`). Trigger chặn đổi MEMBER thành LEAD. |
 | 5 | Khóa quá hạn chỉ mở bằng Mở khóa & Gia hạn | Còn hai đường khác mở được (kích hoạt tài khoản có nhập số ngày, và gỡ hạn chế trực tiếp) |
 | 6 | Sai mật khẩu **5** lần thì khóa, có hiển thị số lần còn lại, chỉ mở bằng mail đặt lại mật khẩu | Khóa sau **10** lần, không báo số lần còn lại, tự mở sau 30 phút, Admin mở được bằng nhiều đường |
 | 7 | Chỉ tính khóa chưa xong khi thêm khóa / đổi ban | Code tính cả khóa đã xong, nên hạn có thể dài hơn |

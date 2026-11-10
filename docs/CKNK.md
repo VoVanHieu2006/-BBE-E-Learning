@@ -5,6 +5,8 @@
 > **Cách đọc:** tài liệu viết **ngôn ngữ người dùng trước, thuật ngữ kỹ thuật sau** — mỗi quy tắc mở bằng câu hỏi đời thường ("chuyển giao vào ngày nào?", "hệ thống kiểm tra bao lâu một lần?"), rồi mới tới tên bảng/tên hàm, và luôn có **ví dụ thật**. Mỗi quy tắc đều kèm `file:line` của mã đang thực thi để tự kiểm chứng. Chỗ nào **còn ngoài phạm vi P0–P4** được đánh dấu 🔧 và gom về [Phần 7.2](#72-các-chỗ-cần-sửa-mã-để-khớp-quy-tắc-chuẩn). Chỗ nào mã và tài liệu cũ **nói khác nhau** được đánh dấu ⚠️. Tài liệu **chưa** xác nhận dữ liệu production (xem [Phần 7.6](#76-phạm-vi-chưa-kiểm-chứng)).
 >
 > **Phạm vi đợt P0–P4:** đã sửa mã và cập nhật tài liệu tại chỗ. Các hạng mục P5 (đổi mã vị trí, xoá `TRAINEE`, alias `CHAPTER_MANAGER`), khung nhiệm kỳ cố định và viết lại toàn bộ tài liệu **không nằm trong đợt này**.
+>
+> **Cập nhật 10/11/2026 (prompt 03):** hạng mục P5 về tên gọi đã xong: role `LEAD` (thay `CHAPTER_LEADER`, DNA lead cũng là `LEAD`), chức vụ `CHAPTER_LEAD`/`DNA_LEAD`/`PRESIDENT`/`DEPARTMENT_LEAD`/`DEPARTMENT_MEMBER`/`DNA_MEMBER`, 18 nhóm học tên mới, ban `BDHU`; không còn alias `CHAPTER_MANAGER`/`DEPARTMENT_LEADER`/`CHAPTER_PRESIDENT`. Các đoạn dưới đây còn nhắc tên cũ là mô tả lịch sử; khi mâu thuẫn, theo `KHBB.md` mục 2-3.
 
 ## Bảng tra nhanh
 
@@ -45,9 +47,9 @@ Hệ thống chỉ có **ba cấp vai trò** khi nói về quyền và về vi�
 
 Ba điều cần nhớ để không nhầm:
 
-1. **`LEAD` và `MEMBER` là cách gọi nghiệp vụ, không phải cột trong DB.** Cột `role` trong DB chỉ có ba giá trị `ADMIN`, `CHAPTER_LEADER`, `MEMBER` (`prisma/schema.prisma:16-22`). `LEAD_CHAPTER` / `LEAD_DNA` **được suy ra** từ vị trí đang giữ, qua `getLearningManagerKind()` (`src/lib/manager-learning-access.ts:5-19`): có vị trí `CHAPTER_LEAD`/`CHAPTER_MANAGER` → `LEAD_CHAPTER`; có `DNA_LEAD`/`DNA_MANAGER` → `LEAD_DNA`. Người giữ vị trí `DNA_LEAD` vẫn mang `role = 'MEMBER'` trong DB (`src/lib/invitations.ts:379`).
-2. **`MEMBER_CHAPTER` là tên gọi trong tài liệu** cho vị trí thành viên ban; mã vẫn dùng `position.code = 'MEMBER'`. Đây chỉ là **đổi tên cách gọi**, không phải đổi dữ liệu.
-3. **`PRESIDENT` là vị trí cấp Chapter, thuộc nhóm LT và vẫn nhận sao.** Trong mã hiện tại vị trí này vẫn mang mã `CHAPTER_PRESIDENT`; việc thống nhất về `PRESIDENT` nằm ngoài phạm vi P0–P4 (xem [Phần 7.2](#72-các-chỗ-cần-sửa-mã-để-khớp-quy-tắc-chuẩn), dòng 15).
+1. **Role trong DB là `ADMIN`, `LEAD`, `MEMBER`** (`prisma/schema.prisma`, enum `UserRole`). Người giữ chức vụ `DNA_LEAD` cũng mang `role = 'LEAD'`. Loại quản lý (`LEAD_CHAPTER` / `LEAD_DNA`) được suy ra từ chức vụ đang giữ qua `getLearningManagerKind()` (`src/lib/manager-learning-access.ts`).
+2. **Thành viên ban** giữ chức vụ `DEPARTMENT_MEMBER` (trước đây `MEMBER`, tài liệu cũ gọi `MEMBER_CHAPTER`).
+3. **`PRESIDENT` là vị trí cấp Chapter, thuộc nhóm LT và vẫn nhận sao.** Mã chức vụ trong DB là `PRESIDENT` (đã thống nhất từ `CHAPTER_PRESIDENT`).
 
 ### 0.2 Vị trí và các ban được lưu ở đâu
 
@@ -798,9 +800,9 @@ Thiếu dữ liệu → ghi **lý do loại**, **không** tính thành điểm 0
 ### 5.6 Ai được vào bảng xếp hạng
 
 ```ts
-if (role !== 'MEMBER' || positionCodes.some(c => ['DNA_LEAD','DNA_MANAGER','CHAPTER_LEAD','CHAPTER_MANAGER','TT','TRAINEE'].includes(c))) return null
+if (role !== 'MEMBER' || positionCodes.some(c => ['DNA_LEAD','CHAPTER_LEAD','TT','TRAINEE'].includes(c))) return null
 if (dna) return 'DNA'
-return positionCodes.some(c => ['PRESIDENT','CHAPTER_PRESIDENT','DEPARTMENT_LEAD','DEPARTMENT_LEADER'].includes(c)) ? 'LT' : 'MEMBER'
+return positionCodes.some(c => ['PRESIDENT','DEPARTMENT_LEAD'].includes(c)) ? 'LT' : 'MEMBER'
 ```
 
 ✅ `src/lib/competition-ranking-rules.ts:143-147`
@@ -822,25 +824,25 @@ Ba cấp vai trò `ADMIN` / `LEAD` / `MEMBER` đã định nghĩa ở [0.1](#01-
 
 | Nhãn nghiệp vụ        | `position.code` trong DB                      | Ghi chú                                                                                                       |
 | ------------------------ | ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `PRESIDENT`            | `CHAPTER_PRESIDENT`                           | 🔧 sẽ thống nhất về `PRESIDENT` — [7.2](#72-các-chỗ-cần-sửa-mã-để-khớp-quy-tắc-chuẩn) dòng 15 |
-| `DEPARTMENT_LEAD` (LT) | `DEPARTMENT_LEAD` hoặc `DEPARTMENT_LEADER` | Hai mã cùng nghĩa                                                                                           |
-| `MEMBER_CHAPTER`       | `MEMBER`                                      | Chỉ đổi **cách gọi**, dữ liệu giữ nguyên                                                        |
-| `DNA_MEMBER`           | `TT`, `SGDC`, `LDC`                       | 3 vị trí DNA                                                                                                 |
-| `CHAPTER_LEAD`         | `CHAPTER_LEAD` hoặc `CHAPTER_MANAGER`      | `CHAPTER_MANAGER` là alias — xem [7.4](#74-alias-chaptermanager-vẫn-được-nhận-sao)                     |
-| `DNA_LEAD`             | `DNA_LEAD` hoặc `DNA_MANAGER`              |                                                                                                                |
+| `PRESIDENT`            | `PRESIDENT`                                   | Đã đổi từ `CHAPTER_PRESIDENT` |
+| `DEPARTMENT_LEAD` (LT) | `DEPARTMENT_LEAD` | Đã gộp từ `DEPARTMENT_LEADER` |
+| `DEPARTMENT_MEMBER`    | `DEPARTMENT_MEMBER` | Đã đổi từ `MEMBER` |
+| `DNA_MEMBER`           | `DNA_MEMBER` (đơn vị `TT`, `SGDC`, `LDC`)     | Chức vụ `TT`/`TRAINEE` cũ đã gộp vào `DNA_MEMBER` |
+| `CHAPTER_LEAD`         | `CHAPTER_LEAD`      | Đã gộp từ `CHAPTER_MANAGER` (không còn alias) |
+| `DNA_LEAD`             | `DNA_LEAD`          | Đã gộp từ `DNA_MANAGER` |
 
 **Cách xác định một người đang giữ vai trò nào** (trả lời cho câu "làm sao biết ai là LEAD, ai là MEMBER"):
 
 1. Đọc các dòng `position_assignments` **còn hiệu lực** của người đó (`ends_at IS NULL`).
-2. Nếu có `DNA_LEAD` / `DNA_MANAGER` → **`LEAD`** (cụ thể `LEAD_DNA`).
-3. Nếu có `CHAPTER_LEAD` / `CHAPTER_MANAGER` → **`LEAD`** (cụ thể `LEAD_CHAPTER`).
+2. Nếu có `DNA_LEAD` → **`LEAD`** (cụ thể `LEAD_DNA`).
+3. Nếu có `CHAPTER_LEAD` → **`LEAD`** (cụ thể `LEAD_CHAPTER`).
 4. Còn lại → **`MEMBER`**, rồi chia nhóm theo bảng ánh xạ ở trên.
 
-Không dùng cột `role` để trả lời câu này: `role` chỉ phân biệt `ADMIN` / `CHAPTER_LEADER` / `MEMBER`, và người giữ vị trí `DNA_LEAD` vẫn mang `role = 'MEMBER'`. Xem thêm [0.2](#02-vị-trí-và-các-ban-được-lưu-ở-đâu).
+Từ prompt 03, cột `role` phân biệt `ADMIN` / `LEAD` / `MEMBER` và người giữ `DNA_LEAD` cũng là `LEAD`; chức vụ vẫn quyết định loại quản lý và nhóm học. Xem thêm [0.2](#02-vị-trí-và-các-ban-được-lưu-ở-đâu).
 
 Admin/Lead quản trị **không** nhận sao/BXH.
-⚠️ Riêng alias `CHAPTER_MANAGER` đã bị loại khỏi BXH nhưng **vẫn được nhận sao** — lỗi predicate đã ghi nhận ([Phần 7.4](#74-alias-chaptermanager-vẫn-được-nhận-sao)).
-⚠️ Mã `TRAINEE` trong danh sách loại trừ là **mã thừa** — nó chính là `DNA_MEMBER -> TT`, và `TT` đã có sẵn trong cùng danh sách. **Không xoá vội**: phải kiểm tra dữ liệu `positions` trước ([7.2](#72-các-chỗ-cần-sửa-mã-để-khớp-quy-tắc-chuẩn) dòng 16).
+✅ Alias `CHAPTER_MANAGER` đã bị xóa khỏi mã và dữ liệu (migration `20261110_standardize_roles_positions` gộp vào `CHAPTER_LEAD`).
+✅ Chức vụ `TRAINEE`/`TT` cũ đã gộp vào `DNA_MEMBER`; các danh sách loại trừ trong mã còn giữ hai mã này chỉ để phòng ngừa và không còn tác dụng với dữ liệu mới. Nhóm DNA `TT` vẫn bị loại khỏi bảng xếp hạng theo mã đơn vị `TT`.
 
 ### 5.7 Ảnh hưởng của việc dịch chuyển người giữa tháng
 
@@ -1046,7 +1048,7 @@ Tổng hợp mọi điểm đã đánh dấu 🔧 trong tài liệu. **Đợt P0
 | 16 | `TRAINEE` trong 4 danh sách loại trừ (`competition-ranking-rules.ts:144`, `leaderboard/route.ts:35-43`, `chapters/[chapterId]/route.ts:69`, `dna-leaderboard/route.ts:23`) | mã **thừa** — chính là `DNA_MEMBER -> TT`, mà `TT` đã có trong cùng danh sách                                                                | xoá `TRAINEE` **sau khi** kiểm tra `SELECT code FROM positions WHERE code = 'TRAINEE'` trả về 0 dòng — [5.6](#56-ai-được-vào-bảng-xếp-hạng)                             | 🟡 Thấp  |
 | 17 | `src/lib/learning-periods.ts:88-92`                                                                                                                                                   | danh sách chặn sao thiếu `CHAPTER_MANAGER` (trong khi `manager-learning-access.ts:12` có)                                                                 | thêm `CHAPTER_MANAGER` để alias không còn nhận sao — [7.4](#74-alias-chaptermanager-vẫn-được-nhận-sao)                                                                           | 🟠 Vừa   |
 
-> **Kết quả đợt P0–P4:** các dòng 1–6, 8, 9, 11–14 đã xong. Dòng 7 (`chapter_competition_terms` cố định), 15–17 (đổi mã vị trí, xoá `TRAINEE`, alias `CHAPTER_MANAGER`) **không nằm trong phạm vi** và vẫn cần xử lý riêng.
+> **Kết quả đợt P0–P4:** các dòng 1–6, 8, 9, 11–14 đã xong. Dòng 7 (`chapter_competition_terms` cố định), 15–17 (đổi mã vị trí, xoá `TRAINEE`, alias `CHAPTER_MANAGER`) **không nằm trong phạm vi** và vẫn cần xử lý riêng. **Cập nhật 10/11/2026:** dòng 15–17 đã xử lý trong prompt 03 (đổi mã vị trí, gộp `TRAINEE`, bỏ alias `CHAPTER_MANAGER`).
 
 ✅ **Kiểm tra hồi quy:** `chapter-initial-rewards`, `learning-cycles` và `transfer-windows` (mới) đã chạy qua; `chapter-six-month-transfer` và các script integration đã được cập nhật nhưng chưa chạy trong môi trường hiện tại vì thiếu `TEST_DATABASE_URL` trỏ tới `bbe_test_learning_cycles`.
 

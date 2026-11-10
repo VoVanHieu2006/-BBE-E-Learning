@@ -119,7 +119,7 @@ PUT giữ nguyên catalog, mapping khóa/chương trình/target, seasons, chuẩ
 | Method | Truy cập / guard | Đầu vào đọc trực tiếp | Response thành công | Mã lỗi thấy trong handler |
 |---|---|---|---|---|
 | [GET](../src/app/api/v1/admin/restrictions/route.ts#L9) | `authenticate`, `role ADMIN` | `query.limit`, `query.page` | `items, total, page, limit, totalPages` | `AccessDenied` |
-| [POST](../src/app/api/v1/admin/restrictions/route.ts#L34) | `authenticate`, `includes`, `role ADMIN`, `role CHAPTER_LEADER` | `body.action`, `body.reason`, `body.reasonType`, `body.sourceReference`, `body.targetId`, `body.targetType` | `chapterId, unlocked, unlockedUsers, stillLockedUsers`, `restriction, lockedUsers`, `restriction, status, cascadedChapterIds, lockedUsers`, `userId, unlocked, remainingRestriction` | `AccessDenied`, `ChapterOrganizationMissing`, `InvalidTransition`, `NotFound`, `ValidationError` |
+| [POST](../src/app/api/v1/admin/restrictions/route.ts#L34) | `authenticate`, `includes`, `role ADMIN`, `role LEAD` | `body.action`, `body.reason`, `body.reasonType`, `body.sourceReference`, `body.targetId`, `body.targetType` | `chapterId, unlocked, unlockedUsers, stillLockedUsers`, `restriction, lockedUsers`, `restriction, status, cascadedChapterIds, lockedUsers`, `userId, unlocked, remainingRestriction` | `AccessDenied`, `ChapterOrganizationMissing`, `InvalidTransition`, `NotFound`, `ValidationError` |
 
 ### `/api/v1/admin/users/[userId]/extend-deadline`
 
@@ -231,7 +231,7 @@ PUT giữ nguyên catalog, mapping khóa/chương trình/target, seasons, chuẩ
 
 | Method | Truy cập / guard | Đầu vào đọc trực tiếp | Response thành công | Mã lỗi thấy trong handler |
 |---|---|---|---|---|
-| [GET](../src/app/api/v1/chapters/[chapterId]/current-roster/route.ts#L11) | `authenticate`, `canAccessChapterPermission`, `role ADMIN`, `role CHAPTER_LEADER`, `role MEMBER` | — | `chapterId, chapterName, currentTermNumber, roster, unassignedMembers, departments, scheduledBatch, totalMembers` | `AccessDenied`, `ChapterNotFound` |
+| [GET](../src/app/api/v1/chapters/[chapterId]/current-roster/route.ts#L11) | `authenticate`, `canAccessChapterPermission`, `role ADMIN`, `role LEAD`, `role MEMBER` | — | `chapterId, chapterName, currentTermNumber, roster, unassignedMembers, departments, scheduledBatch, totalMembers` | `AccessDenied`, `ChapterNotFound` |
 
 ### `/api/v1/chapters/[chapterId]/dashboard/courses`
 
@@ -256,7 +256,7 @@ PUT giữ nguyên catalog, mapping khóa/chương trình/target, seasons, chuẩ
 
 | Method | Truy cập / guard | Đầu vào đọc trực tiếp | Response thành công | Mã lỗi thấy trong handler |
 |---|---|---|---|---|
-| [GET](../src/app/api/v1/chapters/[chapterId]/members/[userId]/course-progress/route.ts#L14) | `authenticate`, `hasChapterPermission`, `role ADMIN`, `role CHAPTER_LEADER` | — | `user, summary, courses, learningDetail` | `AccessDenied`, `ChapterScopeRequired`, `NotFound` |
+| [GET](../src/app/api/v1/chapters/[chapterId]/members/[userId]/course-progress/route.ts#L14) | `authenticate`, `hasChapterPermission`, `role ADMIN`, `role LEAD` | — | `user, summary, courses, learningDetail` | `AccessDenied`, `ChapterScopeRequired`, `NotFound` |
 
 ### `/api/v1/chapters/[chapterId]/members/[userId]/department`
 
@@ -293,7 +293,7 @@ PUT giữ nguyên catalog, mapping khóa/chương trình/target, seasons, chuẩ
 
 | Method | Truy cập / guard | Đầu vào đọc trực tiếp | Response thành công | Mã lỗi thấy trong handler |
 |---|---|---|---|---|
-| [POST](../src/app/api/v1/chapters/[chapterId]/reorganizations/parse-sheet/route.ts#L40) | `authenticate`, `canAccessChapterPermission`, `role ADMIN`, `role CHAPTER_LEADER` | `body.url` | `sourceUrl, items, matchedNewTerm, unmatchedSheetMembers, unmatchedCurrentMembers, errors, valid, summary` | `AccessDenied`, `ChapterOrganizationMissing`, `DocumentNotPublic`, `SheetEmpty`, `ValidationError` |
+| [POST](../src/app/api/v1/chapters/[chapterId]/reorganizations/parse-sheet/route.ts#L40) | `authenticate`, `canAccessChapterPermission`, `role ADMIN`, `role LEAD` | `body.url` | `sourceUrl, items, matchedNewTerm, unmatchedSheetMembers, unmatchedCurrentMembers, errors, valid, summary` | `AccessDenied`, `ChapterOrganizationMissing`, `DocumentNotPublic`, `SheetEmpty`, `ValidationError` |
 
 ### `/api/v1/chapters/[chapterId]/reorganizations`
 
@@ -360,7 +360,7 @@ PUT giữ nguyên catalog, mapping khóa/chương trình/target, seasons, chuẩ
 
 | Method | Truy cập / guard | Đầu vào đọc trực tiếp | Response thành công | Mã lỗi thấy trong handler |
 |---|---|---|---|---|
-| [GET](../src/app/api/v1/courses/[courseId]/route.ts#L9) | `authenticate`, `includes`, `role ADMIN`, `role CHAPTER_LEADER`, `role MEMBER`, `Đọc công khai có điều kiện; auth optional` | — | `cached`, `payload` | `AccessDenied`, `CourseNotFound`, `UNAUTHORIZED` |
+| [GET](../src/app/api/v1/courses/[courseId]/route.ts#L9) | `authenticate`, `includes`, `role ADMIN`, `role LEAD`, `role MEMBER`, `Đọc công khai có điều kiện; auth optional` | — | `cached`, `payload` | `AccessDenied`, `CourseNotFound`, `UNAUTHORIZED` |
 | [PATCH](../src/app/api/v1/courses/[courseId]/route.ts#L172) | `authenticate`, `role ADMIN` | `body.coverUrl`, `body.description`, `body.programCode`, `body.programId`, `body.title`, `body.visibility` | `courseId, id, title, description, status, visibility, publishedAt, coverUrl, programId, programCode, program` | `AccessDenied`, `CourseNotFound`, `CoursePublished`, `ProgramNotFound`, `ValidationError` |
 | [DELETE](../src/app/api/v1/courses/[courseId]/route.ts#L277) | `authenticate`, `role ADMIN` | — | `success` | `AccessDenied`, `CourseNotFound` |
 
@@ -380,7 +380,7 @@ PUT giữ nguyên catalog, mapping khóa/chương trình/target, seasons, chuẩ
 
 | Method | Truy cập / guard | Đầu vào đọc trực tiếp | Response thành công | Mã lỗi thấy trong handler |
 |---|---|---|---|---|
-| [GET](../src/app/api/v1/courses/[courseId]/students/route.ts#L14) | `authenticate`, `canAccessChapterPermission`, `role ADMIN`, `role CHAPTER_LEADER` | `query.chapterId` | `courseId, courseTitle, totalLessons, summary, items` | `AccessDenied`, `CourseNotFound` |
+| [GET](../src/app/api/v1/courses/[courseId]/students/route.ts#L14) | `authenticate`, `canAccessChapterPermission`, `role ADMIN`, `role LEAD` | `query.chapterId` | `courseId, courseTitle, totalLessons, summary, items` | `AccessDenied`, `CourseNotFound` |
 
 ### `/api/v1/courses/[courseId]/unpublish`
 
@@ -392,7 +392,7 @@ PUT giữ nguyên catalog, mapping khóa/chương trình/target, seasons, chuẩ
 
 | Method | Truy cập / guard | Đầu vào đọc trực tiếp | Response thành công | Mã lỗi thấy trong handler |
 |---|---|---|---|---|
-| [GET](../src/app/api/v1/courses/route.ts#L8) | `authenticate`, `role ADMIN`, `role CHAPTER_LEADER`, `role GUEST`, `role MEMBER`, `Đọc công khai có điều kiện; auth optional` | `query.limit`, `query.page` | `cached`, `responsePayload` | `UNAUTHORIZED` |
+| [GET](../src/app/api/v1/courses/route.ts#L8) | `authenticate`, `role ADMIN`, `role LEAD`, `role GUEST`, `role MEMBER`, `Đọc công khai có điều kiện; auth optional` | `query.limit`, `query.page` | `cached`, `responsePayload` | `UNAUTHORIZED` |
 | [POST](../src/app/api/v1/courses/route.ts#L104) | `authenticate`, `role ADMIN` | `body.coverUrl`, `body.description`, `body.title`, `body.visibility` | `courseId, id, title, description, status, visibility, coverUrl, createdAt` | `AccessDenied`, `ValidationError` |
 
 ### `/api/v1/documents/[documentId]/download`
@@ -447,13 +447,13 @@ PUT giữ nguyên catalog, mapping khóa/chương trình/target, seasons, chuẩ
 
 | Method | Truy cập / guard | Đầu vào đọc trực tiếp | Response thành công | Mã lỗi thấy trong handler |
 |---|---|---|---|---|
-| [POST](../src/app/api/v1/invitations/member/route.ts#L18) | `authenticate`, `canAccessChapterPermission`, `canAccessOrganizationUnitPermission`, `role ADMIN`, `role CHAPTER_LEADER` | `body.chapterId`, `body.email`, `body.organizationUnitId` | `invitationId, id, chapterId, organizationUnitId, status, expiresAt, emailSent, emailError` | `AccessDenied`, `OrganizationUnitNotFound`, `ValidationError` |
+| [POST](../src/app/api/v1/invitations/member/route.ts#L18) | `authenticate`, `canAccessChapterPermission`, `canAccessOrganizationUnitPermission`, `role ADMIN`, `role LEAD` | `body.chapterId`, `body.email`, `body.organizationUnitId` | `invitationId, id, chapterId, organizationUnitId, status, expiresAt, emailSent, emailError` | `AccessDenied`, `OrganizationUnitNotFound`, `ValidationError` |
 
 ### `/api/v1/invitations`
 
 | Method | Truy cập / guard | Đầu vào đọc trực tiếp | Response thành công | Mã lỗi thấy trong handler |
 |---|---|---|---|---|
-| [GET](../src/app/api/v1/invitations/route.ts#L10) | `authenticate`, `canAccessChapterPermission`, `canAccessOrganizationUnitPermission`, `role ADMIN`, `role CHAPTER_LEADER`, `role MEMBER` | `query.chapterId`, `query.kind`, `query.limit`, `query.organizationUnitId`, `query.page`, `query.status` | `cached`, `result` | `AccessDenied`, `ValidationError` |
+| [GET](../src/app/api/v1/invitations/route.ts#L10) | `authenticate`, `canAccessChapterPermission`, `canAccessOrganizationUnitPermission`, `role ADMIN`, `role LEAD`, `role MEMBER` | `query.chapterId`, `query.kind`, `query.limit`, `query.organizationUnitId`, `query.page`, `query.status` | `cached`, `result` | `AccessDenied`, `ValidationError` |
 
 ### `/api/v1/invitations/validate`
 
@@ -465,7 +465,7 @@ PUT giữ nguyên catalog, mapping khóa/chương trình/target, seasons, chuẩ
 
 | Method | Truy cập / guard | Đầu vào đọc trực tiếp | Response thành công | Mã lỗi thấy trong handler |
 |---|---|---|---|---|
-| [GET](../src/app/api/v1/leaderboard/chapters/[chapterId]/route.ts#L10) | `authenticate`, `canAccessChapterPermission`, `includes`, `role ADMIN`, `role CHAPTER_LEADER` | — | `chapterId, items` | `AccessDenied`, `ChapterNotFound` |
+| [GET](../src/app/api/v1/leaderboard/chapters/[chapterId]/route.ts#L10) | `authenticate`, `canAccessChapterPermission`, `includes`, `role ADMIN`, `role LEAD` | — | `chapterId, items` | `AccessDenied`, `ChapterNotFound` |
 
 ### `/api/v1/leaderboard/chapters`
 
@@ -555,7 +555,7 @@ Với `GET /api/v1/leaderboard?group=DNA&periodType=TERM`, cửa sổ xếp hạ
 
 | Method | Truy cập / guard | Đầu vào đọc trực tiếp | Response thành công | Mã lỗi thấy trong handler |
 |---|---|---|---|---|
-| [GET](../src/app/api/v1/members/me/courses/route.ts#L7) | `authenticate`, `isLearningManager`, `role ADMIN`, `role CHAPTER_LEADER`, `role MEMBER` | `query.limit`, `query.page` | `items, totalItems, totalPages, summary`, `items, totalItems, totalPages, summary, managementOnly` | `AccessDenied` |
+| [GET](../src/app/api/v1/members/me/courses/route.ts#L7) | `authenticate`, `isLearningManager`, `role ADMIN`, `role LEAD`, `role MEMBER` | `query.limit`, `query.page` | `items, totalItems, totalPages, summary`, `items, totalItems, totalPages, summary, managementOnly` | `AccessDenied` |
 
 ### `/api/v1/members/me/deadlines`
 
@@ -638,7 +638,7 @@ Với `GET /api/v1/leaderboard?group=DNA&periodType=TERM`, cửa sổ xếp hạ
 
 | Method | Truy cập / guard | Đầu vào đọc trực tiếp | Response thành công | Mã lỗi thấy trong handler |
 |---|---|---|---|---|
-| [PATCH](../src/app/api/v1/users/[userId]/route.ts#L13) | `assertCanChangeUserStatus`, `authenticate`, `canAccessChapterPermission`, `invalidateAdminOverviewCache`, `role ADMIN`, `role CHAPTER_LEADER` | — | `userId, status, affectedCount` | `AccessDenied`, `AccountRetired`, `UserNotFound`, `ValidationError` |
+| [PATCH](../src/app/api/v1/users/[userId]/route.ts#L13) | `assertCanChangeUserStatus`, `authenticate`, `canAccessChapterPermission`, `invalidateAdminOverviewCache`, `role ADMIN`, `role LEAD` | — | `userId, status, affectedCount` | `AccessDenied`, `AccountRetired`, `UserNotFound`, `ValidationError` |
 
 ### `/api/v1/users/me`
 
@@ -651,7 +651,7 @@ Với `GET /api/v1/leaderboard?group=DNA&periodType=TERM`, cửa sổ xếp hạ
 
 | Method | Truy cập / guard | Đầu vào đọc trực tiếp | Response thành công | Mã lỗi thấy trong handler |
 |---|---|---|---|---|
-| [GET](../src/app/api/v1/users/route.ts#L59) | `authenticate`, `role ADMIN`, `role CHAPTER_LEADER`, `role CHAPTER_MEMBER`, `role DNA`, `role DNA_LEAD`, `role LT`, `role MEMBER` | `query.chapterId`, `query.compact`, `query.limit`, `query.page`, `query.role`, `query.search`, `query.status` | `items, totalItems, totalPages, page, limit`, `responsePayload` | `AccessDenied` |
+| [GET](../src/app/api/v1/users/route.ts#L59) | `authenticate`, `role ADMIN`, `role LEAD`, `role CHAPTER_MEMBER`, `role DNA`, `role DNA_LEAD`, `role LT`, `role MEMBER` | `query.chapterId`, `query.compact`, `query.limit`, `query.page`, `query.role`, `query.search`, `query.status` | `items, totalItems, totalPages, page, limit`, `responsePayload` | `AccessDenied` |
 
 ### `/api/v1/youtube/info`
 

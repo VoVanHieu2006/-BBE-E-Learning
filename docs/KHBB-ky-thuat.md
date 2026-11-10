@@ -6,17 +6,19 @@
 >
 > **Cách đọc:** mỗi quy tắc quan trọng có ví dụ số và nguồn `file:line`. Mô hình hạn chung (một hạn cho cả lộ trình) là mô hình duy nhất đang chạy.
 >
-> **Tên trong mã và tên chuẩn đã chốt.** Phụ lục giữ nguyên tên đang có trong mã để tra cứu. Tên chuẩn trong `KHBB.md` sẽ được áp dụng vào mã ở giai đoạn sau:
+> **Tên cũ và tên chuẩn.** Prompt 03 (10/11/2026) đã đổi tên trực tiếp trong mã và trong migration `20261110_standardize_roles_positions`; các mô tả `file:line` bên dưới có thể còn dùng tên cũ ở phần lịch sử. Bảng đối chiếu để đọc lại tài liệu cũ:
 >
-> | Tên trong mã hiện tại | Tên chuẩn |
+> | Tên cũ (trước prompt 03) | Tên chuẩn (đang dùng) |
 > | --- | --- |
-> | role `CHAPTER_LEADER` (DNA lead hiện là `MEMBER` + chức vụ `DNA_LEAD`) | role `LEAD`, chức vụ `CHAPTER_LEAD` / `DNA_LEAD` |
+> | role `CHAPTER_LEADER` (DNA lead là `MEMBER` + chức vụ `DNA_LEAD`) | role `LEAD`, chức vụ `CHAPTER_LEAD` / `DNA_LEAD` |
 > | chức vụ `CHAPTER_MANAGER`, `DEPARTMENT_LEADER` | `CHAPTER_LEAD`, `DEPARTMENT_LEAD` |
-> | chức vụ `CHAPTER_PRESIDENT`, `PRESIDENT` | `PRESIDENT` |
-> | chức vụ `MEMBER` (thành viên ban) | `DEPARTMENT_MEMBER` |
+> | chức vụ `CHAPTER_PRESIDENT` | `PRESIDENT` |
+> | chức vụ `MEMBER` (thành viên ban), `TRAINEE`/`TT` | `DEPARTMENT_MEMBER`, `DNA_MEMBER` |
 > | nhóm học `MEMBER_BTV`… `LEADER_BTV`… | `DEPARTMENT_MEMBER_BTV`… `DEPARTMENT_LEAD_BTV`… |
 > | nhóm học `CHAPTER_PRESIDENT`, `DNA_TT`… | `PRESIDENT`, `DNA_MEMBER_TT`… |
-> | mã ban Định Hướng `BDH` (trong code và dữ liệu) | `BDHU` (tên dùng trong tài liệu; code chưa đổi) |
+> | mã ban Định Hướng `BDH` | `BDHU` |
+>
+> **Thứ tự triển khai:** migration và mã mới đi cùng một bản; token/cookie cũ mang `CHAPTER_LEADER` bị từ chối và người dùng phải đăng nhập lại. Nếu mã mới chạy trên dữ liệu chưa migrate thì `reconcileAssignments` sẽ kết thúc oan nghĩa vụ (không tìm thấy nhóm học), nên không triển khai mã trước migration. Migration dừng (và hoàn tác) nếu dữ liệu có người giữ hai chức vụ/hai ban hoặc chức vụ sai role, thay vì tự chọn.
 >
 > **Các quy tắc đã chốt mà mã chưa làm** (xem Phần 9 và bảng cuối `KHBB.md`): LEAD/ADMIN không bao giờ bị khóa vì quá hạn và không có khóa bắt buộc; mở khóa quá hạn chỉ qua “Mở khóa & Gia hạn”; khóa mật khẩu chỉ mở bằng mail đặt lại mật khẩu; thêm khóa/đổi ban chỉ tính khóa chưa xong; gỡ khóa có sàn 3 ngày nếu còn khóa khác; gia hạn tay không bị tính lại làm rút ngắn; “Mở khóa & Gia hạn” chỉ cho tài khoản đã bị khóa (hạn mới = hôm nay + N); sai mật khẩu 5 lần, có báo số lần còn lại; gỡ khóa rồi thêm lại trong 3 ngày thì hạn về đúng hạn cũ; khóa chỉ có trạng thái xuất bản / bản nháp; sửa khóa đã xuất bản qua bản nháp thay đổi + nút “Cập nhật khóa học”; thêm video/quiz riêng chia đôi số ngày, thêm bài thi cuối +3 ngày; thêm bài tính hạn từ lúc thêm và mở lại khóa đã xong; bài/quiz mới gắn nhãn “Mới” và không chặn bài sau.
 

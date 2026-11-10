@@ -132,6 +132,7 @@ describe('Learning cycle initialization and historical reads', () => {
             return attempts.filter(row => where.OR?.some((part: any) => row.learning_cycle_id === part.learning_cycle_id && (!part.started_at || row.started_at < part.started_at.lt)))
           },
         },
+        user: { findUniqueOrThrow: async () => ({ role: "MEMBER" }), findUnique: async () => ({ role: "MEMBER" }) },
         organizationMembership: { findFirst: async () => null, findMany: async () => [] },
         positionAssignment: { findMany: async () => [] },
         learningRule: { findMany: async () => [rule] },
