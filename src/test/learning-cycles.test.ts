@@ -25,14 +25,16 @@ describe('Chapter overdue transfer reward pause', () => {
 })
 
 describe('Vietnam competition months', () => {
-  const cutover = new Date('2026-09-15T05:00:00Z')
-  it('uses the historical cutover floor for the first shortened official month', () => {
-    assert.deepEqual(competitionMonthBounds(cutover, cutover), { key: '2026-09', startsAt: cutover, endsAt: new Date('2026-09-30T17:00:00Z') })
+  it('uses the natural start of the month even for the first activity mid-month', () => {
+    assert.deepEqual(competitionMonthBounds(new Date('2026-09-15T05:00:00Z')), { key: '2026-09', startsAt: new Date('2026-08-31T17:00:00Z'), endsAt: new Date('2026-09-30T17:00:00Z') })
   })
   it('changes months exactly at midnight UTC+7, including December', () => {
-    assert.equal(competitionMonthBounds(new Date('2026-09-30T16:59:59.999Z'), cutover).key, '2026-09')
-    assert.equal(competitionMonthBounds(new Date('2026-09-30T17:00:00Z'), cutover).key, '2026-10')
-    assert.equal(competitionMonthBounds(new Date('2026-12-31T17:00:00Z'), cutover).key, '2027-01')
+    assert.equal(competitionMonthBounds(new Date('2026-09-30T16:59:59.999Z')).key, '2026-09')
+    assert.equal(competitionMonthBounds(new Date('2026-09-30T17:00:00Z')).key, '2026-10')
+    assert.equal(competitionMonthBounds(new Date('2026-12-31T17:00:00Z')).key, '2027-01')
+  })
+  it('keeps natural boundaries through leap February', () => {
+    assert.deepEqual(competitionMonthBounds(new Date('2028-02-29T16:59:59.999Z')), { key: '2028-02', startsAt: new Date('2028-01-31T17:00:00Z'), endsAt: new Date('2028-02-29T17:00:00Z') })
   })
 })
 

@@ -1,13 +1,12 @@
 /** All competition boundaries are instants; Vietnam has no daylight saving time. */
 export const DAY_MS = 86_400_000
-/** `cutover` is an optional historical floor kept for legacy period attribution. */
-export function competitionMonthBounds(at: Date, cutover?: Date | null) {
+export function competitionMonthBounds(at: Date) {
   const local = new Date(at.getTime() + 7 * 3_600_000)
   const year = local.getUTCFullYear(), month = local.getUTCMonth()
   const naturalStart = new Date(Date.UTC(year, month, 1) - 7 * 3_600_000)
   return {
     key: `${year}-${String(month + 1).padStart(2, '0')}`,
-    startsAt: cutover ? new Date(Math.max(naturalStart.getTime(), cutover.getTime())) : naturalStart,
+    startsAt: naturalStart,
     endsAt: new Date(Date.UTC(year, month + 1, 1) - 7 * 3_600_000),
   }
 }

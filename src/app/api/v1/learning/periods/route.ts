@@ -78,7 +78,7 @@ export async function GET(request: NextRequest) {
     : await prisma.transferSeason.findMany({ orderBy: { starts_at: 'desc' }, take: 30 })
 
   const now = new Date()
-  const base = await readLearningReadiness(prisma, now)
+  const base = await readLearningReadiness(now)
   const periodReadiness = {
     month: readinessForReason(months.some(month => month.starts_at <= now && month.ends_at > now) ? 'READY' : 'MONTH_NOT_CONFIGURED'),
     term: readinessForReason(terms.some(term => term.starts_at <= now && (!term.ends_at || term.ends_at > now)) ? 'READY' : 'TERM_NOT_CONFIGURED'),

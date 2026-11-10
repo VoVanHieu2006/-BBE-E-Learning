@@ -63,7 +63,7 @@ describe('monthly star reset', () => {
 
   it('quiz start gate does not skip the replay check when the month row is missing', () => {
     const source = read('src/app/api/v1/assessments/[assessmentId]/attempts/route.ts')
-    assert.match(source, /const monthBounds = competitionMonthBounds\(now, \(await loadLearningPolicy\(prisma\)\)\?\.cutover_at\)/)
+    assert.match(source, /const monthBounds = competitionMonthBounds\(now\)/)
     assert.match(source, /submitted_at: \{ lt: monthBounds\.startsAt \}/)
     assert.match(source, /competitionMonth\.findUnique\(\{ where: \{ key: monthBounds\.key \}/)
     assert.doesNotMatch(source, /competitionMonth\.findFirst/)

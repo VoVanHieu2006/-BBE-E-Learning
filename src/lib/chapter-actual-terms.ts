@@ -14,7 +14,7 @@ export async function chapterActualTermRows(tx: Prisma.TransactionClient, at: Da
   for (const chapter of chapters) {
     const term = terms.find(t => t.chapter_id === chapter.id)
     if (termId && !term) continue
-    // Founding is authoritative for the first actual term, including before cutover.
+    // Founding is authoritative for the first actual term.
     const prior = transfers.find(t => t.chapter_id === chapter.id && (!term || t.actualAt <= term.starts_at))
     const startsAt = term?.season_id ? term.starts_at : prior?.actualAt || chapter.created_at
     const endsAt = term?.ends_at || null

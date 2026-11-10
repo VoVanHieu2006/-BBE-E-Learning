@@ -82,7 +82,6 @@ test('a transfer for the next window applied early counts once that window start
 })
 
 test('successful early September application immediately opens awards before October boundary', async () => {  const tx = {
-    learningPolicy: { findUnique: async () => ({ cutover_at: new Date('2026-01-01'), mapping_approved_at: new Date('2026-01-01') }) },
     organizationMembership: { count: async () => 0 },
     chapterMember: { findUnique: async () => ({ chapter_id: 'c' }) },
     chapter: { findUnique: async () => ({ id: 'c', created_at: new Date('2025-06-01') }) },
@@ -100,7 +99,6 @@ test('successful early September application immediately opens awards before Oct
 
 test('a missing season never pauses a Chapter that has not transferred yet', async () => {
   const tx = {
-    learningPolicy: { findUnique: async () => ({ cutover_at: new Date('2026-01-01'), mapping_approved_at: new Date('2026-01-01') }) },
     organizationMembership: { count: async () => 0 },
     chapterMember: { findUnique: async () => ({ chapter_id: 'c' }) },
     chapter: { findUnique: async () => ({ id: 'c', created_at: new Date('2025-06-01') }) },

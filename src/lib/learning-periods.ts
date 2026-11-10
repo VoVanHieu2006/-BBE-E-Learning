@@ -1,4 +1,4 @@
-import { Prisma, CompetitionMonth, LearningPolicy, LearningCycle } from '@prisma/client'
+import { Prisma, CompetitionMonth, LearningCycle } from '@prisma/client'
 import { competitionMonthBounds } from './learning-cycle-rules'
 import { chapterRewardState } from './chapter-reward-gate'
 
@@ -11,17 +11,11 @@ export async function lockLearningUser(tx: LearningTx, userId: string) {
   return clock.now
 }
 
-/** The policy row is historical data now: cutover_at is only a legacy floor, never a gate. */
-export async function loadLearningPolicy(tx: LearningTx) {
-  return tx.learningPolicy.findUnique({ where: { id: 'default' } })
-}
-
 /** Lock a competition period before sampling the business timestamp. */
-export async function lockCompetitionScope(tx: LearningTx, now: Date): Promise<{ policy: LearningPolicy | null; month: CompetitionMonth; now: Date }> {
+export async function lockCompetitionScope(tx: LearningTx, now: Date): Promise<{ month: CompetitionMonth; now: Date }> {
   const [initialClock] = await tx.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`
   now = initialClock.now
-  const policy = await loadLearningPolicy(tx)
-  const bounds = competitionMonthBounds(now, policy?.cutover_at)
+  const bounds = competitionMonthBounds(now)
   const month = await tx.competitionMonth.upsert({
     where: { key: bounds.key }, update: {},
     create: { key: bounds.key, starts_at: bounds.startsAt, ends_at: bounds.endsAt },
@@ -31,13 +25,12 @@ export async function lockCompetitionScope(tx: LearningTx, now: Date): Promise<{
   if (clock.now >= month.ends_at) return lockCompetitionScope(tx, clock.now)
   const lockedMonth = await tx.competitionMonth.findUniqueOrThrow({ where: { id: month.id } })
   if (lockedMonth.state !== 'OPEN') throw new Error('CompetitionMonthClosed')
-  return { policy, month: lockedMonth, now: clock.now }
+  return { month: lockedMonth, now: clock.now }
 }
 
 /** Caller holds the user's lock. Transition import never infers historical terms. */
 export async function learningContext(tx: LearningTx, userId: string, now: Date): Promise<{ month: CompetitionMonth; cycle: LearningCycle; now: Date }> {
-  const policy = await loadLearningPolicy(tx)
-  const bounds = competitionMonthBounds(now, policy?.cutover_at)
+  const bounds = competitionMonthBounds(now)
   let month = await tx.competitionMonth.findUnique({ where: { key: bounds.key } })
   if (!month) {
     month = await tx.competitionMonth.upsert({
@@ -49,25 +42,22 @@ export async function learningContext(tx: LearningTx, userId: string, now: Date)
   // The month row is immutable for the purpose of a heartbeat. This avoids an
   // upsert + FOR SHARE + two clock queries on every video heartbeat.
   if (month.ends_at <= now) {
-    const next = competitionMonthBounds(month.ends_at, policy?.cutover_at)
+    const next = competitionMonthBounds(month.ends_at)
     month = await tx.competitionMonth.findUnique({ where: { key: next.key } })
       || await tx.competitionMonth.upsert({ where: { key: next.key }, update: {}, create: { key: next.key, starts_at: next.startsAt, ends_at: next.endsAt } })
   }
   let cycle = await tx.learningCycle.findFirst({ where: { user_id: userId, ends_at: null } })
   if (!cycle) {
     const chapter = await tx.chapterMember.findUnique({ where: { user_id: userId } })
-    const user = await tx.user.findUniqueOrThrow({ where: { id: userId }, select: { created_at: true } })
-    const cutoverAt = policy?.cutover_at || null
-    const legacy = Boolean(cutoverAt && user.created_at <= cutoverAt)
     cycle = await tx.learningCycle.create({ data: {
       user_id: userId, chapter_id: chapter?.chapter_id, trigger_key: `initial:${userId}:${now.toISOString()}`,
-      starts_at: legacy ? cutoverAt! : now, provenance: legacy ? 'LEGACY' : 'NATIVE',
+      starts_at: now, provenance: 'NATIVE',
     } })
     const progress = await tx.lessonProgress.findMany({ where: { user_id: userId } })
     if (progress.length) await tx.cycleLessonProgress.createMany({ data: progress.map((row) => ({
       user_id: userId, lesson_id: row.lesson_id, learning_cycle_id: cycle!.id,
       furthest_seconds: row.furthest_watched_position_seconds || 0,
-      completed_at: row.completed_at, provenance: legacy ? 'LEGACY' : 'NATIVE',
+      completed_at: row.completed_at, provenance: 'NATIVE',
     })), skipDuplicates: true })
     // Import evidence of the earliest assignment and the latest old deadline.
     const assignments = await tx.userLearningAssignment.findMany({ where: { user_id: userId }, orderBy: { assigned_at: 'asc' } })

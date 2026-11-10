@@ -45,7 +45,7 @@ export async function readChapterTermResult(tx: Prisma.TransactionClient, chapte
         const start = new Date(stage.startsAt), stop = new Date(stage.endsAt)
         if (!Number.isFinite(start.getTime()) || !Number.isFinite(stop.getTime()) || stop <= start) { reason = 'SNAPSHOT_STAGE_DATA_MISSING'; break }
         if (stop <= rangeStart || start >= rangeEnd) continue
-        // Initial founding/cutover may fall inside its first month's sole stage;
+        // Initial founding may fall inside its first month's sole stage;
         // there is no earlier actual term to which those Chapter stars could belong.
         if ((start < rangeStart && !(initial && startsAt > month.starts_at && start.getTime() === month.starts_at.getTime())) || stop > rangeEnd) { reason = 'SNAPSHOT_STAGE_BOUNDARY_MISSING'; break }
         if (Math.max(start.getTime(), rangeStart.getTime()) !== coveredUntil) { reason = 'SNAPSHOT_STAGE_COVERAGE_MISSING'; break }
