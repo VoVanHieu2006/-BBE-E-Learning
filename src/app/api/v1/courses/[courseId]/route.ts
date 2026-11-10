@@ -1,3 +1,8 @@
+import { deleteUnusedContent, ContentDeleteError } from '@/lib/content-deletion'
+import { cleanupDeletedContentAssets } from '@/lib/deleted-content-assets'
+import { invalidateCourseContentCaches } from '@/lib/course-edit-guard'
+import { invalidateChapterLeaderboardCache } from '@/lib/chapter-leaderboard-cache'
+import { invalidateMemberLeaderboardCache } from '@/lib/member-leaderboard-cache'
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -235,20 +240,25 @@ export async function PATCH(request: NextRequest, { params }: { params: { course
     targetProgramId = programId === '' ? null : programId
   }
 
-  const updated = await prisma.course.update({
-    where: { id: courseId },
-    data: {
-      ...(title !== undefined ? { title: title.trim() } : {}),
-      ...(description !== undefined ? { description: description?.trim() || null } : {}),
-      ...(visibility !== undefined ? { visibility } : {}),
-      ...(coverUrl !== undefined ? { cover_url: coverUrl || null } : {}),
-      ...(targetProgramId !== undefined ? { program_id: targetProgramId } : {}),
-    },
-    include: {
-      program: {
-        select: { id: true, code: true, name: true, is_core: true, sort_order: true },
+  const updated = await prisma.$transaction(async tx => {
+    const row = await tx.course.update({
+      where: { id: courseId },
+      data: {
+        ...(title !== undefined ? { title: title.trim() } : {}),
+        ...(description !== undefined ? { description: description?.trim() || null } : {}),
+        ...(visibility !== undefined ? { visibility } : {}),
+        ...(coverUrl !== undefined ? { cover_url: coverUrl || null } : {}),
+        ...(targetProgramId !== undefined ? { program_id: targetProgramId } : {}),
       },
-    },
+      include: {
+        program: {
+          select: { id: true, code: true, name: true, is_core: true, sort_order: true },
+        },
+      },
+    })
+
+    await tx.auditLog.create({ data: { actor_user_id: (auth as any).context!.userId, action: 'UPDATE_COURSE', entity_type: 'COURSE', entity_id: courseId, metadata: { fields: Object.keys(body).filter(key => ['title', 'description', 'visibility', 'coverUrl', 'programCode', 'programId'].includes(key)) } } })
+    return row
   })
 
   invalidateCoursesServerCache()
@@ -286,11 +296,17 @@ export async function DELETE(request: NextRequest, { params }: { params: { cours
     return NextResponse.json({ error: { code: 'AccessDenied', message: 'Chỉ Admin mới có quyền xóa khóa học' } }, { status: 403 })
   }
 
-  const course = await prisma.course.findUnique({ where: { id: courseId } })
-  if (!course) return NextResponse.json({ error: { code: 'CourseNotFound', message: 'Khóa học không tồn tại' } }, { status: 404 })
-
-  await prisma.course.delete({ where: { id: courseId } })
-  invalidateCoursesServerCache(courseId)
+  try {
+    const assets = await prisma.$transaction(tx => deleteUnusedContent(tx, { courseId }, (auth as any).context!.userId), { isolationLevel: 'Serializable', timeout: 30_000 })
+    invalidateCourseContentCaches(courseId)
+    invalidateChapterLeaderboardCache()
+    invalidateMemberLeaderboardCache()
+    await cleanupDeletedContentAssets(assets)
+  } catch (error) {
+    if (error instanceof ContentDeleteError) return NextResponse.json({ error: { code: error.code, message: error.message } }, { status: error.status })
+    if ((error as { code?: string }).code === 'P2034') return NextResponse.json({ error: { code: 'ContentChanged', message: 'Dữ liệu vừa thay đổi. Vui lòng tải lại và thử lại.' } }, { status: 409 })
+    throw error
+  }
 
   return NextResponse.json({ success: true }, { status: 200 })
 }

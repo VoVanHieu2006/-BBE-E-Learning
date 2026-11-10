@@ -23,7 +23,7 @@ export async function GET(request: NextRequest, { params }: { params: { assessme
     return NextResponse.json({ error: { code: 'Unauthorized' } }, { status: 401 })
   }
   const userRole = (auth as any).context!.role
-  if (userRole !== 'ADMIN' && userRole !== 'CHAPTER_LEADER') {
+  if (userRole !== 'ADMIN') {
     return NextResponse.json(
       { error: { code: 'AccessDenied', message: 'Bạn không có quyền xem ngân hàng câu hỏi.' } },
       { status: 403 },

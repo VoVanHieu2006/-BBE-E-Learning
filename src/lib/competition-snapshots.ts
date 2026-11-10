@@ -284,8 +284,12 @@ export async function historicalChapterMonthRows(tx: Tx, month: { id: string; ke
             return completed.size / coreIds.size >= 0.7
           }).length
         : 0
+      // Use the same cohort for stars and headcount: departed users must not
+      // inflate the current stage's numerator after leaving its denominator.
+      const memberIds = new Set(members.map(member => member.userId))
       const stageStarRows = starRows.filter((row) => (
         row.chapter_at_award_id === chapter.id
+        && memberIds.has(row.user_id)
         && !excludedDnaUserIds.has(row.user_id)
         && row.awarded_at >= startsAt
         && row.awarded_at < at
@@ -305,13 +309,8 @@ export async function historicalChapterMonthRows(tx: Tx, month: { id: string; ke
     const kpiRow = kpiByChapter.get(chapter.id)
     const kpi = kpiRow && kpiRow.updated_at < end ? kpiRow.status : null
 
-    const chapterStarRows = starRows.filter((row) => (
-      row.chapter_at_award_id === chapter.id
-      && !excludedDnaUserIds.has(row.user_id)
-      && row.awarded_at >= month.starts_at
-      && row.awarded_at < end
-    ))
-    const lastStarAwardedAt = chapterStarRows.length ? new Date(Math.max(...chapterStarRows.map((r) => r.awarded_at.getTime()))) : null
+    const stageLastStars = stages.flatMap(stage => stage.lastStarAwardedAt ? [new Date(stage.lastStarAwardedAt).getTime()] : [])
+    const lastStarAwardedAt = stageLastStars.length ? new Date(Math.max(...stageLastStars)) : null
     const scoreResult = chapterCompetitionScore(stages, kpi, { coreLessonCount: coreIds.size })
 
     items.push({

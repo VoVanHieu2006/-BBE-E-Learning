@@ -347,7 +347,7 @@ Danh sách này dùng để lên kế hoạch sửa code. Tài liệu này mô t
 | 16 | Hủy xuất bản khóa bắt buộc: tạm rời khỏi bộ khóa, xuất bản lại như thêm lại | Hạn vẫn chạy và người học có thể bị khóa dù không mở được khóa |
 | 17 | Chỉ tick được khóa đã xuất bản | Khóa nháp vẫn tick được |
 | 18 | Thêm video/quiz riêng: chia đôi số ngày của một bài; thêm bài thi cuối +3 ngày; đổi đề không cộng | Chỉ bài học mới được cộng ngày; quiz và bài thi cuối không cộng |
-| 19 | Bảng xếp hạng giữ lịch sử người đã rời; bảng đang diễn ra ẩn người đã rời (xem `CKNK.md` 5.10) | Chưa kiểm chứng trong code |
+| 19 | Bảng xếp hạng giữ lịch sử người đã rời; bảng đang diễn ra ẩn người đã rời (xem `CKNK.md` 5.10) | Đã đối chiếu và test fixture prompt 05: snapshot giữ người INACTIVE; live loại người rời; sửa sao Chapter ngoài cohort và legacy tháng đóng đọc snapshot. Chưa nghiệm thu DB/production và toàn bộ chuyển giao/reset; full unit còn lỗi tiến trình con (HANDOFF.md). |
 | 20 | Gỡ khóa rồi thêm lại trong 3 ngày thì hạn về đúng hạn cũ (mục 5.7) | Thêm lại luôn được ngày mới nên có thể làm mới hạn vô hạn |
 | 21 | Khóa chỉ có hai trạng thái **xuất bản** / **bản nháp**; “công khai / riêng tư” chỉ là việc khách có được xem hay không | Một số màn hình và mô tả còn dùng lẫn các từ này |
 

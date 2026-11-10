@@ -1,8 +1,10 @@
+import { deleteUnusedContent, ContentDeleteError } from '@/lib/content-deletion'
+import { cleanupDeletedContentAssets } from '@/lib/deleted-content-assets'
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { guardCourseEditableBySession, invalidateCourseContentCaches } from '@/lib/course-edit-guard'
 import { prisma } from '@/lib/prisma'
-import { assertFinalExamBankCapacity, finalExamBankError, lockCourseExamBank } from '@/lib/final-exam-bank'
+import { finalExamBankError } from '@/lib/final-exam-bank'
 
 export async function GET(request: NextRequest, { params }: { params: { sessionId: string } }) {
   const sessionId = params.sessionId
@@ -104,17 +106,13 @@ export async function DELETE(request: NextRequest, { params }: { params: { sessi
   if (blocked) return blocked
 
   try {
-    await prisma.$transaction(async (tx) => {
-      await lockCourseExamBank(tx, session.course_id)
-      const attempts = await tx.attempt.count({ where: { assessment: { lesson: { session_id: sessionId } } } })
-      if (attempts) throw new Error('SessionHasAttempts')
-      await tx.session.delete({ where: { id: sessionId } })
-      await assertFinalExamBankCapacity(tx, session.course_id)
-    })
+    const assets = await prisma.$transaction(tx => deleteUnusedContent(tx, { courseId: session.course_id, sessionId }, (auth as any).context!.userId), { isolationLevel: 'Serializable', timeout: 30_000 })
+    await cleanupDeletedContentAssets(assets)
   } catch (error) {
+    if (error instanceof ContentDeleteError) return NextResponse.json({ error: { code: error.code, message: error.message } }, { status: error.status })
+    if ((error as { code?: string }).code === 'P2034') return NextResponse.json({ error: { code: 'ContentChanged', message: 'D\u1eef li\u1ec7u v\u1eeba thay \u0111\u1ed5i. Vui l\u00f2ng t\u1ea3i l\u1ea1i v\u00e0 th\u1eed l\u1ea1i.' } }, { status: 409 })
     const bankError = finalExamBankError(error)
     if (bankError) return NextResponse.json(bankError, { status: 409 })
-    if (error instanceof Error && error.message === 'SessionHasAttempts') return NextResponse.json({ error: { code: 'AssessmentVersionRequired', message: 'Buổi học có quiz đã được làm; không thể xóa lịch sử.' } }, { status: 409 })
     throw error
   }
 
