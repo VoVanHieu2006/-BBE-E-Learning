@@ -45,7 +45,7 @@ flowchart TD
 - Tổ chức: Chapter/ChapterMember legacy, OrganizationUnit/Membership, Position/Assignment, tenure/history, Lead binding, reorganization batch/items.
 - Nội dung: Course→Session→Lesson→Video/Documents, Assessment/Question/Options, bank/pool/version/draft.
 - Học: lifetime progress, LearningCycle/CycleLessonProgress, MonthlyVideoReplay, immutable attempt question/grading evidence, StarLedger và reward high-water.
-- Policy: bốn program, 18 target, mandatory rules/assignments/path/budget history, requirement/publication snapshot và supplemental obligation.
+- Cấu hình học tập: bốn program, 18 target, mandatory rules/assignments/path/budget history, requirement/publication snapshot và supplemental obligation. Release1 giữ bảng `learning_policy` / model `LearningPolicy` chỉ để rollback, không còn reader runtime; trang `/admin/learning-config` vẫn cần.
 - Kỳ: CompetitionMonth, competition/actual terms, KPI, frozen LearningSnapshot và temporal history.
 - Đồng bộ: LearningOutbox retry/backoff; không thay core reset atomic trong transaction.
 
@@ -61,18 +61,18 @@ Cookie login/refresh có HttpOnly, Secure ở production; client hiện vẫn l�
 
 ## Learning và transaction
 
-1. Mô hình deadline chung luôn chạy; Admin duyệt mapping/rules/aliases/season trước khi cấu hình có hiệu lực. Dữ liệu legacy chỉ còn là đường đọc lịch sử, không có cờ kích hoạt.
-2. Context gồm tháng UTC+7, cycle học và cửa sổ thưởng. Cửa sổ chuyển giao nhiệm kỳ là `01/01–30/06` (mốc `01/04`) và `01/07–31/12` (mốc `01/10`); mọi thời điểm chuyển giao chuẩn hóa về mốc gần nhất. Theo quy tắc chuẩn, nhiệm kỳ thi đua là mốc + 6 tháng; việc mở nhiệm kỳ tại thời điểm apply vẫn nằm ngoài phạm vi P0–P4 và được ghi ở [known-issues](known-issues.md). Training completion, monthly replay và sao là facts riêng.
+1. Mô hình deadline chung luôn chạy; Admin duyệt mapping/rules/aliases/season trước khi cấu hình có hiệu lực. Readiness cơ sở release1 là `READY`/`asOf`, không có `policy`; API periods vẫn bổ sung trạng thái cấu hình từng kỳ. Người chưa có cycle nhận `NATIVE` từ `now`, nhập video progress, `imported_due_at` và giữ đường đọc lộ trình lịch sử như trước. Cycle `LEGACY` đã có vẫn đọc attempt null; không tự nhập attempt null vào cycle `NATIVE` mới. Giữ các trường provenance.
+2. Context gồm tháng tự nhiên `[00:00 đầu tháng, 00:00 đầu tháng kế tiếp)` UTC+7, cycle học và cửa sổ thưởng; không viết lại month rows/snapshots đã có. Cửa sổ chuyển giao nhiệm kỳ là `01/01–30/06` (mốc `01/04`) và `01/07–31/12` (mốc `01/10`); mọi thời điểm chuyển giao chuẩn hóa về mốc gần nhất. Theo quy tắc chuẩn, nhiệm kỳ thi đua là mốc + 6 tháng; việc mở nhiệm kỳ tại thời điểm apply vẫn nằm ngoài phạm vi P0–P4 và được ghi ở [known-issues](known-issues.md). Training completion, monthly replay và sao là facts riêng.
 3. Heartbeat kiểm tra video/session, lock user/context, tăng furthest theo elapsed bounded. ENDED có dung sai nhỏ, không bỏ chứng cứ watch time.
 4. Manual/auto submit dùng chung service, snapshot đề/grading, bảo vệ expiry/cycle cũ và high-water idempotency.
-5. Apply transfer snapshot/reset atomic rồi enqueue từng người; retry outbox không reset lại. DNA boundary riêng; scheduler trễ dùng DB clock thực.
+5. Apply transfer snapshot/reset atomic rồi enqueue từng người; retry outbox không reset lại. Mùa xếp hạng DNA dùng `[reward_boundary_at, dnaSeasonEnd(season.reward_boundary_at))`, không có mốc cấu hình làm sàn. Mùa đã kết thúc không có ledger `NATIVE` trong cửa sổ và không có đúng snapshot `ranking:DNA:<season.id>` là lịch sử không khả dụng; có `NATIVE`/chưa có snapshot thì scheduler được phép chốt; snapshot đã có giữ nguyên. Scheduler trễ dùng DB clock thực.
 6. Tháng/kỳ đóng dùng saved snapshot. Pending KPI chỉ hoàn thiện phần KPI; thiếu data trả reason. Không tính quá khứ theo roles hôm nay.
 
 ## Cache và request cũ
 
 Client có memory GET TTL 30 giây, sessionStorage cho đường phù hợp, in-flight dedupe và refresh 401. Tập route chuyển tab có memory-only tab cache tối đa 30 entries, chung trên `window` giữa layout/page chunk và gắn identity; không serialize tab data vào sessionStorage. Giữ invalidation prefix sau mutation.
 
-Server cache riêng theo role/scope/loại dữ liệu: course list TTL 15 giây, leaderboard/progress/roster có helper riêng. Policy/readiness/progress nhạy cảm có no-store. Cache không thay quyền DB đang có hiệu lực. Tách component/hook phải giữ request identity, cancellation/stale guard, effect dependencies, payload/loading/error và React key để không remount ngoài ý muốn.
+Server cache riêng theo role/scope/loại dữ liệu: course list TTL 15 giây, leaderboard/progress/roster có helper riêng. Cấu hình học tập/readiness/progress nhạy cảm có no-store. Cache không thay quyền DB đang có hiệu lực. Tách component/hook phải giữ request identity, cancellation/stale guard, effect dependencies, payload/loading/error và React key để không remount ngoài ý muốn.
 
 ## Scheduler
 

@@ -1,6 +1,6 @@
 # Vấn đề còn mở và giới hạn kiểm chứng
 
-Phân biệt lỗi nghiệp vụ, fixture test không tương thích và phần chưa nghiệm thu. Cleanup không sửa formulas, quyền, reward writer, policy hoặc data/snapshot production để ép test xanh.
+Phân biệt lỗi nghiệp vụ, fixture test không tương thích và phần chưa nghiệm thu. Không sửa formulas, quyền, reward writer, cấu hình học tập hoặc data/snapshot production để ép test xanh.
 
 ## Audit sổ tay
 
@@ -44,9 +44,9 @@ GET chuyển giao hiện có side effect: `reorganizations`, `current-roster` v�
 
 | Phạm vi | Giới hạn / bước tiếp |
 |---|---|
-| Production | Đối chiếu read-only revision/policy/mapping/season, index `chapter_transfers_one_applied_season`, provenance month/cycle và snapshots. Supabase timeout không có SELECT không chứng minh data đúng/sai; báo cáo phiên cũ không phải snapshot hiện tại. |
-| Readiness | API readiness chỉ phản ánh kỳ hiện tại. Cần kiểm tra mapping/season thực tế trước khi vận hành; không tự tạo policy/đổi position để bypass. |
-| Lịch sử | Chưa chứng nhận đủ evidence mọi tháng/kỳ; thiếu trả reason, không dựng lại frozen snapshot theo affiliation hôm nay. |
+| Production | Đối chiếu read-only revision/mapping/season, index `chapter_transfers_one_applied_season`, provenance month/cycle và snapshots; audit affiliation và backup bảng rollback theo [runbook release1/release2](operations.md#prompt04--triển-khai-hai-release). Supabase timeout không có SELECT không chứng minh data đúng/sai; báo cáo phiên cũ không phải snapshot hiện tại. |
+| Readiness | Readiness cơ sở release1 là `READY`/`asOf`, không có `policy`; API periods vẫn báo lý do thiếu kỳ nhưng không chứng nhận mapping/season hay evidence lịch sử. Vẫn cần kiểm tra cấu hình thực tế, không đổi position để bypass quyền. |
+| Lịch sử | Chưa chứng nhận đủ evidence mọi tháng/kỳ; không dựng lại frozen snapshot theo affiliation hôm nay. Mùa DNA đã kết thúc không có `NATIVE` trong `[reward_boundary_at, dnaSeasonEnd(season.reward_boundary_at))` và không có đúng snapshot `ranking:DNA:<season.id>` là lịch sử không khả dụng; có `NATIVE`/chưa có snapshot thì scheduler được phép chốt; snapshot đã có giữ nguyên. |
 | Điện thoại thật | Android/iPhone Safari/Chrome native/theater, xoay/Back/tab, browser chrome, rate/seek/buffer/session cần máy thật. Touch emulation không thay nghiệm thu thiết bị. |
 | Video/DB/browser | Mock browser bảo vệ UI contract, không thay YouTube thật + learner DB thật. PASS chỉ đúng phạm vi đã chạy. |
 | Đặc tả thiếu | Nguyên văn V01–V15, A–J/14 case trong handoff cũ không đủ; không chế ma trận để tuyên bố đã nghiệm thu. |

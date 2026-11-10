@@ -25,11 +25,10 @@ const { processLearningOutbox } = require('../../src/lib/learning-outbox')
 const { prepareOrganizationTransition } = require('../../src/lib/organization-transition')
 const { publishCourseRequirements, captureCourseRequirementVersion } = require('../../src/lib/course-requirements')
 const { closeCompetitionMonths, completePendingCompetitionKpis, closeCompetitionTerms } = require('../../src/lib/competition-snapshots')
-const { learningContext } = require('../../src/lib/learning-periods')
+const { learningContext, currentCycleAttemptFilter } = require('../../src/lib/learning-periods')
 const { windowOf } = require('../../src/lib/transfer-windows')
 
 const owned = { userIds: [] }
-let originalPolicy
 async function createOwnedUser(input) {
   const row = await prisma.user.create(input)
   owned.userIds.push(row.id)
@@ -62,7 +61,7 @@ async function cleanupOwnedFixtures() {
     await prisma.courseRequirementVersion.deleteMany({ where: { course_id: owned.courseId } })
     await prisma.coursePublicationEvent.deleteMany({ where: { course_id: owned.courseId } })
   }
-  const keys = owned.cutoverKey ? [owned.cutoverKey] : []
+  const keys = []
   if (owned.monthId) for (const group of ['MEMBER', 'LT', 'DNA', 'CHAPTER']) keys.push(`ranking:${group}:${owned.monthId}`)
   if (owned.chapterId) {
     const transfers = await prisma.chapterReorganization.findMany({ where: { chapter_id: owned.chapterId }, select: { id: true } })
@@ -91,7 +90,6 @@ async function cleanupOwnedFixtures() {
 }
 
 async function main() {
-  originalPolicy = await prisma.learningPolicy.findUnique({ where: { id: 'default' } })
   const suffix = randomUUID()
   owned.suffix = suffix
   const admin = await createOwnedUser({ data: { email: `admin-${suffix}@example.invalid`, password_hash: '-', role: 'ADMIN' } })
@@ -125,7 +123,6 @@ async function main() {
   await prisma.userLearningAssignment.create({ data: { user_id: user.id, course_id: course.id, rule_id: rule.id, assigned_at: new Date(Date.now() - 86_400_000), due_at: new Date(Date.now() + 20 * 86_400_000) } })
   await prisma.lessonProgress.create({ data: { user_id: user.id, lesson_id: lesson.id, completed: true, completed_at: new Date(), furthest_watched_position_seconds: 10 } })
   await prisma.starLedger.create({ data: { user_id: user.id, amount: 99, reason: 'ADMIN_ADJUSTMENT', reward_key: suffix, source_type: 'USER', source_id: user.id } })
-  await prisma.learningPolicy.upsert({ where: { id: 'default' }, update: { cutover_at: new Date(Date.now() - 60_000), mapping_approved_at: new Date() }, create: { cutover_at: new Date(Date.now() - 60_000), mapping_approved_at: new Date() } })
   const scheduleWindow = windowOf(new Date())
   const season = await prisma.transferSeason.upsert({
     where: { reward_boundary_at: scheduleWindow.anchor },
@@ -133,10 +130,21 @@ async function main() {
     create: { code: `IT_${scheduleWindow.anchor.toISOString()}`, reward_boundary_at: scheduleWindow.anchor, starts_at: scheduleWindow.startsAt, ends_at: scheduleWindow.endsAt },
   })
   const earlyFixture = await prisma.chapterReorganization.create({ data: { transfer_season_id: season.id, chapter_id: chapter.id, created_by_user_id: admin.id, status: 'APPLIED', effective_at: new Date(Date.now() - 86_400_000), applied_at: new Date(Date.now() - 86_400_000) } })
+  const oldAssignment = await prisma.userLearningAssignment.findFirstOrThrow({ where: { user_id: user.id } })
+  const oldProgress = await prisma.lessonProgress.findUniqueOrThrow({ where: { user_id_lesson_id: { user_id: user.id, lesson_id: lesson.id } } })
+  const initializedAt = new Date()
+  const { cycle } = await prisma.$transaction((tx) => learningContext(tx, user.id, initializedAt))
+  assert.equal(cycle.provenance, 'NATIVE', 'old created_at does not imply a LEGACY cycle')
+  assert.deepEqual(cycle.starts_at, initializedAt, 'missing cycles begin at the initialization instant')
+  const importedProgress = await prisma.cycleLessonProgress.findFirstOrThrow({ where: { user_id: user.id, learning_cycle_id: cycle.id } })
+  assert.equal(importedProgress.provenance, 'NATIVE')
+  assert.equal(Number(importedProgress.furthest_seconds), oldProgress.furthest_watched_position_seconds)
+  assert.deepEqual(importedProgress.completed_at, oldProgress.completed_at, 'old video completion evidence is not retimed')
+  const importedPath = await prisma.learningPath.findUniqueOrThrow({ where: { learning_cycle_id: cycle.id } })
+  assert.deepEqual(importedPath.starts_at, oldAssignment.assigned_at, 'path keeps the old assignment start')
+  assert.deepEqual(importedPath.imported_due_at, oldAssignment.due_at)
+  assert.deepEqual(importedPath.due_at, oldAssignment.due_at, 'path keeps the old deadline')
   await reconcileLearningAssignmentsForUser(user.id)
-  const cycle = await prisma.learningCycle.findFirstOrThrow({ where: { user_id: user.id, ends_at: null } })
-  assert.equal(cycle.provenance, 'LEGACY')
-  assert.equal((await prisma.cycleLessonProgress.findFirstOrThrow({ where: { user_id: user.id } })).provenance, 'LEGACY')
   const pathBefore = await prisma.learningPath.findUniqueOrThrow({ where: { learning_cycle_id: cycle.id } })
   await reconcileLearningAssignmentsForUser(user.id)
   assert.deepEqual((await prisma.learningPath.findUniqueOrThrow({ where: { learning_cycle_id: cycle.id } })).due_at, pathBefore.due_at, 'retry must not move the imported deadline')
@@ -273,23 +281,41 @@ async function main() {
   await closeCompetitionTerms()
   assert.equal((await prisma.learningSnapshot.findUniqueOrThrow({ where: { key: `ranking:MEMBER:${closedTerm.id}` } })).payload.state, 'FINALIZED')
 
-  // Without a policy row the learning model still starts a native cycle.
-  await prisma.learningPolicy.deleteMany({ where: { id: 'default' } })
-  const fresh = await createOwnedUser({ data: { email: `fresh-${suffix}@example.invalid`, password_hash: '-', role: 'MEMBER' } })
-  const freshContext = await prisma.$transaction((tx) => learningContext(tx, fresh.id, new Date()))
+  // LEGACY is explicit stored evidence, never inferred from account creation time.
+  const legacy = await createOwnedUser({ data: { email: `legacy-${suffix}@example.invalid`, password_hash: '-', role: 'MEMBER' } })
+  const legacyStart = new Date(Date.now() - 60_000)
+  const legacyCycle = await prisma.learningCycle.create({ data: { user_id: legacy.id, starts_at: legacyStart, trigger_key: `legacy-fixture:${suffix}`, provenance: 'LEGACY' } })
+  const legacyProgress = await prisma.cycleLessonProgress.create({ data: { user_id: legacy.id, lesson_id: lesson.id, learning_cycle_id: legacyCycle.id, furthest_seconds: 10, completed_at: legacyStart, provenance: 'LEGACY' } })
+  const legacyPath = await prisma.learningPath.create({ data: { user_id: legacy.id, learning_cycle_id: legacyCycle.id, starts_at: legacyStart, due_at: oldAssignment.due_at, imported_due_at: oldAssignment.due_at } })
+  const legacyContext = await prisma.$transaction((tx) => learningContext(tx, legacy.id, new Date()))
+  assert.deepEqual(await prisma.cycleLessonProgress.findUniqueOrThrow({ where: { id: legacyProgress.id } }), legacyProgress, 'explicit LEGACY progress remains unchanged')
+  assert.deepEqual(await prisma.learningPath.findUniqueOrThrow({ where: { id: legacyPath.id } }), legacyPath, 'explicit LEGACY path/deadlines remain unchanged')
+  assert.equal(legacyContext.cycle.id, legacyCycle.id)
+  assert.equal(legacyContext.cycle.provenance, 'LEGACY')
+  assert.deepEqual(legacyContext.cycle.starts_at, legacyStart, 'existing LEGACY cycles are not retimed')
+  const legacyFilter = await currentCycleAttemptFilter(prisma, legacy.id)
+  assert.deepEqual(legacyFilter, { OR: [{ learning_cycle_id: legacyCycle.id }, { learning_cycle_id: null, started_at: { lt: legacyStart } }] })
+  const legacyAttempts = []
+  for (const [cycleId, startedAt] of [[null, new Date(legacyStart.getTime() - 1000)], [null, new Date(legacyStart.getTime() + 1000)], [legacyCycle.id, new Date()]]) {
+    legacyAttempts.push(await prisma.attempt.create({ data: { user_id: legacy.id, assessment_id: assessment.id, learning_cycle_id: cycleId, started_at: startedAt, expires_at: new Date(startedAt.getTime() + 60_000), attempt_number: legacyAttempts.length + 1 } }))
+  }
+  const visibleAttempts = await prisma.attempt.findMany({ where: { user_id: legacy.id, ...legacyFilter } })
+  assert.deepEqual(visibleAttempts.map(row => row.id).sort(), [legacyAttempts[0].id, legacyAttempts[2].id].sort(), 'only pre-cycle null attempts remain visible for LEGACY cycles')
+
+  const fresh = await createOwnedUser({ data: { email: `fresh-${suffix}@example.invalid`, password_hash: '-', role: 'MEMBER', created_at: new Date('2000-01-01') } })
+  const freshAt = new Date()
+  const freshContext = await prisma.$transaction((tx) => learningContext(tx, fresh.id, freshAt))
   assert.equal(freshContext.cycle.provenance, 'NATIVE')
+  assert.deepEqual(freshContext.cycle.starts_at, freshAt)
   assert.equal(await prisma.learningCycle.count({ where: { user_id: fresh.id } }), 1)
-  console.log('PASS: legacy import, stable deadlines, concurrent submissions, frozen questions, monthly replay, disconnected heartbeat, atomic transfer, retry, omitted roster, outbox exclusive DNA membership, shared-deadline publish retries and legacy supplemental reset history, delayed month close, historical roles, KPI completion, immutable term/month snapshots and policy-free native cycles.')
+  assert.deepEqual(await currentCycleAttemptFilter(prisma, fresh.id), { learning_cycle_id: freshContext.cycle.id }, 'NATIVE cycles exclude null-cycle attempts')
+  const retriedContext = await prisma.$transaction((tx) => learningContext(tx, fresh.id, new Date()))
+  assert.equal(retriedContext.cycle.id, freshContext.cycle.id)
+  assert.deepEqual(retriedContext.cycle.starts_at, freshAt, 'retry preserves the native cycle start')
+  console.log('PASS: native initialization preserving old video/path evidence, explicit LEGACY cycles and pre-cycle null-attempt filters, stable deadlines, concurrent submissions, frozen questions, monthly replay, disconnected heartbeat, atomic transfer, retry, omitted roster, outbox exclusive DNA membership, shared-deadline publish retries and legacy supplemental reset history, delayed month close, historical roles, KPI completion and immutable term/month snapshots.')
 }
 main().catch((error) => { console.error(error); process.exitCode = 1 }).finally(async () => {
   try { await cleanupOwnedFixtures() }
   catch (error) { console.error('Owned fixture cleanup failed:', error); process.exitCode = 1 }
-  finally {
-    try {
-      if (originalPolicy) await prisma.learningPolicy.update({ where: { id: 'default' }, data: {
-        cutover_at: originalPolicy.cutover_at, mapping_approved_at: originalPolicy.mapping_approved_at, updated_at: originalPolicy.updated_at,
-      } })
-      else if (originalPolicy === null) await prisma.learningPolicy.deleteMany({ where: { id: 'default' } })
-    } finally { await prisma.$disconnect() }
-  }
+  finally { await prisma.$disconnect() }
 })

@@ -31,7 +31,7 @@ Typecheck dùng `tsconfig.json`, hợp nhất config check trùng lặp. Unit d�
 
 ## DB riêng, loopback
 
-Không dùng `DATABASE_URL` chung, cloud DB đang dùng hoặc `.env` fallback cho test ghi. Đọc guard đầu suite trước chạy; không đổi host/tên DB để vượt guard. Chọn đúng một tên suite, ví dụ `npm run test:integration -- test-learning-flow-integration`; không chạy aggregate mọi DB suite. HTTP app test dùng cùng DB/JWT/cron secrets fixture, bind loopback/port riêng. Suite dùng chung DB có thể thay policy/schema nên chạy tuần tự.
+Không dùng `DATABASE_URL` chung, cloud DB đang dùng hoặc `.env` fallback cho test ghi. Đọc guard đầu suite trước chạy; không đổi host/tên DB để vượt guard. Chọn đúng một tên suite, ví dụ `npm run test:integration -- test-learning-flow-integration`; không chạy aggregate mọi DB suite. HTTP app test dùng cùng DB/JWT/cron secrets fixture, bind loopback/port riêng. Suite dùng chung DB có thể thay cấu hình học tập/schema nên chạy tuần tự.
 
 | Suite | Đích yêu cầu |
 |---|---|

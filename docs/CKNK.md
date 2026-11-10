@@ -198,7 +198,7 @@ Cách hiểu cho đúng — **"1 nhiệm kỳ chuyển giao 2 lần" là đúng 
 
 ### 1.6 Mùa do Admin cấu hình
 
-Admin cấu hình mùa qua `PUT /api/v1/admin/learning-policy`. Ràng buộc hiện tại:
+Admin cấu hình mùa tại `/admin/learning-config` qua `PUT /api/v1/admin/learning-config`. Release1 giữ `/admin/learning-policy` chuyển hướng và `/api/v1/admin/learning-policy` làm alias tương thích; trang cấu hình vẫn cần, không xóa. GET giữ `programs, targets, courses, pending, failed, seasons`, không có `policy`. PUT giữ nguyên catalog, mapping, mùa, chuẩn hóa tổ chức, retry outbox, quyền và quy tắc nghiệp vụ. Ràng buộc mùa hiện tại:
 
 - `reward_boundary_at` phải **đúng** `1/4` hoặc `1/10`, **đúng `00:00:00.000`** giờ VN.
 - `starts_at` / `ends_at` phải **trùng đúng một cửa sổ chuẩn**: `1/1–30/6` hoặc `1/7–31/12` tương ứng với mốc.
@@ -206,7 +206,7 @@ Admin cấu hình mùa qua `PUT /api/v1/admin/learning-policy`. Ràng buộc hi�
 - Mùa đã có chapter chuyển giao (`APPLIED` gắn với mùa hoặc nằm trong cửa sổ của mùa) **hoặc đang được một đợt `SCHEDULED` tham chiếu** thì **không sửa được** (`TransferSeasonAlreadyUsed`).
 - Mùa **chưa được dùng** (không có `APPLIED` và không bị đợt `SCHEDULED` nào tham chiếu) vẫn sửa được, kể cả mùa của cửa sổ hiện tại — đây là cách Admin sửa cấu hình sai mà không phải xoá dữ liệu.
 
-✅ `src/app/api/v1/admin/learning-policy/route.ts`
+✅ `src/app/api/v1/admin/learning-config/route.ts`
 
 **Một đường tra mùa duy nhất.** Cả đặt lịch, worker, cổng kiểm tra thưởng và trang Admin đều dùng `resolveSeasonForWindow(...)`:
 
@@ -444,7 +444,11 @@ DNA reset chạy ở **mốc đã qua gần nhất** do `chapterRewardBoundary(n
 
 ✅ `src/lib/dna-cycle-resets.ts:10-11`, `:24`
 
-✅ **Đã tách helper:** `anchorElapsed(at)` / `chapterRewardBoundary(at)` giữ nghĩa **mốc đã qua** cho DNA reset và ngừng cộng sao; `anchorNearest(at)` / `windowOf(at)` dùng nghĩa **mốc gần nhất** cho đặt lịch và tra mùa. DNA reset không bị ảnh hưởng bởi việc đổi cách tính cửa sổ.
+**Hai helper đã tách:** `anchorElapsed(at)` / `chapterRewardBoundary(at)` giữ nghĩa **mốc đã qua** cho DNA reset và ngừng cộng sao; `anchorNearest(at)` / `windowOf(at)` dùng nghĩa **mốc gần nhất** cho đặt lịch và tra mùa. DNA reset không bị ảnh hưởng bởi việc đổi cách tính cửa sổ.
+
+**Xếp hạng DNA release1** xét cửa sổ nửa mở `[season.reward_boundary_at, dnaSeasonEnd(season.reward_boundary_at))`, không lấy đầu cửa sổ đặt lịch làm đầu kỳ thưởng và không có mốc cấu hình làm sàn. Mùa đã kết thúc không có ledger `NATIVE` trong cửa sổ **và không có đúng** snapshot `ranking:DNA:<season.id>` là lịch sử không khả dụng, không dựng snapshot rỗng ngược. Có `NATIVE` nhưng chưa có snapshot thì scheduler được phép chốt; snapshot đã có luôn giữ nguyên kể cả không có `NATIVE`. Tháng runtime dùng ranh giới tự nhiên UTC+7 `[đầu tháng, đầu tháng kế tiếp)`; month rows/snapshots đã có không bị viết lại.
+
+Nguồn: `src/lib/competition-snapshots.ts`, `src/lib/period-leaderboard.ts`.
 
 ---
 
@@ -675,16 +679,19 @@ Nếu đã có lần apply `APPLIED` với **thời gian chuyển giao thực t�
 
 ### 4.5 Lỗi / phi cấu hình mùa
 
-| Mã lý do                         | Thông điệp hiển thị                                                |
-| ---------------------------------- | ----------------------------------------------------------------------- |
-| `TRANSFER_SEASON_NOT_CONFIGURED` | "Chưa cấu hình mùa chuyển giao cho giai đoạn này." (không còn dùng để ngừng thưởng) |
-| `CHAPTER_TRANSFER_OVERDUE`       | "Chapter chưa hoàn tất chuyển giao nên thưởng đang tạm dừng." |
-| `TERM_NOT_CONFIGURED`            | "Chưa khởi tạo nhiệm kỳ Chapter phù hợp."                        |
-| `SEASON_NOT_CONFIGURED`          | "Chưa khởi tạo mùa chuyển giao phù hợp."                         |
-| `CYCLE_NOT_STARTED`              | "Chưa có chu kỳ học; tiến độ lịch sử được giữ riêng."       |
-| `MONTH_NOT_CONFIGURED`           | "Chưa khởi tạo tháng thi đua phù hợp."                             |
+Readiness cơ sở release1 là `READY` cùng `asOf`, không có `policy` hay cổng kích hoạt. API periods vẫn bổ sung lý do theo kỳ phù hợp; các kiểm tra quyền, chuyển giao/thưởng và khả dụng lịch sử giữ nguyên.
 
-✅ `src/lib/learning-readiness-rules.ts:1-15`
+| Mã lý do | Thông điệp hiển thị |
+| --- | --- |
+| `TRANSFER_SEASON_NOT_CONFIGURED` | "Chưa cấu hình mùa chuyển giao cho giai đoạn này." (không dùng để ngừng thưởng) |
+| `CHAPTER_TRANSFER_OVERDUE` | "Chapter chưa hoàn tất chuyển giao nên thưởng đang tạm dừng." |
+| `TERM_NOT_CONFIGURED` | "Chưa khởi tạo nhiệm kỳ Chapter phù hợp." |
+| `SEASON_NOT_CONFIGURED` | "Chưa khởi tạo mùa chuyển giao phù hợp." |
+| `CYCLE_NOT_STARTED` | "Chưa có chu kỳ học; tiến độ lịch sử được giữ riêng." |
+| `MONTH_NOT_CONFIGURED` | "Chưa khởi tạo tháng thi đua phù hợp." |
+| `HISTORICAL_SEASON_UNAVAILABLE` | "Mùa lịch sử chưa có dữ liệu học theo mô hình hiện hành hoặc snapshot đã lưu." |
+
+Nguồn: `src/lib/learning-readiness.ts`, `src/lib/learning-readiness-rules.ts`, `src/lib/chapter-reward-gate.ts`.
 
 ### 4.6 Có lịch nhưng chưa tới giờ / bị hủy
 
@@ -965,8 +972,8 @@ INITIAL_NOT_DUE — không ngừng
 
 | # | Thông điệp                                                          | Nguồn                                                                   | Điều kiện kích hoạt chính xác                                                                                                                                                                                                                                                                                                    |
 | - | ---------------------------------------------------------------------- | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A | "Admin cần cấu hình mùa chuyển giao cho thời điểm đã chọn." | Trước P0–P4: `TransferSeasonNotConfigured` tại `reorganizations/route.ts` | Policy đã kích hoạt **và** số mùa phủ `effectiveAt` **≠ 1**                                                                                                                                                                                                                                                      |
-| B | "Chưa cấu hình mùa chuyển giao…" (nay chỉ là thông tin, **không** ngừng thưởng) | `TRANSFER_SEASON_NOT_CONFIGURED`, ✅ `src/lib/chapter-reward-gate.ts` | Trước P0–P4: policy đã kích hoạt + chapter **đã từng** chuyển giao + không có mùa khớp đúng mốc. Sau P0–P4: mùa thiếu **không** làm chapter chưa từng chuyển giao bị ngừng thưởng |
+| A | "Admin cần cấu hình mùa chuyển giao cho thời điểm đã chọn." | Trước P0–P4: `TransferSeasonNotConfigured` tại `reorganizations/route.ts` | Trước P0–P4: số mùa phủ `effectiveAt` **≠ 1**                                                                                                                                                                                                                                                      |
+| B | "Chưa cấu hình mùa chuyển giao…" (nay chỉ là thông tin, **không** ngừng thưởng) | `TRANSFER_SEASON_NOT_CONFIGURED`, ✅ `src/lib/chapter-reward-gate.ts` | Trước P0–P4: chapter **đã từng** chuyển giao + không có mùa khớp đúng mốc. Sau P0–P4: mùa thiếu **không** làm chapter chưa từng chuyển giao bị ngừng thưởng; release1 không có bước kích hoạt policy |
 
 **Nguyên nhân chắc chắn đã xác định (cả A và B):** điều kiện kiểm tra **gộp nhiều tình huống khác nhau vào một thông điệp "chưa cấu hình"**, nên khi mùa *đã có* nhưng không khớp điều kiện, người dùng vẫn bị báo là "chưa cấu hình". Cụ thể:
 
@@ -1018,13 +1025,13 @@ Tổng hợp mọi điểm đã đánh dấu 🔧 trong tài liệu. **Đợt P0
 | 3  | `src/lib/chapter-reward-gate.ts` | ✅ `resolveSeasonForWindow(...)` tra theo cửa sổ chứa `t` | tra mùa theo cửa sổ — [1.6](#16-mùa-do-admin-cấu-hình) | ✅ Xong |
 | 4  | `src/lib/chapter-term-rules.ts` | ✅ `evaluateChapterTransferEligibility` dùng `paused(t)` và lịch sử `APPLIED` | cùng công thức — [2.3](#23-bảng-quyết-định-đầy-đủ) | ✅ Xong |
 | 5  | Chặn trùng | ✅ Chặn theo **cửa sổ** của `effective_at` | tối đa 1 lần mỗi cửa sổ — [1.4](#14-chặn-trùng-một-lần-mỗi-cửa-sổ) | ✅ Xong |
-| 6  | `src/app/api/v1/admin/learning-policy/route.ts` | ✅ Buộc `starts_at`/`ends_at` trùng đúng cửa sổ chuẩn | như mô tả — [1.6](#16-mùa-do-admin-cấu-hình) | ✅ Xong |
+| 6  | `src/app/api/v1/admin/learning-config/route.ts` | ✅ Buộc `starts_at`/`ends_at` trùng đúng cửa sổ chuẩn | như mô tả — [1.6](#16-mùa-do-admin-cấu-hình) | ✅ Xong |
 | 7  | `chapter_competition_terms` (`chapter-reorganizations.ts`; đọc ở `competition-snapshots.ts`, `period-leaderboard.ts`) | vẫn mở tại thời điểm apply | mở/đóng theo nhiệm kỳ cố định — [1.5](#15-nhiệm-kỳ-khác-cửa-sổ) | 🔧 Ngoài P0–P4 |
 | 8  | `scripts/db/seed-rich-demo.ts` | ✅ Seed dùng `1/1–30/6` / `1/7–31/12` | như mô tả — [1.8](#18-dữ-liệu-mẫu-và-các-định-nghĩa-mùa) | ✅ Xong |
 | 9  | `src/test/chapter-six-month-transfer.test.ts` | ✅ Đã viết lại theo cửa sổ chuẩn | mốc `1/4`/`1/10` 00:00 — [2.4](#24-ví-dụ-số) | ✅ Xong |
 | 10 | `docs/business-rules.md` | ✅ Đã sửa 29/10/2026 | `1/1–30/6`, `1/7–31/12` — [1.2](#12-cửa-sổ-chuyển-giao) | ✅ Xong |
 | 11 | `src/lib/dna-cycle-resets.ts` | ✅ Dùng helper `anchorElapsed` / `chapterRewardBoundary` | tách helper mốc đã qua — [1.10](#110-dna-reset-độc-lập) | ✅ Xong |
-| 12 | `src/app/api/v1/admin/learning-policy/route.ts` | ✅ Chỉ còn cấu hình season/mapping | như mô tả — [1.6](#16-mùa-do-admin-cấu-hình) | ✅ Xong |
+| 12 | `src/app/api/v1/admin/learning-config/route.ts` | ✅ Chỉ còn cấu hình season/mapping | như mô tả — [1.6](#16-mùa-do-admin-cấu-hình) | ✅ Xong |
 | 13 | `src/test/learning-cycles.test.ts` + `src/test/transfer-windows.test.ts` | ✅ Giữ test mốc đã qua; thêm test riêng cho mốc gần nhất | như mô tả | ✅ Xong |
 | 14 | `src/lib/chapter-term-rules.ts` | ✅ Đã xoá `firstEligibleAt` + `INITIAL_SEASON_SKIPPED` | chapter mới chuyển giao ngay — [2.1](#21-chapter-mới-chuyển-giao-được-ngay-không-phải-chờ) | ✅ Xong |
 | 15 | `CHAPTER_PRESIDENT` → `PRESIDENT` (7 file mã + 2 migration + 3 test + 1 component + 1 trang admin)                                                                                | hai mã cho cùng một vị trí: `CHAPTER_PRESIDENT` trong dữ liệu, `PRESIDENT` ở vài danh sách                                                          | **một mã duy nhất `PRESIDENT`** — [5.6](#56-ai-được-vào-bảng-xếp-hạng)                                                                                                      | 🟠 Vừa   |
@@ -1067,7 +1074,7 @@ Hệ quả: người giữ `CHAPTER_MANAGER` **không** được coi là learnin
 ### 7.6 Phạm vi chưa kiểm chứng
 
 - Toàn bộ nội dung tài liệu này dựa trên **đọc mã + test tự động**, **chưa** đối chiếu dữ liệu production.
-- Supabase không truy cập được từ môi trường soạn tài liệu (lỗi TLS), nên không xác minh được cấu hình policy/mùa thật.
+- Supabase không truy cập được từ môi trường soạn tài liệu (lỗi TLS), nên không xác minh được mapping/mùa thật hoặc dữ liệu cần backup cho release1/release2.
 - Chưa đối chiếu dữ liệu cũ thật trên production.
   ⚠️ `docs/known-issues.md:32-33`
 
@@ -1103,7 +1110,7 @@ Hệ quả: người giữ `CHAPTER_MANAGER` **không** được coi là learnin
 | DNA reset độc lập                                                            | ✅ `src/lib/dna-cycle-resets.ts` dùng `chapterRewardBoundary` (mốc **đã qua**) — xem [1.10](#110-dna-reset-độc-lập)                                                                                                                                       |
 | Thông điệp lý do hiển thị                                                 | `src/lib/learning-readiness-rules.ts:1-12`                                                                                                                                                                                                                        |
 | Cổng chặn ở video/quiz/tiến độ                                            | `src/lib/video-heartbeat.ts:238`, `src/lib/quiz-submission.ts:119`, `src/app/api/v1/lessons/[lessonId]/progress/route.ts:202`, `src/lib/learning-periods.ts:94`                                                                                             |
-| Validate cấu hình mùa của Admin                                             | ✅ `src/lib/transfer-season-lookup.ts` (`checkSeasonConfiguration`), `src/app/api/v1/admin/learning-policy/route.ts`                                                                                                                                   |
+| Validate cấu hình mùa của Admin                                             | ✅ `src/lib/transfer-season-lookup.ts` (`checkSeasonConfiguration`), `src/app/api/v1/admin/learning-config/route.ts`                                                                                                                                   |
 | Tạo lịch chuyển giao (validate)                                              | `src/app/api/v1/chapters/[chapterId]/reorganizations/route.ts:64-216`                                                                                                                                                                                             |
 | Áp dụng ngay / hủy lịch                                                     | `src/app/api/v1/chapters/[chapterId]/reorganizations/[batchId]/route.ts`                                                                                                                                                                                          |
 | Cron apply                                                                      | `vercel.json:11`, `src/app/api/internal/organization/reorganizations/apply/route.ts`                                                                                                                                                                            |

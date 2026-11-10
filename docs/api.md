@@ -22,7 +22,7 @@ Danh mục đọc từ 96 file route trong `src/app/api`. Đường dẫn độn
 | Course authoring | Draft → session/lesson/video/document → assessment/bank → publish; draft snapshot/publish riêng | Admin; used bank/version và content publishing có guard; không tự reset attempt |
 | Chuyển giao | Đọc roster, parse sheet, preview/POST batch, apply/cancel theo batch | Scope Chapter thực tế; GET danh sách/roster hiện có thể apply đợt đến hạn (xem known-issues); scheduling chưa reset; successful apply mới reset và tạo outbox |
 | BXH kỳ | `group=MEMBER/LT/DNA/CHAPTER`, `periodType=MONTH/TERM/ACTUAL_TERM`; thêm periodId/chapterId theo source | ACTUAL_TERM chỉ CHAPTER, statisticsOnly; bảng đóng đọc snapshot, thiếu dữ liệu trả reason; thành viên/manager bị giới hạn đơn vị |
-| Learning policy | Admin GET cấu hình/readiness; PUT catalog/mapping/season | Mapping đề xuất chưa được tự duyệt; season không chồng lấn, boundary April/October UTC+7, và phải phủ cửa sổ `01/01–30/06` / `01/07–31/12` |
+| Cấu hình học tập | Admin GET cấu hình; PUT catalog/mapping/season/normalization/outbox | Không đổi quyền hay quy tắc cấu hình; mapping đề xuất chưa được tự duyệt; season không chồng lấn, boundary April/October UTC+7, và phải phủ cửa sổ `01/01–30/06` / `01/07–31/12` |
 
 ## Danh mục route
 
@@ -46,12 +46,16 @@ Danh mục đọc từ 96 file route trong `src/app/api`. Đường dẫn độn
 |---|---|---|---|---|
 | [GET](../src/app/api/internal/organization/reorganizations/apply/route.ts#L9) | `CRON_SECRET` | — | `applied, dnaResets, synchronization, retired, supplementalViolations, closedMonths, completedKpis, closedTerms` | `Unauthorized` |
 
-### `/api/v1/admin/learning-policy`
+### `/api/v1/admin/learning-config`
+
+Release1: `/api/v1/admin/learning-policy` là alias tương thích cùng contract; trang chính `/admin/learning-config`, đường `/admin/learning-policy` chuyển hướng tương thích. Trang/API cấu hình vẫn cần, không bị xóa.
 
 | Method | Truy cập / guard | Đầu vào đọc trực tiếp | Response thành công | Mã lỗi thấy trong handler |
 |---|---|---|---|---|
-| [GET](../src/app/api/v1/admin/learning-policy/route.ts#L13) | `admin`, `authenticate`, `role ADMIN` | — | `policy, programs, targets, courses, pending, failed, seasons` | `AccessDenied` |
-| [PUT](../src/app/api/v1/admin/learning-policy/route.ts#L28) | `admin`, `authenticate`, `role ADMIN` | `body.courses`, `body.normalizeOrganization`, `body.programs`, `body.retryOutboxIds`, `body.seasons`, `body.targets`, `body.units` | `saved` | `AccessDenied`, `ValidationError` |
+| [GET](../src/app/api/v1/admin/learning-config/route.ts) | `admin`, `authenticate`, `role ADMIN` | — | `programs, targets, courses, pending, failed, seasons` (không có `policy`) | `AccessDenied` |
+| [PUT](../src/app/api/v1/admin/learning-config/route.ts) | `admin`, `authenticate`, `role ADMIN` | `body.courses`, `body.normalizeOrganization`, `body.programs`, `body.retryOutboxIds`, `body.seasons`, `body.targets`, `body.units` | `saved` | `AccessDenied`, `ValidationError` |
+
+PUT giữ nguyên catalog, mapping khóa/chương trình/target, seasons, chuẩn hóa tổ chức, retry outbox, quyền Admin và mọi validation/quy tắc nghiệp vụ; không có thao tác kích hoạt policy.
 
 ### `/api/v1/admin/transfer-seasons/progress`
 
@@ -298,7 +302,7 @@ Danh mục đọc từ 96 file route trong `src/app/api`. Đường dẫn độn
 | [GET](../src/app/api/v1/chapters/[chapterId]/reorganizations/route.ts#L9) | `authenticate`, `canAccessChapterPermission`, `role ADMIN` | — | `items` | `AccessDenied` |
 | [POST](../src/app/api/v1/chapters/[chapterId]/reorganizations/route.ts#L64) | `authenticate`, `canAccessChapterPermission`; Admin bị từ chối | `body.effectiveAt`, `body.items`, `body.sourceUrl`, `body.termNumber` | `item, appliedImmediately, normalized` | `AccessDenied`, `AdminReadOnly`, `ChapterNotFound`, `ChapterPresidentPositionRequired`, `DepartmentScopeInvalid`, `DuplicateUser`, `InvalidTermNumber`, `MemberScopeInvalid`, `MultipleChapterPresidents`, `PositionScopeInvalid`, `ScheduledReorganizationExists`, `TransferApplyFailed`, `WINDOW_ALREADY_APPLIED`, `SEASON_NOT_CONFIGURED`, `SEASON_OVERLAP`, `SEASON_NOT_COVERING_DATE`, `SEASON_LEGACY_WINDOW`, `SEASON_WINDOW_MISMATCH`, `SEASON_BOUNDARY_MISMATCH`, `ValidationError` |
 
-> Admin chỉ được xem chuyển giao nhiệm kỳ: các thao tác đặt lịch, áp dụng ngay và hủy lịch trả `403 AdminReadOnly`. Cấu hình mùa vẫn do Admin quản lý ở `/api/v1/admin/learning-policy`.
+> Admin chỉ được xem chuyển giao nhiệm kỳ: các thao tác đặt lịch, áp dụng ngay và hủy lịch trả `403 AdminReadOnly`. Cấu hình mùa vẫn do Admin quản lý ở `/api/v1/admin/learning-config`.
 
 ### `/api/v1/chapters`
 
@@ -486,6 +490,10 @@ Danh mục đọc từ 96 file route trong `src/app/api`. Đường dẫn độn
 | Method | Truy cập / guard | Đầu vào đọc trực tiếp | Response thành công | Mã lỗi thấy trong handler |
 |---|---|---|---|---|
 | [GET](../src/app/api/v1/learning/periods/route.ts#L10) | `authenticate`, `getLearningManagerKind`, `role ADMIN`, `role MEMBER` | — | `readiness, months, terms, seasons, actualTerms, periodTypes, scope` | — |
+
+Release1: `readiness` gồm `ready, reasonCode, message, asOf, periods`, không có `policy`; response không có `policy` ở cấp ngoài. Readiness cơ sở là `READY`, nhưng API vẫn báo lý do thiếu tháng/nhiệm kỳ/mùa phù hợp như trước. Đây không phải chứng nhận mapping/mùa hay đủ dữ liệu lịch sử. Tháng runtime dùng ranh giới tự nhiên `[đầu tháng, đầu tháng kế tiếp)` UTC+7; bản ghi tháng/snapshot đã có không bị viết lại.
+
+Với `GET /api/v1/leaderboard?group=DNA&periodType=TERM`, cửa sổ xếp hạng DNA là `[season.reward_boundary_at, dnaSeasonEnd(season.reward_boundary_at))`, không có mốc cấu hình làm sàn. Mùa đã kết thúc không có ledger `NATIVE` trong cửa sổ **và không có đúng** snapshot `ranking:DNA:<season.id>` trả lịch sử không khả dụng, không giả thành 0. Có `NATIVE` và chưa có snapshot thì scheduler được phép chốt; snapshot đã tồn tại được đọc và giữ nguyên, kể cả không có ledger `NATIVE`.
 
 ### `/api/v1/lessons/[lessonId]/assessment`
 

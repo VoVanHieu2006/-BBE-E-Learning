@@ -234,41 +234,47 @@ async function readiness() {
   const catalog = require('../../src/app/api/v1/learning/periods/route')
   const { periodLeaderboard } = require('../../src/lib/period-leaderboard')
   const { competitionMonthBounds } = require('../../src/lib/learning-cycle-rules')
-  const old = await prisma.learningPolicy.findUnique({ where: { id: 'default' } })
+  const { readLearningReadiness } = require('../../src/lib/learning-readiness')
+  await check('FB08 readiness is always READY/asOf and has no database dependency', async () => {
+    const source = require('node:fs').readFileSync(path.resolve('src/lib/learning-readiness.ts'), 'utf8')
+    assert.doesNotMatch(source, /learningPolicy|learning_policy|prisma|\$queryRaw|\$executeRaw/)
+    for (const at of [new Date('1990-01-01'), new Date(), new Date('2099-01-01')]) {
+      const result = await readLearningReadiness(at)
+      assert.equal(result.ready, true); assert.equal(result.reasonCode, 'READY')
+      assert.equal(result.asOf, at)
+      assert.deepEqual(Object.keys(result).sort(), ['asOf', 'message', 'ready', 'reasonCode'])
+    }
+  })
   const bounds = competitionMonthBounds(new Date())
   await prisma.competitionMonth.upsert({ where: { key: bounds.key }, update: {}, create: { key: bounds.key, starts_at: bounds.startsAt, ends_at: bounds.endsAt } })
-  try {
-    for (const data of [null, {}, { mapping_approved_at: new Date() }, { mapping_approved_at: new Date(), cutover_at: new Date(Date.now() + 86400000) }]) {
-      await prisma.learningPolicy.deleteMany()
-      if (data) await prisma.learningPolicy.create({ data: { id: 'default', ...data } })
-      await check(`FB08 catalog and board are READY without cutover activation (${JSON.stringify(data)}); GET creates no periods`, async () => {
-        const before = await prisma.competitionMonth.count()
-        const a = await (await catalog.GET(await req(admin, '/api/v1/learning/periods'))).json()
-        const b = await (await periodLeaderboard(await req(admin, '/api/v1/leaderboard?group=CHAPTER&periodType=MONTH'))).json()
-        assert.equal(a.readiness.reasonCode, 'READY'); assert.equal(b.reasonCode, 'READY')
-        assert.equal(await prisma.competitionMonth.count(), before)
-      })
+  await check('FB08 catalog and board are READY; repeated GET creates no periods', async () => {
+    const before = await prisma.competitionMonth.count()
+    for (let retry = 0; retry < 2; retry++) {
+      const a = await (await catalog.GET(await req(admin, '/api/v1/learning/periods'))).json()
+      const b = await (await periodLeaderboard(await req(admin, '/api/v1/leaderboard?group=CHAPTER&periodType=MONTH'))).json()
+      assert.equal(a.readiness.ready, true); assert.equal(a.readiness.reasonCode, 'READY')
+      assert.equal(b.reasonCode, 'READY')
+      assert.equal(await prisma.competitionMonth.count(), before)
     }
-    await prisma.learningPolicy.update({ where: { id: 'default' }, data: { cutover_at: new Date(Date.now() - 86400000) } })
-    for (const [query, reason] of [['group=CHAPTER&periodType=MONTH&periodId=1990-01', 'MONTH_NOT_CONFIGURED'], [`group=MEMBER&periodType=TERM&periodId=${randomUUID()}&chapterId=${randomUUID()}`, 'TERM_NOT_CONFIGURED'], [`group=DNA&periodType=TERM&periodId=${randomUUID()}`, 'SEASON_NOT_CONFIGURED']]) {
-      await check(`FB08 distinguishes ${reason}`, async () => {
-        const body = await (await periodLeaderboard(await req(admin, `/api/v1/leaderboard?${query}`))).json()
-        assert.equal(body.reasonCode, reason)
-      })
-    }
-    await check('FB08 closed board requires exact snapshot and never rewrites saved scores', async () => {
-      const month = await prisma.competitionMonth.upsert({ where: { key: '1991-01' }, update: {}, create: { key: '1991-01', starts_at: new Date('1990-12-31T17:00:00Z'), ends_at: new Date('1991-01-31T17:00:00Z'), state: 'FINALIZED' } })
-      await prisma.learningSnapshot.deleteMany({ where: { key: `ranking:CHAPTER:${month.id}` } })
-      const query = '/api/v1/leaderboard?group=CHAPTER&periodType=MONTH&periodId=1991-01'
-      const missing = await (await periodLeaderboard(await req(admin, query))).json()
-      assert.equal(missing.reasonCode, 'SNAPSHOT_MISSING')
-      const payload = { state: 'FINALIZED', items: [{ chapterId: randomUUID(), chapterName: 'Frozen', eligible: true, score: 42.125, rank: 1 }] }
-      await prisma.learningSnapshot.create({ data: { key: `ranking:CHAPTER:${month.id}`, kind: 'RANKING', payload, captured_at: new Date() } })
-      const result = await (await periodLeaderboard(await req(admin, query))).json()
-      assert.equal(result.items[0].score, 42.125)
-      assert.deepEqual((await prisma.learningSnapshot.findUnique({ where: { key: `ranking:CHAPTER:${month.id}` } })).payload, payload)
+  })
+  for (const [query, reason] of [['group=CHAPTER&periodType=MONTH&periodId=1990-01', 'MONTH_NOT_CONFIGURED'], [`group=MEMBER&periodType=TERM&periodId=${randomUUID()}&chapterId=${randomUUID()}`, 'TERM_NOT_CONFIGURED'], [`group=DNA&periodType=TERM&periodId=${randomUUID()}`, 'SEASON_NOT_CONFIGURED']]) {
+    await check(`FB08 distinguishes ${reason}`, async () => {
+      const body = await (await periodLeaderboard(await req(admin, `/api/v1/leaderboard?${query}`))).json()
+      assert.equal(body.reasonCode, reason)
     })
-  } finally { await prisma.learningPolicy.deleteMany(); if (old) await prisma.learningPolicy.create({ data: old }) }
+  }
+  await check('FB08 closed board requires exact snapshot and never rewrites saved scores', async () => {
+    const month = await prisma.competitionMonth.upsert({ where: { key: '1991-01' }, update: {}, create: { key: '1991-01', starts_at: new Date('1990-12-31T17:00:00Z'), ends_at: new Date('1991-01-31T17:00:00Z'), state: 'FINALIZED' } })
+    await prisma.learningSnapshot.deleteMany({ where: { key: `ranking:CHAPTER:${month.id}` } })
+    const query = '/api/v1/leaderboard?group=CHAPTER&periodType=MONTH&periodId=1991-01'
+    const missing = await (await periodLeaderboard(await req(admin, query))).json()
+    assert.equal(missing.reasonCode, 'SNAPSHOT_MISSING')
+    const payload = { state: 'FINALIZED', items: [{ chapterId: randomUUID(), chapterName: 'Frozen', eligible: true, score: 42.125, rank: 1 }] }
+    await prisma.learningSnapshot.create({ data: { key: `ranking:CHAPTER:${month.id}`, kind: 'RANKING', payload, captured_at: new Date() } })
+    const result = await (await periodLeaderboard(await req(admin, query))).json()
+    assert.equal(result.items[0].score, 42.125)
+    assert.deepEqual((await prisma.learningSnapshot.findUnique({ where: { key: `ranking:CHAPTER:${month.id}` } })).payload, payload)
+  })
 }
 async function videoFixture() {
   const member = await user(), admin = await user('ADMIN'), ch = await chapter()
@@ -280,82 +286,77 @@ async function videoFixture() {
   return { member, admin, ch, course, lesson, video }
 }
 async function videoRewards() {
-  const old = await prisma.learningPolicy.findUnique({ where: { id: 'default' } })
   const { recordVideoHeartbeat } = require('../../src/lib/video-heartbeat')
   const route = require('../../src/app/api/v1/lessons/[lessonId]/progress/route')
-  try {
-    await prisma.learningPolicy.deleteMany()
-    await check('FB07 lifetime completion with no cycle is labelled separately', async () => {
-      const f = await videoFixture()
-      await prisma.lessonProgress.create({ data: { user_id: f.member.id, lesson_id: f.lesson.id, completed: true, completed_at: new Date(), furthest_watched_position_seconds: 862 } })
-      const body = await (await route.GET(await req(f.member, `/api/v1/lessons/${f.lesson.id}/progress`), { params: { lessonId: f.lesson.id } })).json()
-      assert.equal(body.progressContext.learningCycleId, null)
-      assert.equal(body.lifetime.completed, true); assert.equal(body.cycleProgress, null)
-      assert.equal(body.rewardStatus.reasonCode, 'CYCLE_NOT_STARTED')
-      assert.equal(await prisma.learningCycle.count({ where: { user_id: f.member.id } }), 0)
-    })
-    const now = new Date(), cutover = new Date(Date.now() - 86400000)
-    await prisma.learningPolicy.create({ data: { id: 'default', cutover_at: cutover, mapping_approved_at: cutover } })
-    const { chapterRewardBoundary } = require('../../src/lib/chapter-reward-gate')
-    const { windowOf, windowOfAnchor } = require('../../src/lib/transfer-windows')
-    const boundary = chapterRewardBoundary(now)
-    const scheduleWindow = windowOf(now), pauseWindow = windowOfAnchor(boundary)
-    let season = await prisma.transferSeason.findUnique({ where: { reward_boundary_at: scheduleWindow.anchor } })
-    if (!season) season = await prisma.transferSeason.create({ data: { code: `fb-${randomUUID()}`, starts_at: scheduleWindow.startsAt, ends_at: scheduleWindow.endsAt, reward_boundary_at: scheduleWindow.anchor } })
-    else if (season.starts_at.getTime() !== scheduleWindow.startsAt.getTime() || season.ends_at.getTime() !== scheduleWindow.endsAt.getTime()) season = await prisma.transferSeason.update({ where: { id: season.id }, data: { starts_at: scheduleWindow.startsAt, ends_at: scheduleWindow.endsAt } })
+  await check('FB07 lifetime completion with no cycle is labelled separately', async () => {
     const f = await videoFixture()
-    await prisma.chapterReorganization.create({ data: { chapter_id: f.ch.id, created_by_user_id: f.admin.id, effective_at: cutover, applied_at: cutover, status: 'APPLIED', transfer_season_id: season.id } })
-    const beat = (position, event = 'HEARTBEAT') => recordVideoHeartbeat(f.member.id, f.lesson.id, position, position, false, 'fb-session', { event, playbackRate: 2, playerDurationSeconds: 862 })
-    await check('FB07 actual writer grants 14 stars for 862s once, including concurrent retries and refresh', async () => {
-      const start = await beat(0, 'PLAY'); assert.ok(!start.error)
-      assert.equal(start.progressContext.monthlyReplayRequired, true)
-      for (let position = 20; position <= 860; position += 20) {
-        await prisma.monthlyVideoReplay.updateMany({ where: { user_id: f.member.id, video_id: f.video.id }, data: { last_heartbeat_at: new Date(Date.now() - 10050) } })
-        const result = await beat(position); assert.ok(!result.error)
-      }
-      await prisma.monthlyVideoReplay.updateMany({ where: { user_id: f.member.id, video_id: f.video.id }, data: { last_heartbeat_at: new Date(Date.now() - 2000) } })
-      const result = await beat(862, 'ENDED')
-      assert.equal(result.starReward.amount, 14); assert.equal(result.rewardStatus.reasonCode, 'AWARDED')
-      assert.equal(result.replay.learningCycleId, result.progressContext.learningCycleId)
-      assert.equal(result.replay.competitionMonthId, result.progressContext.competitionMonthId)
-      const retries = await Promise.all([beat(862, 'ENDED'), beat(862, 'ENDED'), beat(862)])
-      assert.ok(retries.every(row => row.starReward.amount === 0))
-      const entries = await prisma.starLedger.findMany({ where: { user_id: f.member.id, source_id: f.video.id } })
-      assert.equal(entries.length, 1); assert.equal(entries[0].amount, 14)
-      const refreshed = await (await route.GET(await req(f.member, `/api/v1/lessons/${f.lesson.id}/progress`), { params: { lessonId: f.lesson.id } })).json()
-      assert.equal(refreshed.rewardStatus.reasonCode, 'ALREADY_AWARDED'); assert.equal(refreshed.videoStarsThisMonth.awardedStars, 14)
-    })
-    await check('FB07 forged seek/ENDED creates no reward and completed cycle is independent from new replay', async () => {
-      const g = await videoFixture()
-      const first = await recordVideoHeartbeat(g.member.id, g.lesson.id, 862, 862, false, 'forged', { event: 'ENDED', playbackRate: 2 })
-      assert.equal(first.starReward.amount, 0); assert.equal(first.replay.completed, false)
-      const cycle = await prisma.learningCycle.findFirst({ where: { user_id: g.member.id, ends_at: null } })
-      await prisma.cycleLessonProgress.updateMany({ where: { user_id: g.member.id, lesson_id: g.lesson.id }, data: { furthest_seconds: 862, completed_at: now } })
-      const oldMonth = await prisma.competitionMonth.upsert({ where: { key: '2020-01' }, update: {}, create: { key: '2020-01', starts_at: new Date('2019-12-31T17:00:00Z'), ends_at: new Date('2020-01-31T17:00:00Z'), state: 'FINALIZED' } })
-      await prisma.monthlyVideoReplay.create({ data: { user_id: g.member.id, video_id: g.video.id, competition_month_id: oldMonth.id, learning_cycle_id: cycle.id, furthest_seconds: 862, completed_at: oldMonth.ends_at } })
-      const data = await (await route.GET(await req(g.member, `/api/v1/lessons/${g.lesson.id}/progress`), { params: { lessonId: g.lesson.id } })).json()
-      assert.equal(data.progressContext.learningCycleId, cycle.id); assert.equal(data.cycleProgress.completed, true)
-      assert.equal(data.replay.completed, false); assert.equal(data.replay.watchedSeconds, 0)
-    })
-    await check('FB07 transfer pause suppresses completed replay and later transfer never backfills', async () => {
-      const g = await videoFixture()
-      await prisma.chapter.update({ where: { id: g.ch.id }, data: { created_at: new Date(season.starts_at.getTime() - 200 * 86400000) } })
-      // A founding Chapter remains eligible until its first actual transfer.
-      // This fixture tests an overdue *previously transferred* Chapter, so the
-      // earlier transfer sits before the current pause window.
-      const priorTransferAt = new Date(pauseWindow.startsAt.getTime() - 86400000)
-      await prisma.chapterReorganization.create({ data: { chapter_id: g.ch.id, created_by_user_id: g.admin.id, status: 'APPLIED', effective_at: priorTransferAt, applied_at: priorTransferAt } })
-      const send = () => recordVideoHeartbeat(g.member.id, g.lesson.id, 862, 862, false, 'suppression', { event: 'ENDED', playbackRate: 2 })
-      await recordVideoHeartbeat(g.member.id, g.lesson.id, 0, 0, false, 'suppression', { event: 'PLAY', playbackRate: 2 })
-      await prisma.monthlyVideoReplay.updateMany({ where: { user_id: g.member.id, video_id: g.video.id }, data: { furthest_seconds: 842, last_heartbeat_at: new Date(Date.now() - 10050) } })
-      const suppressed = await send()
-      assert.equal(suppressed.starReward.amount, 0); assert.equal(suppressed.replay.suppressed, true)
-      assert.equal(suppressed.rewardStatus.reasonCode, 'CHAPTER_TRANSFER_OVERDUE')
-      await prisma.chapterReorganization.create({ data: { chapter_id: g.ch.id, created_by_user_id: g.admin.id, effective_at: cutover, applied_at: cutover, status: 'APPLIED', transfer_season_id: season.id } })
-      const retry = await send(); assert.equal(retry.starReward.amount, 0); assert.equal(retry.rewardStatus.reasonCode, 'SUPPRESSED')
-      assert.equal(await prisma.starLedger.count({ where: { user_id: g.member.id } }), 0)
-    })
-  } finally { await prisma.learningPolicy.deleteMany(); if (old) await prisma.learningPolicy.create({ data: old }) }
+    await prisma.lessonProgress.create({ data: { user_id: f.member.id, lesson_id: f.lesson.id, completed: true, completed_at: new Date(), furthest_watched_position_seconds: 862 } })
+    const body = await (await route.GET(await req(f.member, `/api/v1/lessons/${f.lesson.id}/progress`), { params: { lessonId: f.lesson.id } })).json()
+    assert.equal(body.progressContext.learningCycleId, null)
+    assert.equal(body.lifetime.completed, true); assert.equal(body.cycleProgress, null)
+    assert.equal(body.rewardStatus.reasonCode, 'CYCLE_NOT_STARTED')
+    assert.equal(await prisma.learningCycle.count({ where: { user_id: f.member.id } }), 0)
+  })
+  const now = new Date(), appliedAt = new Date(Date.now() - 86400000)
+  const { chapterRewardBoundary } = require('../../src/lib/chapter-reward-gate')
+  const { windowOf, windowOfAnchor } = require('../../src/lib/transfer-windows')
+  const boundary = chapterRewardBoundary(now)
+  const scheduleWindow = windowOf(now), pauseWindow = windowOfAnchor(boundary)
+  let season = await prisma.transferSeason.findUnique({ where: { reward_boundary_at: scheduleWindow.anchor } })
+  if (!season) season = await prisma.transferSeason.create({ data: { code: `fb-${randomUUID()}`, starts_at: scheduleWindow.startsAt, ends_at: scheduleWindow.endsAt, reward_boundary_at: scheduleWindow.anchor } })
+  else if (season.starts_at.getTime() !== scheduleWindow.startsAt.getTime() || season.ends_at.getTime() !== scheduleWindow.endsAt.getTime()) season = await prisma.transferSeason.update({ where: { id: season.id }, data: { starts_at: scheduleWindow.startsAt, ends_at: scheduleWindow.endsAt } })
+  const f = await videoFixture()
+  await prisma.chapterReorganization.create({ data: { chapter_id: f.ch.id, created_by_user_id: f.admin.id, effective_at: appliedAt, applied_at: appliedAt, status: 'APPLIED', transfer_season_id: season.id } })
+  const beat = (position, event = 'HEARTBEAT') => recordVideoHeartbeat(f.member.id, f.lesson.id, position, position, false, 'fb-session', { event, playbackRate: 2, playerDurationSeconds: 862 })
+  await check('FB07 actual writer grants 14 stars for 862s once, including concurrent retries and refresh', async () => {
+    const start = await beat(0, 'PLAY'); assert.ok(!start.error)
+    assert.equal(start.progressContext.monthlyReplayRequired, true)
+    for (let position = 20; position <= 860; position += 20) {
+      await prisma.monthlyVideoReplay.updateMany({ where: { user_id: f.member.id, video_id: f.video.id }, data: { last_heartbeat_at: new Date(Date.now() - 10050) } })
+      const result = await beat(position); assert.ok(!result.error)
+    }
+    await prisma.monthlyVideoReplay.updateMany({ where: { user_id: f.member.id, video_id: f.video.id }, data: { last_heartbeat_at: new Date(Date.now() - 2000) } })
+    const result = await beat(862, 'ENDED')
+    assert.equal(result.starReward.amount, 14); assert.equal(result.rewardStatus.reasonCode, 'AWARDED')
+    assert.equal(result.replay.learningCycleId, result.progressContext.learningCycleId)
+    assert.equal(result.replay.competitionMonthId, result.progressContext.competitionMonthId)
+    const retries = await Promise.all([beat(862, 'ENDED'), beat(862, 'ENDED'), beat(862)])
+    assert.ok(retries.every(row => row.starReward.amount === 0))
+    const entries = await prisma.starLedger.findMany({ where: { user_id: f.member.id, source_id: f.video.id } })
+    assert.equal(entries.length, 1); assert.equal(entries[0].amount, 14)
+    const refreshed = await (await route.GET(await req(f.member, `/api/v1/lessons/${f.lesson.id}/progress`), { params: { lessonId: f.lesson.id } })).json()
+    assert.equal(refreshed.rewardStatus.reasonCode, 'ALREADY_AWARDED'); assert.equal(refreshed.videoStarsThisMonth.awardedStars, 14)
+  })
+  await check('FB07 forged seek/ENDED creates no reward and completed cycle is independent from new replay', async () => {
+    const g = await videoFixture()
+    const first = await recordVideoHeartbeat(g.member.id, g.lesson.id, 862, 862, false, 'forged', { event: 'ENDED', playbackRate: 2 })
+    assert.equal(first.starReward.amount, 0); assert.equal(first.replay.completed, false)
+    const cycle = await prisma.learningCycle.findFirst({ where: { user_id: g.member.id, ends_at: null } })
+    await prisma.cycleLessonProgress.updateMany({ where: { user_id: g.member.id, lesson_id: g.lesson.id }, data: { furthest_seconds: 862, completed_at: now } })
+    const oldMonth = await prisma.competitionMonth.upsert({ where: { key: '2020-01' }, update: {}, create: { key: '2020-01', starts_at: new Date('2019-12-31T17:00:00Z'), ends_at: new Date('2020-01-31T17:00:00Z'), state: 'FINALIZED' } })
+    await prisma.monthlyVideoReplay.create({ data: { user_id: g.member.id, video_id: g.video.id, competition_month_id: oldMonth.id, learning_cycle_id: cycle.id, furthest_seconds: 862, completed_at: oldMonth.ends_at } })
+    const data = await (await route.GET(await req(g.member, `/api/v1/lessons/${g.lesson.id}/progress`), { params: { lessonId: g.lesson.id } })).json()
+    assert.equal(data.progressContext.learningCycleId, cycle.id); assert.equal(data.cycleProgress.completed, true)
+    assert.equal(data.replay.completed, false); assert.equal(data.replay.watchedSeconds, 0)
+  })
+  await check('FB07 transfer pause suppresses completed replay and later transfer never backfills', async () => {
+    const g = await videoFixture()
+    await prisma.chapter.update({ where: { id: g.ch.id }, data: { created_at: new Date(season.starts_at.getTime() - 200 * 86400000) } })
+    // A founding Chapter remains eligible until its first actual transfer.
+    // This fixture tests an overdue *previously transferred* Chapter, so the
+    // earlier transfer sits before the current pause window.
+    const priorTransferAt = new Date(pauseWindow.startsAt.getTime() - 86400000)
+    await prisma.chapterReorganization.create({ data: { chapter_id: g.ch.id, created_by_user_id: g.admin.id, status: 'APPLIED', effective_at: priorTransferAt, applied_at: priorTransferAt } })
+    const send = () => recordVideoHeartbeat(g.member.id, g.lesson.id, 862, 862, false, 'suppression', { event: 'ENDED', playbackRate: 2 })
+    await recordVideoHeartbeat(g.member.id, g.lesson.id, 0, 0, false, 'suppression', { event: 'PLAY', playbackRate: 2 })
+    await prisma.monthlyVideoReplay.updateMany({ where: { user_id: g.member.id, video_id: g.video.id }, data: { furthest_seconds: 842, last_heartbeat_at: new Date(Date.now() - 10050) } })
+    const suppressed = await send()
+    assert.equal(suppressed.starReward.amount, 0); assert.equal(suppressed.replay.suppressed, true)
+    assert.equal(suppressed.rewardStatus.reasonCode, 'CHAPTER_TRANSFER_OVERDUE')
+    await prisma.chapterReorganization.create({ data: { chapter_id: g.ch.id, created_by_user_id: g.admin.id, effective_at: appliedAt, applied_at: appliedAt, status: 'APPLIED', transfer_season_id: season.id } })
+    const retry = await send(); assert.equal(retry.starReward.amount, 0); assert.equal(retry.rewardStatus.reasonCode, 'SUPPRESSED')
+    assert.equal(await prisma.starLedger.count({ where: { user_id: g.member.id } }), 0)
+  })
 }
 async function history() {
   await check('FB05 typed membership history retains Chapter intervals and is read-only', async () => {

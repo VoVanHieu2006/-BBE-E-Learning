@@ -587,20 +587,21 @@ Các lý do `MANDATORY_COURSE_ADDED`, `MANDATORY_COURSE_REMOVED` có trong enum 
 
 ### 3.11 Thời điểm bắt đầu `D_start` được lấy từ đâu?
 
-- Với người học mới: chu kỳ được tạo ở lần học đầu tiên; lộ trình được tạo trong lần reconcile đầu tiên, `starts_at = now` (`src/lib/shared-learning-path.ts:15-17`).
-- Với người học đã có dữ liệu từ trước: lần học/reconcile đầu tiên tạo chu kỳ và lộ trình; `starts_at` là `assigned_at` sớm nhất của assignment cũ, hoặc `now` nếu không có; `imported_due_at` là hạn cũ muộn nhất (`src/lib/learning-periods.ts`).
+- Release1: người học **chưa có chu kỳ** nhận chu kỳ `NATIVE` với `learning_cycles.starts_at = now` tại lần học/reconcile đầu tiên, kể cả tài khoản đã có từ trước. Không chọn `LEGACY` theo ngày tạo tài khoản và không lùi chu kỳ mới về `assigned_at` cũ (`src/lib/learning-periods.ts`).
+- Lộ trình nhập lần đầu giữ `learning_paths.starts_at` là `assigned_at` sớm nhất của assignment cũ, hoặc `now` nếu không có (`src/lib/learning-periods.ts`); lộ trình mới sau chuyển giao được tạo từ `now` khi reconcile (`src/lib/shared-learning-path.ts`). Tiến độ video cũ và hạn cũ muộn nhất qua `imported_due_at` vẫn được nhập như trước; nhập tiến độ không đồng nghĩa nhập attempt null vào chu kỳ `NATIVE` mới.
 - Với người vừa chuyển giao: chu kỳ mới bắt đầu tại thời điểm apply; lộ trình mới được tạo khi reconcile chạy, nên `D_start` có thể **muộn hơn** thời điểm chuyển giao nếu reconcile bị trễ. Đây là điểm cần lưu ý khi kiểm tra số liệu (xem Phần 9).
-- `imported_due_at` chỉ được dùng làm **sàn** trong lần tính lại đầu tiên của lộ trình (`src/lib/shared-learning-path.ts:47-49`). Sau khi đã có ít nhất một lần thay đổi, sàn này không còn áp dụng.
+- `imported_due_at` giữ nguyên trường và ý nghĩa: chỉ làm **sàn** trong lần tính lại đầu tiên khi chưa có `learning_path_changes`; sau khi đã có thay đổi, sàn này không còn áp dụng. Không dùng hạn nhập làm mốc bắt đầu chu kỳ.
 
 ### 3.12 Dữ liệu từ trước khi có hạn chung
 
-Mô hình hạn chung luôn chạy. Dữ liệu cũ chỉ được **đọc** để giữ lịch sử, không có cổng bật/tắt:
+**Release1:** mô hình hạn chung luôn chạy, không có cổng kích hoạt policy. Bảng `learning_policy` và model `LearningPolicy` chỉ giữ để rollback, không còn được runtime đọc. Trang `/admin/learning-config` vẫn cần cho catalog, mapping, mùa, chuẩn hóa tổ chức và retry outbox; đường cũ chỉ là alias/redirect release1 (xem `operations.md`).
 
-- Assignment cũ có thể giữ `due_at` riêng khi đọc lịch sử; mọi ghi mới dùng một hạn chung từ `learning_paths` và số ngày từ `courses.mandatory_default_due_days`.
-- Attempt cũ có `learning_cycle_id = null` vẫn được tính qua `currentCycleAttemptFilter` (`src/lib/learning-periods.ts`); mọi ghi mới đều gắn chu kỳ.
-- Ledger sao cũ không có month/cycle vẫn đọc được; ledger mới gắn month/cycle và `provenance = NATIVE`.
-- Snapshot lịch sử đã chốt được giữ nguyên.
-- Không backfill, không đổi sao, không đổi tiến độ.
+- Assignment và lộ trình cũ giữ đường đọc lịch sử/read-only, gồm hạn riêng và `imported_due_at`; nhập tiến độ video như trước. Ghi mới dùng hạn chung từ `learning_paths` và số ngày từ `courses.mandatory_default_due_days`.
+- **Chu kỳ `LEGACY` đã tồn tại** vẫn đọc attempt có `learning_cycle_id = null` qua `currentCycleAttemptFilter`. Người chưa có chu kỳ nhận `NATIVE` bắt đầu từ `now`; **không tự nhập attempt null cũ** vào chu kỳ `NATIVE` mới. Ghi attempt mới luôn gắn chu kỳ.
+- Giữ các trường `provenance` của cycle, cycle progress và ledger. Ledger cũ thiếu month/cycle vẫn đọc được; ledger mới gắn month/cycle và `provenance = NATIVE`.
+- Tháng runtime dùng `[00:00 đầu tháng, 00:00 đầu tháng kế tiếp)` UTC+7. Không viết lại bản ghi tháng/snapshot đã có, không backfill hay đổi sao/tiến độ lịch sử.
+- Mùa DNA xét `[reward_boundary_at, dnaSeasonEnd(season.reward_boundary_at))`. Mùa đã kết thúc **không có** `star_ledger` `NATIVE` trong cửa sổ **và không có đúng snapshot** `ranking:DNA:<season.id>` là lịch sử không khả dụng, không dựng snapshot rỗng ngược. Có `NATIVE` nhưng chưa có snapshot thì đủ điều kiện cho scheduler; snapshot đã tồn tại luôn giữ nguyên. Không có mốc cấu hình làm sàn.
+- Release1 chỉ có migration định nghĩa lại hàm; drop bảng và bỏ model/sinh lại client chỉ khi release2 được duyệt sau. SQL release2 chuẩn bị ngoài thư mục Prisma deploy và chưa áp dụng; xem [runbook](operations.md#prompt04--triển-khai-hai-release).
 
 ### 3.13 Bảng đối chiếu đặc tả và mã
 

@@ -481,6 +481,13 @@ export async function completePendingCompetitionKpis() {
   return completed
 }
 
+export async function hasNativeLearningEvidence(tx: Tx, startsAt: Date, endsAt: Date) {
+  return Boolean(await tx.starLedger.findFirst({
+    where: { provenance: 'NATIVE', awarded_at: { gte: startsAt, lt: endsAt } },
+    select: { id: true },
+  }))
+}
+
 export async function closeCompetitionTerms() {
   const now = new Date()
   const [terms, seasons] = await Promise.all([
@@ -488,19 +495,20 @@ export async function closeCompetitionTerms() {
     prisma.transferSeason.findMany({ where: { ends_at: { lte: now } } }),
   ])
   let captured = 0
-  const policy = await prisma.learningPolicy.findUnique({ where: { id: 'default' } })
-  const cutoverAt = policy?.cutover_at || null
   const dnaSeasons = await prisma.transferSeason.findMany({ where: { reward_boundary_at: { not: null } } })
   for (const season of dnaSeasons) {
     const end = dnaSeasonEnd(season.reward_boundary_at!)
-    // Seasons that ended before the current model started remain history.
-    if (end > now || (cutoverAt && end <= cutoverAt)) continue
+    if (end > now) continue
     await prisma.$transaction(async (tx) => {
-      const users = await tx.user.findMany({ select: { id: true }, orderBy: { id: 'asc' } })
-      for (const user of users) await lockLearningUser(tx, user.id)
       const key = `ranking:DNA:${season.id}`
       if (await tx.learningSnapshot.findUnique({ where: { key } })) return
-      const period = { ...season, starts_at: new Date(Math.max(season.reward_boundary_at!.getTime(), cutoverAt?.getTime() ?? 0)), ends_at: end }
+      // Without native evidence, synthesizing an old season would invent an empty history.
+      if (!await hasNativeLearningEvidence(tx, season.reward_boundary_at!, end)) return
+      const users = await tx.user.findMany({ select: { id: true }, orderBy: { id: 'asc' } })
+      for (const user of users) await lockLearningUser(tx, user.id)
+      // Another scheduler may have finalized this season while we waited for locks.
+      if (await tx.learningSnapshot.findUnique({ where: { key } })) return
+      const period = { ...season, starts_at: season.reward_boundary_at!, ends_at: end }
       await saveSnapshot(tx, key, { group: 'DNA', periodType: 'TERM', period, state: 'FINALIZED', items: await individualPeriodRows(tx, period.starts_at, end, 'DNA') }, now)
       captured++
     }, { timeout: 60_000 })

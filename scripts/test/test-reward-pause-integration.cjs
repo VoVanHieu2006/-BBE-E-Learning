@@ -23,7 +23,6 @@ async function main() {
   const key = randomUUID(), now = new Date(), boundary = chapterRewardBoundary(now)
   const scheduleWindow = windowOf(now), pauseWindow = windowOfAnchor(boundary)
   const season = await db.transferSeason.upsert({ where: { reward_boundary_at: scheduleWindow.anchor }, update: { starts_at: scheduleWindow.startsAt, ends_at: scheduleWindow.endsAt }, create: { code: `QA_${key}`, reward_boundary_at: scheduleWindow.anchor, starts_at: scheduleWindow.startsAt, ends_at: scheduleWindow.endsAt } })
-  await db.learningPolicy.upsert({ where: { id: 'default' }, update: { cutover_at: new Date(now.getTime() - 60000), mapping_approved_at: now }, create: { cutover_at: new Date(now.getTime() - 60000), mapping_approved_at: now } })
   const admin = await db.user.create({ data: { email: `pause-admin-${key}@example.invalid`, password_hash: '-', role: 'ADMIN' } })
   const user = await db.user.create({ data: { email: `pause-${key}@example.invalid`, password_hash: '-', role: 'MEMBER', created_at: new Date(now.getTime() - 86400000) } })
   const unit = await db.organizationUnit.create({ data: { name: key, type: 'CHAPTER' } })
@@ -71,7 +70,6 @@ async function main() {
   assert.equal((await heartbeat()).starReward.amount, 0, 'DNA transition preserves suppression in the same month/cycle')
   assert.equal(await db.starLedger.count({ where: { user_id: user.id } }), 0, 'no ledger or deferred payment is created')
   // Exercise the real DNA job across the most recent fixed boundary without backdating its reset.
-  await db.learningPolicy.update({ where: { id: 'default' }, data: { cutover_at: new Date(boundary.getTime() - 86400000) } })
   await db.learningSnapshot.deleteMany({ where: { key: `dna-reset:${boundary.toISOString()}` } })
   const dnaUser = await db.user.create({ data: { email: `dna-reset-${key}@example.invalid`, password_hash: '-', role: 'MEMBER', created_at: new Date(boundary.getTime() - 3 * 86400000) } })
   await db.organizationMembership.create({ data: { user_id: dnaUser.id, unit_id: dna.id, starts_at: new Date(boundary.getTime() - 2 * 86400000) } })

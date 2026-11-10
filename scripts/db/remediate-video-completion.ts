@@ -71,11 +71,8 @@ async function main() {
   console.log(`User ID: ${user.id}`)
 
   const now = new Date()
-  const [cycle, policy] = await Promise.all([
-    prisma.learningCycle.findFirst({ where: { user_id: user.id, ends_at: null }, orderBy: { starts_at: 'desc' } }),
-    prisma.learningPolicy.findUnique({ where: { id: 'default' }, select: { cutover_at: true } }),
-  ])
-  const bounds = competitionMonthBounds(now, policy?.cutover_at ?? new Date(0))
+  const cycle = await prisma.learningCycle.findFirst({ where: { user_id: user.id, ends_at: null }, orderBy: { starts_at: 'desc' } })
+  const bounds = competitionMonthBounds(now)
   const month = await prisma.competitionMonth.findUnique({ where: { key: bounds.key } })
 
   console.log(`Chu kỳ đang mở: ${cycle ? cycle.id : 'KHÔNG CÓ'}`)

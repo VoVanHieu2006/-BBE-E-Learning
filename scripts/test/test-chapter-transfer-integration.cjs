@@ -22,7 +22,6 @@ async function main() {
   await db.organizationMembership.create({ data: { user_id: member.id, unit_id: unit.id } })
   const term = await db.chapterCompetitionTerm.create({ data: { chapter_id: chapter.id, starts_at: chapter.created_at } })
   const cycle = await db.learningCycle.create({ data: { user_id: member.id, chapter_id: chapter.id, starts_at: now, trigger_key: key } })
-  await db.learningPolicy.update({ where: { id: 'default' }, data: { cutover_at: new Date('2026-01-01'), mapping_approved_at: now } })
   const season = await db.transferSeason.upsert({ where: { reward_boundary_at: transferWindow.anchor }, update: { starts_at: transferWindow.startsAt, ends_at: transferWindow.endsAt }, create: { code: key, starts_at: transferWindow.startsAt, ends_at: transferWindow.endsAt, reward_boundary_at: transferWindow.anchor } })
   const month = await db.competitionMonth.findFirstOrThrow({ where: { starts_at: { lte: now }, ends_at: { gt: now } } })
   for (const [amount, monthId] of [[7,month.id],[3,null]]) await db.starLedger.create({ data: { user_id: member.id, chapter_at_award_id: chapter.id, amount, reason: 'VIDEO_COMPLETION', source_type: 'TEST', source_id: member.id, reward_key: `transfer-test:${key}:${amount}`, competition_month_id: monthId, learning_cycle_id: cycle.id, awarded_at: now, provenance: monthId ? 'NATIVE' : 'LEGACY' } })

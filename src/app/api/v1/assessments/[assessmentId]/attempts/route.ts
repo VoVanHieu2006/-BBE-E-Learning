@@ -8,7 +8,7 @@ import { randomInt } from 'crypto'
 import { isLearningManager } from '@/lib/manager-learning-access'
 import { selectBalancedFinalExamQuestions } from '@/lib/final-exam-selection'
 import { lockCourseExamBank } from '@/lib/final-exam-bank'
-import { learningContext, lockLearningUser, loadLearningPolicy } from '@/lib/learning-periods'
+import { learningContext, lockLearningUser } from '@/lib/learning-periods'
 import { competitionMonthBounds } from '@/lib/learning-cycle-rules'
 
 function shuffleSecurely<T>(items: readonly T[]): T[] {
@@ -77,7 +77,7 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
     const cycle = await prisma.learningCycle.findFirst({ where: { user_id: userId, ends_at: null }, select: { id: true } })
     // The month comes from the calendar, not from whether its row exists yet:
     // early in a new month nobody may have created the row, and the gate must still apply.
-    const monthBounds = competitionMonthBounds(now, (await loadLearningPolicy(prisma))?.cutover_at)
+    const monthBounds = competitionMonthBounds(now)
 
     if (cycle && assessment.lesson.video) {
       const priorAttemptInEarlierMonth = await prisma.attempt.findFirst({

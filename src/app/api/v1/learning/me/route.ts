@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
     stars: { history: allStars._sum.amount || 0, month: monthStars?._sum.amount || 0, cycle: cycleStars?._sum.amount || 0 },
     rewardsPaused: user?.status !== 'ACTIVE' || user?.role !== 'MEMBER' || rewardState.paused,
     rewardState,
-    path: path ? { startsAt: path.starts_at, dueAt: unfinished ? path.due_at : null, importedDueAt: path.imported_due_at } : null,
+    path: path ? { startsAt: path.starts_at, dueAt: unfinished ? path.due_at : null } : null,
     replay, programs, notices, supplements,
     learningCycleId: cycle?.id || null,
     lessonStates,

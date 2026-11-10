@@ -3,7 +3,7 @@ import { addCalendarMonthsVietnam } from './chapter-term-rules'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from './prisma'
 import { authenticate } from './auth'
-import { historicalChapterMonthRows, individualPeriodRows, chapterSeasonRows, competitionCohortAt } from './competition-snapshots'
+import { historicalChapterMonthRows, individualPeriodRows, chapterSeasonRows, competitionCohortAt, hasNativeLearningEvidence } from './competition-snapshots'
 import { dnaSeasonEnd } from './chapter-reward-gate'
 import { getLearningManagerKind } from './manager-learning-access'
 import { listAccessibleChapterIds, listManagedOrganizationUnits } from './authorization'
@@ -92,8 +92,6 @@ export async function periodLeaderboard(request: NextRequest) {
   }
 
   const now = new Date()
-  const policy = await prisma.learningPolicy.findUnique({ where: { id: 'default' } })
-  const cutoverAt = policy?.cutover_at || null
 
   const periodId = query.get('periodId')
   if (periodId && (periodType === 'MONTH' ? !/^\d{4}-(0[1-9]|1[0-2])$/.test(periodId) : !/^[0-9a-f-]{36}$/i.test(periodId))) {
@@ -138,7 +136,7 @@ export async function periodLeaderboard(request: NextRequest) {
   const dnaPeriod = group === 'DNA' && season?.reward_boundary_at
     ? {
         ...season,
-        starts_at: cutoverAt ? new Date(Math.max(season.reward_boundary_at.getTime(), cutoverAt.getTime())) : season.reward_boundary_at,
+        starts_at: season.reward_boundary_at,
         ends_at: dnaSeasonEnd(season.reward_boundary_at),
       }
     : null
@@ -182,6 +180,9 @@ export async function periodLeaderboard(request: NextRequest) {
     return NextResponse.json(await hydrateRanking(payload, isGuest), { headers: { 'Cache-Control': 'no-store' } })
   }
   if (period.ends_at && period.ends_at <= now) {
+    if (group === 'DNA' && periodType === 'TERM' && !await hasNativeLearningEvidence(prisma, period.starts_at, period.ends_at)) {
+      return NextResponse.json({ items: [], state: 'PERIOD_UNAVAILABLE', ...readinessForReason('HISTORICAL_SEASON_UNAVAILABLE'), group, periodType, period, formula: INDIVIDUAL_FORMULA }, { headers: { 'Cache-Control': 'no-store' } })
+    }
     return NextResponse.json({ items: [], state: 'AWAITING_SNAPSHOT', ...readinessForReason('SNAPSHOT_MISSING'), group, periodType, period, formula: group === 'CHAPTER' ? CHAPTER_FORMULA : INDIVIDUAL_FORMULA })
   }
 

@@ -68,9 +68,18 @@ try {
   // Current compatibility behavior: these GET handlers apply due transfers.
   // A future read-only contract is tracked in docs/known-issues.md, not changed here.
   assert.equal((await db.chapterReorganization.findUniqueOrThrow({ where: { id: batch.id } })).status, 'APPLIED', 'compatibility GETs retain the current due-transfer application behavior')
+  assert.equal((await call('/api/v1/admin/learning-config', memberToken)).status, 403)
+  assert.equal((await call('/api/v1/admin/learning-config', adminToken)).status, 200)
+  assert.equal((await call('/api/v1/admin/learning-config', adminToken, 'PUT', { targets: [{ code: 'not valid' }] })).status, 400)
+  // The historical endpoint is a GET/PUT alias, not a policy activation API.
   assert.equal((await call('/api/v1/admin/learning-policy', memberToken)).status, 403)
-  assert.equal((await call('/api/v1/admin/learning-policy', adminToken)).status, 200)
+  const config = await call('/api/v1/admin/learning-config', adminToken)
+  const alias = await call('/api/v1/admin/learning-policy', adminToken)
+  assert.equal(alias.status, config.status)
+  assert.deepEqual(alias.body, config.body)
+  assert.equal((await call('/api/v1/admin/learning-policy', memberToken, 'PUT', {})).status, 403)
   assert.equal((await call('/api/v1/admin/learning-policy', adminToken, 'PUT', { targets: [{ code: 'not valid' }] })).status, 400)
+  assert.equal((await call('/api/v1/admin/learning-policy', adminToken, 'PUT', {})).status, 200)
   assert.equal((await call('/api/internal/organization/reorganizations/apply')).status, 401)
   assert.equal((await call('/api/internal/attempts/auto-submit', undefined, 'POST')).status, 401)
   const leaderboard = await call('/api/v1/leaderboard?group=MEMBER&periodType=MONTH', memberToken)
@@ -90,13 +99,13 @@ try {
   assert.ok(failed.last_error)
   assert.equal(failed.processed_at, null)
   await db.learningOutbox.update({ where: { id: failed.id }, data: { user_id: member.id, available_at: new Date(Date.now() + 86_400_000) } })
-  assert.equal((await call('/api/v1/admin/learning-policy', memberToken, 'PUT', { retryOutboxIds: [failed.id] })).status, 403)
-  assert.equal((await call('/api/v1/admin/learning-policy', adminToken, 'PUT', { retryOutboxIds: [failed.id] })).status, 200)
+  assert.equal((await call('/api/v1/admin/learning-config', memberToken, 'PUT', { retryOutboxIds: [failed.id] })).status, 403)
+  assert.equal((await call('/api/v1/admin/learning-config', adminToken, 'PUT', { retryOutboxIds: [failed.id] })).status, 200)
   assert.ok((await db.learningOutbox.findUniqueOrThrow({ where: { id: failed.id } })).available_at <= new Date())
   assert.equal((await call('/api/internal/organization/reorganizations/apply', process.env.CRON_SECRET)).status, 200)
   assert.ok((await db.learningOutbox.findUniqueOrThrow({ where: { id: failed.id } })).processed_at)
   assert.equal((await call(`/api/v1/users/${inactive.id}`, adminToken, 'PATCH', { status: 'ACTIVE' })).status, 409)
-  console.log('PASS: cross-Chapter apply/cancel/department denial, target membership checks, compatibility GET due-transfer behavior, Admin mapping authorization, protected cron, no leaderboard email, retirement preserving history and durable job retry.')
+  console.log('PASS: cross-Chapter apply/cancel/department denial, target membership checks, compatibility GET due-transfer behavior, Admin learning-config authorization and legacy GET/PUT alias, protected cron, no leaderboard email, retirement preserving history and durable job retry.')
 } finally {
   try {
     await db.chapterReorganization.deleteMany({ where: { chapter_id: { in: fixture.chapterIds } } })

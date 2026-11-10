@@ -277,17 +277,15 @@ Khi chuyển giao Chapter có hiệu lực:
 
 5.  Ghi audit, giữ lịch sử, video và quiz;
 
-### 16. Tháng kích hoạt hệ thống mới giữa tháng — ĐÃ CHỐT
+### 16. Ranh giới tháng thi đua — ĐÃ CHỐT (release1)
 
-**Tính chính thức ngay trong tháng kích hoạt**, không có kỳ chạy thử bắt buộc.
+**Tháng runtime dùng ranh giới tự nhiên theo UTC+7:** từ 00:00 ngày đầu tháng đến 00:00 ngày đầu tháng kế tiếp, gồm đầu và không gồm cuối.
 
-- Nếu có đủ snapshot và sao lịch sử đáng tin cậy: có thể tính toàn bộ tháng.
+- Không có mốc kích hoạt làm sàn hoặc tạo kỳ chính thức rút ngắn.
 
-- Nếu không đủ chứng cứ: tính từ timestamp kích hoạt đến hết tháng, ghi rõ **kỳ chính thức rút ngắn**.
+- Bản ghi tháng và snapshot đã có giữ nguyên, không viết lại ranh giới hay dựng bù lịch sử. Thiếu chứng cứ phải báo không có dữ liệu lịch sử, không giả thành 0.
 
 - Tháng đủ điều kiện vẫn được tính vào nhiệm kỳ thi đua Chapter.
-
-(Cái này dùng khi bắt đầu lở dở thì tính từ đó luôn chứ không để 1 tháng nháp hay gì hết)
 
 ## V. DEADLINE KHÓA HỌC BẮT BUỘC
 
