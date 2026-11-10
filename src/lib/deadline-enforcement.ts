@@ -102,7 +102,7 @@ export async function enforceOverdueAssignments({ db, now, actorId, syncCompleti
           // ACTIVE -> LOCKED only: an INACTIVE account stays INACTIVE, and an account locked for
           // another cause keeps its own lock_reason (the DEADLINE restriction below still records this one).
           const lock = await tx.user.updateMany({
-            where: { id: assignment.user_id, role: { notIn: ['ADMIN', 'CHAPTER_LEADER'] }, status: 'ACTIVE' },
+            where: { id: assignment.user_id, role: { notIn: ['ADMIN', 'LEAD'] }, status: 'ACTIVE' },
             data: { status: 'LOCKED', lock_reason: 'OVERDUE_LOCK', auth_version: { increment: 1 } },
           })
 

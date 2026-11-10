@@ -1,3 +1,4 @@
+import { replaceUserPosition, assignMembershipPosition } from '@/lib/position-replacement'
 import { prepareOrganizationTransition } from '@/lib/organization-transition'
 import { assertLeadAppointment, OrganizationConflict } from '@/lib/chapter-lead'
 import { lockLearningUser } from '@/lib/learning-periods'
@@ -347,6 +348,7 @@ async function mutateOrganization(request: NextRequest) {
           update: {},
         })
       }
+      if (!duplicate) await assignMembershipPosition(tx, user.id, unit.id, auth.context!.userId)
       if (!duplicate) await tx.auditLog.create({ data: { actor_user_id: auth.context!.userId, action: 'ADD_ORGANIZATION_MEMBERSHIP', entity_type: 'ORGANIZATION_MEMBERSHIP', entity_id: created.id, metadata: { userId: user.id, unitId: unit.id, effectiveAt: effectiveAt.toISOString() } } })
       await reconcileLearningAssignmentsForUser(user.id, tx)
       return created
@@ -402,10 +404,11 @@ async function mutateOrganization(request: NextRequest) {
       prisma.organizationUnit.findUnique({ where: { id: body.unitId }, select: { id: true, type: true } }),
     ])
     if (!user || !position || !unit) return NextResponse.json({ error: { code: 'NotFound', message: 'Không tìm thấy người dùng, chức vụ hoặc đơn vị.' } }, { status: 404 })
+    if (!canHoldPosition(user.role, position.code)) return NextResponse.json({ error: { code: 'PositionRoleMismatch', message: 'Chức vụ không phù hợp vai trò. LEAD chỉ được tạo qua lời mời LEAD cho tài khoản mới.' } }, { status: 409 })
     if (!positionScopeMatchesUnitType(position.scope, unit.type)) {
       return NextResponse.json({ error: { code: 'PositionScopeMismatch', message: 'Phạm vi chức vụ không khớp loại đơn vị được bổ nhiệm.' } }, { status: 400 })
     }
-    if (['CHAPTER_LEAD', 'CHAPTER_MANAGER'].includes(position.code) && user.role !== 'ADMIN') {
+    if (['CHAPTER_LEAD'].includes(position.code) && user.role !== 'ADMIN') {
       const bound = await prisma.chapterLeadBinding.findUnique({ where: { user_id: user.id }, include: { chapter: { select: { organization_unit_id: true, name: true } } } })
       if (bound && bound.chapter.organization_unit_id !== unit.id) return NextResponse.json({ error: { code: 'ChapterLeadPermanentBinding', message: `Tài khoản đã gắn cố định với ${bound.chapter.name}; không thể đổi sang Chapter khác.`, chapterName: bound.chapter.name } }, { status: 409 })
     }
@@ -420,30 +423,7 @@ async function mutateOrganization(request: NextRequest) {
     }
     const isPrimary = Boolean(body.isPrimary)
     const assignment = await prisma.$transaction(async (tx) => {
-      await lockLearningUser(tx, user.id)
-      await assertLeadAppointment(tx, user.id, position.code, unit.id, startsAt, endsAt)
-      let effectiveAt = startsAt
-      if (['DNA', 'DNA_GROUP'].includes(unit.type) && startsAt <= new Date()) {
-        effectiveAt = await prepareOrganizationTransition(tx, user.id, unit.id, auth.context!.userId)
-        if (!await tx.organizationMembership.count({ where: { user_id: user.id, unit_id: unit.id, status: 'ACTIVE', ends_at: null } })) await tx.organizationMembership.create({ data: { user_id: user.id, unit_id: unit.id, starts_at: effectiveAt } })
-        const existing = await tx.positionAssignment.findFirst({ where: { user_id: user.id, position_id: position.id, unit_id: unit.id, starts_at: { lte: effectiveAt }, OR: [{ ends_at: null }, { ends_at: { gt: effectiveAt } }] } })
-        if (existing) return existing
-      }
-      if (isPrimary) {
-        await tx.positionAssignment.updateMany({
-          where: { unit_id: unit.id, position_id: position.id, is_primary: true, starts_at: { lt: startsAt }, OR: [{ ends_at: null }, { ends_at: { gt: startsAt } }] },
-          data: { ends_at: startsAt },
-        })
-      }
-      const created = await tx.positionAssignment.create({ data: {
-        user_id: user.id,
-        position_id: position.id,
-        unit_id: unit.id,
-        is_primary: isPrimary,
-        starts_at: effectiveAt,
-        ends_at: endsAt,
-        appointed_by: auth.context!.userId,
-      } })
+      const created = await replaceUserPosition(tx, { userId: user.id, unitId: unit.id, positionId: position.id, startsAt, endsAt, isPrimary, actorId: auth.context!.userId })
       await tx.auditLog.create({
         data: {
           actor_user_id: auth.context!.userId,
@@ -510,9 +490,10 @@ export async function POST(request: NextRequest) {
     return response
   } catch (error: any) {
     if (error instanceof OrganizationConflict) return NextResponse.json({ error: { code: error.code, message: error.message, chapterName: error.chapterName } }, { status: 409 })
-    if (error?.code === 'P2034' || error?.code === 'P2002' || /ChapterLead|SingleOrganizationAffiliationRequired|MembershipExists/.test(error?.message || '')) {
+    if (error?.code === 'P2034' || error?.code === 'P2002' || /ChapterLead|SingleOrganizationAffiliationRequired|SinglePositionRequired|SingleDepartmentRequired|PositionRoleMismatch|MembershipExists/.test(error?.message || '')) {
       return NextResponse.json({ error: { code: 'OrganizationConflict', message: 'Organization scope changed or conflicts with an existing membership/Lead binding. Reload and review the current scope.' } }, { status: 409 })
     }
     throw error
   }
 }
+import { canHoldPosition } from '@/lib/roles'

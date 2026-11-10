@@ -334,10 +334,10 @@ describe('Competition Chapter stages and role groups', () => {
     assert.ok(chapterCompetitionScore([{ ...stage, memberCount: 21 }], null).exclusionReasons.includes('WAITING_KPI'))
   })
   it('places Presidents in LT, excludes TT and management accounts', () => {
-    assert.equal(competitionGroup('MEMBER', ['CHAPTER_PRESIDENT'], false), 'LT')
-    assert.equal(competitionGroup('MEMBER', ['DEPARTMENT_LEADER'], false), 'LT')
+    assert.equal(competitionGroup('MEMBER', ['PRESIDENT'], false), 'LT')
+    assert.equal(competitionGroup('MEMBER', ['DEPARTMENT_LEAD'], false), 'LT')
     assert.equal(competitionGroup('MEMBER', ['TT'], true), null)
-    assert.equal(competitionGroup('MEMBER', ['DNA_MANAGER'], true), null)
+    assert.equal(competitionGroup('MEMBER', ['DNA_LEAD'], true), null)
     assert.equal(competitionGroup('ADMIN', [], false), null)
   })
 })

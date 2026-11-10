@@ -1,3 +1,4 @@
+import { isLeadRole } from '@/lib/roles'
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -29,7 +30,7 @@ export async function GET(
   }
 
   // Authorization check
-  const isLeader = auth.context!.role === 'CHAPTER_LEADER' && auth.context!.chapterId === chapterId
+  const isLeader = isLeadRole(auth.context!.role) && auth.context!.chapterId === chapterId
   const isAdmin = auth.context!.role === 'ADMIN'
   if (!isAdmin && !(await getActiveMetricChapterIds()).includes(chapterId)) {
     return NextResponse.json({ error: { code: 'AccessDenied' } }, { status: 403 })
@@ -61,7 +62,7 @@ export async function GET(
     },
   })
 
-  if (!target || !['MEMBER', 'CHAPTER_LEADER'].includes(target.role)) {
+  if (!target || !['MEMBER', 'LEAD'].includes(target.role)) {
     return NextResponse.json({ error: { code: 'NotFound', message: 'Thành viên không thuộc chapter này' } }, { status: 404 })
   }
   if (target.status !== 'ACTIVE' && !await canViewInactiveChapterMember(auth.context!, chapterId)) {

@@ -2,8 +2,8 @@ import { prisma } from '@/lib/prisma'
 import { getOrganizationUnitTreeIds } from '@/lib/learning-assignments'
 import { ChapterMemberRecord, mergeChapterMemberRecords } from '@/lib/chapter-membership-rules'
 
-const LT_CODES = ['PRESIDENT', 'CHAPTER_PRESIDENT', 'DEPARTMENT_LEAD', 'DEPARTMENT_LEADER']
-const MANAGER_CODES = ['CHAPTER_LEAD', 'CHAPTER_MANAGER', 'DNA_LEAD', 'DNA_MANAGER']
+const LT_CODES = ['PRESIDENT', 'DEPARTMENT_LEAD']
+const MANAGER_CODES = ['CHAPTER_LEAD', 'DNA_LEAD']
 
 /** Current learners only. Account administration and history retain listChapterMembers. */
 export async function listChapterLearners(chapterId: string, options: { asOf?: Date } = {}): Promise<Array<ChapterMemberRecord & { isLead: boolean }>> {
@@ -49,7 +49,7 @@ export async function listChapterLearners(chapterId: string, options: { asOf?: D
 }
 
 export interface ListChapterMembersOptions {
-  roles?: Array<'ADMIN' | 'CHAPTER_LEADER' | 'MEMBER'>
+  roles?: Array<'ADMIN' | 'LEAD' | 'MEMBER'>
   status?: 'ACTIVE' | 'INACTIVE' | 'LOCKED'
   search?: string
 }

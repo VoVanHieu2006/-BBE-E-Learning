@@ -1,3 +1,4 @@
+import { isLeadRole } from '@/lib/roles'
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { getInvitations } from '@/lib/invitations'
@@ -15,8 +16,8 @@ export async function GET(request: NextRequest) {
 
   const url = new URL(request.url)
   const kind = url.searchParams.get('kind') || undefined
-  if (kind && kind !== 'LEAD') return NextResponse.json({ error: { code: 'ValidationError' } }, { status: 400 })
-  if (kind === 'LEAD' && auth.context!.role !== 'ADMIN') return NextResponse.json({ error: { code: 'AccessDenied' } }, { status: 403 })
+  if (kind && !isLeadRole(kind)) return NextResponse.json({ error: { code: 'ValidationError' } }, { status: 400 })
+  if (isLeadRole(kind) && auth.context!.role !== 'ADMIN') return NextResponse.json({ error: { code: 'AccessDenied' } }, { status: 403 })
   const status = url.searchParams.get('status') as any
   const chapterId = url.searchParams.get('chapterId') || undefined
   const requestedOrganizationUnitId = url.searchParams.get('organizationUnitId') || undefined
@@ -36,7 +37,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: { code: 'AccessDenied' } }, { status: 403 })
     }
   }
-  if ((auth as any).context!.role === 'CHAPTER_LEADER') {
+  if (isLeadRole(auth.context!.role)) {
     if (requestedOrganizationUnitId) {
       effectiveChapterId = undefined
       effectiveOrganizationUnitId = requestedOrganizationUnitId
@@ -62,7 +63,7 @@ export async function GET(request: NextRequest) {
   }
 
   const result = await getInvitations({
-    kind: kind === 'LEAD' ? kind : undefined,
+    kind: isLeadRole(kind) ? kind : undefined,
     actorId: (auth as any).context!.userId,
     actorRole: (auth as any).context!.role,
     status: status || undefined,

@@ -30,7 +30,7 @@ async function fixture(role = 'MEMBER') {
   const other = await prisma.chapter.create({ data: { name: otherUnit.name, organization_unit_id: otherUnit.id } })
   const department = await prisma.organizationUnit.create({ data: { name: `Marketing-${key}`, type: 'DEPARTMENT', parent_id: unit.id } })
   const dna = await prisma.organizationUnit.create({ data: { name: `DNA-${key}`, type: 'DNA' } })
-  const position = await prisma.position.upsert({ where: { code: 'CHAPTER_MANAGER' }, update: {}, create: { code: 'CHAPTER_MANAGER', name: 'Lead Chapter', scope: 'CHAPTER', is_manager: true } })
+  const position = await prisma.position.upsert({ where: { code: 'CHAPTER_LEAD' }, update: {}, create: { code: 'CHAPTER_LEAD', name: 'Lead Chapter', scope: 'CHAPTER', is_manager: true } })
   return { user, chapter, unit, other, otherUnit, department, dna, position }
 }
 const appoint = f => prisma.positionAssignment.create({ data: { user_id: f.user.id, unit_id: f.unit.id, position_id: f.position.id } })
@@ -123,7 +123,7 @@ async function rawTransaction(fn, isolation = 'READ COMMITTED') {
     const { authenticate } = require('../../src/lib/auth')
     const { NextRequest } = require('next/server')
     const { SignJWT } = await import('jose')
-    const f = await fixture('CHAPTER_LEADER')
+    const f = await fixture('LEAD')
     await prisma.chapterMember.create({ data: { user_id: f.user.id, chapter_id: f.chapter.id } })
     const assignment = await appoint(f)
     for (const code of ['VIEW_MEMBER_PROGRESS', 'MANAGE_CHAPTER_MEMBERS']) {
@@ -184,7 +184,7 @@ async function rawTransaction(fn, isolation = 'READ COMMITTED') {
     const { GET: progressGet } = require('../../src/app/api/v1/organization/units/[unitId]/members/[userId]/progress/route')
     const { NextRequest } = require('next/server')
     const { SignJWT } = await import('jose')
-    const admin = await fixture('ADMIN'), lead = await fixture('CHAPTER_LEADER')
+    const admin = await fixture('ADMIN'), lead = await fixture('LEAD')
     await prisma.chapterMember.create({ data: { user_id: lead.user.id, chapter_id: lead.chapter.id } })
     await appoint(lead)
     const learner = await prisma.user.create({ data: { email: `${randomUUID()}@org-test.invalid`, password_hash: 'test-only', role: 'MEMBER' } })

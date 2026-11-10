@@ -112,13 +112,13 @@ export async function POST(request: NextRequest, { params }: { params: { chapter
   }
   const legacyPresidentUnits = await prisma.organizationUnit.findMany({ where: { parent_id: chapter.organization_unit_id, type: 'DEPARTMENT', name: { equals: 'Chủ Tịch', mode: 'insensitive' } }, select: { id: true } })
   const presidentIds = new Set([chapter.organization_unit_id, ...legacyPresidentUnits.map((unit) => unit.id)])
-  const presidentPosition = await prisma.position.upsert({ where: { code: 'CHAPTER_PRESIDENT' }, update: {}, create: { code: 'CHAPTER_PRESIDENT', name: 'Chủ tịch Chapter', scope: 'CHAPTER' } })
+  const presidentPosition = await prisma.position.upsert({ where: { code: 'PRESIDENT' }, update: {}, create: { code: 'PRESIDENT', name: 'Chủ tịch Chapter', scope: 'CHAPTER' } })
   if (rows.some((row: any) => !row.departmentUnitId && row.positionId !== presidentPosition.id)) return NextResponse.json({ error: { code: 'ChapterPresidentPositionRequired' } }, { status: 400 })
   rows = rows.map((row: any) => !row.departmentUnitId || presidentIds.has(row.departmentUnitId) ? { ...row, departmentUnitId: null, positionId: presidentPosition.id } : row)
   if (rows.filter((row: any) => !row.departmentUnitId).length > 1) return NextResponse.json({ error: { code: 'MultipleChapterPresidents' } }, { status: 400 })
   const positionIds = Array.from(new Set<string>(rows.flatMap((row: any) => row.positionId ? [row.positionId as string] : [])))
   const positions = await prisma.position.findMany({ where: { id: { in: positionIds } }, select: { id: true, scope: true, code: true } })
-  if (rows.some((row: any) => row.positionId && !positions.some((position) => position.id === row.positionId && (row.departmentUnitId ? position.scope === 'DEPARTMENT' : position.code === 'CHAPTER_PRESIDENT')))) return NextResponse.json({ error: { code: 'PositionScopeInvalid' } }, { status: 400 })
+  if (rows.some((row: any) => row.positionId && !positions.some((position) => position.id === row.positionId && (row.departmentUnitId ? position.scope === 'DEPARTMENT' : position.code === 'PRESIDENT')))) return NextResponse.json({ error: { code: 'PositionScopeInvalid' } }, { status: 400 })
   const members = await prisma.chapterMember.count({ where: { chapter_id: params.chapterId, user_id: { in: rows.map((row: any) => row.userId) }, user: { role: 'MEMBER', status: 'ACTIVE' } } })
   if (members !== rows.length) return NextResponse.json({ error: { code: 'MemberScopeInvalid' } }, { status: 409 })
 

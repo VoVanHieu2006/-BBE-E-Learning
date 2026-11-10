@@ -1,3 +1,4 @@
+import { isLeadRole } from '@/lib/roles'
 import fs from 'fs'
 import path from 'path'
 import { Resend } from 'resend'
@@ -24,7 +25,7 @@ function getLogoBase64(): string | null {
 
 export interface SendInvitationEmailParams {
   to: string
-  role: 'CHAPTER_LEADER' | 'DNA_LEAD' | 'MEMBER'
+  role: 'LEAD' | 'DNA_LEAD' | 'MEMBER'
   chapterName?: string
   token: string
   expiresAt: Date
@@ -42,7 +43,7 @@ export interface SendPasswordResetEmailParams {
 export async function sendInvitationEmail(params: SendInvitationEmailParams): Promise<{ success: boolean; error?: string }> {
   const { to, role, chapterName, token, expiresAt } = params
   const inviteUrl = `${appUrl}/accept-invitation?token=${token}`
-  const roleName = role === 'CHAPTER_LEADER' ? 'Lead Chapter' : role === 'DNA_LEAD' ? 'Lead DNA' : 'Thành viên học tập'
+  const roleName = isLeadRole(role) ? 'Lead Chapter' : role === 'DNA_LEAD' ? 'Lead DNA' : 'Thành viên học tập'
 
   const logoBase64 = getLogoBase64()
   const logoSrc = logoBase64 ? 'cid:bbe-logo-white' : `${appUrl}/images/logo-white.png`

@@ -63,7 +63,7 @@ describe('Overdue lock (KHBB 7.1, 7.3)', () => {
 
   it('exempts Admin, LEAD (role or position) and INACTIVE accounts, and nobody else', () => {
     assert.equal(deadlineLockExemption({ role: 'ADMIN', status: 'ACTIVE' }), 'ADMIN')
-    assert.equal(deadlineLockExemption({ role: 'CHAPTER_LEADER', status: 'ACTIVE' }), 'LEAD')
+    assert.equal(deadlineLockExemption({ role: 'LEAD', status: 'ACTIVE' }), 'LEAD')
     assert.equal(deadlineLockExemption({ role: 'MEMBER', status: 'ACTIVE' }, ['DNA_LEAD']), 'LEAD')
     assert.equal(deadlineLockExemption({ role: 'MEMBER', status: 'INACTIVE' }), 'INACTIVE')
     assert.equal(deadlineLockExemption({ role: 'MEMBER', status: 'ACTIVE' }, ['DEPARTMENT_LEAD_BKM']), null)

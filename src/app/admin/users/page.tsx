@@ -1,4 +1,5 @@
 'use client';
+import { isLeadRole } from '@/lib/roles'
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import Card from '@/components/ui/Card';
@@ -329,7 +330,7 @@ export default function AdminUsersPage() {
   };
 
   const getRoleBadge = (role: string) => {
-    if (role === 'CHAPTER_LEADER') {
+    if (isLeadRole(role)) {
       return (
         <span className="whitespace-nowrap inline-flex items-center text-xs font-bold px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-700">
           Lead Chapter
@@ -395,7 +396,7 @@ export default function AdminUsersPage() {
           <Card shadow="md" className="p-4 border border-[#eff4ff]">
             <div className="text-xs font-semibold text-purple-700">Lead Chapter</div>
             <div className="text-2xl font-bold text-purple-700 mt-1">
-              {stats?.leaders ?? (loading ? '...' : users.filter((u) => u.role === 'CHAPTER_LEADER').length)}
+              {stats?.leaders ?? (loading ? '...' : users.filter((u) => isLeadRole(u.role)).length)}
             </div>
             <div className="text-[11px] text-[#737686] mt-0.5">Trưởng các chapter</div>
           </Card>
@@ -423,7 +424,7 @@ export default function AdminUsersPage() {
                 <option value="MEMBER">👤 Thành viên chapter</option>
                 <option value="DNA">🧬 Thành viên DNA</option>
                 <option value="DNA_LEAD">⭐ Lead DNA</option>
-                <option value="CHAPTER_LEADER">🏅 Lead Chapter</option>
+                <option value="LEAD">🏅 Lead Chapter</option>
                 <option value="LT">👑 LT Ban</option>
               </select>
             </div>
@@ -543,7 +544,7 @@ export default function AdminUsersPage() {
                     const uId = u.userId || u.id;
                     const isActive = u.status === 'ACTIVE';
                     const isBusy = actionUserId === uId;
-                    const isLeader = u.role === 'CHAPTER_LEADER';
+                    const isLeader = isLeadRole(u.role);
                     const isLeadDna = u.effectivePositions?.some((position: any) => position.code === 'DNA_LEAD') || u.dna?.role === 'Lead DNA';
 
                     return (
@@ -570,7 +571,7 @@ export default function AdminUsersPage() {
                         <td className="px-6 py-4">
                           <div className="flex flex-wrap items-center gap-1.5">
                             {/* Lead Chapter */}
-                            {u.role === 'CHAPTER_LEADER' && (
+                            {isLeadRole(u.role) && (
                               <span className="inline-flex whitespace-nowrap rounded-full bg-purple-50 border border-purple-200 px-2.5 py-0.5 text-[11px] font-bold text-purple-700">
                                 🏅 Lead Chapter · {formatChapterName(u.chapter?.name)}
                               </span>
@@ -679,7 +680,7 @@ export default function AdminUsersPage() {
                               </span>
                               {u.cascadeLeadId ? (
                                 <div className="text-[10px] text-red-500 mt-0.5">Theo Lead Chapter</div>
-                              ) : u.deactivatedByRole === 'LEAD' ? (
+                              ) : isLeadRole(u.deactivatedByRole) ? (
                                 <div className="text-[10px] text-red-500 mt-0.5">Bởi Lead Chapter</div>
                               ) : u.deactivatedByRole === 'ADMIN' ? (
                                 <div className="text-[10px] text-red-500 mt-0.5">Bởi Admin</div>
@@ -868,7 +869,7 @@ export default function AdminUsersPage() {
                       Khi vô hiệu hóa, tài khoản này sẽ bị <strong>chặn đăng nhập ngay lập tức</strong> và ngừng toàn bộ quyền truy cập bài học cũng như bài kiểm tra trên hệ thống BBE.
                     </p>
                   </div>
-                  {confirmStatusModal.user.role === 'CHAPTER_LEADER' && (
+                  {isLeadRole(confirmStatusModal.user.role) && (
                     <div className="p-3.5 bg-red-50 border border-red-200 rounded-2xl text-xs text-red-900 space-y-1.5">
                       <div className="font-bold flex items-center gap-1.5 text-red-800">
                         <span>🚨 Lưu ý đặc biệt: Lead Chapter</span>
@@ -901,7 +902,7 @@ export default function AdminUsersPage() {
                       Tài khoản sẽ được mở khóa lại và học viên/Lead Chapter có thể đăng nhập bình thường.
                     </p>
                   </div>
-                  {confirmStatusModal.user.role === 'CHAPTER_LEADER' && (
+                  {isLeadRole(confirmStatusModal.user.role) && (
                     <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs text-emerald-900 space-y-1">
                       <div className="font-bold text-emerald-800">Tự động kích hoạt thành viên Chapter:</div>
                       <p className="leading-relaxed">

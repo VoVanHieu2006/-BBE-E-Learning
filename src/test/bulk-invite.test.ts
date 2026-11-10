@@ -52,8 +52,8 @@ describe('bulk invite route keeps the single-invite permission rules', () => {
 
   it('chapter leads are bound to their own chapter', () => {
     const source = read('src/lib/member-invite-scope.ts')
-    assert.match(source, /role === 'CHAPTER_LEADER' \? undefined : requestedChapterId/)
-    assert.match(source, /role === 'CHAPTER_LEADER'\) chapterId = context\.chapterId/)
+    assert.match(source, /isLeadRole\(role\) \? undefined : requestedChapterId/)
+    assert.match(source, /isLeadRole\(role\)\) chapterId = context\.chapterId/)
   })
 
   it('bulk route reports existing members and live invitations instead of re-inviting', () => {

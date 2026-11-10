@@ -7,7 +7,7 @@ export const DEPARTMENT_CODE_MAP: Record<string, string> = {
   'Ban Thư Ký': 'BTK',
   'Ban Nội Dung': 'BND',
   'Ban Chất Lượng': 'BCL',
-  'Ban Định Hướng': 'BDH',
+  'Ban Định Hướng': 'BDHU',
   'Ban Khách Mời': 'BKM',
   'Ban TT&SK': 'BTTSK',
 }

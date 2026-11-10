@@ -1,3 +1,6 @@
+import { getLearningManagerKind } from '@/lib/manager-learning-access'
+import { sessionMatchesAccount } from '@/lib/session-role'
+import { hasActiveAffiliation } from '@/lib/affiliation-access'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { jwtVerify, SignJWT } from 'jose'
@@ -75,7 +78,7 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    if (!user || user.status !== 'ACTIVE') {
+    if (!user || !sessionMatchesAccount(payload, user) || user.status !== 'ACTIVE' || !await hasActiveAffiliation(user.id, user.role)) {
       return NextResponse.json(
         { error: { code: 'AccountInactive', message: 'Tài khoản không hoạt động hoặc đã bị vô hiệu hóa' } },
         { status: 403 }
@@ -83,10 +86,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Issue fresh access token
-    const chapterId = user.chapter_members?.[0]?.chapter?.id || undefined
+    const managerKind = await getLearningManagerKind(user.id, user.role)
+    const chapterId = managerKind === 'LEAD_DNA' ? undefined : user.chapter_members?.[0]?.chapter?.id || undefined
     const accessSecret = new TextEncoder().encode(JWT_ACCESS_SECRET)
 
-    const accessToken = await new SignJWT({ sub: user.id, role: user.role, chapterId })
+    const accessToken = await new SignJWT({ sub: user.id, role: user.role, chapterId, managerKind, authVersion: user.auth_version })
       .setProtectedHeader({ alg: 'HS256' })
       .setExpirationTime('15m')
       .setIssuedAt()
@@ -100,7 +104,10 @@ export async function POST(request: NextRequest) {
         role: user.role,
         status: user.status,
         chapterId: chapterId || null,
-        chapterName: user.chapter_members?.[0]?.chapter?.name || null,
+        chapterName: managerKind === 'LEAD_DNA' ? null : user.chapter_members?.[0]?.chapter?.name || null,
+        managerKind,
+        isLearningManager: Boolean(managerKind),
+        isOrganizationManager: managerKind === 'LEAD_DNA',
       },
     }, { status: 200 })
 

@@ -82,7 +82,7 @@ async function main() {
   if (!coreProgram) throw new Error('CORE_MEMBER program is required.')
 
   const hash = await bcrypt.hash(PASSWORD, 10)
-  const plannedUsers = new Map<string, { email: string; display_name: string; role: 'MEMBER' | 'CHAPTER_LEADER' | 'ADMIN'; chapter?: string; dnaGroup?: 'TT' | 'SGDC' | 'LDC'; position?: string; unit?: string }>()
+  const plannedUsers = new Map<string, { email: string; display_name: string; role: 'MEMBER' | 'LEAD' | 'ADMIN'; chapter?: string; dnaGroup?: 'TT' | 'SGDC' | 'LDC'; position?: string; unit?: string }>()
 
   // ---------- Core curriculum: 42 existing lessons + 8 practicum lessons = 50 ----------
   let coreCourse = await prisma.course.findFirst({ where: { title: CORE_COURSE_TITLE }, include: { sessions: { include: { lessons: { include: { video: true } } } } } })
@@ -162,7 +162,7 @@ async function main() {
       plannedUsers.set(email, { email, display_name: email.split('@')[0], role: 'MEMBER', chapter: spec.slug })
     }
     plannedUsers.set(`leader.${spec.slug}@demo.bbe.vn`, {
-      email: `leader.${spec.slug}@demo.bbe.vn`, display_name: `Lead ${spec.name}`, role: 'CHAPTER_LEADER', chapter: spec.slug,
+      email: `leader.${spec.slug}@demo.bbe.vn`, display_name: `Lead ${spec.name}`, role: 'LEAD', chapter: spec.slug,
     })
   }
   plannedUsers.set('admin.rich@bbe.vn', { email: 'admin.rich@bbe.vn', display_name: 'Quản trị viên Demo', role: 'ADMIN' })
@@ -170,7 +170,7 @@ async function main() {
   plannedUsers.set('dna.sgdc@bbe.vn', { email: 'dna.sgdc@bbe.vn', display_name: 'DNA SGDC Demo', role: 'MEMBER', dnaGroup: 'SGDC' })
   plannedUsers.set('dna.ldc@bbe.vn', { email: 'dna.ldc@bbe.vn', display_name: 'DNA LDC Demo', role: 'MEMBER', dnaGroup: 'LDC' })
   plannedUsers.set('dna.tt@bbe.vn', { email: 'dna.tt@bbe.vn', display_name: 'DNA TT Demo', role: 'MEMBER', dnaGroup: 'TT' })
-  plannedUsers.set('president.green@bbe.vn', { email: 'president.green@bbe.vn', display_name: 'Chủ tịch Green Demo', role: 'MEMBER', chapter: 'seed-green', position: 'CHAPTER_PRESIDENT' })
+  plannedUsers.set('president.green@bbe.vn', { email: 'president.green@bbe.vn', display_name: 'Chủ tịch Green Demo', role: 'MEMBER', chapter: 'seed-green', position: 'PRESIDENT' })
   plannedUsers.set('lt.green@bbe.vn', { email: 'lt.green@bbe.vn', display_name: 'LT Green Demo', role: 'MEMBER', chapter: 'seed-green', position: 'DEPARTMENT_LEAD' })
 
   const userRows = Array.from(plannedUsers.values()).map((user) => ({
@@ -195,7 +195,7 @@ async function main() {
   // Positions and DNA groups
   const positionRows = [
     ['CHAPTER_LEAD', 'Lead Chapter', 'CHAPTER', true],
-    ['CHAPTER_PRESIDENT', 'Chủ tịch Chapter', 'CHAPTER', false],
+    ['PRESIDENT', 'Chủ tịch Chapter', 'CHAPTER', false],
     ['DEPARTMENT_LEAD', 'LT Ban', 'DEPARTMENT', true],
     ['DNA_LEAD', 'Lead DNA', 'DNA', true],
     ['MEMBER', 'Thành viên', 'DEPARTMENT', false],
@@ -226,7 +226,7 @@ async function main() {
       })
       await ensureOrgMembership(leader.id, chapter.departments[0])
       await ensurePosition(leader.id, positions.get('CHAPTER_LEAD')!, chapter.unitId, admin.id)
-      await ensureAccountInterval(leader.id, 'CHAPTER_LEADER')
+      await ensureAccountInterval(leader.id, 'LEAD')
       await ensureAffiliation(leader.id, chapter.id)
     }
   }
@@ -243,7 +243,7 @@ async function main() {
       const existingChapterLink = await prisma.chapterMember.findUnique({ where: { user_id: user.id } })
       if (!existingChapterLink) await prisma.chapterMember.create({ data: { chapter_id: chapter.id, user_id: user.id } })
       else if (existingChapterLink.chapter_id !== chapter.id) await prisma.chapterMember.update({ where: { id: existingChapterLink.id }, data: { chapter_id: chapter.id } })
-      await ensureOrgMembership(user.id, chapter.departments[plan.position === 'CHAPTER_PRESIDENT' ? 3 : 0])
+      await ensureOrgMembership(user.id, chapter.departments[plan.position === 'PRESIDENT' ? 3 : 0])
       if (plan.position) await ensurePosition(user.id, positions.get(plan.position)!, plan.position === 'DEPARTMENT_LEAD' ? chapter.departments[0] : chapter.unitId, admin.id)
       await ensureAccountInterval(user.id, plan.role)
       await ensureAffiliation(user.id, chapter.id)

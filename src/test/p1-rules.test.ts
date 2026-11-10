@@ -4,7 +4,7 @@ import { assertCanChangeUserStatus } from '../lib/user-status-rules'
 
 describe('P1 Business Rules: assertCanChangeUserStatus', () => {
   const adminActor = { userId: 'admin-1', role: 'ADMIN' }
-  const leadActor = { userId: 'lead-1', role: 'CHAPTER_LEADER', chapterId: 'chap-1' }
+  const leadActor = { userId: 'lead-1', role: 'LEAD', chapterId: 'chap-1' }
 
   it('Admin can deactivate an active member', () => {
     const target = { id: 'user-1', role: 'MEMBER', status: 'ACTIVE' }
@@ -48,14 +48,14 @@ describe('P1 Business Rules: assertCanChangeUserStatus', () => {
 
   it('Lead Chapter cannot change status of an Admin or another Chapter Leader', () => {
     const adminTarget = { id: 'admin-2', role: 'ADMIN', status: 'ACTIVE' }
-    const leadTarget = { id: 'lead-2', role: 'CHAPTER_LEADER', status: 'ACTIVE' }
+    const leadTarget = { id: 'lead-2', role: 'LEAD', status: 'ACTIVE' }
 
     assert.equal(assertCanChangeUserStatus(leadActor, adminTarget, 'INACTIVE').allowed, false)
     assert.equal(assertCanChangeUserStatus(leadActor, leadTarget, 'INACTIVE').allowed, false)
   })
 
   it('Lead Chapter cannot change their own status', () => {
-    const selfTarget = { id: 'lead-1', role: 'CHAPTER_LEADER', status: 'ACTIVE' }
+    const selfTarget = { id: 'lead-1', role: 'LEAD', status: 'ACTIVE' }
     assert.equal(assertCanChangeUserStatus(leadActor, selfTarget, 'INACTIVE').allowed, false)
   })
 })

@@ -182,11 +182,11 @@ async function run() {
         where: {
           user_id: testMember.id,
           unit_id: chapter.organization_unit_id!,
-          position: { code: 'CHAPTER_PRESIDENT' },
+          position: { code: 'PRESIDENT' },
           ends_at: null,
         },
       })
-      assert.ok(presidentPosition, 'Member must hold CHAPTER_PRESIDENT position in Chapter unit')
+      assert.ok(presidentPosition, 'Member must hold PRESIDENT position in Chapter unit')
 
       // Move back to unassigned
       const res4 = await updateChapterDepartment({

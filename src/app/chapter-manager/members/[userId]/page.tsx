@@ -1,4 +1,5 @@
 'use client';
+import { isLeadRole } from '@/lib/roles'
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
@@ -19,7 +20,7 @@ export default function MemberDetailPage({ params }: { params: { userId: string 
   const [toast, setToast] = useState<ToastMessage | null>(null);
 
   const isAdmin = currentUser?.role === 'ADMIN';
-  const canManageMembers = currentUser?.role === 'CHAPTER_LEADER' || isAdmin || currentUser?.canManageMembers === true;
+  const canManageMembers = isLeadRole(currentUser?.role) || isAdmin || currentUser?.canManageMembers === true;
 
   const handleToggleUserStatus = async () => {
     if (!data?.user?.userId) return;

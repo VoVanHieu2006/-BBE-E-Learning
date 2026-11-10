@@ -1,3 +1,4 @@
+import { isLeadRole } from '@/lib/roles'
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -12,7 +13,7 @@ export async function GET(request: NextRequest) {
   }
   if ((auth as any).context!.role === 'MEMBER') {
     // OK
-  } else if ((auth as any).context!.role === 'CHAPTER_LEADER' || (auth as any).context!.role === 'ADMIN') {
+  } else if (isLeadRole(auth.context!.role) || (auth as any).context!.role === 'ADMIN') {
     // Admin/Leader can also view their own — but this endpoint is specifically for member
   } else {
     return NextResponse.json({ error: { code: 'AccessDenied', message: 'Chỉ thành viên có thể xem' } }, { status: 403 })

@@ -2,7 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { chapterLeadScope } from './chapter-lead'
 import { hasPermissionInOrganizationScope } from '@/lib/authorization-rules'
 
-type LegacyAuthContext = { userId: string; role: 'ADMIN' | 'CHAPTER_LEADER' | 'MEMBER'; chapterId?: string }
+type LegacyAuthContext = { userId: string; role: 'ADMIN' | 'LEAD' | 'MEMBER'; chapterId?: string }
 
 export interface ManagedOrganizationUnit {
   id: string

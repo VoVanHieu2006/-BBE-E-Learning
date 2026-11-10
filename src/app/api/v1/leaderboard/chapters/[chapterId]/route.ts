@@ -1,3 +1,4 @@
+import { isLeadRole } from '@/lib/roles'
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { canAccessChapterPermission } from '@/lib/authorization'
@@ -66,7 +67,7 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
       OR: memberScope,
       position_assignments: {
         none: {
-          position: { code: { in: ['DNA_LEAD', 'DNA_MANAGER', 'CHAPTER_LEAD', 'CHAPTER_MANAGER', 'TT', 'TRAINEE'] } },
+          position: { code: { in: ['DNA_LEAD', 'CHAPTER_LEAD', 'TT', 'TRAINEE'] } },
           starts_at: { lte: now },
           OR: [{ ends_at: null }, { ends_at: { gt: now } }],
         },
@@ -127,7 +128,7 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
   for (const row of posRows) {
     const isLead =
       row.position.is_manager ||
-      ['CHAPTER_LEAD', 'CHAPTER_MANAGER', 'DEPARTMENT_LEAD', 'DEPARTMENT_LEADER', 'CHAPTER_PRESIDENT'].includes(row.position.code)
+      ['CHAPTER_LEAD', 'DEPARTMENT_LEAD', 'PRESIDENT'].includes(row.position.code)
     if (!positionByUser.has(row.user_id) || isLead) {
       positionByUser.set(row.user_id, {
         code: row.position.code,
@@ -140,8 +141,8 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
   const items = members.map((member) => {
     const progress = progressMap.get(member.id)
     const posInfo = positionByUser.get(member.id)
-    const isLead = Boolean(posInfo?.isLead || member.role === 'CHAPTER_LEADER')
-    const positionTitle = posInfo?.name || (member.role === 'CHAPTER_LEADER' ? 'Chủ tịch Chapter' : null)
+    const isLead = Boolean(posInfo?.isLead || isLeadRole(member.role))
+    const positionTitle = posInfo?.name || (isLeadRole(member.role) ? 'Chủ tịch Chapter' : null)
     return {
       userId: member.id,
       displayName: member.display_name,

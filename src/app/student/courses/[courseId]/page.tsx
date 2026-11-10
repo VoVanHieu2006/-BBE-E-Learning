@@ -1,4 +1,5 @@
 'use client';
+import { isLeadRole } from '@/lib/roles'
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Card from '@/components/ui/Card';
@@ -62,7 +63,7 @@ export default function CourseDetailPage({ params }: { params: { courseId: strin
     setLoading(false);
   }
 
-  const isLeaderOrAdmin = user?.role === 'ADMIN' || user?.role === 'CHAPTER_LEADER';
+  const isLeaderOrAdmin = user?.role === 'ADMIN' || isLeadRole(user?.role);
   const totalLessons =
     progressData?.totalLessons ??
     (course?.sessions?.reduce((acc: number, s: any) => acc + (s.lessons?.length || 0), 0) || 0);

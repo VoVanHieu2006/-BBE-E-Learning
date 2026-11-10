@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
     where: {
       unit_id: { in: unitIds }, status: 'ACTIVE',
       starts_at: { lte: new Date() }, OR: [{ ends_at: null }, { ends_at: { gt: new Date() } }],
-      user: { status: 'ACTIVE', role: 'MEMBER', position_assignments: { none: { position: { code: { in: ['DNA_LEAD', 'DNA_MANAGER', 'CHAPTER_LEAD', 'CHAPTER_MANAGER', 'TT', 'TRAINEE'] } }, starts_at: { lte: new Date() }, OR: [{ ends_at: null }, { ends_at: { gt: new Date() } }] } } },
+      user: { status: 'ACTIVE', role: 'MEMBER', position_assignments: { none: { position: { code: { in: ['DNA_LEAD', 'CHAPTER_LEAD', 'TT', 'TRAINEE'] } }, starts_at: { lte: new Date() }, OR: [{ ends_at: null }, { ends_at: { gt: new Date() } }] } } },
     },
     select: { user: { select: { id: true, email: true, display_name: true } }, unit: { select: { name: true, type: true, code: true } } },
   })

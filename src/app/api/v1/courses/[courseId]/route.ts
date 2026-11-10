@@ -1,3 +1,4 @@
+import { isLeadRole } from '@/lib/roles'
 import { deleteUnusedContent, ContentDeleteError } from '@/lib/content-deletion'
 import { cleanupDeletedContentAssets } from '@/lib/deleted-content-assets'
 import { invalidateCourseContentCaches } from '@/lib/course-edit-guard'
@@ -24,7 +25,7 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
     ? await authenticate(request).catch(() => ({ ok: false, error: { code: 'UNAUTHORIZED', message: 'Auth error' } }))
     : { ok: false, error: null }
 
-  const isLeaderOrAdmin = auth.ok && ['ADMIN', 'CHAPTER_LEADER'].includes((auth as any).context?.role)
+  const isLeaderOrAdmin = auth.ok && ['ADMIN', 'LEAD'].includes((auth as any).context?.role)
 
   // Serve from memory cache for non-admin viewers of public courses
   if (!isLeaderOrAdmin) {
@@ -72,7 +73,7 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
 
   // Check Private visibility permission
   if (courseDetail.visibility === 'PRIVATE') {
-    if (!auth.ok || ((auth as any).context!.role !== 'ADMIN' && (auth as any).context!.role !== 'CHAPTER_LEADER' && (auth as any).context!.role !== 'MEMBER')) {
+    if (!auth.ok || ((auth as any).context!.role !== 'ADMIN' && !isLeadRole((auth as any).context!.role) && (auth as any).context!.role !== 'MEMBER')) {
       return NextResponse.json({ error: { code: 'AccessDenied', message: 'Khóa học Private — Vui lòng đăng nhập' } }, { status: 403 })
     }
   }

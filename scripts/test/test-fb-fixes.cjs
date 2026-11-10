@@ -52,7 +52,7 @@ async function invitations() {
   const admin = await user('ADMIN'), member = await user(), ch = await chapter()
   await prisma.organizationMembership.create({ data: { user_id: member.id, unit_id: ch.unit.id } })
   const ids = []
-  for (const role of ['CHAPTER_LEADER', 'DNA_LEAD', 'MEMBER']) {
+  for (const role of ['LEAD', 'DNA_LEAD', 'MEMBER']) {
     const row = await prisma.invitation.create({ data: { email: `invite-${randomUUID()}@test.invalid`, role, chapter_id: ch.id, invited_by: admin.id, token_hash: randomUUID(), expires_at: new Date(Date.now() + 86400000) } })
     ids.push(row.id)
   }
@@ -114,13 +114,13 @@ async function roster() {
       await prisma.chapterMember.create({ data: { user_id: u.id, chapter_id: ch.id } })
       await prisma.organizationMembership.create({ data: { user_id: u.id, unit_id: ch.department.id } })
     }
-    for (const [role, status] of [['CHAPTER_LEADER', 'ACTIVE'], ['MEMBER', 'INACTIVE']]) {
+    for (const [role, status] of [['LEAD', 'ACTIVE'], ['MEMBER', 'INACTIVE']]) {
       const u = await user(role, status)
       await prisma.chapterMember.create({ data: { user_id: u.id, chapter_id: ch.id } })
     }
     const manager = await user()
     await prisma.chapterMember.create({ data: { user_id: manager.id, chapter_id: ch.id } })
-    const position = await prisma.position.upsert({ where: { code: 'CHAPTER_MANAGER' }, update: {}, create: { code: 'CHAPTER_MANAGER', name: 'Lead', scope: 'CHAPTER', is_manager: true } })
+    const position = await prisma.position.upsert({ where: { code: 'CHAPTER_LEAD' }, update: {}, create: { code: 'CHAPTER_LEAD', name: 'Lead', scope: 'CHAPTER', is_manager: true } })
     await prisma.positionAssignment.create({ data: { user_id: manager.id, unit_id: ch.unit.id, position_id: position.id } })
     const rows = await list(ch.id)
     assert.deepEqual(rows.map(r => r.userId).sort(), expected.sort())
@@ -158,7 +158,7 @@ async function roster() {
   })
   await check('FB02/06 LT belongs to the effective Chapter/Ban and retains president', async () => {
     const ch = await chapter(), foreign = await chapter(), expected = [], notLt = []
-    const president = await prisma.position.upsert({ where: { code: 'CHAPTER_PRESIDENT' }, update: {}, create: { code: 'CHAPTER_PRESIDENT', name: 'Chủ tịch', scope: 'CHAPTER', is_manager: true } })
+    const president = await prisma.position.upsert({ where: { code: 'PRESIDENT' }, update: {}, create: { code: 'PRESIDENT', name: 'Chủ tịch', scope: 'CHAPTER', is_manager: true } })
     const lt = await prisma.position.upsert({ where: { code: 'DEPARTMENT_LEAD' }, update: {}, create: { code: 'DEPARTMENT_LEAD', name: 'LT', scope: 'DEPARTMENT', is_manager: true } })
     for (const [pos, unitId, future] of [[president, ch.unit.id, false], [lt, ch.department.id, false], [lt, foreign.department.id, false], [lt, ch.department.id, true]]) {
       const u = await user()

@@ -1,4 +1,6 @@
 'use client';
+import { isLeadRole } from '@/lib/roles'
+import { accountHome } from '@/lib/session-role'
 import { AdminProvider, useAdmin } from './AdminContext';
 import Sidebar from '@/components/layout/Sidebar';
 import ContentTransition from '@/components/layout/ContentTransition';
@@ -77,8 +79,8 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
     }
 
     if (storedUser.role !== 'ADMIN') {
-      if (storedUser.role === 'CHAPTER_LEADER') {
-        router.replace('/chapter-manager/dashboard');
+      if (isLeadRole(storedUser.role)) {
+        router.replace(accountHome(storedUser.role, storedUser.managerKind));
       } else {
         router.replace('/student/dashboard');
       }

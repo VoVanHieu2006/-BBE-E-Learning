@@ -1,3 +1,4 @@
+import { isLeadRole } from '@/lib/roles'
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -8,7 +9,7 @@ import { countCompletedLessonsByCourse } from '@/lib/progress/completed-lesson-c
 /**
  * GET /api/v1/courses/[courseId]/students
  * Danh sách học viên của khóa + tiến độ từng người.
- * - CHAPTER_LEADER: chỉ member ACTIVE thuộc chapter của mình (FR-DB-01)
+ * - LEAD: chỉ member ACTIVE thuộc chapter của mình (FR-DB-01)
  * - ADMIN: mọi member đã có tương tác học với khóa này
  */
 export async function GET(request: NextRequest, { params }: { params: { courseId: string } }) {
@@ -21,7 +22,7 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
 
   let accessibleChapterIds: string[] = []
   if (!isAdmin) {
-    if (context.role === 'CHAPTER_LEADER' && context.chapterId && (!requestedChapterId || requestedChapterId === context.chapterId)) {
+    if (isLeadRole(context.role) && context.chapterId && (!requestedChapterId || requestedChapterId === context.chapterId)) {
       accessibleChapterIds = [context.chapterId]
     } else if (requestedChapterId) {
       const allowed = await canAccessChapterPermission(context, requestedChapterId, 'VIEW_MEMBER_PROGRESS')

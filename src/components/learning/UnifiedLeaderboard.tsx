@@ -1,4 +1,5 @@
 'use client'
+import { isLeadRole } from '@/lib/roles'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import Link from 'next/link'
@@ -94,7 +95,7 @@ export default function UnifiedLeaderboard({
   const [selectedUserData, setSelectedUserData] = useState<any>(null)
   const [loadingProfile, setLoadingProfile] = useState(false)
 
-  const canViewProfile = Boolean(currentUser && ['ADMIN', 'CHAPTER_LEADER'].includes(currentUser.role))
+  const canViewProfile = Boolean(currentUser && ['ADMIN', 'LEAD'].includes(currentUser.role))
 
   const handleOpenProfile = async (memberId: string, chapId?: string) => {
     if (!canViewProfile) return
@@ -143,7 +144,7 @@ export default function UnifiedLeaderboard({
       try { return JSON.parse(localStorage.getItem('user') || 'null') } catch { return null }
     })()
 
-    if (storedUser?.role === 'CHAPTER_LEADER' && storedUser.chapterId) {
+    if (isLeadRole(storedUser?.role) && storedUser.chapterId) {
       setChapterList([{ id: storedUser.chapterId, name: storedUser.chapterName || 'Chapter của tôi' }])
       setSelectedChapterId((current) => current || storedUser.chapterId)
     }
@@ -171,7 +172,7 @@ export default function UnifiedLeaderboard({
           if (t.chapter_id && t.chapterName) uniqueChapters.set(t.chapter_id, t.chapterName)
         })
         const list = Array.from(uniqueChapters.entries()).map(([id, name]) => ({ id, name }))
-        if (storedUser?.role === 'CHAPTER_LEADER' && storedUser.chapterId) {
+        if (isLeadRole(storedUser?.role) && storedUser.chapterId) {
           setChapterList(list.filter((chapter) => chapter.id === storedUser.chapterId))
         } else {
           setChapterList(list)

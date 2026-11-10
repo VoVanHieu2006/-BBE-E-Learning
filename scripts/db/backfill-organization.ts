@@ -15,7 +15,7 @@ async function main() {
     where: { code: 'MANAGE_CHAPTER_MEMBERS' }, update: { description: 'Manage members within a scoped Chapter.' },
     create: { code: 'MANAGE_CHAPTER_MEMBERS', description: 'Manage members within a scoped Chapter.' },
   })
-  const chapterManager = await ensurePosition('CHAPTER_MANAGER', 'BĐHU / Chapter Manager', 'CHAPTER', true)
+  const chapterManager = await ensurePosition('CHAPTER_LEAD', 'BĐHU / Chapter Manager', 'CHAPTER', true)
   await prisma.positionPermission.upsert({
     where: { position_id_permission_id: { position_id: chapterManager.id, permission_id: viewProgressPermission.id } },
     update: {}, create: { position_id: chapterManager.id, permission_id: viewProgressPermission.id },
@@ -24,11 +24,11 @@ async function main() {
     where: { position_id_permission_id: { position_id: chapterManager.id, permission_id: manageMembersPermission.id } },
     update: {}, create: { position_id: chapterManager.id, permission_id: manageMembersPermission.id },
   })
-  const dnaManager = await ensurePosition('DNA_MANAGER', 'DNA Manager', 'DNA', true)
+  const dnaManager = await ensurePosition('DNA_LEAD', 'DNA Manager', 'DNA', true)
   for (const permissionId of [viewProgressPermission.id, manageMembersPermission.id]) {
     await prisma.positionPermission.upsert({ where: { position_id_permission_id: { position_id: dnaManager.id, permission_id: permissionId } }, update: {}, create: { position_id: dnaManager.id, permission_id: permissionId } })
   }
-  const departmentLeader = await ensurePosition('DEPARTMENT_LEADER', 'LT / Department Leader', 'DEPARTMENT', true)
+  const departmentLeader = await ensurePosition('DEPARTMENT_LEAD', 'LT / Department Leader', 'DEPARTMENT', true)
   for (const permissionId of [viewProgressPermission.id, manageMembersPermission.id]) {
     await prisma.positionPermission.upsert({ where: { position_id_permission_id: { position_id: departmentLeader.id, permission_id: permissionId } }, update: {}, create: { position_id: departmentLeader.id, permission_id: permissionId } })
   }
@@ -53,7 +53,7 @@ async function main() {
         await prisma.organizationMembership.create({ data: { user_id: member.user_id, unit_id: unitId, starts_at: member.joined_at } })
         createdMemberships++
       }
-      if (member.user.role === 'CHAPTER_LEADER') {
+      if (member.user.role === 'LEAD') {
         const assignment = await prisma.positionAssignment.findFirst({ where: { user_id: member.user_id, position_id: chapterManager.id, unit_id: unitId, ends_at: null }, select: { id: true } })
         if (!assignment) {
           await prisma.positionAssignment.create({ data: { user_id: member.user_id, position_id: chapterManager.id, unit_id: unitId, is_primary: !primaryAssigned, starts_at: member.joined_at } })

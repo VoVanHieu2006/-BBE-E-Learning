@@ -131,11 +131,11 @@ test('time up cancel discards the attempt', async ({ page }) => {
 
 async function chapterLead(page: Page, context: BrowserContext) {
   const secret = process.env.JWT_ACCESS_SECRET
-  const token = await new SignJWT({ role: 'CHAPTER_LEADER' }).setProtectedHeader({ alg: 'HS256' }).setSubject(memberId).setExpirationTime('10m').sign(new TextEncoder().encode(secret))
+  const token = await new SignJWT({ role: 'LEAD' }).setProtectedHeader({ alg: 'HS256' }).setSubject(memberId).setExpirationTime('10m').sign(new TextEncoder().encode(secret))
   await context.addCookies([{ name: 'accessToken', value: token, url: test.info().project.use.baseURL!, httpOnly: true }])
   await page.addInitScript(({ token, memberId }) => {
     localStorage.setItem('accessToken', token)
-    localStorage.setItem('user', JSON.stringify({ id: memberId, role: 'CHAPTER_LEADER', chapterId: 'chapter-ui', chapterName: 'Chapter UI' }))
+    localStorage.setItem('user', JSON.stringify({ id: memberId, role: 'LEAD', chapterId: 'chapter-ui', chapterName: 'Chapter UI' }))
   }, { token, memberId })
 }
 

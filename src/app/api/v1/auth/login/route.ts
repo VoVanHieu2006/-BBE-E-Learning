@@ -109,12 +109,12 @@ export async function POST(request: NextRequest) {
     const refreshSecret = new TextEncoder().encode(JWT_REFRESH_SECRET)
 
     const [accessToken, refreshToken] = await Promise.all([
-      new SignJWT({ sub: user.id, role: user.role, chapterId })
+      new SignJWT({ sub: user.id, role: user.role, chapterId, managerKind, authVersion: user.auth_version })
         .setProtectedHeader({ alg: 'HS256' })
         .setExpirationTime('15m')
         .setIssuedAt()
         .sign(accessSecret),
-      new SignJWT({ sub: user.id, role: user.role, chapterId })
+      new SignJWT({ sub: user.id, role: user.role, chapterId, managerKind, authVersion: user.auth_version })
         .setProtectedHeader({ alg: 'HS256' })
         .setExpirationTime('7d')
         .setIssuedAt()

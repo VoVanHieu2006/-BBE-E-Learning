@@ -7,7 +7,7 @@ const BASE_URL = 'http://127.0.0.1:3121';
 
 const leadUser = {
   id: 'lead-tab-cache',
-  role: 'CHAPTER_LEADER',
+  role: 'LEAD',
   email: 'lead.tab.cache@test.invalid',
   displayName: 'Lead Tab Cache',
   chapterId: 'ch-tab-cache',

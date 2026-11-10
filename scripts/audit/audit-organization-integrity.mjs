@@ -14,10 +14,10 @@ try {
       SELECT a.user_id, c.id AS chapter_id FROM position_assignments a
       JOIN positions p ON p.id=a.position_id JOIN chapters c ON c.organization_unit_id=a.unit_id
       JOIN users u ON u.id=a.user_id
-      WHERE p.code IN ('CHAPTER_LEAD','CHAPTER_MANAGER') AND u.role <> 'ADMIN'
+      WHERE p.code IN ('CHAPTER_LEAD','CHAPTER_LEAD') AND u.role <> 'ADMIN'
         AND a.starts_at <= timezone('UTC',now()) AND (a.ends_at IS NULL OR a.ends_at > timezone('UTC',now()))
       UNION ALL
-      SELECT m.user_id,m.chapter_id FROM chapter_members m JOIN users u ON u.id=m.user_id WHERE u.role='CHAPTER_LEADER'
+      SELECT m.user_id,m.chapter_id FROM chapter_members m JOIN users u ON u.id=m.user_id WHERE u.role='LEAD'
     ) SELECT md5(user_id::text) AS user_ref, count(DISTINCT chapter_id)::int AS chapter_count,
       array_agg(DISTINCT chapter_id) AS chapter_ids,
       (SELECT json_agg(json_build_object('chapterId',c.id,'name',c.name)) FROM chapters c WHERE c.id IN (SELECT g.chapter_id FROM grants g WHERE g.user_id=grants.user_id)) AS chapters
@@ -34,12 +34,12 @@ try {
         AND m.starts_at<=timezone('UTC',now()) AND (m.ends_at IS NULL OR m.ends_at>timezone('UTC',now())) AND u.type IN ('CHAPTER','DEPARTMENT'))`)
   const { rows: emailConflicts } = await db.query(`SELECT count(*)::int AS accounts FROM users GROUP BY lower(btrim(email)) HAVING count(*)>1`)
   const { rows: diagnostics } = await db.query(`SELECT
-    (SELECT count(*)::int FROM users u WHERE u.role='CHAPTER_LEADER' AND EXISTS(SELECT 1 FROM chapter_members c WHERE c.user_id=u.id) AND NOT EXISTS(SELECT 1 FROM position_assignments a JOIN positions p ON p.id=a.position_id WHERE a.user_id=u.id AND p.code IN ('CHAPTER_LEAD','CHAPTER_MANAGER'))) AS legacy_leads_without_tenure,
-    (SELECT count(*)::int FROM position_assignments a JOIN position_assignments b ON a.user_id=b.user_id AND a.id<b.id JOIN positions p ON p.id=a.position_id JOIN positions q ON q.id=b.position_id JOIN users u ON u.id=a.user_id WHERE u.role<>'ADMIN' AND p.code IN ('CHAPTER_LEAD','CHAPTER_MANAGER') AND q.code IN ('CHAPTER_LEAD','CHAPTER_MANAGER') AND (a.ends_at IS NULL OR a.ends_at>timezone('UTC',now())) AND (b.ends_at IS NULL OR b.ends_at>timezone('UTC',now())) AND tsrange(a.starts_at,a.ends_at,'[)') && tsrange(b.starts_at,b.ends_at,'[)')) AS overlapping_lead_tenure_pairs,
+    (SELECT count(*)::int FROM users u WHERE u.role='LEAD' AND EXISTS(SELECT 1 FROM chapter_members c WHERE c.user_id=u.id) AND NOT EXISTS(SELECT 1 FROM position_assignments a JOIN positions p ON p.id=a.position_id WHERE a.user_id=u.id AND p.code IN ('CHAPTER_LEAD','CHAPTER_LEAD'))) AS legacy_leads_without_tenure,
+    (SELECT count(*)::int FROM position_assignments a JOIN position_assignments b ON a.user_id=b.user_id AND a.id<b.id JOIN positions p ON p.id=a.position_id JOIN positions q ON q.id=b.position_id JOIN users u ON u.id=a.user_id WHERE u.role<>'ADMIN' AND p.code IN ('CHAPTER_LEAD','CHAPTER_LEAD') AND q.code IN ('CHAPTER_LEAD','CHAPTER_LEAD') AND (a.ends_at IS NULL OR a.ends_at>timezone('UTC',now())) AND (b.ends_at IS NULL OR b.ends_at>timezone('UTC',now())) AND tsrange(a.starts_at,a.ends_at,'[)') && tsrange(b.starts_at,b.ends_at,'[)')) AS overlapping_lead_tenure_pairs,
     (SELECT count(*)::int FROM users WHERE email<>lower(btrim(email))) AS noncanonical_emails,
     (SELECT count(*)::int FROM organization_memberships WHERE status='ACTIVE' AND (starts_at>timezone('UTC',now()) OR ends_at<=timezone('UTC',now()))) AS active_status_not_current,
     (SELECT count(*)::int FROM chapter_affiliation_intervals h WHERE h.ends_at IS NULL AND NOT EXISTS(SELECT 1 FROM chapter_members c WHERE c.user_id=h.user_id AND c.chapter_id=h.chapter_id)) AS orphan_open_chapter_intervals,
-    (SELECT count(*)::int FROM position_assignments a JOIN positions p ON p.id=a.position_id WHERE p.code IN ('CHAPTER_LEAD','CHAPTER_MANAGER') AND a.starts_at<=timezone('UTC',now()) AND (a.ends_at IS NULL OR a.ends_at>timezone('UTC',now()))) AS active_lead_assignments`)
+    (SELECT count(*)::int FROM position_assignments a JOIN positions p ON p.id=a.position_id WHERE p.code IN ('CHAPTER_LEAD','CHAPTER_LEAD') AND a.starts_at<=timezone('UTC',now()) AND (a.ends_at IS NULL OR a.ends_at>timezone('UTC',now()))) AS active_lead_assignments`)
   const { rows: leadCodes } = await db.query("SELECT code,scope,is_manager FROM positions WHERE code ILIKE '%CHAPTER%' ORDER BY code")
   const { rows: triggers } = await db.query("SELECT c.relname AS table_name,t.tgname,t.tgenabled FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid WHERE NOT t.tgisinternal AND c.relname IN ('users','chapter_members','organization_memberships','position_assignments') ORDER BY c.relname,t.tgname")
   const { rows: indexes } = await db.query("SELECT tablename,indexname,indexdef FROM pg_indexes WHERE schemaname=current_schema() AND tablename IN ('users','chapter_members','organization_memberships','position_assignments')")

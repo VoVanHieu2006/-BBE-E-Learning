@@ -31,13 +31,13 @@ try {
   assert.equal(legacy.length, 1, 'Review missing/ambiguous affiliation separately.')
   const { rows: assignments } = await db.query(`SELECT a.id,a.unit_id,a.position_id,p.code,c.id AS chapter_id
     FROM position_assignments a JOIN positions p ON p.id=a.position_id JOIN chapters c ON c.organization_unit_id=a.unit_id
-    WHERE a.user_id=$1 AND p.code IN ('CHAPTER_LEAD','CHAPTER_MANAGER') AND (a.ends_at IS NULL OR a.ends_at>timezone('UTC',clock_timestamp())) ORDER BY a.id`, [user.id])
+    WHERE a.user_id=$1 AND p.code IN ('CHAPTER_LEAD','CHAPTER_LEAD') AND (a.ends_at IS NULL OR a.ends_at>timezone('UTC',clock_timestamp())) ORDER BY a.id`, [user.id])
   const { rows: memberships } = await db.query(`WITH RECURSIVE units AS (
     SELECT organization_unit_id AS id,id AS chapter_id FROM chapters WHERE organization_unit_id IS NOT NULL
     UNION ALL SELECT u.id,t.chapter_id FROM organization_units u JOIN units t ON u.parent_id=t.id
   ) SELECT m.id,t.chapter_id FROM organization_memberships m JOIN units t ON t.id=m.unit_id
     WHERE m.user_id=$1 AND m.status='ACTIVE' AND (m.ends_at IS NULL OR m.ends_at>timezone('UTC',clock_timestamp())) ORDER BY m.id`, [user.id])
-  const { rows: positions } = await db.query("SELECT id FROM positions WHERE code='CHAPTER_MANAGER' AND scope='CHAPTER'")
+  const { rows: positions } = await db.query("SELECT id FROM positions WHERE code='CHAPTER_LEAD' AND scope='CHAPTER'")
   assert.equal(positions.length, 1, 'Canonical Lead definition must already exist.')
   assert(legacy[0].chapter_id === keep.id || assignments.some(row => row.chapter_id === keep.id), 'Kept Chapter must already be proven by affiliation or an existing Lead tenure; this tool cannot transfer a Lead to a new Chapter.')
   const plan = {

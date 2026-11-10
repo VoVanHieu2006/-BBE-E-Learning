@@ -1,3 +1,4 @@
+import { isLeadRole } from './roles'
 /** Combine legacy roster membership, current organization membership, and active tenure. */
 export function collectChapterAccountIds(...sources: string[][]): string[] {
   return Array.from(new Set(sources.flat().filter(Boolean)))
@@ -16,10 +17,10 @@ export function canActivateAfterRestrictionLift(hasAnyActiveRestriction: boolean
 export const MAX_LOGIN_ATTEMPTS = 5
 /** Số ngày gia hạn tối đa cho một lần "Mở khóa & Gia hạn" (kiểm tra cả ở backend). */
 export const MAX_EXTENSION_DAYS = 365
-/** Chức vụ của LEAD (Lead Chapter / Lead DNA). `DNA_MANAGER` là tên cũ, vẫn được coi là LEAD. */
-export const LEAD_POSITION_CODES = ['DNA_LEAD', 'DNA_MANAGER', 'CHAPTER_LEAD', 'CHAPTER_MANAGER']
-/** Trong code hiện tại LEAD vẫn mang role `CHAPTER_LEADER` (đổi tên ở prompt 03). */
-const LEAD_ROLES = ['LEAD', 'CHAPTER_LEADER']
+/** Chức vụ của LEAD (Lead Chapter / Lead DNA). `DNA_LEAD` là tên cũ, vẫn được coi là LEAD. */
+export const LEAD_POSITION_CODES = ['DNA_LEAD', 'CHAPTER_LEAD']
+/** Trong code hiện tại LEAD vẫn mang role `LEAD` (đổi tên ở prompt 03). */
+const LEAD_ROLES = ['LEAD']
 
 export type DeadlineLockExemption = 'ADMIN' | 'LEAD' | 'INACTIVE'
 
@@ -32,7 +33,7 @@ export function deadlineLockExemption(
   activePositionCodes: string[] = [],
 ): DeadlineLockExemption | null {
   if (account.role === 'ADMIN') return 'ADMIN'
-  if (LEAD_ROLES.includes(account.role) || activePositionCodes.some((code) => LEAD_POSITION_CODES.includes(code))) return 'LEAD'
+  if (isLeadRole(account.role) || activePositionCodes.some((code) => LEAD_POSITION_CODES.includes(code))) return 'LEAD'
   if (account.status === 'INACTIVE') return 'INACTIVE'
   return null
 }

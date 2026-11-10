@@ -31,6 +31,8 @@ export default function ChapterManagerInvitationsPage() {
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
+  const [departmentUnitId, setDepartmentUnitId] = useState('');
+  const [departments, setDepartments] = useState<Array<{ id: string; name: string }>>([]);
   const [inviteMode, setInviteMode] = useState<'single' | 'bulk'>('single');
   const [bulkText, setBulkText] = useState('');
   const [bulkResults, setBulkResults] = useState<BulkInviteResultItem[] | null>(null);
@@ -51,6 +53,9 @@ export default function ChapterManagerInvitationsPage() {
           const parsed = JSON.parse(u);
           setUser(parsed);
           loadInvitations(parsed.chapterId);
+          apiFetch('/api/v1/organization/managed-units', { noCache: true }).then((res) => {
+            if (res.ok) setDepartments((res.data?.items || []).filter((unit: any) => unit.type === 'DEPARTMENT' && unit.chapterId === parsed.chapterId && unit.canManageMembers));
+          });
         } catch {}
       }
     }
@@ -81,13 +86,14 @@ export default function ChapterManagerInvitationsPage() {
   async function handleSendInvite(e: React.FormEvent) {
     e.preventDefault();
     if (!inviteEmail.trim()) return;
+    if (!departmentUnitId) { showToast('error', 'Vui l?ng ch?n ban cho th?nh vi?n.'); return; }
 
     setSending(true);
     clearApiCache('/api/v1/invitations');
 
     const res = await apiFetch('/api/v1/invitations/member', {
       method: 'POST',
-      body: JSON.stringify({ email: inviteEmail.trim(), chapterId: user?.chapterId }),
+      body: JSON.stringify({ email: inviteEmail.trim(), organizationUnitId: departmentUnitId }),
     });
 
     if (res.ok) {
@@ -340,6 +346,11 @@ export default function ChapterManagerInvitationsPage() {
             <p className="text-xs text-[#737686]">
               Gửi email lời mời tham gia Chapter <span suppressHydrationWarning>{mounted && user?.chapterName ? user.chapterName : ''}</span>. Lời mời có hiệu lực trong 24 giờ.
             </p>
+            <label className="block text-sm font-semibold" htmlFor="invite-department">Ban c?a th?nh vi?n *</label>
+            <select id="invite-department" value={departmentUnitId} onChange={(event) => setDepartmentUnitId(event.target.value)} disabled={sending} className="w-full rounded-lg border px-3 py-2">
+              <option value="">Ch?n ban</option>
+              {departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
+            </select>
             <div className="flex gap-2" role="tablist" aria-label="Cách mời">
               {([
                 { key: 'single', label: 'Một email' },

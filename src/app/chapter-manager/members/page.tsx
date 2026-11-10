@@ -1,4 +1,5 @@
 'use client';
+import { isLeadRole } from '@/lib/roles'
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Card from '@/components/ui/Card';
@@ -36,7 +37,7 @@ export default function ChapterManagerMembersPage() {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [selectedUserData, setSelectedUserData] = useState<any>(null);
   const [loadingProfile, setLoadingProfile] = useState(false);
-  const canManageMembers = user?.role === 'CHAPTER_LEADER' || user?.canManageMembers === true;
+  const canManageMembers = isLeadRole(user?.role) || user?.canManageMembers === true;
 
   const showToast = (type: 'success' | 'error' | 'info', message: string, title?: string) => {
     setToast({ type, message, title });

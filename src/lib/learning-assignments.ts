@@ -5,6 +5,8 @@ import { learningContext, lockLearningUser, currentCycleAttemptFilter } from './
 import { reconcileSharedPath, type RevivedAssignment } from './shared-learning-path'
 import { learningTargetsForUser } from './learning-targets'
 import { prepareOrganizationTransition } from './organization-transition'
+import { isLearnerRole } from './roles'
+import { endManagerLearning } from './manager-learning-exemption'
 
 /** Returns an organization unit and all descendants, with cycle protection. */
 export async function getOrganizationUnitTreeIds(rootUnitId: string): Promise<string[]> {
@@ -27,6 +29,8 @@ async function reconcileAssignments(
   db: Prisma.TransactionClient = prisma,
 ): Promise<{ created: number; ended: number }> {
   const now = await lockLearningUser(db, userId)
+  const account = await db.user.findUniqueOrThrow({ where: { id: userId }, select: { role: true } })
+  if (!isLearnerRole(account.role)) return endManagerLearning(db, userId, now)
   const context = await learningContext(db, userId, now)
   const dna = await db.organizationMembership.findFirst({ where: { user_id: userId, status: 'ACTIVE', starts_at: { lte: now }, OR: [{ ends_at: null }, { ends_at: { gt: now } }], unit: { type: { in: ['DNA', 'DNA_GROUP'] } } } })
   if (dna) {

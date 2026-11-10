@@ -156,7 +156,7 @@ try {
     select: { id: true },
   })
   chapterId = chapter.id
-  const lead = await prisma.user.create({ data: { email: `${emailPrefix}-lead@example.invalid`, password_hash: 'integration-only', role: 'CHAPTER_LEADER' } })
+  const lead = await prisma.user.create({ data: { email: `${emailPrefix}-lead@example.invalid`, password_hash: 'integration-only', role: 'LEAD' } })
   userIds.push(lead.id)
   await prisma.chapterMember.create({ data: { chapter_id: chapter.id, user_id: lead.id } })
 

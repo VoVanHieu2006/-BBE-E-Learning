@@ -1,4 +1,5 @@
 'use client';
+import { isLeadRole } from '@/lib/roles'
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -136,7 +137,7 @@ function AcceptInvitationContent() {
       {inviteInfo && (
         <div className="bg-[#eff4ff] border border-[#cbdbf5] text-[#172554] px-4 py-3 rounded-xl text-sm mb-5">
           Lời mời cho <strong>{inviteInfo.email}</strong>
-          {inviteInfo.role === 'CHAPTER_LEADER' ? ' với vai trò Ban Định Hướng' : ' với vai trò Thành viên học tập'}
+          {isLeadRole(inviteInfo.role) ? ' với vai trò Ban Định Hướng' : ' với vai trò Thành viên học tập'}
           {' — Chapter '}
           <strong>{inviteInfo.chapterName}</strong>
         </div>

@@ -1,16 +1,17 @@
+import { accountHome, canOpenManagerArea, hasCurrentSessionClaims } from '@/lib/session-role'
+import { isLeadRole } from '@/lib/roles'
 import { NextRequest, NextResponse } from 'next/server'
-import { jwtVerify, SignJWT } from 'jose'
+import { jwtVerify } from 'jose'
 
 const JWT_ACCESS_SECRET = process.env.JWT_ACCESS_SECRET || ''
-const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || ''
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   const token = request.cookies.get('accessToken')?.value
   const refreshTokenCookie = request.cookies.get('refreshToken')?.value
-  const userRoleCookie = request.cookies.get('userRole')?.value
 
+  let managerKind: string | null = null
   let role: string | null = null
   let isAuthenticated = false
   let newlyIssuedAccessToken: string | null = null
@@ -20,6 +21,8 @@ export async function middleware(request: NextRequest) {
     try {
       const secret = new TextEncoder().encode(JWT_ACCESS_SECRET)
       const { payload } = await jwtVerify(token, secret)
+      if (!hasCurrentSessionClaims(payload)) throw new Error('InvalidSession')
+      managerKind = (payload.managerKind as string) || null
       role = (payload.role as string) || null
       isAuthenticated = Boolean(payload.sub)
     } catch {
@@ -29,29 +32,24 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // 2. Silent refresh: if accessToken is expired or missing, check refreshToken
-  if (!isAuthenticated && refreshTokenCookie && JWT_REFRESH_SECRET && JWT_ACCESS_SECRET) {
+  // Refresh through the server so revocation and auth_version are checked against the DB.
+  if (!isAuthenticated && refreshTokenCookie && JWT_ACCESS_SECRET) {
     try {
-      const refreshSecret = new TextEncoder().encode(JWT_REFRESH_SECRET)
-      const { payload } = await jwtVerify(refreshTokenCookie, refreshSecret)
-      if (payload.sub) {
-        isAuthenticated = true
-        role = (payload.role as string) || userRoleCookie || 'MEMBER'
-        const sub = payload.sub as string
-        const chapterId = (payload.chapterId as string) || undefined
-
-        // Issue a fresh 15-minute access token right at the edge
-        const accessSecret = new TextEncoder().encode(JWT_ACCESS_SECRET)
-        newlyIssuedAccessToken = await new SignJWT({ sub, role, chapterId })
-          .setProtectedHeader({ alg: 'HS256' })
-          .setExpirationTime('15m')
-          .setIssuedAt()
-          .sign(accessSecret)
+      const response = await fetch(new URL('/api/v1/auth/refresh', request.url), {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ refreshToken: refreshTokenCookie }), cache: 'no-store',
+      })
+      if (response.ok) {
+        const refreshed = await response.json()
+        const { payload } = await jwtVerify(refreshed.accessToken, new TextEncoder().encode(JWT_ACCESS_SECRET))
+        if (payload.sub && hasCurrentSessionClaims(payload)) {
+          newlyIssuedAccessToken = refreshed.accessToken
+          role = payload.role as string
+          managerKind = (payload.managerKind as string) || null
+          isAuthenticated = true
+        }
       }
-    } catch {
-      isAuthenticated = false
-      role = null
-    }
+    } catch { isAuthenticated = false; role = null }
   }
 
   // Helper to attach renewed cookies to outgoing responses
@@ -95,25 +93,31 @@ export async function middleware(request: NextRequest) {
     }
 
     if (role !== 'ADMIN') {
-      if (role === 'CHAPTER_LEADER') {
-        return withCookies(NextResponse.redirect(new URL('/chapter-manager/dashboard', request.url)))
+      if (isLeadRole(role)) {
+        return withCookies(NextResponse.redirect(new URL(accountHome(role, managerKind), request.url)))
       }
-      return withCookies(NextResponse.redirect(new URL('/student/dashboard', request.url)))
+      return withCookies(NextResponse.redirect(new URL(accountHome(role, managerKind), request.url)))
     }
 
     return withCookies(NextResponse.next())
   }
 
-  // 2. Routes requiring CHAPTER_LEADER (or ADMIN)
+  // 2. Routes requiring LEAD (or ADMIN)
   if (pathname.startsWith('/chapter-manager')) {
     if (!isAuthenticated) {
       return redirectToLogin(pathname)
     }
 
-    if (role !== 'CHAPTER_LEADER' && role !== 'ADMIN') {
-      return withCookies(NextResponse.redirect(new URL('/student/dashboard', request.url)))
+    if (!canOpenManagerArea('CHAPTER', role, managerKind)) {
+      return withCookies(NextResponse.redirect(new URL(accountHome(role, managerKind), request.url)))
     }
 
+    return withCookies(NextResponse.next())
+  }
+
+  if (pathname.startsWith('/organization-manager')) {
+    if (!isAuthenticated) return redirectToLogin(pathname)
+    if (!canOpenManagerArea('DNA', role, managerKind)) return withCookies(NextResponse.redirect(new URL(accountHome(role, managerKind), request.url)))
     return withCookies(NextResponse.next())
   }
 
@@ -139,7 +143,7 @@ export async function middleware(request: NextRequest) {
         if (callbackUrl.startsWith('/admin') && role === 'ADMIN') {
           return withCookies(NextResponse.redirect(new URL(callbackUrl, request.url)))
         }
-        if (callbackUrl.startsWith('/chapter-manager') && (role === 'CHAPTER_LEADER' || role === 'ADMIN')) {
+        if (callbackUrl.startsWith('/chapter-manager') && canOpenManagerArea('CHAPTER', role, managerKind)) {
           return withCookies(NextResponse.redirect(new URL(callbackUrl, request.url)))
         }
         if (callbackUrl.startsWith('/student')) {
@@ -150,8 +154,8 @@ export async function middleware(request: NextRequest) {
       if (role === 'ADMIN') {
         return withCookies(NextResponse.redirect(new URL('/admin/dashboard', request.url)))
       }
-      if (role === 'CHAPTER_LEADER') {
-        return withCookies(NextResponse.redirect(new URL('/chapter-manager/dashboard', request.url)))
+      if (isLeadRole(role)) {
+        return withCookies(NextResponse.redirect(new URL(accountHome(role, managerKind), request.url)))
       }
       return withCookies(NextResponse.redirect(new URL('/student/dashboard', request.url)))
     }
@@ -185,6 +189,7 @@ export const config = {
   matcher: [
     '/admin/:path*',
     '/chapter-manager/:path*',
+    '/organization-manager/:path*',
     '/student/dashboard/:path*',
     '/student/progress/:path*',
     '/student/courses/:courseId/quiz/:path*',

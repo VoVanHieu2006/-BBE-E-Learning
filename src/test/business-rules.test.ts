@@ -17,6 +17,17 @@ import { evaluateCourseFinalRequirements } from '../lib/course-final-assessment-
 import { selectBalancedFinalExamQuestions } from '../lib/final-exam-selection'
 import { canActivateAfterRestrictionLift, canDeadlineLockAccount, collectChapterAccountIds } from '../lib/account-restriction-rules'
 import { LEARNING_TARGETS } from '../lib/learning-catalog'
+import { isLeadRole, isAccountRole, isLearnerRole } from '../lib/roles'
+
+it('recognizes only canonical account roles and separates managers from learners', () => {
+  assert.equal(isLeadRole('LEAD'), true)
+  for (const value of ['ADMIN', 'MEMBER', 'DNA_LEAD', 'unknown', null, undefined]) assert.equal(isLeadRole(value), false)
+  assert.equal(isAccountRole('LEAD'), true)
+  assert.equal(isAccountRole('DNA_LEAD'), false)
+  assert.equal(isLearnerRole('MEMBER'), true)
+  assert.equal(isLearnerRole('LEAD'), false)
+  assert.equal(isLearnerRole('ADMIN'), false)
+})
 
 describe('Account restriction rules', () => {
   it('includes legacy members, current organization members, and active position holders once', () => {
@@ -35,10 +46,10 @@ describe('Account restriction rules', () => {
   it('never lets automatic course deadlines disable Admin or LEAD accounts (KHBB 7.1)', () => {
     assert.equal(canDeadlineLockAccount('ADMIN'), false)
     assert.equal(canDeadlineLockAccount('MEMBER'), true)
-    // In the current code the LEAD role is still named CHAPTER_LEADER.
-    assert.equal(canDeadlineLockAccount('CHAPTER_LEADER'), false)
+    // In the current code the LEAD role is still named LEAD.
+    assert.equal(canDeadlineLockAccount('LEAD'), false)
     assert.equal(canDeadlineLockAccount('MEMBER', ['DNA_LEAD']), false, 'a DNA lead holds a position, not a role')
-    assert.equal(canDeadlineLockAccount('MEMBER', ['CHAPTER_MANAGER']), false)
+    assert.equal(canDeadlineLockAccount('MEMBER', ['CHAPTER_LEAD']), false)
     assert.equal(canDeadlineLockAccount('MEMBER', ['DEPARTMENT_MEMBER_BTV']), true)
     assert.equal(canDeadlineLockAccount('MEMBER', [], 'INACTIVE'), false, 'a deactivated account is never turned into LOCKED')
   })
@@ -119,7 +130,7 @@ describe('Organization-scoped authorization rules', () => {
   it('limits comment deletion to the author or Admin, never a global legacy Chapter Leader role', () => {
     assert.equal(canDeleteLessonComment('MEMBER', true), true)
     assert.equal(canDeleteLessonComment('ADMIN', false), true)
-    assert.equal(canDeleteLessonComment('CHAPTER_LEADER', false), false)
+    assert.equal(canDeleteLessonComment('LEAD', false), false)
     assert.equal(canDeleteLessonComment('MEMBER', false), false)
   })
 })
@@ -857,9 +868,9 @@ describe('Mandatory learning catalog', () => {
   it('has exactly 18 unique canonical targets', () => {
     assert.equal(LEARNING_TARGETS.length, 18)
     assert.equal(new Set(LEARNING_TARGETS.map((target) => target.code)).size, 18)
-    assert.equal(LEARNING_TARGETS.filter((target) => target.code.startsWith('MEMBER_')).length, 7)
-    assert.equal(LEARNING_TARGETS.filter((target) => target.code.startsWith('LEADER_')).length, 7)
-    assert.equal(LEARNING_TARGETS.filter((target) => target.code.startsWith('DNA_')).length, 3)
-    assert.ok(LEARNING_TARGETS.some((target) => target.code === 'CHAPTER_PRESIDENT'))
+    assert.equal(LEARNING_TARGETS.filter((target) => target.code.startsWith('DEPARTMENT_MEMBER_')).length, 7)
+    assert.equal(LEARNING_TARGETS.filter((target) => target.code.startsWith('DEPARTMENT_LEAD_')).length, 7)
+    assert.equal(LEARNING_TARGETS.filter((target) => target.code.startsWith('DNA_MEMBER_')).length, 3)
+    assert.ok(LEARNING_TARGETS.some((target) => target.code === 'PRESIDENT'))
   })
 })

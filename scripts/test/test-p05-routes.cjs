@@ -29,7 +29,7 @@ const poolsRoute = require('../../src/app/api/v1/assessments/[assessmentId]/pool
 const { ContentDeleteError } = require('../../src/lib/content-deletion')
 const courseRoute = require('../../src/app/api/v1/courses/[courseId]/route')
 
-for (const deniedRole of ['CHAPTER_LEADER', 'LEAD', 'MEMBER', null]) test(`question bank denies ${deniedRole} before reading answers`, async () => {
+for (const deniedRole of ['LEAD', 'MEMBER', null]) test(`question bank denies ${deniedRole} before reading answers`, async () => {
   role = deniedRole; const before = bankCalls
   const response = await bankRoute.GET(new NextRequest('http://localhost/api'), { params: { assessmentId: ID } })
   assert.equal(response.status, deniedRole ? 403 : 401)
@@ -160,7 +160,7 @@ test('cached live Chapter board still returns fresh available months', async () 
   } finally { db.competitionMonth.findFirst = findFirst; invalidateChapterLeaderboardCache() }
 })
 
-for (const deniedRole of ['CHAPTER_LEADER', 'LEAD', 'MEMBER', null]) test(`pools GET denies ${deniedRole} before reading the DB`, async () => {
+for (const deniedRole of ['LEAD', 'MEMBER', null]) test(`pools GET denies ${deniedRole} before reading the DB`, async () => {
   role = deniedRole
   db.questionPool = { findMany: async () => { throw new Error('Must not read pools') } }
   const response = await poolsRoute.GET(new NextRequest('http://localhost/api'), { params: { assessmentId: ID } })

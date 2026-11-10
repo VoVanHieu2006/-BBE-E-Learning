@@ -7,14 +7,14 @@ export const LEARNING_PROGRAMS = [
 
 export const STANDARD_DEPARTMENTS = [
   ['BTV', 'Ban Thành Viên'], ['BTK', 'Ban Thư Ký'], ['BND', 'Ban Nội Dung'],
-  ['BCL', 'Ban Chất Lượng'], ['BDH', 'Ban Định Hướng'], ['BKM', 'Ban Khách Mời'], ['BTTSK', 'Ban TT&SK'],
+  ['BCL', 'Ban Chất Lượng'], ['BDHU', 'Ban Định Hướng'], ['BKM', 'Ban Khách Mời'], ['BTTSK', 'Ban TT&SK'],
 ] as const
 
 export const LEARNING_TARGETS = [
-  ...STANDARD_DEPARTMENTS.map(([code, name], index) => ({ code: `MEMBER_${code}`, label: `Thành viên ${name}`, department_code: code, position_code: 'MEMBER', dna_unit_code: null, sort_order: index })),
-  ...STANDARD_DEPARTMENTS.map(([code, name], index) => ({ code: `LEADER_${code}`, label: `LT ${name}`, department_code: code, position_code: 'DEPARTMENT_LEAD', dna_unit_code: null, sort_order: index + 7 })),
-  { code: 'CHAPTER_PRESIDENT', label: 'Chủ tịch Chapter', department_code: null, position_code: 'CHAPTER_PRESIDENT', dna_unit_code: null, sort_order: 14 },
-  ...['TT', 'SGDC', 'LDC'].map((code, index) => ({ code: `DNA_${code}`, label: `DNA ${code}`, department_code: null, position_code: null, dna_unit_code: code, sort_order: 15 + index })),
+  ...STANDARD_DEPARTMENTS.map(([code, name], index) => ({ code: `DEPARTMENT_MEMBER_${code}`, label: `Thành viên ${name}`, department_code: code, position_code: 'DEPARTMENT_MEMBER', dna_unit_code: null, sort_order: index })),
+  ...STANDARD_DEPARTMENTS.map(([code, name], index) => ({ code: `DEPARTMENT_LEAD_${code}`, label: `LT ${name}`, department_code: code, position_code: 'DEPARTMENT_LEAD', dna_unit_code: null, sort_order: index + 7 })),
+  { code: 'PRESIDENT', label: 'Chủ tịch Chapter', department_code: null, position_code: 'PRESIDENT', dna_unit_code: null, sort_order: 14 },
+  ...['TT', 'SGDC', 'LDC'].map((code, index) => ({ code: `DNA_MEMBER_${code}`, label: `DNA ${code}`, department_code: null, position_code: 'DNA_MEMBER', dna_unit_code: code, sort_order: 15 + index })),
 ]
 
 export function suggestLearningProgram(title: string) {

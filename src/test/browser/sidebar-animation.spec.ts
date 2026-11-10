@@ -29,7 +29,7 @@ const adminUser: TestUser = {
 
 const chapterUser: TestUser = {
   id: 'sidebar-chapter',
-  role: 'CHAPTER_LEADER',
+  role: 'LEAD',
   email: 'lead.sidebar@test.invalid',
   displayName: 'Lead Sidebar',
   chapterId: 'ch-sidebar',

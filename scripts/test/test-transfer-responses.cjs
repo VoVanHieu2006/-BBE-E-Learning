@@ -5,7 +5,7 @@ require('ts-node').register({ project: 'tsconfig.test.json' })
 const Module = require('node:module'), resolve = Module._resolveFilename
 Module._resolveFilename = function (name, ...args) { return resolve.call(this, name.startsWith('@/') ? path.resolve('src', name.slice(2)) : name, ...args) }
 const stub = (file, exports) => { const id = require.resolve(file); require.cache[id] = { id, filename: id, loaded: true, exports } }
-let authContext = { userId: 'leader', role: 'CHAPTER_LEADER' }
+let authContext = { userId: 'leader', role: 'LEAD' }
 stub('../../src/lib/auth', { authenticate: async () => ({ ok: true, context: authContext }) })
 stub('../../src/lib/authorization', { canAccessChapterPermission: async () => true })
 stub('../../src/lib/learning-assignments', { getOrganizationUnitTreeIds: async () => ['chapter-unit', 'department'] })
@@ -56,5 +56,5 @@ test('ADMIN is view-only for scheduling, applying and cancelling transfers', asy
   assert.equal((await schedule.json()).error.code, 'AdminReadOnly')
   assert.equal((await batchRoute.POST({}, { params: { chapterId: 'chapter', batchId: 'batch' } })).status, 403)
   assert.equal((await batchRoute.DELETE({}, { params: { chapterId: 'chapter', batchId: 'batch' } })).status, 403)
-  authContext = { userId: 'leader', role: 'CHAPTER_LEADER' }
+  authContext = { userId: 'leader', role: 'LEAD' }
 })

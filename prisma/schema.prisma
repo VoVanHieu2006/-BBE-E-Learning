@@ -15,7 +15,7 @@ datasource db {
 
 enum UserRole {
   ADMIN
-  CHAPTER_LEADER
+  LEAD
   MEMBER
 
   @@map("user_role")
@@ -44,7 +44,7 @@ enum MembershipStatus {
 }
 
 enum InvitationRole {
-  CHAPTER_LEADER
+  LEAD
   DNA_LEAD
   MEMBER
 

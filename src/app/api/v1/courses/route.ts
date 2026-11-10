@@ -1,3 +1,4 @@
+import { isLeadRole } from '@/lib/roles'
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -47,7 +48,7 @@ export async function GET(request: NextRequest) {
     const role = (auth as any).context!.role
     if (role === 'ADMIN') {
       // Admin sees all courses (DRAFT and PUBLISHED)
-    } else if (role === 'CHAPTER_LEADER' || role === 'MEMBER') {
+    } else if (isLeadRole(role) || role === 'MEMBER') {
       where.status = 'PUBLISHED'
     } else {
       where.status = 'PUBLISHED'

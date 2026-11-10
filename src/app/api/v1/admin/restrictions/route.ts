@@ -1,3 +1,4 @@
+import { isLeadRole } from '@/lib/roles'
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate, invalidateUserAuthCache } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -55,7 +56,7 @@ export async function POST(request: NextRequest) {
       if (target.role === 'ADMIN') return NextResponse.json({ error: { code: 'InvalidTransition', message: 'Admin accounts cannot be locked through this endpoint.' } }, { status: 403 })
       const reason = typeof body.reason === 'string' && body.reason.trim() ? body.reason.trim() : 'Locked by Admin'
       const type = body.reasonType === 'DEADLINE' ? 'DEADLINE' : 'DIRECT_ADMIN'
-      const cascadeChapters = type === 'DIRECT_ADMIN' ? await getUserManagedChapterScopes(targetId, target.role === 'CHAPTER_LEADER') : []
+      const cascadeChapters = type === 'DIRECT_ADMIN' ? await getUserManagedChapterScopes(targetId, isLeadRole(target.role)) : []
       if (cascadeChapters.some((chapter) => !chapter.organizationUnitId)) {
         return NextResponse.json({ error: { code: 'ChapterOrganizationMissing', message: 'Cannot cascade-lock a Chapter until its organization unit is configured.' } }, { status: 409 })
       }
