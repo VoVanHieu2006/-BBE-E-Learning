@@ -2,6 +2,14 @@
 
 Đọc `docs/prompts/00-quy-tac-chung.md` trước. **Chỉ làm sau khi prompt 01 và 02 đã xong và được duyệt.** Nhánh gợi ý: `feat/chuan-hoa-vai-tro`. **Bắt đầu ở chế độ Plan** (chỉ đọc), trình kế hoạch chi tiết rồi mới sửa.
 
+## CẬP NHẬT QUYẾT ĐỊNH (10/11/2026) — thay thế các điểm mâu thuẫn bên dưới
+Chủ sản phẩm xác nhận: **dữ liệu học tập hiện có trên DB (chapter, học viên, tiến độ, bảng xếp hạng) không quan trọng và sẽ bị xóa trước khi triển khai.** Điều bắt buộc là: **sau khi xóa dữ liệu và triển khai lại thì không được lỗi.** Hệ quả:
+- **Bỏ mô hình "hai bản phát hành" và việc chấp nhận song song tên cũ và mới.** Đổi tên trực tiếp trong một bản; token/cookie cũ mang `CHAPTER_LEADER` cho phép mất hiệu lực (buộc đăng nhập lại, tăng `auth_version`).
+- **Bỏ Bước 0 khảo sát dữ liệu production.** Thay bằng kiểm tra triển khai trên DB trống (xem nghiệm thu).
+- Vẫn viết migration đúng và an toàn cho DB đã có schema (đổi enum, gộp mã chức vụ, đổi `learning_targets.code`/`learning_rules.target_code`/`organization_units.code`), nhưng **không cần bảo toàn dữ liệu học tập**; không tự thêm lệnh xóa dữ liệu vào migration (người dùng tự xóa).
+- Cập nhật `prisma/seed.ts`, `prisma/bootstrap/*` (snapshot schema và manifest nếu cần), `scripts/db/*`, `load-tests/fixtures/*` để dùng tên mới. Seed phải chạy được trên DB trống.
+- **Nghiệm thu bổ sung:** (a) `rg "CHAPTER_LEADER|CHAPTER_MANAGER|DEPARTMENT_LEADER|CHAPTER_PRESIDENT|MEMBER_BTV|LEADER_BTV|BDH\b"` trong `src`, `prisma/seed.ts`, `scripts`, `load-tests` chỉ còn trong migration cũ và tài liệu lịch sử; (b) migration mới phải hợp lệ khi áp dụng lên DB đã có schema hiện tại (không cần chạy được ở đây). **Việc cắt lại baseline DB trống, sửa seed chạy được và kiểm tra triển khai từ DB trống thuộc prompt 06, KHÔNG làm ở prompt này** (chỉ đổi tên trong `prisma/seed.ts` nếu có, không cố làm seed chạy).
+
 ## Mục tiêu
 Chuẩn hóa tên theo `docs/KHBB.md` mục 2-3 và bảng đối chiếu ở đầu `docs/KHBB-ky-thuat.md`, và các dòng 1, 2, 3, 4 của bảng mục 9. Đây là thay đổi lớn nhất: dữ liệu production đang dùng tên cũ, nên phải đổi **theo hai bản phát hành** (chấp nhận cả tên cũ và mới, rồi mới chuyển dữ liệu).
 
