@@ -32,7 +32,7 @@ type Props = Pick<CourseEditorState,
   'handleQuestionTypeChange' |
   'handleRemoveOption' |
   'handleAddOption' |
-  'isPublished' |
+  'editorLocked' |
   'handleDeleteAssessment' |
   'assessmentSaving' |
   'isLessonQuizInvalid' |
@@ -68,7 +68,7 @@ export default function CourseAssessmentEditor({
   handleQuestionTypeChange,
   handleRemoveOption,
   handleAddOption,
-  isPublished,
+  editorLocked,
   handleDeleteAssessment,
   assessmentSaving,
   isLessonQuizInvalid,
@@ -417,7 +417,7 @@ export default function CourseAssessmentEditor({
 
               <div className="flex items-center justify-between pt-3 border-t border-[#eff4ff]">
                 <div>
-                  {activeLessonForAssessment?.assessment && !isPublished && (
+                  {activeLessonForAssessment?.assessment && !editorLocked && (
                     <Button variant="danger" size="sm" onClick={handleDeleteAssessment}>
                       🗑️ Xóa Quiz này
                     </Button>

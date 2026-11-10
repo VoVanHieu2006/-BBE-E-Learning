@@ -72,15 +72,16 @@ async function check(id, expected, run, validate) {
     await reconcileSharedPath(tx, 'user', 'cycle', at(5))
     return (updated - at(0)) / DAY_MS
   }, actual => assert.equal(actual, 21))
-  await check('BOOK-20 newly published lessons use publication instant, not an expired previous deadline', 26, async () => {
+  await check('HANDBOOK-DEADLINE-ADDED', 26, async () => {
     let due
-    const course = { id: 'course', title: 'Course', program_id: 'core', content_version: 1, mandatory_default_due_days: 20, final_assessment: null, sessions: [{ lessons: Array.from({ length: 7 }, (_, i) => ({ id: `lesson${i}`, assessment: null })) }] }
+    const course = { id: 'course', title: 'Course', program_id: 'core', content_version: 1, mandatory_default_due_days: 20, final_assessment: null, sessions: [{ lessons: Array.from({ length: 7 }, (_, i) => ({ id: `lesson${i}`, video: { id: `video${i}` }, assessment: { id: `quiz${i}` } })) }] }
     const tx = {
       course: { findUniqueOrThrow: async () => course, update: async () => course },
-      courseRequirementVersion: { findFirst: async () => ({ id: 'v1', version: 1, fingerprint: 'previous', lesson_ids: ['lesson0', 'lesson1', 'lesson2', 'lesson3', 'lesson4'] }), create: async args => ({ id: 'v2', ...args.data }) },
-      userLearningAssignment: { findMany: async () => [{ user_id: 'user', learning_cycle_id: 'cycle' }], updateMany: async () => ({ count: 1 }) },
+      courseRequirementVersion: { findFirst: async () => ({ id: 'v1', version: 1, fingerprint: JSON.stringify({ lessonIds: ['lesson0','lesson1','lesson2','lesson3','lesson4'], assessmentIds: ['quiz0','quiz1','quiz2','quiz3','quiz4'], finalVersion: null, videoLessonIds: ['lesson0','lesson1','lesson2','lesson3','lesson4'], quizLessonIds: ['lesson0','lesson1','lesson2','lesson3','lesson4'] }), lesson_ids: ['lesson0', 'lesson1', 'lesson2', 'lesson3', 'lesson4'], assessment_ids: ['quiz0','quiz1','quiz2','quiz3','quiz4'], final_version_id: null }), create: async args => ({ id: 'v2', ...args.data }) },
+      userLearningAssignment: { findMany: async () => [{ id: 'assignment', user_id: 'user', learning_cycle_id: 'cycle', mandatory: true, status: 'COMPLETED', completed_at: at(5) }], update: async () => ({}), updateMany: async () => ({ count: 1 }) },
       learningCycle: { findUnique: async () => ({ id: 'cycle', ends_at: null }) },
       learningPath: { findUnique: async () => ({ id: 'path', due_at: at(10) }), update: async args => { due = args.data.due_at; return {} } },
+      learningPathChange: { create: async () => ({}) }, auditLog: { create: async () => ({}) },
       learningNotice: { upsert: async () => ({}) }, coursePublicationEvent: { create: async () => ({}) },
     }
     await executePublishCourseRequirements(tx, 'course', at(20))

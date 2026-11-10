@@ -8,13 +8,13 @@ Phân biệt lỗi nghiệp vụ, fixture test không tương thích và phần 
 
 | ID | Tái hiện và bằng chứng | Tình trạng |
 |---|---|---|
-| HANDBOOK-DEADLINE-ADDED | Khóa 20 ngày, 5 bài, đã hoàn thành, hạn cũ ngày 10; publish thêm 2 bài ngày 20, tổng 7 bài. Expected `20+2*max(ceil(20/7),3)=26`; `executePublishCourseRequirements` cộng hạn cũ ra 16. | Lệch mốc tái hiện. Sửa riêng cần completed/incomplete, due future/past, publish retry; không suy rộng mọi khóa. |
+| HANDBOOK-DEADLINE-ADDED | Fixture đã mô tả đủ assignment COMPLETED/bắt buộc và video+quiz. Khóa 20 ngày, 5→7 bài, hạn cũ ngày 10, cập nhật ngày 20: kết quả ngày 26. | PASS trong audit thuần sau prompt 02b. Unit bao phủ người học dở, hạn tương lai/quá khứ và idempotence; chưa kiểm chứng DB thật. |
 | HANDBOOK-MANAGER-ALIAS | User MEMBER có vị trí `CHAPTER_MANAGER`, course published; `rewardEligibility` vẫn true, thiếu alias trong loại trừ. `competitionGroup` đã loại alias khỏi BXH. | Lỗi predicate tái hiện; chưa audit thiệt hại ledger thật. Không thu hồi sao/sửa history lần này. Chi tiết và cách sửa: [CKNK mục 7.4](CKNK.md#74-alias-chaptermanager-vẫn-được-nhận-sao). |
 | HANDBOOK-TERM-EXPECTATION | Chuyển 15/9, stage 4+6; sổ tay (bản cũ) muốn 10 thuộc kỳ kết thúc 30/9. Baseline fixture thiếu dependency; sau bổ sung dependency, audit thực sự chạy và trả **4**, expected **10**. | **ĐÃ CHỐT ngày 29/10/2026: code trả 4 là ĐÚNG, expectation 10 là SAI.** Chuyển giao `15/9` chuẩn hóa về mốc `01/10`, nên nhiệm kỳ vừa kết thúc là `01/04→01/10` và nhiệm kỳ mới là `01/10→01/04`. Khung `30/9` đã bị bỏ khỏi [handbook-formulas](reference/handbook-formulas.md) mục 13. Audit vẫn đỏ cho tới khi expectation được cập nhật theo khung mới; không sửa production để ép expectation. |
 
 Deadline chung mục 18 đã chốt `max(D_start+T_new,D_change+T_added)`, thay deadline riêng; ví dụ ngày 5→21/ngày 20→31 và retry/history có `test:shared-deadline`. Không backfill hạn đã lưu. Formula regression cũ PASS không chứng minh phù hợp toàn sổ tay, nhất là expectation stage midpoint cũ.
 
-Lần chạy sau sửa fixture trong đợt cleanup: **8 PASS / 3 FAIL**, gồm actual4/expected10 ở phân điểm, actual16/expected26 ở thêm bài, actualtrue/expectedfalse ở alias. Hai sai lệch sau đã tái hiện rõ; phân điểm **đã có kết luận đặc tả** (code đúng, expectation sai — xem bảng trên), không gộp thành một fixture error chưa chạy hoặc tự sửa công thức.
+Lần chạy prompt 02b: **9 PASS / 2 FAIL**. `HANDBOOK-DEADLINE-ADDED` PASS; hai case còn FAIL ngoài phạm vi: phân điểm actual4/expected10 và fixture alias quản lý thiếu dependency `count`. Kết quả cleanup trước đây là 8 PASS/3 FAIL; không dùng số liệu cũ để kết luận code hiện tại.
 
 ## Hạn học và khóa tài khoản (prompt 01, đối chiếu KHBB mục 9)
 
@@ -24,7 +24,7 @@ Còn lệch hoặc cần theo dõi:
 
 | Mục | Ghi chú |
 |---|---|
-| KHBB dòng 10, 11, 12, 18 | Thêm bài/quiz/bài thi cuối: thuộc prompt 02, chưa làm. |
+| KHBB dòng 10, 11, 12, 15, 18 | Logic nền và phần còn lại prompt 02b đã được nối: draft editor/publish, OCC, giữ câu hỏi/pool/lịch sử, xóa có guard, video/ngân hàng/final version, nhãn Mới và quiz đạt. Có unit với transaction double; nghiệm thu DB/browser còn thiếu vì môi trường (xem HANDOFF.md). Chưa tuyên bố hoàn tất nghiệm thu. |
 | KHBB dòng 1, 3, 4 | Đổi tên role/chức vụ/nhóm học: prompt 03. Trong code mới `LEAD` vẫn nhận diện qua role `CHAPTER_LEADER` và chức vụ `DNA_LEAD`/`DNA_MANAGER`/`CHAPTER_LEAD`/`CHAPTER_MANAGER`. |
 | Số lần sai tồn từ chính sách cũ | Tài khoản `ACTIVE` đang có `failed_login_count` từ 5 đến 9 (ngưỡng cũ là 10) sẽ bị khóa ngay ở lần sai kế tiếp. Không backfill. |
 | Khóa nháp đã có ô tick | Quy tắc cũ cho tick khóa nháp. Ô đã tick vẫn còn, vẫn cho bỏ tick/sửa ngày; reconcile coi khóa nháp là ngoài bộ khóa, và người chưa có assignment sẽ chỉ được tạo assignment khi có lần reconcile sau khi xuất bản. |
@@ -60,7 +60,7 @@ GET chuyển giao hiện có side effect: `reorganizations`, `current-roster` v�
 | Video/DB/browser | Mock browser bảo vệ UI contract, không thay YouTube thật + learner DB thật. PASS chỉ đúng phạm vi đã chạy. |
 | Đặc tả thiếu | Nguyên văn V01–V15, A–J/14 case trong handoff cũ không đủ; không chế ma trận để tuyên bố đã nghiệm thu. |
 | Công thức/UX | Full timing/cohort 30→15, 22,30/50,56%; đổi tên qua snapshot cũ, đủ tám bảng cùng dataset và reset nghĩa vụ toàn bộ cần acceptance riêng khi chưa có evidence. |
-| Nội dung | Gia hạn shared path hiện xử lý bài mới, không tự cho video replacement/arbitrary edits. Full bank-version authoring UI cho mọi lesson bank legacy chưa được bảo đảm. |
+| Nội dung | Thêm video/quiz riêng và bài thi cuối dùng công thức prompt 02; thay video có sẵn hoặc sửa nội dung tùy ý không tự cộng ngày. Quiz có attempt giữ ID/pool, cấm đổi nội dung/đáp án hoặc xóa câu đã dùng; muốn thay phải theo quy tắc lịch sử. Draft cũ thiếu cấu trúc an toàn được báo lỗi và cho bỏ để tạo lại. Upload vào draft bị bỏ có thể để lại asset cloud chưa liên kết; chưa có cleanup tự động. |
 | Client token | Cookie flags có nhưng client còn localStorage tokens. Đổi auth storage/CSP là thay đổi riêng, cần xem UX/compatibility. |
 | Rate limiting | Auth/reset handlers khảo sát không có throttling IP/gateway tại chỗ; bảo vệ ngoài ứng dụng chưa xác minh. Cần nghiệm thu anti-abuse riêng, không thêm middleware trong cleanup. |
 | Route tương thích/debug | `/lessons/[lessonId]` vẫn có player thử token; cả `/invitations/accept` và `/accept-invitation` còn tồn tại. Giữ URL/tính năng trong cleanup; đóng/redirect cần quyết định riêng và kiểm tra người dùng còn gọi. |

@@ -5,7 +5,7 @@ import type { CourseEditorState } from './useCourseEditor';
 type Props = Pick<CourseEditorState,
   'hasUnsavedCourseInfo' |
   'handleSaveInfo' |
-  'isPublished' |
+  'editorLocked' |
   'form' |
   'setForm' |
   'course' |
@@ -16,7 +16,7 @@ type Props = Pick<CourseEditorState,
 export default function CourseInfo({
   hasUnsavedCourseInfo,
   handleSaveInfo,
-  isPublished,
+  editorLocked,
   form,
   setForm,
   course,
@@ -35,7 +35,7 @@ export default function CourseInfo({
                   <input
                     type="text"
                     required
-                    disabled={isPublished}
+                    disabled={editorLocked}
                     value={form.title}
                     onChange={(e) => setForm({ ...form, title: e.target.value })}
                     className="w-full px-4 py-2.5 border border-[#cbdbf5] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB] disabled:bg-slate-100 disabled:cursor-not-allowed"
@@ -45,7 +45,7 @@ export default function CourseInfo({
                   <label className="block text-sm font-semibold text-[#172554] mb-1">Mô tả</label>
                   <textarea
                     rows={3}
-                    disabled={isPublished}
+                    disabled={editorLocked}
                     value={form.description}
                     onChange={(e) => setForm({ ...form, description: e.target.value })}
                     className="w-full px-4 py-2.5 border border-[#cbdbf5] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB] disabled:bg-slate-100 disabled:cursor-not-allowed"
@@ -77,7 +77,7 @@ export default function CourseInfo({
                       <input
                         type="file"
                         accept="image/jpeg,image/png,image/webp"
-                        disabled={isPublished || coverUploading}
+                        disabled={editorLocked || coverUploading}
                         onChange={(event) => { void handleCoverUpload(event.target.files?.[0]); event.currentTarget.value = ''; }}
                         className="block text-sm text-[#172554] file:mr-3 file:rounded-lg file:border-0 file:bg-[#eff4ff] file:px-3 file:py-2 file:text-sm file:font-semibold file:text-[#2563EB] hover:file:bg-[#dbeafe] disabled:opacity-60 cursor-pointer"
                       />
@@ -101,7 +101,7 @@ export default function CourseInfo({
                         type="radio"
                         name="visibility"
                         value="PUBLIC"
-                        disabled={isPublished}
+                        disabled={editorLocked}
                         checked={form.visibility === 'PUBLIC'}
                         onChange={() => setForm({ ...form, visibility: 'PUBLIC' })}
                         className="text-[#2563EB]"
@@ -113,7 +113,7 @@ export default function CourseInfo({
                         type="radio"
                         name="visibility"
                         value="PRIVATE"
-                        disabled={isPublished}
+                        disabled={editorLocked}
                         checked={form.visibility === 'PRIVATE'}
                         onChange={() => setForm({ ...form, visibility: 'PRIVATE' })}
                         className="text-[#2563EB]"

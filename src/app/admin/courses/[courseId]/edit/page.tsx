@@ -42,28 +42,33 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
           >
             ← Quay lại danh sách khóa học
           </Link>
-          {course && <div className="flex items-center gap-3">
-            {!isPublished && <Button variant="secondary" loading={savingInfo} onClick={() => void handleSaveInfo()}>{hasUnsavedCourseInfo ? 'Lưu thay đổi •' : 'Đã lưu'}</Button>}
+          {course && <div className="flex flex-wrap items-center gap-3">
+            <Button variant="secondary" disabled={editor.editorLocked} loading={savingInfo || editor.draftSaving} onClick={() => void handleSaveInfo()}>{hasUnsavedCourseInfo ? 'Lưu thay đổi •' : 'Đã lưu'}</Button>
             <span
               className={`whitespace-nowrap inline-flex items-center text-xs font-bold px-3 py-1 rounded-full ${
                 isPublished ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
               }`}
             >
-              {isPublished ? '✓ Đang công khai (Published)' : 'Bản nháp (Draft)'}
+              {isPublished ? 'Đã xuất bản' : 'Bản nháp'}
             </span>
 
-            {isPublished && <Button loading={publishLoading} onClick={handlePublish}>Công bố cập nhật nội dung</Button>}
-            {isPublished ? (
-              <Button variant="secondary" loading={publishLoading} onClick={() => setShowUnpublishConfirm(true)}>
-                Hạ về bản nháp
-              </Button>
-            ) : (
+            {isPublished && <Button disabled={editor.editorLocked || (!editor.hasDraftChanges && !hasUnsavedCourseInfo)} loading={publishLoading} onClick={handlePublish}>Cập nhật khóa học</Button>}
+            {isPublished && <Button variant="secondary" disabled={editor.draftSaving || editor.draftConflict || publishLoading || !editor.hasDraftChanges} onClick={editor.handleDiscardDraft}>Bỏ thay đổi</Button>}
+            {!isPublished && (
               <Button loading={publishLoading} onClick={handlePublish}>
-                Công khai khóa học
+                Xuất bản khóa học
               </Button>
             )}
           </div>}
         </div>
+
+        {isPublished && <div className="mb-6 space-y-3">
+          <p role="status" className="text-sm text-[#434655]">{editor.draftSaving ? 'Đang lưu bản nháp…' : editor.hasDraftChanges ? 'Có thay đổi chưa cập nhật. Học viên vẫn học bản đang xuất bản.' : 'Chỉnh sửa được lưu vào bản nháp thay đổi.'}</p>
+          {editor.draftConflict && <div role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">Bản nháp hoặc bản xuất bản đã thay đổi bởi Admin khác. Hãy tải lại để xem phiên bản mới trước khi tiếp tục. <Button variant="secondary" onClick={editor.reloadDraft}>Tải lại bản nháp</Button></div>}
+          {editor.draftError && <p role="alert" className="text-sm text-red-700">Bản nháp cũ không hợp lệ: {editor.draftError} Đang hiển thị bản xuất bản. Hãy bỏ thay đổi để bắt đầu bản nháp mới.</p>}
+          <button type="button" disabled={editor.editorLocked || editor.hasDraftChanges || hasUnsavedCourseInfo} onClick={() => setShowUnpublishConfirm(true)} className="text-sm font-semibold text-red-700 underline underline-offset-4 disabled:opacity-50">Hủy xuất bản khẩn cấp</button>
+          {(editor.hasDraftChanges || hasUnsavedCourseInfo) && <p className="text-xs text-[#737686]">Cập nhật hoặc bỏ thay đổi trước khi hủy xuất bản khẩn cấp.</p>}
+        </div>}
 
         {/* IMP-03: Unpublish Confirmation Modal */}
         <Modal
@@ -74,17 +79,17 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
           <div className="p-6 space-y-4">
             <div className="flex items-center gap-3 mb-2">
               <span className="text-2xl">⚠️</span>
-              <h2 className="text-lg font-bold text-[#172554]">Xác nhận hạ xuất bản</h2>
+              <h2 className="text-lg font-bold text-[#172554]">Hủy xuất bản khẩn cấp</h2>
             </div>
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
               <p className="text-amber-800 font-semibold text-sm mb-1">Hành động này sẽ ảnh hưởng đến toàn bộ học viên!</p>
               <p className="text-amber-700 text-sm">
-                Việc hạ về bản nháp sẽ <strong>tạm thời ẩn khóa học này</strong> khỏi danh sách học viên đang theo dõi.
+                Hủy xuất bản sẽ <strong>tạm ngừng khóa học này</strong> đối với học viên.
                 Học viên sẽ không thể truy cập bài học hay làm bài kiểm tra cho đến khi khóa học được xuất bản trở lại.
               </p>
             </div>
             <p className="text-[#434655] text-sm">
-              Dữ liệu tiến trình và điểm thi của học viên sẽ <strong>không bị mất</strong>. Bạn có thể xuất bản lại bất cứ lúc nào.
+              Khóa tạm rời bộ khóa bắt buộc và hạn được tính lại: còn khóa khác có sàn 3 ngày, hết khóa thì không còn hạn. Tiến trình, điểm thi và ô tick bắt buộc được giữ nguyên. Xuất bản lại trong 3 ngày khôi phục hạn trước khi gỡ; sau 3 ngày tính như thêm lại khóa.
             </p>
             <div className="flex gap-3 pt-2">
               <Button
@@ -99,7 +104,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
                 disabled={publishLoading}
                 className="flex-1 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl transition-colors disabled:opacity-50"
               >
-                {publishLoading ? 'Đang xử lý...' : 'Xác nhận hạ xuất bản'}
+                {publishLoading ? 'Đang xử lý...' : 'Xác nhận hủy xuất bản'}
               </button>
             </div>
           </div>
@@ -119,7 +124,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
             </Link>
           </Card>
         ) : (
-          <div className="space-y-8">
+          <fieldset disabled={editor.editorLocked} className="space-y-8 min-w-0">
             {/* 1. Basic Info Form */}
             <CourseInfo {...editor} />
 
@@ -130,7 +135,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
 
             {/* 3. Quiz Per-Lesson Overview Section */}
             <LessonQuizOverview {...editor} />
-          </div>
+          </fieldset>
         )}
 
         {/* Modal: Add / Edit Session */}

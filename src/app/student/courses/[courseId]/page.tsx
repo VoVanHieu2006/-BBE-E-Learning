@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
+import NewContentChip from '@/components/learning/NewContentChip';
+import { allCourseLessonsDone } from '@/lib/learning-display';
 import { apiFetch, getCachedApiData } from '@/lib/api/client';
 
 export default function CourseDetailPage({ params }: { params: { courseId: string } }) {
@@ -66,7 +68,7 @@ export default function CourseDetailPage({ params }: { params: { courseId: strin
     (course?.sessions?.reduce((acc: number, s: any) => acc + (s.lessons?.length || 0), 0) || 0);
   const completedLessons = isLeaderOrAdmin ? totalLessons : progressData?.completedLessons ?? 0;
   const progressPercentage = isLeaderOrAdmin ? 100 : progressData?.progressPercentage ?? 0;
-  const allLessonsDone = totalLessons > 0 && completedLessons >= totalLessons;
+  const allLessonsDone = allCourseLessonsDone(course?.sessions || [], progressData?.sessions || []);
 
   const content = (
     <div className="max-w-7xl mx-auto px-6 py-10 flex-1 w-full space-y-8">
@@ -94,7 +96,7 @@ export default function CourseDetailPage({ params }: { params: { courseId: strin
       ) : (
         <div className="space-y-8">
           {/* Banner hoàn thành khóa học */}
-          {user && !isLeaderOrAdmin && progressPercentage >= 100 && (
+          {user && !isLeaderOrAdmin && allLessonsDone && (!course.finalAssessment || progressData?.finalAssessmentAttempt?.passed) && (
             <div className="rounded-2xl border-2 border-emerald-300 bg-emerald-50 px-5 py-4 flex items-center gap-3 shadow-sm">
               <span className="text-2xl">🎉</span>
               <div>
@@ -197,7 +199,7 @@ export default function CourseDetailPage({ params }: { params: { courseId: strin
                                   </span>
                                   <div>
                                     <h4 className="font-semibold text-sm text-slate-600 flex items-center gap-1.5">
-                                      <span>🔒</span> {lesson.title}
+                                      <span>🔒</span> {lesson.title} <NewContentChip show={lessonProg?.isNew} />
                                     </h4>
                                     {lesson.description && (
                                       <p className="text-xs text-slate-400 mt-0.5 line-clamp-1">{lesson.description}</p>
@@ -206,7 +208,7 @@ export default function CourseDetailPage({ params }: { params: { courseId: strin
                                       <span>📹 Video bài giảng</span>
                                       {lesson.assessment && (
                                         <span className="inline-flex items-center gap-1 font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md text-[11px]">
-                                          📝 Quiz ({lesson.assessment.questionCount || lesson.assessment._count?.questions || 0} câu)
+                                          📝 Quiz ({lesson.assessment.questionCount || lesson.assessment._count?.questions || 0} câu) <NewContentChip show={lessonProg?.quizIsNew} />
                                         </span>
                                       )}
                                     </div>
@@ -236,7 +238,7 @@ export default function CourseDetailPage({ params }: { params: { courseId: strin
                                 </span>
                                 <div>
                                   <h4 className="font-semibold text-sm text-[#172554] group-hover:text-[#2563EB] transition">
-                                    {lesson.title}
+                                    {lesson.title} <NewContentChip show={lessonProg?.isNew} />
                                   </h4>
                                   {lesson.description && (
                                     <p className="text-xs text-[#434655] mt-0.5 line-clamp-1">{lesson.description}</p>
@@ -245,7 +247,7 @@ export default function CourseDetailPage({ params }: { params: { courseId: strin
                                     <span>📹 Video bài giảng</span>
                                     {lesson.assessment && (
                                       <span className="inline-flex items-center gap-1 font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md text-[11px]">
-                                        📝 Quiz ({lesson.assessment.questionCount || lesson.assessment._count?.questions || 0} câu)
+                                        📝 Quiz ({lesson.assessment.questionCount || lesson.assessment._count?.questions || 0} câu) <NewContentChip show={lessonProg?.quizIsNew} />
                                       </span>
                                     )}
                                     {lesson.documents?.length > 0 && (

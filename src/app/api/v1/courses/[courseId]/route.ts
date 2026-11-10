@@ -246,7 +246,8 @@ export async function PATCH(request: NextRequest, { params }: { params: { course
       data: {
         ...(title !== undefined ? { title: title.trim() } : {}),
         ...(description !== undefined ? { description: description?.trim() || null } : {}),
-        ...(visibility !== undefined ? { visibility } : {}),
+        // Advance OCC atomically, including a visibility write racing with publication.
+        ...(visibility !== undefined ? { visibility, content_version: { increment: 1 } } : {}),
         ...(coverUrl !== undefined ? { cover_url: coverUrl || null } : {}),
         ...(targetProgramId !== undefined ? { program_id: targetProgramId } : {}),
       },

@@ -57,7 +57,7 @@ export async function captureCourseRequirementVersion(tx: Prisma.TransactionClie
       })
     : diffRequirementState(null, EMPTY_STATE)
   const version = await tx.courseRequirementVersion.create({ data: {
-    course_id: courseId, version: previous ? previous.version + 1 : course.content_version,
+    course_id: courseId, version: previous ? Math.max(previous.version + 1, course.content_version) : course.content_version,
     lesson_ids: lessonIds, assessment_ids: assessmentIds, final_version_id: finalVersion,
     fingerprint, published_at: now,
   } })

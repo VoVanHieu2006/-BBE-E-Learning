@@ -7,7 +7,7 @@ const suites = {
   unit: [
     ts('src/test/learning-unlocks.test.ts'),
     ['src/test/admin-chapters-state.test.cjs'],
-    ...['business-rules','video-playback-guard','video-progress-session','video-fullscreen-controls','video-controls-youtube-ux','video-switching-leak','video-player-ui','shared-learning-path','quiz-plan-b-selection','p1-rules','prompt1-verification','prompt2-verification','master-verification','video-continuity-security','chapter-initial-rewards','transfer-windows','pwa-standalone','viewport-reset','bulk-invite','quiz-timer-navigator','lesson-navigation','monthly-reward-reset','learning-cycles','account-lock-rules','deadline-enforcement','deadline-extension','login-lock','course-update-rules','lesson-new-label','content-deletion','content-management','ranking-departures'].map(name => ts(`src/test/${name}.test.ts`)),
+    ...['business-rules','video-playback-guard','video-progress-session','video-fullscreen-controls','video-controls-youtube-ux','video-switching-leak','video-player-ui','shared-learning-path','quiz-plan-b-selection','p1-rules','prompt1-verification','prompt2-verification','master-verification','video-continuity-security','chapter-initial-rewards','transfer-windows','pwa-standalone','viewport-reset','bulk-invite','quiz-timer-navigator','lesson-navigation','monthly-reward-reset','learning-cycles','account-lock-rules','deadline-enforcement','deadline-extension','login-lock','course-update-rules','lesson-new-label','course-draft','course-draft-publish','course-draft-routes','learning-display','content-deletion','content-management','ranking-departures'].map(name => ts(`src/test/${name}.test.ts`)),
     ...['baseline-empty-database.test.mjs','test-formula-audit.cjs','test-p05-assets.cjs','test-p05-routes.cjs','test-chapter-period-api.cjs','test-chapter-term-aggregation.cjs','test-completed-lessons.cjs','test-transfer-responses.cjs','test-transfer-guard.cjs','test-transfer-admin-view.cjs'].map(file => [`scripts/test/${file}`]),
     ['scripts/test/database-safety.test.cjs'], ['load-tests/tests/safety.test.mjs'], ['load-tests/tests/profiler.test.mjs'],
   ],
@@ -15,7 +15,7 @@ const suites = {
     ...['test-learning-flow-integration.mjs','test-chapter-leaderboard-integration.mjs','test-learning-security.mjs','test-learning-cycles-integration.cjs','test-reward-pause-integration.cjs','test-organization-integrity.cjs','test-organization-repair.mjs','test-chapter-transfer-integration.cjs','test-completed-lessons-integration.cjs','test-star-history-integration.cjs','test-fb-fixes.cjs'].map(file => [`scripts/test/${file}`]),
     ...['admin-program-and-lead-dept','quiz-and-refresh-integration','chapter-six-month-transfer'].map(name => ['-r','./scripts/test/require-test-database.cjs',...ts(`src/test/${name}.test.ts`)]),
   ],
-  browser: ['player','tabs','sidebar','fb','refactor','quiz'].map(name => ['node_modules/@playwright/test/cli.js','test','-c',`playwright.${name}.config.ts`]),
+  browser: ['player','tabs','sidebar','fb','refactor','quiz','course-update'].map(name => ['node_modules/@playwright/test/cli.js','test','-c',`playwright.${name}.config.ts`]),
 }
 const group = process.argv[2] || 'unit'
 if (!Object.hasOwn(suites, group)) throw new Error('Choose unit, integration or browser')

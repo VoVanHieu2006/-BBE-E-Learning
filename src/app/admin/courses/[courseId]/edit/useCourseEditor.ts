@@ -2,14 +2,18 @@
 import { useEffect, useState, useRef } from 'react';
 import type { ToastMessage } from '@/components/ui/Toast';
 import { apiFetch, clearApiCache, getCachedApiData } from '@/lib/api/client';
+import type { CourseDraftContent } from '@/lib/course-draft';
+import { draftToEditorCourse, findDraftLesson, draftQuestionBankSize } from '@/lib/course-draft-editor';
 import { normalizeDurationSeconds, parseDurationInput } from '@/lib/validation/duration';
 
 interface QuestionOptionForm {
+  id?: string;
   optionText: string;
   isCorrect: boolean;
 }
 
 interface QuestionForm {
+  id?: string;
   questionText: string;
   type: 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE';
   points: number;
@@ -21,6 +25,56 @@ interface QuestionForm {
 
 export function useCourseEditor(params: { courseId: string }) {
   const [course, setCourse] = useState<any>(null);
+  const draftRef = useRef<CourseDraftContent | null>(null);
+  const draftVersionRef = useRef(0);
+  const draftIdRef = useRef<string | null>(null);
+  const baseVersionRef = useRef(0);
+  const draftBusyRef = useRef(false);
+  const draftConflictRef = useRef(false);
+  const [draftSaving, setDraftSaving] = useState(false);
+  const [hasDraftChanges, setHasDraftChanges] = useState(false);
+  const [draftConflict, setDraftConflict] = useState(false);
+  const [draftError, setDraftError] = useState<string | null>(null);
+  const [quizPoolIds, setQuizPoolIds] = useState<string[]>([]);
+  const tempId = () => `temp-${crypto.randomUUID()}`;
+
+  async function savePublishedDraft(change: (content: CourseDraftContent) => void) {
+    if (!draftRef.current || draftBusyRef.current || draftConflictRef.current || draftError) {
+      showToast('error', draftConflictRef.current ? 'Bản nháp đã đổi bởi Admin khác. Hãy tải lại trang.' : 'Đang lưu bản nháp, vui lòng đợi.');
+      return false;
+    }
+    draftBusyRef.current = true;
+    setDraftSaving(true);
+    try {
+      const content = structuredClone(draftRef.current);
+      change(content);
+      const res = await apiFetch(`/api/v1/courses/${params.courseId}/draft`, { method: 'PUT', body: JSON.stringify({ content, expectedDraftId: draftIdRef.current, expectedDraftVersion: draftVersionRef.current, baseContentVersion: baseVersionRef.current }) });
+      if (!res.ok) {
+        if (res.status === 409) { draftConflictRef.current = true; setDraftConflict(true); }
+        showToast('error', res.error?.message || 'Không lưu được bản nháp.');
+        return false;
+      }
+      draftRef.current = res.data.draft.content;
+      draftVersionRef.current = res.data.draft.draftVersion;
+      draftIdRef.current = res.data.draft.id;
+      setHasDraftChanges(true);
+      setCourse((prev: any) => draftToEditorCourse(res.data.draft.content, prev));
+      return true;
+    } catch (e) {
+      showToast('error', e instanceof Error ? e.message : 'Không lưu được bản nháp.');
+      return false;
+    } finally { draftBusyRef.current = false; setDraftSaving(false); }
+  }
+
+  async function handleDiscardDraft() {
+    if (draftBusyRef.current || draftConflictRef.current || !window.confirm('Bỏ toàn bộ thay đổi chưa cập nhật của khóa học?')) return;
+    draftBusyRef.current = true; setDraftSaving(true);
+    try {
+      const res = await apiFetch(`/api/v1/courses/${params.courseId}/draft`, { method: 'DELETE', body: JSON.stringify({ expectedDraftId: draftIdRef.current, expectedDraftVersion: draftVersionRef.current, baseContentVersion: baseVersionRef.current }) });
+      if (res.ok) { await loadCourse(true); showToast('success', 'Đã bỏ thay đổi chưa cập nhật.'); }
+      else { if (res.status === 409) { draftConflictRef.current = true; setDraftConflict(true); } showToast('error', res.error?.message || 'Không bỏ được bản nháp.'); }
+    } finally { draftBusyRef.current = false; setDraftSaving(false); }
+  }
   const [assessment, setAssessment] = useState<any>(null);
   const [finalAvailableQuestions, setFinalAvailableQuestions] = useState(0);
 
@@ -139,20 +193,26 @@ export function useCourseEditor(params: { courseId: string }) {
     return () => window.removeEventListener('beforeunload', warn);
   }, [hasUnsavedCourseInfo]);
 
-  async function loadCourse() {
+  async function loadCourse(reload = false) {
+    if (draftConflictRef.current && !reload) return;
     const courseRes = await apiFetch(`/api/v1/courses/${params.courseId}`, { noCache: true });
-
     if (courseRes.ok && courseRes.data) {
-      const c = courseRes.data;
+      let c = courseRes.data;
+      if (c.status === 'PUBLISHED') {
+        const result = await apiFetch(`/api/v1/courses/${params.courseId}/draft`, { noCache: true });
+        if (!result.ok) { showToast('error', result.error?.message || 'Không tải được bản nháp.'); setLoading(false); return; }
+        setDraftError(result.data.draftError || null);
+        draftRef.current = result.data.draftError ? result.data.initialContent : result.data.draft?.content || result.data.initialContent;
+        draftVersionRef.current = result.data.draft?.draftVersion || 0;
+        draftIdRef.current = result.data.draft?.id || null;
+        baseVersionRef.current = result.data.course.contentVersion;
+        setHasDraftChanges(Boolean(result.data.draft));
+        c = draftToEditorCourse(draftRef.current!, c);
+      } else { draftRef.current = null; setHasDraftChanges(false); setDraftError(null); }
+      draftConflictRef.current = false; setDraftConflict(false);
       setCourse(c);
-      setForm({
-        title: c.title,
-        description: c.description || '',
-        visibility: c.visibility,
-        status: c.status,
-      });
+      setForm({ title: c.title, description: c.description || '', visibility: c.visibility, status: c.status });
     }
-
     setLoading(false);
   }
 
@@ -176,7 +236,7 @@ export function useCourseEditor(params: { courseId: string }) {
 
     // The modal opens immediately. One endpoint now returns assessment + pools,
     // avoiding the old pair of sequential requests before anything was shown.
-    if (assessData) {
+    if (assessData && !draftRef.current) {
       const res = await apiFetch(`/api/v1/lessons/${lId}/assessment`);
       if (loadId !== assessmentLoadIdRef.current) return;
       if (res.ok && res.data) {
@@ -191,9 +251,10 @@ export function useCourseEditor(params: { courseId: string }) {
     const poolIndexById = new Map<string, number>();
     if (Array.isArray(assessData?.pools) && assessData.pools.length > 0) {
       poolNames = assessData.pools.map((pool: any) => pool.name);
-      assessData.pools.forEach((pool: any, index: number) => poolIndexById.set(pool.poolId, index));
+      assessData.pools.forEach((pool: any, index: number) => poolIndexById.set(pool.poolId || pool.id, index));
     }
     setQuizPoolNames(poolNames);
+    setQuizPoolIds((assessData?.pools || []).map((p: any) => p.poolId || p.id));
 
     setActiveLessonForAssessment({
       sessionId: sId,
@@ -210,6 +271,7 @@ export function useCourseEditor(params: { courseId: string }) {
         questionCount: assessData?.questionCount || 1,
         durationMinutes: assessData ? (assessData.durationMinutes ?? 0) : 30,
         questions: assessData.questions.map((q: any, idx: number) => ({
+          id: q.id || q.questionId,
           questionText: q.questionText || q.question_text || `Câu hỏi ${idx + 1}`,
           // Loại Đúng/Sai đã ngừng dùng: quy về 1 đáp án để form không lỗi khi đọc dữ liệu cũ
           type: (q.type || q.questionType) === 'MULTIPLE_CHOICE' ? 'MULTIPLE_CHOICE' : 'SINGLE_CHOICE',
@@ -218,6 +280,7 @@ export function useCourseEditor(params: { courseId: string }) {
           explanation: q.explanation || '',
            poolIndex: poolIndexById.get(q.poolId) ?? idx % Math.max(1, poolNames.length),
           options: (q.options || []).map((opt: any, oIdx: number) => ({
+            id: opt.id || opt.optionId,
             optionText: opt.optionText || opt.option_text || `Đáp án ${oIdx + 1}`,
             isCorrect: Boolean(opt.isCorrect ?? opt.is_correct),
           })),
@@ -258,7 +321,9 @@ export function useCourseEditor(params: { courseId: string }) {
     setActiveLessonForAssessment(null);
     setShowAssessmentModal(true);
     setAssessmentLoading(true);
-    const result = await apiFetch(`/api/v1/courses/${params.courseId}/final-assessment`);
+    const result = draftRef.current
+      ? { ok: true, data: { assessment: draftRef.current.finalAssessment, availableQuestions: draftQuestionBankSize(draftRef.current) }, error: undefined }
+      : await apiFetch(`/api/v1/courses/${params.courseId}/final-assessment`);
     if (loadId !== assessmentLoadIdRef.current) return;
     if (!result.ok) {
       setAssessmentLoading(false);
@@ -284,9 +349,12 @@ export function useCourseEditor(params: { courseId: string }) {
   const handleSaveInfo = async (e?: React.FormEvent) => {
     e?.preventDefault();
 
-    if (form.status === 'PUBLISHED') {
-      showToast('error', 'Khóa học đang công khai. Hãy Bỏ công khai trước rồi mới chỉnh sửa.');
-      return false;
+    if (course?.status === 'PUBLISHED') {
+      setSavingInfo(true);
+      const ok = await savePublishedDraft(c => { c.title = form.title.trim(); c.description = form.description.trim(); c.visibility = form.visibility; });
+      setSavingInfo(false);
+      if (ok) showToast('success', 'Đã lưu thông tin vào bản nháp.');
+      return ok;
     }
 
     setSavingInfo(true);
@@ -324,9 +392,10 @@ export function useCourseEditor(params: { courseId: string }) {
     setCoverUploading(true);
     const payload = new FormData();
     payload.append('file', file);
-    const res = await apiFetch(`/api/v1/courses/${params.courseId}/cover`, { method: 'POST', body: payload, noCache: true });
+    const res = await apiFetch(`/api/v1/courses/${params.courseId}/cover${draftRef.current ? '?draft=true' : ''}`, { method: 'POST', body: payload, noCache: true });
     setCoverUploading(false);
     if (res.ok && res.data) {
+      if (draftRef.current) { await savePublishedDraft(c => { c.coverUrl = res.data.coverUrl; c.coverPublicId = res.data.coverPublicId; }); return; }
       setCourse((previous: any) => ({ ...previous, coverUrl: res.data.coverUrl }));
       clearApiCache('/api/v1/courses');
       showToast('success', 'Đã cập nhật ảnh bìa khóa học.');
@@ -336,6 +405,7 @@ export function useCourseEditor(params: { courseId: string }) {
   };
 
   const handlePublish = async () => {
+    if (draftBusyRef.current || draftConflictRef.current || draftError) return;
     setPublishLoading(true);
     if (hasUnsavedCourseInfo) {
       const saved = await handleSaveInfo();
@@ -344,19 +414,22 @@ export function useCourseEditor(params: { courseId: string }) {
     clearApiCache('/api/v1/courses');
     clearApiCache(`/api/v1/courses/${params.courseId}`);
 
-    const res = await apiFetch(`/api/v1/courses/${params.courseId}/publish`, { method: 'POST' });
+    const updating = Boolean(draftRef.current);
+    const res = await apiFetch(`/api/v1/courses/${params.courseId}/${updating ? 'draft/publish' : 'publish'}`, { method: 'POST', ...(updating ? { body: JSON.stringify({ expectedDraftId: draftIdRef.current, expectedDraftVersion: draftVersionRef.current }) } : {}) });
     clearApiCache('/api/v1/courses');
     clearApiCache(`/api/v1/courses/${params.courseId}`);
 
     if (res.ok) {
       setForm((prev) => ({ ...prev, status: 'PUBLISHED' }));
       setCourse((prev: any) => ({ ...prev, status: 'PUBLISHED' }));
-      showToast('success', 'Đã công khai khóa học thành công!');
+      await loadCourse(true);
+      showToast('success', updating ? 'Đã cập nhật khóa học.' : 'Đã xuất bản khóa học.');
     } else if (res.error?.code === 'AlreadyPublished') {
       setForm((prev) => ({ ...prev, status: 'PUBLISHED' }));
       setCourse((prev: any) => ({ ...prev, status: 'PUBLISHED' }));
-      showToast('info', 'Khóa học đã ở trạng thái công khai.');
+      showToast('info', 'Khóa học đã ở trạng thái xuất bản.');
     } else {
+      if (updating && ['ConcurrencyConflict', 'BaseVersionMismatch', 'CourseNotPublished', 'DraftNotFound'].includes(res.error?.code || '')) { draftConflictRef.current = true; setDraftConflict(true); }
       showToast('error', res.error?.message || 'Khóa học cần ít nhất 1 buổi học và mỗi buổi học có 1 bài học.');
     }
     setPublishLoading(false);
@@ -373,15 +446,16 @@ export function useCourseEditor(params: { courseId: string }) {
     clearApiCache(`/api/v1/courses/${params.courseId}`);
 
     if (res.ok) {
+      draftRef.current = null; setHasDraftChanges(false);
       setForm((prev) => ({ ...prev, status: 'DRAFT' }));
       setCourse((prev: any) => ({ ...prev, status: 'DRAFT' }));
-      showToast('info', 'Đã chuyển khóa học về bản nháp. Bạn có thể chỉnh sửa nội dung.');
+      showToast('info', 'Đã hủy xuất bản khẩn cấp. Tiến trình học được giữ nguyên.');
     } else if (res.error?.code === 'AlreadyDraft') {
       setForm((prev) => ({ ...prev, status: 'DRAFT' }));
       setCourse((prev: any) => ({ ...prev, status: 'DRAFT' }));
       showToast('info', 'Khóa học đã ở trạng thái bản nháp.');
     } else {
-      showToast('error', res.error?.message || 'Không thể bỏ công khai khóa học.');
+      showToast('error', res.error?.message || 'Không thể hủy xuất bản khóa học.');
     }
     setPublishLoading(false);
   };
@@ -409,6 +483,16 @@ export function useCourseEditor(params: { courseId: string }) {
     if (!titleToSave) {
       showToast('error', 'Vui lòng nhập tiêu đề buổi học');
       return;
+    }
+
+    if (draftRef.current) {
+      setSessionSaving(true);
+      const ok = await savePublishedDraft(c => {
+        if (sessionModalMode === 'create') c.sessions.push({ id: tempId(), title: titleToSave, description: sessionForm.description.trim(), lessons: [] });
+        else { const target = c.sessions.find(s => s.id === editingSessionId)!; target.title = titleToSave; target.description = sessionForm.description.trim(); }
+      });
+      if (ok) setShowSessionModal(false);
+      setSessionSaving(false); return;
     }
 
     setSessionSaving(true);
@@ -487,6 +571,7 @@ export function useCourseEditor(params: { courseId: string }) {
 
   const handleDeleteSession = async (sessionId: string) => {
     if (!window.confirm('Xóa buổi học này và tất cả bài học bên trong?')) return;
+    if (draftRef.current) { await savePublishedDraft(c => { c.sessions = c.sessions.filter(s => s.id !== sessionId); }); return; }
     clearApiCache('/api/v1/courses');
 
     setCourse((prev: any) => ({
@@ -517,6 +602,7 @@ export function useCourseEditor(params: { courseId: string }) {
       sortOrder: idx,
     }));
 
+    if (draftRef.current) { await savePublishedDraft(c => { c.sessions = newSessions.map(s => c.sessions.find(row => row.id === (s.sessionId || s.id))!); }); return; }
     setCourse({ ...course, sessions: newSessions });
     clearApiCache('/api/v1/courses');
 
@@ -540,6 +626,7 @@ export function useCourseEditor(params: { courseId: string }) {
     newLessons[lessonIndex] = newLessons[targetIndex];
     newLessons[targetIndex] = temp;
 
+    if (draftRef.current) { await savePublishedDraft(c => { const session = c.sessions.find(s => s.id === sessionId)!; session.lessons = newLessons.map(l => session.lessons.find(row => row.id === (l.lessonId || l.id))!); }); return; }
     setCourse((prev: any) => ({
       ...prev,
       sessions: prev.sessions.map((s: any) =>
@@ -728,6 +815,16 @@ export function useCourseEditor(params: { courseId: string }) {
     const targetSessionId = showLessonModal;
     const lessonTitle = lessonForm.title.trim();
 
+    if (draftRef.current) {
+      const ok = await savePublishedDraft(c => {
+        const data = { title: lessonTitle, description: lessonForm.description.trim(), video: { youtubeVideoId: cleanVidId, durationSeconds: durationSec } };
+        if (editingLessonId) Object.assign(findDraftLesson(c, editingLessonId), data);
+        else c.sessions.find(s => s.id === targetSessionId)!.lessons.push({ ...data, id: tempId(), documents: [], assessment: null });
+      });
+      if (ok) closeLessonModal();
+      setLessonSaving(false); return;
+    }
+
     if (editingLessonId) {
       const targetLessonId = editingLessonId;
       const updatedDesc = lessonForm.description.trim() || null;
@@ -873,6 +970,7 @@ export function useCourseEditor(params: { courseId: string }) {
 
   const handleDeleteLesson = async (sessionId: string, lessonId: string) => {
     if (!window.confirm('Xóa bài học này?')) return;
+    if (draftRef.current) { await savePublishedDraft(c => { const session = c.sessions.find(s => s.id === sessionId)!; session.lessons = session.lessons.filter(l => l.id !== lessonId); }); return; }
     clearApiCache('/api/v1/courses');
 
     setCourse((prev: any) => ({
@@ -948,7 +1046,9 @@ export function useCourseEditor(params: { courseId: string }) {
               body: file,
             });
 
-            if (r2Res.ok) {
+            if (r2Res.ok && draftRef.current) {
+              uploadedDoc = { id: tempId(), fileName: file.name, fileSize: file.size, mimeType: file.type || 'application/octet-stream', storageKey: presignData.storageKey };
+            } else if (r2Res.ok) {
               const confirmRes = await fetch(`/api/v1/lessons/${lessonId}/documents/confirm`, {
                 method: 'POST',
                 headers: {
@@ -982,7 +1082,7 @@ export function useCourseEditor(params: { courseId: string }) {
         if (!uploadedDoc && file.size <= 4.2 * 1024 * 1024) {
           const formData = new FormData();
           formData.append('file', file);
-          const res = await fetch(`/api/v1/lessons/${lessonId}/documents/upload`, {
+          const res = await fetch(draftRef.current ? `/api/v1/courses/${params.courseId}/draft/documents/upload` : `/api/v1/lessons/${lessonId}/documents/upload`, {
             method: 'POST',
             headers: {
               ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -994,6 +1094,7 @@ export function useCourseEditor(params: { courseId: string }) {
             uploadedDoc = {
               documentId: data.documentId || data.id,
               id: data.documentId || data.id,
+              storageKey: data.storageKey,
               fileName: data.fileName || file.name,
               fileSize: data.fileSize || file.size,
               mimeType: data.mimeType || file.type,
@@ -1020,6 +1121,10 @@ export function useCourseEditor(params: { courseId: string }) {
       }
     }
 
+    if (addedDocs.length > 0 && draftRef.current) {
+      await savePublishedDraft(c => { findDraftLesson(c, lessonId).documents.push(...addedDocs); });
+      setUploadingDocForLessonId(null); e.target.value = ''; return;
+    }
     if (addedDocs.length > 0) {
       setCourse((prev: any) => ({
         ...prev,
@@ -1058,6 +1163,7 @@ export function useCourseEditor(params: { courseId: string }) {
     fileName: string
   ) => {
     if (!window.confirm(`Xóa tài liệu "${fileName}"?`)) return;
+    if (draftRef.current) { await savePublishedDraft(c => { const l = findDraftLesson(c, lessonId); l.documents = l.documents.filter(d => d.id !== documentId); }); return; }
     clearApiCache('/api/v1/courses');
 
     setCourse((prev: any) => ({
@@ -1112,11 +1218,12 @@ export function useCourseEditor(params: { courseId: string }) {
     }));
   };
 
-  const handleAddPool = () => setQuizPoolNames((previous) => [...previous, `Nhóm ${previous.length + 1}`]);
+  const handleAddPool = () => { setQuizPoolNames((previous) => [...previous, `Nhóm ${previous.length + 1}`]); setQuizPoolIds(previous => [...previous, tempId()]); };
   const handleRemovePool = (poolIndex: number) => {
     if (quizPoolNames.length <= 1) return showToast('error', 'Quiz phải có ít nhất một nhóm.');
     if (assessmentForm.questions.some((question) => (question.poolIndex ?? 0) === poolIndex)) return showToast('error', 'Hãy xóa hoặc chuyển các câu hỏi trong nhóm trước.');
     setQuizPoolNames((previous) => previous.filter((_, index) => index !== poolIndex));
+    setQuizPoolIds(previous => previous.filter((_, index) => index !== poolIndex));
     setAssessmentForm((previous) => ({ ...previous, questions: previous.questions.map((question) => ({ ...question, poolIndex: (question.poolIndex ?? 0) > poolIndex ? (question.poolIndex ?? 0) - 1 : question.poolIndex })) }));
   };
 
@@ -1311,6 +1418,25 @@ export function useCourseEditor(params: { courseId: string }) {
       }
     }
 
+    if (draftRef.current) {
+      setAssessmentSaving(true);
+      const ok = await savePublishedDraft(c => {
+        const config = { title: assessmentForm.title.trim(), description: assessmentForm.description.trim(), questionCount: assessmentForm.questionCount, durationMinutes: assessmentForm.durationMinutes };
+        if (activeAssessmentMode === 'COURSE_FINAL') c.finalAssessment = { ...c.finalAssessment, ...config };
+        else {
+          const l = findDraftLesson(c, activeLessonForAssessment!.lessonId);
+          const pools = quizPoolNames.map((name, index) => ({ id: quizPoolIds[index] || tempId(), name }));
+          l.assessment = { ...config, id: l.assessment?.id || tempId(), pools, questions: assessmentForm.questions.map(q => ({
+            id: q.id || tempId(), questionText: q.questionText.trim(), questionType: q.type, points: q.points, explanation: q.explanation || null,
+            poolId: pools[q.poolIndex ?? 0].id,
+            options: q.options.map(o => ({ id: o.id || tempId(), optionText: o.optionText.trim(), isCorrect: o.isCorrect })),
+          })) };
+        }
+      });
+      if (ok) setShowAssessmentModal(false);
+      setAssessmentSaving(false); return;
+    }
+
     setAssessmentSaving(true);
     clearApiCache('/api/v1/courses');
 
@@ -1391,6 +1517,7 @@ export function useCourseEditor(params: { courseId: string }) {
     if (activeAssessmentMode === 'COURSE_FINAL' && !course?.finalAssessment) return;
 
     if (!window.confirm('Bạn có chắc muốn xóa bài kiểm tra của bài học này?')) return;
+    if (draftRef.current) { const ok = await savePublishedDraft(c => { if (activeAssessmentMode === 'COURSE_FINAL') c.finalAssessment = null; else findDraftLesson(c, activeLessonForAssessment!.lessonId).assessment = null; }); if (ok) setShowAssessmentModal(false); return; }
 
     clearApiCache('/api/v1/courses');
     const endpoint = activeAssessmentMode === 'COURSE_FINAL'
@@ -1463,6 +1590,13 @@ export function useCourseEditor(params: { courseId: string }) {
   const isPublished = course?.status === 'PUBLISHED';
 
     return {
+    editorLocked: draftSaving || draftConflict || publishLoading || Boolean(draftError),
+    draftError,
+    draftSaving,
+    draftConflict,
+    hasDraftChanges,
+    handleDiscardDraft,
+    reloadDraft: () => loadCourse(true),
     toast,
     setToast,
     course,

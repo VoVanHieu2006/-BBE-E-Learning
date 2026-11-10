@@ -49,7 +49,7 @@ export async function POST(request: NextRequest, { params }: { params: { courseI
   const updated = await prisma.$transaction(async (tx) => {
     const row = await tx.course.update({
       where: { id: courseId },
-      data: { status: 'DRAFT', published_at: null },
+      data: { status: 'DRAFT', published_at: null, content_version: { increment: 1 } },
     })
     await enqueueCourseStatusReconcile(tx, courseId, 'DRAFT', new Date())
     await tx.auditLog.create({ data: { actor_user_id: (auth as any).context!.userId, action: 'UNPUBLISH_COURSE', entity_type: 'COURSE', entity_id: courseId, metadata: { activeAttempts, inProgressLearners: inProgressLearners.length } } })

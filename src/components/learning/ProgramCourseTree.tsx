@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useMemo } from 'react'
 import Link from 'next/link'
+import NewContentChip from './NewContentChip'
+import type { LearnerDisplayState } from '@/lib/learning-display'
 import { apiFetch, getCachedApiData } from '@/lib/api/client'
 
 const PROGRAM_THEME: Record<string, {
@@ -55,7 +57,7 @@ export interface ProgramCourseTreeProps {
     completedLessonIds: Set<string>
     inProgressLessonIds: Set<string>
     unlockedLessonIds: Set<string>
-    lessonStates: Record<string, { canView: boolean }>
+    lessonStates: Record<string, LearnerDisplayState & { canView: boolean }>
   }) => void
 }
 
@@ -64,7 +66,7 @@ export default function ProgramCourseTree({ refreshTrigger, onDataLoaded }: Prog
   const [completedLessonIds, setCompletedLessonIds] = useState<Set<string>>(new Set())
   const [inProgressLessonIds, setInProgressLessonIds] = useState<Set<string>>(new Set())
   const [unlockedLessonIds, setUnlockedLessonIds] = useState<Set<string>>(new Set())
-  const [lessonStates, setLessonStates] = useState<Record<string, { canView: boolean }>>({})
+  const [lessonStates, setLessonStates] = useState<Record<string, LearnerDisplayState & { canView: boolean }>>({})
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [openPrograms, setOpenPrograms] = useState<Record<string, boolean>>({})
@@ -297,7 +299,8 @@ export default function ProgramCourseTree({ refreshTrigger, onDataLoaded }: Prog
                                   </div>
                                   <div className="space-y-1">
                                     {session.lessons?.map((lesson: any) => {
-                                      const isDone = completedLessonIds.has(lesson.id)
+                                      const state = lessonStates[lesson.id]
+                                      const isDone = completedLessonIds.has(lesson.id) && (!lesson.assessment || state?.assessmentPassed === true)
                                       const isInProgress = inProgressLessonIds.has(lesson.id) && !isDone
                                       const isOpen = lessonStates[lesson.id]?.canView === true
                                       const status = isDone ? 'done' : !isOpen ? 'locked' : isInProgress ? 'progress' : 'open'
@@ -324,6 +327,7 @@ export default function ProgramCourseTree({ refreshTrigger, onDataLoaded }: Prog
                                                 {lesson.title}
                                               </Link>
                                             )}
+                                            <NewContentChip show={state?.isNew || state?.quizIsNew} />
                                           </div>
                                           <div className="shrink-0">
                                             {status === 'done' ? (
