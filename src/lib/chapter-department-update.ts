@@ -10,7 +10,7 @@ import { ensureChapterStandardDepartments } from './chapter-departments'
 /** President is a Chapter position; seven departments remain independent units. */
 export async function updateChapterDepartment(input: { chapterId: string; userId: string; departmentUnitId: string | null; makeLead: boolean; actorId: string }) {
   const result = await prisma.$transaction(async (tx) => {
-    if (!input.departmentUnitId) throw new OrganizationConflict('MemberPositionRequired', 'Vui l?ng ch?n ch?c v? v? ban m?i; ??i ch?c v? l? thay th?.')
+    if (!input.departmentUnitId) throw new OrganizationConflict('MemberPositionRequired', 'Vui lòng chọn chức vụ và ban mới; đổi chức vụ là thay thế.')
     const now = await lockLearningUser(tx, input.userId)
     if (await hasActiveDnaAffiliation(input.userId, tx)) throw new OrganizationConflict('DnaMembershipConflict', 'Thành viên đang thuộc DNA; không thể thêm lại vào Ban của Chapter.')
     const member = await tx.chapterMember.findUnique({ where: { user_id: input.userId } })
@@ -25,7 +25,7 @@ export async function updateChapterDepartment(input: { chapterId: string; userId
 
     const code = president ? 'PRESIDENT' : input.makeLead ? 'DEPARTMENT_LEAD' : 'DEPARTMENT_MEMBER'
     if (input.departmentUnitId) {
-      const position = await tx.position.upsert({ where: { code }, update: {}, create: { code, name: president ? 'Ch? t?ch Chapter' : input.makeLead ? 'Tr??ng ban' : 'Th?nh vi?n ban', scope: president ? 'CHAPTER' : 'DEPARTMENT', is_manager: false } })
+      const position = await tx.position.upsert({ where: { code }, update: {}, create: { code, name: president ? 'Chủ tịch Chapter' : input.makeLead ? 'Trưởng ban' : 'Thành viên ban', scope: president ? 'CHAPTER' : 'DEPARTMENT', is_manager: false } })
       await replaceUserPosition(tx, { userId: input.userId, unitId: president ? chapter.organization_unit_id : input.departmentUnitId, positionId: position.id, actorId: input.actorId })
     } else {
       await tx.organizationMembership.updateMany({ where: { user_id: input.userId, unit_id: { in: departmentIds }, status: 'ACTIVE', ends_at: null }, data: { status: 'ENDED', ends_at: now } })

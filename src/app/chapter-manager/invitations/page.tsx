@@ -86,7 +86,7 @@ export default function ChapterManagerInvitationsPage() {
   async function handleSendInvite(e: React.FormEvent) {
     e.preventDefault();
     if (!inviteEmail.trim()) return;
-    if (!departmentUnitId) { showToast('error', 'Vui l?ng ch?n ban cho th?nh vi?n.'); return; }
+    if (!departmentUnitId) { showToast('error', 'Vui lòng chọn ban cho thành viên.'); return; }
 
     setSending(true);
     clearApiCache('/api/v1/invitations');
@@ -346,9 +346,9 @@ export default function ChapterManagerInvitationsPage() {
             <p className="text-xs text-[#737686]">
               Gửi email lời mời tham gia Chapter <span suppressHydrationWarning>{mounted && user?.chapterName ? user.chapterName : ''}</span>. Lời mời có hiệu lực trong 24 giờ.
             </p>
-            <label className="block text-sm font-semibold" htmlFor="invite-department">Ban c?a th?nh vi?n *</label>
+            <label className="block text-sm font-semibold" htmlFor="invite-department">Ban của thành viên *</label>
             <select id="invite-department" value={departmentUnitId} onChange={(event) => setDepartmentUnitId(event.target.value)} disabled={sending} className="w-full rounded-lg border px-3 py-2">
-              <option value="">Ch?n ban</option>
+              <option value="">Chọn ban</option>
               {departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
             </select>
             <div className="flex gap-2" role="tablist" aria-label="Cách mời">

@@ -126,7 +126,7 @@ export async function applyDueChapterReorganizations(now = new Date(), batchId?:
       await tx.positionAssignment.updateMany({ where: { unit_id: chapter.organization_unit_id, position: { code: 'PRESIDENT' }, ends_at: null }, data: { ends_at: now } })
       const departmentItems = fresh.items.filter((item) => item.department_unit_id)
       if (departmentItems.length) await tx.organizationMembership.createMany({ data: departmentItems.map((item) => ({ user_id: item.user_id, unit_id: item.department_unit_id!, starts_at: now })) })
-      const memberPosition = await tx.position.upsert({ where: { code: 'DEPARTMENT_MEMBER' }, update: {}, create: { code: 'DEPARTMENT_MEMBER', name: 'Th?nh vi?n ban', scope: 'DEPARTMENT' } })
+      const memberPosition = await tx.position.upsert({ where: { code: 'DEPARTMENT_MEMBER' }, update: {}, create: { code: 'DEPARTMENT_MEMBER', name: 'Thành viên ban', scope: 'DEPARTMENT' } })
       await tx.positionAssignment.createMany({ data: fresh.items.map((item) => ({ user_id: item.user_id, unit_id: item.department_unit_id || chapter.organization_unit_id!, position_id: item.position_id || memberPosition.id, is_primary: item.is_primary, starts_at: now, appointed_by: batch.created_by_user_id })) })
       return true
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 30_000 })

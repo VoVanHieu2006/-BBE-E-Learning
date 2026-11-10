@@ -130,7 +130,7 @@ BEGIN
       AND a.starts_at<coalesce(b.ends_at,'infinity') AND b.starts_at<coalesce(a.ends_at,'infinity')
       AND coalesce(a.ends_at,'infinity')>at_time AND coalesce(b.ends_at,'infinity')>at_time)
   THEN RAISE EXCEPTION 'ChapterPresidentConflict' USING ERRCODE='23514'; END IF;
-END $;
+END $$;
 
 -- Rename or merge position definitions without losing grants, tenures or rules.
 DO $merge$
@@ -160,10 +160,10 @@ END $merge$;
 INSERT INTO positions(id,code,name,scope,is_manager) VALUES
  (gen_random_uuid(),'CHAPTER_LEAD','Lead Chapter','CHAPTER',true),
  (gen_random_uuid(),'DNA_LEAD','Lead DNA','DNA',true),
- (gen_random_uuid(),'PRESIDENT','Ch? t?ch Chapter','CHAPTER',false),
- (gen_random_uuid(),'DEPARTMENT_LEAD','Tr??ng ban','DEPARTMENT',false),
- (gen_random_uuid(),'DEPARTMENT_MEMBER','Th?nh vi?n ban','DEPARTMENT',false),
- (gen_random_uuid(),'DNA_MEMBER','Th?nh vi?n DNA','DNA',false)
+ (gen_random_uuid(),'PRESIDENT','Chủ tịch Chapter','CHAPTER',false),
+ (gen_random_uuid(),'DEPARTMENT_LEAD','Trưởng ban','DEPARTMENT',false),
+ (gen_random_uuid(),'DEPARTMENT_MEMBER','Thành viên ban','DEPARTMENT',false),
+ (gen_random_uuid(),'DNA_MEMBER','Thành viên DNA','DNA',false)
 ON CONFLICT(code) DO UPDATE SET name=excluded.name,scope=excluded.scope,is_manager=excluded.is_manager;
 
 -- Backfill the former position-only DNA managers before installing the no-promotion guard.
@@ -215,7 +215,7 @@ WHERE u.role='MEMBER' AND m.status='ACTIVE' AND unit.type IN ('DEPARTMENT','DNA_
 
 -- Managers retain learning evidence, but no active obligations or overdue locks.
 UPDATE user_learning_assignments a SET mandatory=false,ended_at=clock_timestamp(),due_at=NULL,
- status=CASE WHEN completed_at IS NULL THEN 'ENDED'::learning_assignment_status ELSE status END
+ status=CASE WHEN a.completed_at IS NULL THEN 'ENDED'::learning_assignment_status ELSE a.status END
  FROM users u WHERE a.user_id=u.id AND u.role IN ('ADMIN','LEAD') AND a.ended_at IS NULL;
 UPDATE supplemental_learning_requirements s SET ended_at=clock_timestamp() FROM users u WHERE s.user_id=u.id AND u.role IN ('ADMIN','LEAD') AND s.ended_at IS NULL;
 UPDATE learning_paths p SET due_at=NULL,imported_due_at=NULL,budget='[]'::jsonb,budget_fingerprint=''

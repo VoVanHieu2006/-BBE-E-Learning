@@ -42,6 +42,6 @@ export async function resolveMemberInviteScope(context: AuthContext, body: Recor
   if (!organizationUnitId && !isLeadRole(role) && (role === 'ADMIN' || !await canAccessChapterPermission(context, chapterId!, 'MANAGE_CHAPTER_MEMBERS'))) {
     return { ok: false, status: 403, error: { code: 'AccessDenied', message: 'Bạn không có quyền mời thành viên vào Chapter này.' } }
   }
-  if (!organizationUnitId) return { ok: false, status: 400, error: { code: 'MemberPositionRequired', message: 'Vui l?ng ch?n m?t ban ho?c nh?m DNA cho th?nh vi?n.' } }
+  if (!organizationUnitId) return { ok: false, status: 400, error: { code: 'MemberPositionRequired', message: 'Vui lòng chọn một ban hoặc nhóm DNA cho thành viên.' } }
   return { ok: true, organizationUnitId }
 }

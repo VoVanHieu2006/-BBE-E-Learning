@@ -52,7 +52,7 @@ export async function replaceUserPosition(tx: Prisma.TransactionClient, input: {
 /** Adding a learner to a leaf unit also supplies their one canonical position. */
 export async function assignMembershipPosition(tx: Prisma.TransactionClient, userId: string, unitId: string, actorId?: string) {
   const unit = await tx.organizationUnit.findUniqueOrThrow({ where: { id: unitId } })
-  if (!['DEPARTMENT', 'DNA_GROUP'].includes(unit.type)) throw new OrganizationConflict('MemberPositionRequired', 'Vui l?ng ch?n m?t ban ho?c nh?m DNA cho th?nh vi?n.')
+  if (!['DEPARTMENT', 'DNA_GROUP'].includes(unit.type)) throw new OrganizationConflict('MemberPositionRequired', 'Vui lòng chọn một ban hoặc nhóm DNA cho thành viên.')
   const code = unit.type === 'DEPARTMENT' ? 'DEPARTMENT_MEMBER' : 'DNA_MEMBER'
   const position = await tx.position.upsert({ where: { code }, update: {}, create: { code, name: code === 'DNA_MEMBER' ? 'Thành viên DNA' : 'Thành viên ban', scope: unit.type === 'DEPARTMENT' ? 'DEPARTMENT' : 'DNA' } })
   await replaceUserPosition(tx, { userId, unitId, positionId: position.id, actorId })

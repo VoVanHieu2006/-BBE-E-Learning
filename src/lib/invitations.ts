@@ -62,7 +62,7 @@ export async function sendMemberInvitation(
   }
   if (opts.role === 'MEMBER') {
     const unit = opts.organizationUnitId ? await prisma.organizationUnit.findUnique({ where: { id: opts.organizationUnitId }, select: { type: true, status: true } }) : null
-    if (!unit || unit.status !== 'ACTIVE' || !['DEPARTMENT', 'DNA_GROUP'].includes(unit.type)) return { ok: false, code: 'MemberPositionRequired', message: 'Vui l?ng ch?n m?t ban ho?c nh?m DNA cho th?nh vi?n.' }
+    if (!unit || unit.status !== 'ACTIVE' || !['DEPARTMENT', 'DNA_GROUP'].includes(unit.type)) return { ok: false, code: 'MemberPositionRequired', message: 'Vui lòng chọn một ban hoặc nhóm DNA cho thành viên.' }
   }
   // BR-02 (issue #10): no invitation if email already belongs to ANY account (Active or Inactive)
   if (await emailHasAnyAccount(opts.email)) {
@@ -222,7 +222,7 @@ export async function sendDnaLeaderInvitation(email: string, invitedBy: string) 
   })
   if (activeLead) return { ok: false as const, code: 'DnaLeadExists', message: 'Hệ thống đã có một Lead DNA đang hoạt động.' }
   const existingUser = await prisma.user.findUnique({ where: { email: email.trim().toLowerCase() } })
-  if (existingUser) return { ok: false as const, code: 'LeadInvitationRequiresNewAccount', message: 'LEAD ph?i l? t?i kho?n m?i ???c m?i l?m LEAD; kh?ng ??i vai tr? t?i kho?n hi?n c?.' }
+  if (existingUser) return { ok: false as const, code: 'LeadInvitationRequiresNewAccount', message: 'LEAD phải là tài khoản mới được mời làm LEAD; không đổi vai trò tài khoản hiện có.' }
   return sendMemberInvitation({ email, role: 'DNA_LEAD', organizationUnitId: dnaUnit.id, invitedBy })
 }
 
@@ -363,7 +363,7 @@ export async function acceptInvitation(
 
   if (invitation.role === 'MEMBER') {
     const unit = invitation.organization_unit_id ? await prisma.organizationUnit.findUnique({ where: { id: invitation.organization_unit_id }, select: { type: true, status: true } }) : null
-    if (!unit || unit.status !== 'ACTIVE' || !['DEPARTMENT', 'DNA_GROUP'].includes(unit.type)) return { ok: false, code: 'MemberPositionRequired', message: 'L?i m?i c?n ???c g?i l?i v?i m?t ban ho?c nh?m DNA c? th?.' }
+    if (!unit || unit.status !== 'ACTIVE' || !['DEPARTMENT', 'DNA_GROUP'].includes(unit.type)) return { ok: false, code: 'MemberPositionRequired', message: 'Lời mời cần được gửi lại với một ban hoặc nhóm DNA cụ thể.' }
   }
 
   // Hash password with bcrypt

@@ -97,7 +97,7 @@ export default function OrganizationManagerPage() {
   const addExistingMember = async (event: FormEvent) => {
     event.preventDefault();
     if (!selectedUnit || !addEmail.trim()) return;
-    if (!['DEPARTMENT', 'DNA_GROUP'].includes(selectedUnit.type)) { setMessage('Ch?n m?t ban ho?c nh?m DNA tr??c khi th?m th?nh vi?n.'); return; }
+    if (!['DEPARTMENT', 'DNA_GROUP'].includes(selectedUnit.type)) { setMessage('Chọn một ban hoặc nhóm DNA trước khi thêm thành viên.'); return; }
     setBusy(true);
     clearApiCache(`/api/v1/organization/units/${selectedUnit.id}/members`);
     setMessage('');
@@ -118,7 +118,7 @@ export default function OrganizationManagerPage() {
   const inviteMember = async (event: FormEvent) => {
     event.preventDefault();
     if (!selectedUnit || !inviteEmail.trim()) return;
-    if (!['DEPARTMENT', 'DNA_GROUP'].includes(selectedUnit.type)) { setMessage('Ch?n m?t ban ho?c nh?m DNA tr??c khi m?i th?nh vi?n.'); return; }
+    if (!['DEPARTMENT', 'DNA_GROUP'].includes(selectedUnit.type)) { setMessage('Chọn một ban hoặc nhóm DNA trước khi mời thành viên.'); return; }
     setBusy(true);
     clearApiCache('/api/v1/invitations');
     setMessage('');
