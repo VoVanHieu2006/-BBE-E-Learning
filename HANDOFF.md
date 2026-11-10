@@ -49,3 +49,16 @@ Sau **mỗi mục**: chạy `npx tsc --noEmit`, test liên quan, ghi kết quả
 - Sửa lỗi phát hiện khi rà soát: (1) chữ Việt bị hỏng thành dấu `?` trong 8 file (migration, UI, thông báo lỗi) — đã khôi phục; (2) migration: `END $;` thiếu `$` và `status` mơ hồ trong UPDATE user_learning_assignments — đã sửa, kiểm chứng trên DB tạm; (3) `learning-cycles.test.ts` thiếu `user` trong DB giả — đã thêm.
 - Thêm `src/test/standardize-migration.test.ts` (kiểm tra tĩnh SQL, đăng ký trong `scripts/test/run-tests.cjs`).
 - Tài liệu đã cập nhật: KHBB mục 9 dòng 1–4, KHBB-ky-thuat (bảng tên + thứ tự triển khai), business-rules, CKNK, api.md, operations.md, known-issues.md.
+
+## Vòng sửa theo review chéo Qoder (chưa xong — hết hạn mức)
+Quyết định chủ sản phẩm: (A) mỗi Chapter 1 PRESIDENT; bổ nhiệm người mới thì PRESIDENT cũ kết thúc chức vụ và thành "thành viên Chapter không ban" (hợp lệ). (B) không lên lịch bổ nhiệm/đổi ban; chuyển giao THAY THẾ toàn bộ (đóng mọi hàng đang hiệu lực HOẶC có ngày bắt đầu/kết thúc tương lai); API bổ nhiệm luôn hiệu lực ngay.
+- [x] 7. Route APPOINT_POSITION: precheck scope cho DNA_MEMBER dùng DNA_GROUP.
+- [x] 12. `scripts/db/backfill-organization.ts`, `scripts/db/seed-rich-demo.ts`: mã `DEPARTMENT_MEMBER` thay `MEMBER` (seed-rich-demo vẫn tạo `leader.dna` với role MEMBER — nên là LEAD, chưa sửa).
+- [ ] 1. `chapter-reorganizations.ts`: chuyển giao đóng mọi hàng position/membership còn hiệu lực hoặc tương lai (zero-length cho hàng bắt đầu tương lai); chỉ tạo position cho item có ban hoặc position_id (người không ban = thành viên Chapter không ban).
+- [ ] 5. `position-replacement.ts`: bổ nhiệm PRESIDENT thì đóng PRESIDENT hiện tại của Chapter (lock + enqueueAssignmentSync cho người bị thay).
+- [ ] 6. cùng file: bỏ lịch tương lai (từ chối startsAt > now ở route và helper), đóng membership tương lai trùng ban đích.
+- [ ] 2. migration: đóng (effective_until = now) rule trùng trước khi đổi mã (`learning_rules_active_scope_key`), thử lại trên Postgres tạm.
+- [ ] 3. `admin/learning-rules/[ruleId]/materialize/route.ts`: bỏ qua ADMIN/LEAD.
+- [ ] 4. `middleware.ts`: phiên bị từ chối thì xóa cookie và cho vào /login.
+- [ ] 8. UI mời hàng loạt/Members: chọn ban. [ ] 9. lọc danh sách lời mời theo organization_unit_id. [ ] 10. quyền MANAGE_DNA_MEMBERS cho DNA LEAD ở `api/v1/invitations`. [ ] 11. `dna-leaderboard`: xác định thành viên theo DNA_GROUP, cập nhật danh sách loại trừ.
+- [ ] 13. test hành vi thuần (position-replacement thay PRESIDENT/membership tương lai, chuyển giao thay thế, scope DNA_GROUP) và test kịch bản rule trùng.

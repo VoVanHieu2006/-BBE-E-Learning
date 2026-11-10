@@ -198,7 +198,7 @@ async function main() {
     ['PRESIDENT', 'Chủ tịch Chapter', 'CHAPTER', false],
     ['DEPARTMENT_LEAD', 'LT Ban', 'DEPARTMENT', true],
     ['DNA_LEAD', 'Lead DNA', 'DNA', true],
-    ['MEMBER', 'Thành viên', 'DEPARTMENT', false],
+    ['DEPARTMENT_MEMBER', 'Thành viên ban', 'DEPARTMENT', false],
   ] as const
   const positions = new Map<string, string>()
   for (const [code, name, scope, isManager] of positionRows) {

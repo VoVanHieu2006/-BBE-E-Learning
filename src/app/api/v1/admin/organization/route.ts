@@ -406,7 +406,7 @@ async function mutateOrganization(request: NextRequest) {
     ])
     if (!user || !position || !unit) return NextResponse.json({ error: { code: 'NotFound', message: 'Không tìm thấy người dùng, chức vụ hoặc đơn vị.' } }, { status: 404 })
     if (!canHoldPosition(user.role, position.code)) return NextResponse.json({ error: { code: 'PositionRoleMismatch', message: 'Chức vụ không phù hợp vai trò. LEAD chỉ được tạo qua lời mời LEAD cho tài khoản mới.' } }, { status: 409 })
-    if (!positionScopeMatchesUnitType(position.scope, unit.type)) {
+    if (position.code === 'DNA_MEMBER' ? unit.type !== 'DNA_GROUP' : !positionScopeMatchesUnitType(position.scope, unit.type)) {
       return NextResponse.json({ error: { code: 'PositionScopeMismatch', message: 'Phạm vi chức vụ không khớp loại đơn vị được bổ nhiệm.' } }, { status: 400 })
     }
     if (['CHAPTER_LEAD'].includes(position.code) && user.role !== 'ADMIN') {

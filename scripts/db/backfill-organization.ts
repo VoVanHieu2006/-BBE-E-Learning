@@ -32,7 +32,7 @@ async function main() {
   for (const permissionId of [viewProgressPermission.id, manageMembersPermission.id]) {
     await prisma.positionPermission.upsert({ where: { position_id_permission_id: { position_id: departmentLeader.id, permission_id: permissionId } }, update: {}, create: { position_id: departmentLeader.id, permission_id: permissionId } })
   }
-  await ensurePosition('MEMBER', 'Member', 'DEPARTMENT', false)
+  await ensurePosition('DEPARTMENT_MEMBER', 'Thành viên ban', 'DEPARTMENT', false)
 
   const chapters = await prisma.chapter.findMany({ include: { chapter_members: { include: { user: { select: { id: true, role: true } } }, orderBy: { joined_at: 'asc' } } } })
   let createdUnits = 0
