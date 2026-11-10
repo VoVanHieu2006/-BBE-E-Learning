@@ -94,20 +94,28 @@ describe('DNA historical season evidence', () => {
     assert.equal(await hasNativeLearningEvidence(nativeEvidenceTx([{ provenance: 'NATIVE', awarded_at: dnaStart }]) as any, dnaStart, dnaEnd), true)
   })
 
-  for (const scenario of ['legacy-only', 'native', 'saved'] as const) {
+  for (const scenario of ['legacy-only', 'native', 'saved', 'saved-while-waiting'] as const) {
     it(`scheduler preserves historical seasons: ${scenario}`, async (t) => {
       const saved = { key: `ranking:DNA:${dnaSeason.id}`, payload: { state: 'FINALIZED', items: [{ stars: 9 }] } }
       const unchanged = JSON.stringify(saved)
       const created: any[] = []
       let evidenceReads = 0
-      const evidence = nativeEvidenceTx([{ provenance: scenario === 'native' ? 'NATIVE' : 'LEGACY', awarded_at: dnaStart }])
+      const events: string[] = []
+      const evidence = nativeEvidenceTx([{ provenance: scenario === 'native' || scenario === 'saved-while-waiting' ? 'NATIVE' : 'LEGACY', awarded_at: dnaStart }])
       const tx: any = {
-        user: { findMany: async () => [] },
+        user: { findMany: async () => { events.push('users'); return [{ id: USER }] } },
+        $queryRaw: async (sql: TemplateStringsArray) => {
+          if (sql.join('').includes('FOR UPDATE')) { events.push('lock'); return [{ id: USER }] }
+          return [{ now: at('2026-11-10T05:00:00Z') }]
+        },
         learningSnapshot: {
-          findUnique: async () => scenario === 'saved' ? saved : null,
+          findUnique: async () => {
+            events.push('snapshot')
+            return scenario === 'saved' || (scenario === 'saved-while-waiting' && events.includes('lock')) ? saved : null
+          },
           create: async ({ data }: any) => { created.push(data); return data },
         },
-        starLedger: { findFirst: async (args: any) => { evidenceReads++; return evidence.starLedger.findFirst(args) } },
+        starLedger: { findFirst: async (args: any) => { events.push('evidence'); evidenceReads++; return evidence.starLedger.findFirst(args) } },
         accountStateInterval: { findMany: async () => [] },
         chapterAffiliationInterval: { findMany: async () => [] },
         chapter: { findMany: async () => [] },
@@ -122,6 +130,8 @@ describe('DNA historical season evidence', () => {
       assert.equal(await closeCompetitionTerms(), scenario === 'native' ? 1 : 0)
       assert.equal(created.length, scenario === 'native' ? 1 : 0)
       assert.equal(evidenceReads, scenario === 'saved' ? 0 : 1)
+      assert.deepEqual(events, scenario === 'saved' ? ['snapshot'] : scenario === 'native'
+        || scenario === 'saved-while-waiting' ? ['snapshot', 'evidence', 'users', 'lock', 'snapshot'] : ['snapshot', 'evidence'])
       assert.equal(JSON.stringify(saved), unchanged)
       if (scenario === 'native') {
         assert.equal(created[0].payload.period.starts_at, dnaStart.toISOString())

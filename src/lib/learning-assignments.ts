@@ -38,7 +38,7 @@ async function reconcileAssignments(
     db.positionAssignment.findMany({ where: { user_id: userId, starts_at: { lte: now }, OR: [{ ends_at: null }, { ends_at: { gt: now } }] }, select: { position_id: true, unit_id: true } }),
     // Khóa không còn PUBLISHED tạm rời khỏi bộ khóa (KHBB 6.3): coi như bị gỡ, ô tick và tiến độ giữ nguyên.
     db.learningRule.findMany({ where: { effective_from: { lte: now }, OR: [{ effective_until: null }, { effective_until: { gt: now } }], course: { status: 'PUBLISHED' } } }),
-    db.userLearningAssignment.findMany({ where: { user_id: userId }, select: { id: true, rule_id: true, course_id: true, status: true, due_at: true, completed_at: true, ended_at: true } }),
+    db.userLearningAssignment.findMany({ where: { user_id: userId }, select: { id: true, rule_id: true, course_id: true, learning_cycle_id: true, status: true, due_at: true, completed_at: true, ended_at: true } }),
   ])
   const unitIds = new Set<string>()
   let unitFrontier = memberships.map((membership) => membership.unit_id)
@@ -95,7 +95,7 @@ async function reconcileAssignments(
   for (const [courseId, sources] of Array.from(byCourse)) {
     const existing = current.find((row) => row.course_id === courseId)
     const imported = !existing && context.cycle.provenance === 'LEGACY'
-      ? activeAssignments.find((row) => row.course_id === courseId && !row.ended_at) : null
+      ? activeAssignments.find((row) => row.course_id === courseId && row.learning_cycle_id === null && !row.ended_at) : null
     const data = {
       learning_cycle_id: context.cycle.id, rule_id: sources[0].id, source_rule_ids: sources.map((row) => row.id),
       mandatory: sources.some((row) => row.mandatory), can_view: sources.every((row) => row.can_view),

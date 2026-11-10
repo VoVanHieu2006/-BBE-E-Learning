@@ -1,5 +1,18 @@
 # HANDOFF — Prompt 04: cấu hình học tập
 
+## Worker sửa lỗi reviewer chéo (10/11/2026) — đã sửa, kiểm chứng một phần
+- Phạm vi: khởi tạo chu kỳ dựa trên dữ liệu học cũ (LEGACY/NATIVE), giữ hoàn thành khi reconcile đầu tiên; kiểm tra snapshot/bằng chứng NATIVE trước khóa user khi chốt mùa DNA.
+- Đã xác nhận nhánh `chore/p04-go-cutover`, working tree sạch lúc bắt đầu; giữ thay đổi trong working tree, không commit/push.
+- (1) Đã tái hiện test đỏ: khóa cũ về ASSIGNED; sửa khởi tạo LEGACY khi có attempt null, lesson_progress hoặc assignment null. Chỉ người không có bằng chứng cũ mới NATIVE; starts_at vẫn now, progress nhập cùng provenance, hạn nhập giữ nguyên. Import assignment chỉ nhận hàng null cycle, không lấy hàng chu kỳ khác.
+- (2) Đã tái hiện test đỏ với danh sách user không rỗng: scheduler khóa user trước kiểm tra. Đã đưa snapshot/NATIVE lên trước vòng khóa; kiểm tra snapshot lần nữa sau khóa để tránh dựng trùng nếu scheduler khác chốt trong lúc chờ. Có test cho tình huống này.
+- Đã xác nhận test hồi quy đỏ trước sửa, xanh sau sửa. Trên cây mã cuối, learning-cycles PASS 48/48, monthly-reward-reset PASS 21/21 trong lần chạy toàn bộ (gồm test snapshot được chốt khi chờ khóa).
+- `npx tsc --noEmit`: PASS, exit 0. `git diff --check`: PASS.
+- `npm run test:unit`: FAIL, exit 1; 37 suite đầu PASS rồi dừng ở `scripts/test/database-safety.test.cjs` (2/2 test FAIL do `spawnSync C:\nvm4w\nodejs\node.exe EPERM`, không tạo được tiến trình con trong sandbox).
+- Đã chạy riêng hai suite sau điểm dừng: `npm run test:unit -- safety.test.mjs` PASS 8/8; `npm run test:unit -- profiler.test.mjs` FAIL 0/1, tiến trình con trả status null thay vì 0. Không sửa runner/guard để né lỗi môi trường, không khẳng định toàn bộ unit PASS.
+- Log lần chạy toàn bộ: `artifacts/p04-review-fixes-unit.log` (file bị git ignore). Cần người dùng chạy lại toàn bộ unit ở môi trường cho phép spawn tiến trình con. Không chạy DB/integration vì phạm vi chỉ cho phép offline, không có DB test/env.
+- File thay đổi trong lượt này: `src/lib/learning-periods.ts`, `src/lib/learning-assignments.ts`, `src/lib/competition-snapshots.ts`, `src/test/learning-cycles.test.ts`, `src/test/monthly-reward-reset.test.ts`, `HANDOFF.md`. Không commit/push, không đổi schema/quyền/công thức nghiệp vụ.
+- Lưu ý: phần kiểm tra/checkpoint bên dưới là lịch sử lượt trước, không phải kết quả nghiệm thu lượt sửa này. Chu kỳ NATIVE đã tồn tại không bị tự đổi provenance; yêu cầu hiện tại chỉ sửa người chưa có chu kỳ.
+
 ## Phạm vi và an toàn
 - Worktree `p04`, nhánh `chore/p04-go-cutover`; không push/merge/rebase/đổi nhánh.
 - Prompt 04 chạy TRƯỚC prompt 03, không chờ đổi role/nhóm. Không cần mốc production, không dùng MODEL_START.
@@ -11,7 +24,7 @@
 - Đã đọc lại HANDOFF cũ, quy tắc chung/worker ngoài, prompt 04 cập nhật và các phần KHBB/CKNK/tài liệu kỹ thuật liên quan.
 - Bước 0: giữ truy vấn chỉ đọc bên dưới cho người dùng; chưa chạy DB, không chặn việc viết bản 1 vì thiếu audit.
 - Bản 1 mục 2: đã thêm `prisma/migrations/20261110_learning_affiliation_without_policy/migration.sql`, chỉ CREATE OR REPLACE FUNCTION và bỏ câu policy gate; phần còn lại giữ nguyên bản trên nhánh. Chưa áp dụng.
-- Bản 1 mục 3: bỏ mọi đọc policy trong src; tháng mới theo đầu tháng tự nhiên UTC+7, không sửa hàng tháng đã tồn tại. Chu kỳ thiếu được tạo NATIVE bắt đầu now; nhập video và bằng chứng đường học cũ như trước. Bỏ hàm awardStars không dùng và trường importedDueAt trong response, không bỏ cột.
+- Bản 1 mục 3: bỏ mọi đọc policy trong src; tháng mới theo đầu tháng tự nhiên UTC+7, không sửa hàng tháng đã tồn tại. Chu kỳ thiếu chọn LEGACY theo dữ liệu học không gắn chu kỳ, NATIVE nếu hoàn toàn mới, bắt đầu now; nhập video và bằng chứng đường học cũ như trước. Bỏ hàm awardStars không dùng và trường importedDueAt trong response, không bỏ cột.
 - Bản 1 mục 4: route/trang chuẩn `learning-config`; API cũ alias GET/PUT cùng handler, trang cũ redirect. GET không còn policy; giữ cấu hình chương trình, nhóm, mapping, mùa, chuẩn hóa tổ chức, outbox và quyền ADMIN.
 - Bản 1 mục 5: hoàn tất test unit tháng, khởi tạo NATIVE, chu kỳ LEGACY/null attempts, hạn/tiến độ nhập, mùa DNA cũ/NATIVE/snapshot chốt, API GET/PUT/alias/quyền và đối chiếu migration. Đã dọn/review script audit, test tích hợp, remediation và load-test; rehearsal giữ guard loopback, kiểm tra hàm/trigger/lịch sử và có --release-2 opt-in sao lưu trước drop. Chưa chạy các script cần DB.
 - Bản 1 mục 6: đã cập nhật/review 11 tài liệu hiện có về cấu hình, dữ liệu lịch sử và triển khai hai bản. Không sửa prompt gốc.
@@ -24,7 +37,7 @@
 - Có bằng chứng NATIVE thì scheduler dựng bình thường; API trước khi chốt báo AWAITING_SNAPSHOT. Bằng chứng chỉ yêu cầu dòng NATIVE trong cửa sổ, không lọc lượng sao, tư cách hiện tại hay chỉ riêng DNA.
 - Snapshot đã lưu luôn được ưu tiên trả về, scheduler không dựng lại dù NATIVE hiện không còn; không đổi snapshot đã chốt.
 - Chu kỳ LEGACY có sẵn giữ nguyên nhánh attempt null trước starts_at trong currentCycleAttemptFilter, lesson-learning-state, video-heartbeat, quiz-submission, learning-assignments. learning_cycles/star_ledger/cycle_lesson_progress.provenance vẫn còn.
-- Người chưa có chu kỳ nhận NATIVE tại now. Video/hạn cũ vẫn nhập; attempt quiz cũ null không tự chuyển sang chu kỳ NATIVE. Không quét/backfill người đang ngủ; chủ sản phẩm cần kiểm tra tác động trước deploy, không phải yêu cầu cung cấp mốc để worker tiếp tục.
+- Người chưa có chu kỳ có attempt null, lesson_progress hoặc assignment null nhận LEGACY tại now; nhánh LEGACY nhận attempt cũ trước starts_at và nhập assignment null như trước. Người hoàn toàn mới nhận NATIVE tại now. Không dùng cutover/ngày tạo tài khoản, không quét/backfill người đang ngủ, không sửa chu kỳ đã có.
 
 ## Bước 0 — truy vấn production để người dùng tự chạy
 Không truy vấn nào dưới đây được chạy trong session. Dùng tài khoản chỉ đọc đã ủy quyền; lưu kết quả/backup ở nơi bảo mật, không commit DB/connection string/email/token. Timestamp không timezone được hiểu UTC như trigger hiện có.
@@ -117,7 +130,7 @@ ROLLBACK;
 - Prompt 03 sẽ đổi role/nhóm và có thể sửa enforce_single_learning_affiliation, learning-periods/readiness/catalog/schema/tài liệu; tích hợp giữ logic mới của prompt 03, chỉ gỡ policy gate.
 - Prompt 02b/05 sửa editor/draft/publish/xóa khóa/caches; chỉ bỏ import awardStars không dùng ở progress, không đổi hành vi các luồng đó.
 - Worker 04 sở hữu sàn mùa DNA trong competition-snapshots/period-leaderboard. Không đổi công thức xếp hạng/quyền.
-- Mục 3 danh sách việc trong prompt vẫn nhắc MODEL_START, trái phần cập nhật và chỉ dẫn trực tiếp của người dùng. Đã dùng quy tắc NATIVE ở phần khảo sát; không sửa prompt của người dùng.
+- Mục 3 danh sách việc trong prompt vẫn nhắc MODEL_START, trái phần cập nhật và chỉ dẫn trực tiếp của người dùng. Lượt sửa reviewer chéo dùng dữ liệu học cũ để chọn LEGACY/NATIVE; không sửa prompt của người dùng. Các tài liệu release1 cũ nói mọi chu kỳ thiếu đều NATIVE đã lỗi thời so với chỉ dẫn sửa lỗi hiện tại; lượt này chỉ cập nhật HANDOFF và code/test trong phạm vi yêu cầu.
 - Bản 2 chỉ chuẩn bị SQL; bỏ model/generate/apply/restore rehearsal chờ bản 2 được duyệt. Giữ provenance và imported_due_at, không thực hiện tùy chọn xóa provenance.
 - Phần code bản 1 và kiểm tra offline đã hoàn tất. Các release gate DB/audit/browser, kiểm kê deployment cũ và tích hợp worker khác vẫn cần người dùng thực hiện trước triển khai.
 

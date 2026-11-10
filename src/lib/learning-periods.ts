@@ -49,18 +49,24 @@ export async function learningContext(tx: LearningTx, userId: string, now: Date)
   let cycle = await tx.learningCycle.findFirst({ where: { user_id: userId, ends_at: null } })
   if (!cycle) {
     const chapter = await tx.chapterMember.findUnique({ where: { user_id: userId } })
+    const [progress, assignments, oldAttempt] = await Promise.all([
+      tx.lessonProgress.findMany({ where: { user_id: userId } }),
+      tx.userLearningAssignment.findMany({ where: { user_id: userId, learning_cycle_id: null }, orderBy: { assigned_at: 'asc' } }),
+      tx.attempt.findFirst({ where: { user_id: userId, learning_cycle_id: null }, select: { id: true } }),
+    ])
+    // Unscoped learning evidence predates cycles, regardless of account age.
+    // LEGACY keeps old quiz passes and assignments available on first reconcile.
+    const provenance = progress.length || assignments.length || oldAttempt ? 'LEGACY' : 'NATIVE'
     cycle = await tx.learningCycle.create({ data: {
       user_id: userId, chapter_id: chapter?.chapter_id, trigger_key: `initial:${userId}:${now.toISOString()}`,
-      starts_at: now, provenance: 'NATIVE',
+      starts_at: now, provenance,
     } })
-    const progress = await tx.lessonProgress.findMany({ where: { user_id: userId } })
     if (progress.length) await tx.cycleLessonProgress.createMany({ data: progress.map((row) => ({
       user_id: userId, lesson_id: row.lesson_id, learning_cycle_id: cycle!.id,
       furthest_seconds: row.furthest_watched_position_seconds || 0,
-      completed_at: row.completed_at, provenance: 'NATIVE',
+      completed_at: row.completed_at, provenance,
     })), skipDuplicates: true })
     // Import evidence of the earliest assignment and the latest old deadline.
-    const assignments = await tx.userLearningAssignment.findMany({ where: { user_id: userId }, orderBy: { assigned_at: 'asc' } })
     const dates = assignments.flatMap((row) => row.due_at ? [row.due_at.getTime()] : [])
     const importedDue = dates.length ? new Date(Math.max(...dates)) : null
     await tx.learningPath.create({ data: {

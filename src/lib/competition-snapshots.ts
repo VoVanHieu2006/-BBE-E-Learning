@@ -500,12 +500,14 @@ export async function closeCompetitionTerms() {
     const end = dnaSeasonEnd(season.reward_boundary_at!)
     if (end > now) continue
     await prisma.$transaction(async (tx) => {
-      const users = await tx.user.findMany({ select: { id: true }, orderBy: { id: 'asc' } })
-      for (const user of users) await lockLearningUser(tx, user.id)
       const key = `ranking:DNA:${season.id}`
       if (await tx.learningSnapshot.findUnique({ where: { key } })) return
       // Without native evidence, synthesizing an old season would invent an empty history.
       if (!await hasNativeLearningEvidence(tx, season.reward_boundary_at!, end)) return
+      const users = await tx.user.findMany({ select: { id: true }, orderBy: { id: 'asc' } })
+      for (const user of users) await lockLearningUser(tx, user.id)
+      // Another scheduler may have finalized this season while we waited for locks.
+      if (await tx.learningSnapshot.findUnique({ where: { key } })) return
       const period = { ...season, starts_at: season.reward_boundary_at!, ends_at: end }
       await saveSnapshot(tx, key, { group: 'DNA', periodType: 'TERM', period, state: 'FINALIZED', items: await individualPeriodRows(tx, period.starts_at, end, 'DNA') }, now)
       captured++
