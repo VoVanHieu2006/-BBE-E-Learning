@@ -4,6 +4,17 @@ import { invalidateCourseContentCaches } from '@/lib/course-edit-guard'
 import { prisma } from '@/lib/prisma'
 import { PoolUpdateError, updateLessonPools } from '@/lib/assessment-pools'
 
+export async function GET(request: NextRequest, { params }: { params: { assessmentId: string } }) {
+  const auth = await authenticate(request)
+  if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: 401 })
+  if (auth.context?.role !== 'ADMIN') return NextResponse.json({ error: { code: 'AccessDenied' } }, { status: 403 })
+  const pools = await prisma.questionPool.findMany({
+    where: { assessment_id: params.assessmentId },
+    include: { _count: { select: { questions: true } } }, orderBy: { sort_order: 'asc' },
+  })
+  return NextResponse.json({ items: pools.map(pool => ({ poolId: pool.id, name: pool.name, sortOrder: pool.sort_order, questionCount: pool._count.questions })) })
+}
+
 export async function PUT(request: NextRequest, { params }: { params: { assessmentId: string } }) {
   const auth = await authenticate(request)
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: 401 })

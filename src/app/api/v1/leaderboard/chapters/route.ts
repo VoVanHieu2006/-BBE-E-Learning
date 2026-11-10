@@ -28,10 +28,12 @@ export async function GET(request: NextRequest) {
       },
     })
   }
+  const availableMonthRows = await prisma.competitionMonth.findMany({ distinct: ['key'], orderBy: { starts_at: 'desc' }, select: { key: true }, take: 24 })
+  const availableMonths = availableMonthRows.map(item => item.key)
   if (!compMonth) {
     return NextResponse.json({
       month: now.toISOString(),
-      availableMonths: [],
+      availableMonths,
       formulaVersion: 'chapter-v8-a-over-n',
       items: [],
       excluded: [],
@@ -46,13 +48,12 @@ export async function GET(request: NextRequest) {
   const saved = closed ? await prisma.learningSnapshot.findUnique({ where: { key: `ranking:CHAPTER:${compMonth.id}` } }) : null
   const savedPayload = saved?.payload as any
   if (closed && (!Array.isArray(savedPayload?.items) || savedPayload.items.some((row: any) => !row || typeof row.eligible !== 'boolean' || !('score' in row)))) {
-    return NextResponse.json({ monthKey: compMonth.key, items: [], excluded: [], state: 'AWAITING_SNAPSHOT', reasonCode: saved ? 'SNAPSHOT_DATA_MISSING' : 'SNAPSHOT_MISSING' }, { headers: { 'Cache-Control': 'no-store' } })
+    return NextResponse.json({ month: compMonth.starts_at.toISOString(), monthKey: compMonth.key, availableMonths, items: [], excluded: [], state: 'AWAITING_SNAPSHOT', reasonCode: saved ? 'SNAPSHOT_DATA_MISSING' : 'SNAPSHOT_MISSING' }, { headers: { 'Cache-Control': 'no-store' } })
   }
   const cachedData = !closed ? getCachedChapterLeaderboard(cacheKey) : null
-  if (cachedData) return NextResponse.json(cachedData, { headers: { 'Cache-Control': 'no-store' } })
-  const [chapters, availableMonths, chapterRows] = await Promise.all([
+  if (cachedData) return NextResponse.json({ ...cachedData as object, availableMonths }, { headers: { 'Cache-Control': 'no-store' } })
+  const [chapters, chapterRows] = await Promise.all([
     prisma.chapter.findMany({ select: { id: true, name: true, description: true } }),
-    prisma.competitionMonth.findMany({ distinct: ['key'], orderBy: { starts_at: 'desc' }, select: { key: true }, take: 24 }),
     closed ? Promise.resolve(savedPayload.items as Awaited<ReturnType<typeof historicalChapterMonthRows>>) : historicalChapterMonthRows(prisma, compMonth, now),
   ])
   const chapterDescMap = new Map(chapters.map((chapter) => [chapter.id, chapter.description]))
@@ -89,7 +90,7 @@ export async function GET(request: NextRequest) {
   const data = {
     month: compMonth.starts_at.toISOString(),
     monthKey: compMonth.key,
-    availableMonths: availableMonths.map((item) => item.key),
+    availableMonths,
     formulaVersion: 'chapter-v8-a-over-n',
     formula: 'Tháng thường: S_m = A_m / N_m; Tháng chuyển giao: S_m = A_1 / N_1 + A_2 / N_2; KPI Vàng/Xanh; >20 thành viên; ≥50% đạt ≥70% bài lõi',
     updatedAt: now.toISOString(),

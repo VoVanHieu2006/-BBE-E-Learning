@@ -111,6 +111,7 @@ test('legacy closed Chapter board uses immutable saved result and never reconstr
   assert.equal(data.state, 'FINALIZED')
   assert.equal(data.items[0].score, 4)
   assert.equal(data.items[0].memberCount, 25)
+  assert.deepEqual(data.availableMonths, ['2020-10'])
   assert.equal(historyCalls, 0)
 })
 test('legacy closed Chapter board reports missing snapshot instead of rebuilding history', async () => {
@@ -119,5 +120,70 @@ test('legacy closed Chapter board reports missing snapshot instead of rebuilding
   const data = await response.json()
   assert.equal(data.state, 'AWAITING_SNAPSHOT')
   assert.equal(data.reasonCode, 'SNAPSHOT_MISSING')
+  assert.deepEqual(data.availableMonths, ['2020-10'])
+  assert.equal(data.month, month.starts_at.toISOString())
   assert.equal(historyCalls, 0)
+})
+
+test('legacy closed Chapter board retains month choices when snapshot data is incomplete', async () => {
+  snapshot = { payload: { items: [{ chapterId: 'old', score: 5 }] } }
+  const response = await legacyRoute.GET(new NextRequest('http://localhost/api/v1/leaderboard/chapters?month=2020-10'))
+  const data = await response.json()
+  assert.equal(data.state, 'AWAITING_SNAPSHOT')
+  assert.equal(data.reasonCode, 'SNAPSHOT_DATA_MISSING')
+  assert.deepEqual(data.availableMonths, ['2020-10'])
+  assert.deepEqual(data.items, [])
+  assert.equal(historyCalls, 0)
+})
+
+test('legacy Chapter board retains available months even if current period is unavailable', async () => {
+  const findFirst = db.competitionMonth.findFirst
+  db.competitionMonth.findFirst = async () => null
+  try {
+    const response = await legacyRoute.GET(new NextRequest('http://localhost/api/v1/leaderboard/chapters'))
+    const data = await response.json()
+    assert.equal(data.state, 'PERIOD_UNAVAILABLE')
+    assert.deepEqual(data.availableMonths, ['2020-10'])
+  } finally { db.competitionMonth.findFirst = findFirst }
+})
+
+test('cached live Chapter board still returns fresh available months', async () => {
+  const findFirst = db.competitionMonth.findFirst
+  const { setCachedChapterLeaderboard, invalidateChapterLeaderboardCache } = require('../../src/lib/chapter-leaderboard-cache')
+  db.competitionMonth.findFirst = async () => ({ ...month, ends_at: new Date('2999-01-01') })
+  setCachedChapterLeaderboard({ items: [], state: 'OPEN', availableMonths: [] }, 'legacy-chapter:2020-10')
+  try {
+    const response = await legacyRoute.GET(new NextRequest('http://localhost/api/v1/leaderboard/chapters'))
+    const data = await response.json()
+    assert.equal(data.state, 'OPEN')
+    assert.deepEqual(data.availableMonths, ['2020-10'])
+  } finally { db.competitionMonth.findFirst = findFirst; invalidateChapterLeaderboardCache() }
+})
+
+for (const deniedRole of ['CHAPTER_LEADER', 'LEAD', 'MEMBER', null]) test(`pools GET denies ${deniedRole} before reading the DB`, async () => {
+  role = deniedRole
+  db.questionPool = { findMany: async () => { throw new Error('Must not read pools') } }
+  const response = await poolsRoute.GET(new NextRequest('http://localhost/api'), { params: { assessmentId: ID } })
+  assert.equal(response.status, deniedRole ? 403 : 401)
+})
+
+test('Admin pools GET returns ordered groups with question counts in the existing contract', async () => {
+  role = 'ADMIN'
+  db.questionPool = { findMany: async ({ where, include, orderBy }) => {
+    assert.equal(where.assessment_id, ID)
+    assert.deepEqual(orderBy, { sort_order: 'asc' })
+    assert.equal(include._count.select.questions, true)
+    return [{ id: 'pool-1', name: 'Nhóm 1', sort_order: 0, _count: { questions: 3 } }, { id: 'pool-2', name: 'Nhóm 2', sort_order: 1, _count: { questions: 0 } }]
+  } }
+  const response = await poolsRoute.GET(new NextRequest('http://localhost/api'), { params: { assessmentId: ID } })
+  assert.equal(response.status, 200)
+  assert.deepEqual(await response.json(), { items: [{ poolId: 'pool-1', name: 'Nhóm 1', sortOrder: 0, questionCount: 3 }, { poolId: 'pool-2', name: 'Nhóm 2', sortOrder: 1, questionCount: 0 }] })
+})
+
+test('Admin pools GET returns an empty list if no groups exist', async () => {
+  role = 'ADMIN'
+  db.questionPool = { findMany: async () => [] }
+  const response = await poolsRoute.GET(new NextRequest('http://localhost/api'), { params: { assessmentId: ID } })
+  assert.equal(response.status, 200)
+  assert.deepEqual(await response.json(), { items: [] })
 })

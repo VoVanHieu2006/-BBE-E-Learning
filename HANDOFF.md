@@ -1,6 +1,49 @@
 # Handoff — prompt 05
 
-## Trạng thái cuối — ưu tiên phần này so với nhật ký bên dưới
+## Trạng thái vòng sửa reviewer 10/11/2026 — ưu tiên mục này
+
+Đã sửa code/test cho cả (1)–(4), **chưa nghiệm thu toàn bộ** vì full unit còn lỗi tiến trình con bên dưới. Nhánh `fix/p05-xoa-khoa`, working tree sạch lúc bắt đầu vòng này. Không commit/push/install/generate Prisma/DB thật; giữ toàn bộ thay đổi để người dùng commit.
+
+### Kết quả theo yêu cầu reviewer
+
+1. **Đã sửa:** cleanup kiểm tham chiếu sau commit trước từng object: document (FK tới lesson), course cover (public ID hoặc URL sao chép), JSON course draft lồng nhau. Lỗi đọc tham chiếu giữ object. Test dùng chung tài liệu trong/cross-course, draft-only, ảnh bìa dùng chung, URL encode và lỗi lookup.
+2. **Đã sửa trong giới hạn yêu cầu:** đọc lại lesson ID còn tồn tại, đúng course, ngay trước create/update unlock trong cùng transaction; không ghi nếu tất cả đã mất. Giữ dọn cycle progress theo scope khi xóa. Sửa comment tránh khẳng định Serializable bao phủ mọi writer. Không thêm FK/schema hay thay toàn bộ heartbeat.
+3. **Đã sửa:** luôn trả availableMonths, kể cả thiếu/hỏng snapshot, thiếu kỳ hiện tại và cache live; giữ state/lý do. Trang lưu state/reason từ cả cache lẫn fetch và hiển thị “Tháng này chưa có dữ liệu lịch sử”. Không dựng lại/backfill snapshot lịch sử.
+4. **Đã sửa:** GET pools giống contract cũ: Admin-only, items gồm poolId/name/sortOrder/questionCount, sort_order tăng dần; chặn quyền trước đọc DB.
+
+### Kiểm chứng vòng reviewer
+
+| Lệnh | Kết quả |
+|---|---|
+| `node scripts/test/run-tests.cjs unit test-p05-assets` | PASS 15/15 (trước sửa 4 PASS/11 FAIL đúng lỗi) |
+| `node scripts/test/run-tests.cjs unit learning-unlocks` | PASS 4/4 (trước sửa 1 PASS/3 FAIL) |
+| `node scripts/test/run-tests.cjs unit admin-chapters-state` | PASS 3/3 (trước sửa 0 PASS/3 FAIL; render cache/fetch/chuyển tháng) |
+| `node scripts/test/run-tests.cjs unit test-p05-routes` | PASS 22/22 (trước sửa 12 PASS/10 FAIL) |
+| `npx tsc --noEmit` | PASS, exit 0 |
+| `git -c core.safecrlf=false diff --check` | PASS |
+| `npm run test:unit` | FAIL, exit 1: bắt đầu 45 suite; 649 test, 647 PASS/2 FAIL ở database-safety.test.cjs (`spawnSync ... EPERM`) |
+| `node scripts/test/run-tests.cjs unit safety.test.mjs` | PASS 8/8 (suite sau điểm full run dừng) |
+| `node scripts/test/run-tests.cjs unit profiler.test.mjs` | FAIL 0 PASS/1 FAIL: tiến trình con trả status=null thay vì 0 |
+
+44/44 test liên quan bản sửa PASS, đều có kiểm chứng RED trước sửa. Full run đã bao gồm bản code/test cuối; không gộp các lần riêng để tuyên bố full unit PASS. Log: `test-results/p05-review-unit.log` (ignored, UTF-16). Hai lỗi database-safety và một lỗi profiler cùng loại đã được ghi ở vòng trước; không sửa guard để ép xanh. Review chỉ đọc bản diff: không có finding chặn mới. Integration/concurrency/storage thật và browser không chạy vì không có DB test/.env và phạm vi không cho dùng dịch vụ thật.
+
+### File sửa/thêm trong vòng reviewer (12)
+
+- `src/lib/deleted-content-assets.ts`, `src/lib/learning-unlocks.ts`, `src/lib/content-deletion.ts` (file cuối chỉ sửa comment giới hạn race)
+- `src/app/api/v1/leaderboard/chapters/route.ts`, `src/app/admin/chapters/page.tsx`
+- `src/app/api/v1/assessments/[assessmentId]/pools/route.ts`
+- `scripts/test/test-p05-assets.cjs`, `scripts/test/test-p05-routes.cjs`, `scripts/test/run-tests.cjs`
+- Thêm `src/test/learning-unlocks.test.ts`, `src/test/admin-chapters-state.test.cjs`
+- `HANDOFF.md`
+
+### Giới hạn/rủi ro và xung đột có thể
+
+- Progress: DELETE sau lần đọc lại, hoặc transaction giữ snapshot cũ, vẫn có thể để lọt writer không dùng FK/khóa chung. Chưa kiểm chứng DB concurrency; cần protocol khóa thống nhất hoặc FK để bảo đảm tuyệt đối, ngoài phạm vi sửa tối thiểu này.
+- Storage: kiểm DB rồi gọi provider vẫn có cửa sổ writer tạo tham chiếu mới sau kiểm tra; chưa có protocol khóa chung/tombstone cho mọi uploader. URL mơ hồ giữ lại object để tránh mất dữ liệu; cleanup lỗi chỉ log, chưa retry bền vững. Quét cover/draft JSON theo từng object có thể tốn chi phí khi dữ liệu lớn.
+- Không có thay đổi nghiệp vụ/schema/quyền ngoài GET Admin-only đã công bố. `docs/api.md` vốn đúng contract GET nên không cần sửa. Không tự quyết việc bổ sung snapshot lịch sử.
+- Khi gộp cần giữ phần đọc lại ID trong `learning-unlocks.ts` (có thể chạm worker luồng học) và các mục test bổ sung trong runner dùng chung; không ghi đè thay đổi worker khác.
+
+## Trạng thái vòng trước — lưu để đối chiếu
 
 Ngày 10/11/2026, nhánh `fix/p05-xoa-khoa`. A–D đã triển khai trong phạm vi mô tả dưới đây, **chưa nghiệm thu toàn bộ** do full unit thất bại và không có DB test. E bỏ qua đúng yêu cầu. Tất cả thay đổi còn ở working tree: Git bị sandbox từ chối tạo `C:/Users/Acer/Desktop/E-learning/.git/worktrees/p05/index.lock` khi add/commit. Không có SHA checkpoint, không vượt sandbox, không push/merge/rebase/đổi nhánh. Cần quyền metadata Git để commit khi bàn giao.
 

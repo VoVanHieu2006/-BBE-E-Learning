@@ -11,7 +11,8 @@ export class ContentDeleteError extends Error {
   }
 }
 
-/** Caller uses SERIALIZABLE: concurrent learner writes must not slip past the history checks. */
+/** Caller uses SERIALIZABLE. Writers without lesson FKs/shared locks can still
+ * race after the checks; see persistLearningUnlocks and HANDOFF.md. */
 export async function deleteUnusedContent(tx: Tx, scope: DeleteScope, actorId: string) {
   const { courseId, sessionId, lessonId } = scope
   await lockCourseExamBank(tx, courseId)
