@@ -22,7 +22,7 @@ Danh mục đọc từ 96 file route trong `src/app/api`. Đường dẫn độn
 | Course authoring | Draft → session/lesson/video/document → assessment/bank → publish; draft snapshot/publish riêng | Admin; used bank/version và content publishing có guard; không tự reset attempt |
 | Chuyển giao | Đọc roster, parse sheet, preview/POST batch, apply/cancel theo batch | Scope Chapter thực tế; GET danh sách/roster hiện có thể apply đợt đến hạn (xem known-issues); scheduling chưa reset; successful apply mới reset và tạo outbox |
 | BXH kỳ | `group=MEMBER/LT/DNA/CHAPTER`, `periodType=MONTH/TERM/ACTUAL_TERM`; thêm periodId/chapterId theo source | ACTUAL_TERM chỉ CHAPTER, statisticsOnly; bảng đóng đọc snapshot, thiếu dữ liệu trả reason; thành viên/manager bị giới hạn đơn vị |
-| Learning policy | Admin GET cấu hình/readiness; PUT catalog/mapping/season | Không còn POST kích hoạt cutover; mapping đề xuất chưa được tự duyệt; season không chồng lấn, boundary April/October UTC+7, và phải phủ cửa sổ `01/01–30/06` / `01/07–31/12` |
+| Learning policy | Admin GET cấu hình/readiness; PUT catalog/mapping/season | Mapping đề xuất chưa được tự duyệt; season không chồng lấn, boundary April/October UTC+7, và phải phủ cửa sổ `01/01–30/06` / `01/07–31/12` |
 
 ## Danh mục route
 
@@ -121,7 +121,7 @@ Danh mục đọc từ 96 file route trong `src/app/api`. Đường dẫn độn
 
 | Method | Truy cập / guard | Đầu vào đọc trực tiếp | Response thành công | Mã lỗi thấy trong handler |
 |---|---|---|---|---|
-| [POST](../src/app/api/v1/admin/users/[userId]/extend-deadline/route.ts#L6) | `authenticate`, `role ADMIN` | `body.extensionDays`, `body.reason` | `ok, userId, extensionDays, newDueAt, accountStatus, accountLockReason, unlocked` | `AccessDenied`, `ValidationError` |
+| [POST](../src/app/api/v1/admin/users/[userId]/extend-deadline/route.ts#L6) | `authenticate`, `role ADMIN` | `body.extensionDays` (nguyên 1-365), `body.reason` (bắt buộc) | `ok, userId, extensionDays, newDueAt, accountStatus, accountLockReason, unlocked` | `AccessDenied`, `InvalidUserId`, `ValidationError`, `ReasonRequired` (400); `UserNotFound` (404); `NotOverdueLocked`, `AccountRetired`, `NoActiveLearningCycle`, `NoActiveLearningPath` (409). Chỉ cho tài khoản đang bị khóa quá hạn; hạn mới = hôm nay + N. |
 
 ### `/api/v1/assessments/[assessmentId]/attempts/me`
 

@@ -18,7 +18,7 @@ Mục tiêu là tập trung đào tạo và giúp người học/Lead theo dõi 
 | Lead Chapter / Lead DNA | Quản lý đúng đơn vị/chức vụ có hiệu lực; không mặc nhiên là người thi đua |
 | Admin | Quản trị toàn hệ thống, nội dung, tổ chức, tài khoản và vận hành |
 
-Role legacy `ADMIN`, `CHAPTER_LEADER`, `MEMBER` không thay kiểm tra chức vụ, thời hạn và đơn vị trong DB. Admin/Lead quản trị không nhận sao/BXH theo đặc tả; alias `CHAPTER_MANAGER` còn lệch reward predicate được ghi riêng. Bảy Ban chuẩn: BTV, BTK, BND, BCL, BDH, BKM, BTTSK. Lead Chapter gắn cố định một Chapter, không sang DNA kể cả sau thu hồi. President là vị trí Chapter và thuộc LT; trong DB vị trí này mang mã `CHAPTER_PRESIDENT`, đang được thống nhất về `PRESIDENT`. Vị trí và Ban lưu ở `organization_units`, `organization_memberships`, `positions`, `position_assignments` — **không** suy ra từ cột `role`.
+Role legacy `ADMIN`, `CHAPTER_LEADER`, `MEMBER` không thay kiểm tra chức vụ, thời hạn và đơn vị trong DB. Admin/Lead quản trị không nhận sao/BXH theo đặc tả; alias `CHAPTER_MANAGER` còn lệch reward predicate được ghi riêng. Bảy Ban chuẩn: BTV, BTK, BND, BCL, BDHU, BKM, BTTSK. Lead Chapter gắn cố định một Chapter, không sang DNA kể cả sau thu hồi. President là vị trí Chapter và thuộc LT; trong DB vị trí này mang mã `CHAPTER_PRESIDENT`, đang được thống nhất về `PRESIDENT`. Vị trí và Ban lưu ở `organization_units`, `organization_memberships`, `positions`, `position_assignments` — **không** suy ra từ cột `role`.
 
 Một người chỉ có một tư cách Chapter/DNA đang hoạt động. Chapter → DNA chấm dứt Ban/chức vụ/quyền Chapter hiện hành, giữ sao, tiến độ và lịch sử. Không xóa history hoặc tạo ledger giả để chuyển điểm. Raw import, chức vụ tương lai và concurrent writes cũng chịu guard tổ chức.
 
@@ -29,7 +29,7 @@ Một người chỉ có một tư cách Chapter/DNA đang hoạt động. Chapt
 - ACTIVE vẫn cần affiliation hợp lệ. Backend đọc trạng thái/quyền hiện tại, không tin role/Chapter cũ trong JWT để bỏ qua thu hồi.
 - Quản lý chỉ vô hiệu hóa tài khoản trong scope; chỉ Admin kích hoạt lại theo quy tắc hiện tại. Deadline có thể tạo restriction/khóa, không tự mở khi thêm khóa hoặc tăng hạn.
 - Inactive quá thời gian giữ sẽ retirement thành tombstone, bảo toàn ledger/kết quả/snapshot, không khôi phục như tài khoản bình thường.
-- Reset password và login lock theo handler hiện tại. Yêu cầu BA cũ “10 lần sai → LOCKED” hoặc hạn reset không phải acceptance đã xác minh chỉ vì từng ghi trong tài liệu.
+- Khóa mật khẩu theo KHBB 7.2: sai **5** lần thì `LOCKED` với `lock_reason = PASSWORD_LOCK`; mỗi lần sai trả `remainingAttempts`; không đặt `locked_until` (không tự mở theo thời gian). Chỉ mail đặt lại mật khẩu mới mở khóa này (và không bao giờ mở khóa quá hạn). Đăng nhập đúng chỉ đếm lại số lần sai, không đổi `status`.
 
 ## Nội dung và video
 
@@ -50,7 +50,7 @@ Tháng mới giữ training progress/bài đã mở. Muốn thi lại/kiếm sao
 
 Video thưởng một lần cho `(user,video,month,learningCycle)`. Quiz dùng `(user,quiz,month,learningCycle)`; khi đạt 85%, sao thêm `max(0, số câu đúng mới − mốc số câu đúng đã thưởng cao nhất)`. Ví dụ quiz 100 câu: 80→90→85→91→100→100 nhận 0,90,0,1,9,0 sao. Không áp phương án “2 sao/câu + bonus” cũ. Sao video dùng chính sách reward hiện tại, không đổi công thức.
 
-Tháng mới tạo cửa sổ thưởng mới, giữ progress. Apply chuyển giao thành công tạo cycle mới và học lại mọi khóa kể cả mở rộng, giữ history. Suppressed activity khi pause không được cộng bù sau mở thưởng/chuyển DNA trong cùng cửa sổ. Reset thành công cho phép hoạt động học mới trong cycle mới nhận sao.
+Bảng xếp hạng đã chốt là snapshot bất biến; người rời nhiệm kỳ hoặc bị vô hiệu hóa vẫn hiện ở các bảng họ còn hoạt động đến lúc chụp, và ẩn khỏi bảng đang diễn ra (xem CKNK 5.10). Tháng mới tạo cửa sổ thưởng mới, giữ progress. Apply chuyển giao thành công tạo cycle mới và học lại mọi khóa kể cả mở rộng, giữ history. Suppressed activity khi pause không được cộng bù sau mở thưởng/chuyển DNA trong cùng cửa sổ. Reset thành công cho phép hoạt động học mới trong cycle mới nhận sao.
 
 ## Chương trình, deadline và dữ liệu legacy
 
@@ -62,13 +62,13 @@ Lộ trình bắt buộc dùng **một deadline chung**. Khi đổi tập nghĩa
 D_new = max(D_start + T_new, D_change + T_added)
 ```
 
-`T_new`: tổng ngân sách tập khóa mới; `T_added`: khóa mới phát sinh. A10+B10 đổi A10+C11 ngày 5 → ngày 21; ngày 20 → ngày 31. Không thêm hạn cũ thành số hạng thứ ba. Tập nghĩa vụ không đổi giữ gia hạn thủ công; fingerprint ngăn cộng lặp. Đổi vị trí giữ progress; apply chuyển giao mới tạo cycle/nghĩa vụ mới. Quyết định này thay deadline riêng mục 17.
+`T_new`: tổng ngân sách các khóa **chưa xong** của tập mới (khóa đã xong không kéo dài hạn); `T_added`: các khóa mới phát sinh chưa xong. A10+B10 đổi A10+C11 ngày 5 → ngày 21; ngày 20 → ngày 31. Người đã xong hết, thêm khóa 10 ngày → hạn = ngày thêm + 10. Không thêm hạn cũ thành số hạng thứ ba. Gỡ khóa: còn khóa chưa xong thì hạn không sớm hơn `D_change + 3d`; hết khóa chưa xong thì không còn hạn. Gia hạn thủ công không bao giờ bị tính lại làm rút ngắn (lấy lớn hơn giữa hạn tính lại và hạn đang có); fingerprint ngăn cộng lặp. Đổi vị trí/ban giữ progress, hạn có thể ngắn hơn hạn cũ; apply chuyển giao mới tạo cycle/nghĩa vụ mới. Quyết định này thay deadline riêng mục 17. Bản đọc dễ hiểu: [KHBB](KHBB.md); bổ sung sổ tay: phụ lục cuối [handbook-formulas](reference/handbook-formulas.md).
 
-Admin giảm ngân sách có sàn ba ngày: `max(D_assigned+T_new,D_adminChange+3d)`; không áp sàn cho mọi lần tăng. Mở lại tài khoản quá hạn phải gia hạn đúng luồng, xem hạn mới, ghi lý do và giữ history restriction. Thêm khóa không tự mở khóa.
+Admin giảm ngân sách có sàn ba ngày: `max(D_assigned+T_new,D_adminChange+3d)`; không áp sàn cho mọi lần tăng. Mở lại tài khoản quá hạn **chỉ** qua luồng "Mở khóa & Gia hạn": xem hạn mới, ghi lý do và giữ history restriction; kích hoạt thường không mở được khóa quá hạn. Khóa mật khẩu (sai 5 lần) chỉ mở bằng mail đặt lại mật khẩu. "Mở khóa & Gia hạn" chỉ dùng cho tài khoản đang bị khóa quá hạn (hạn mới = hôm nay + N ngày, N nguyên 1-365, bắt buộc có lý do); `PATCH /users/[userId]` (kích hoạt) và `POST /admin/restrictions` LIFT trả 409 với khóa quá hạn. Cron `deadlines/enforce` bỏ qua ADMIN, LEAD (role hoặc chức vụ), tài khoản INACTIVE và khóa không còn PUBLISHED. Gỡ rồi thêm lại một khóa trong 3 ngày (bỏ tick, đổi ban, hủy xuất bản rồi xuất bản lại) trả hạn về đúng hạn trước khi gỡ (KHBB 5.7). ADMIN và LEAD không bị khóa vì quá hạn và không có khóa bắt buộc. Thêm khóa không tự mở khóa.
 
-Thêm `k` bài vào khóa bắt buộc đã hoàn thành có thời gian bổ sung `k × max(ceil(T_course/L_after),3)` ngày **từ publish** theo đặc tả, không cộng trùng khi retry. Mã còn lệch mốc; xem known-issues, không coi là đã sửa.
+Thêm `k` bài vào khóa bắt buộc đã hoàn thành có thời gian bổ sung `k × max(ceil(T_course/L_after),3)` ngày **tính từ lúc thêm**, không cộng trùng khi retry; khóa của người đã xong mở lại thành chưa xong (người đang học dở: cộng dồn vào hạn hiện tại). Bài/quiz mới có nhãn "Mới", không mất tiến trình và không chặn bài sau; điểm thi cuối khóa đã đạt vẫn tính. Mã còn lệch (cộng vào hạn cũ, không mở lại khóa); xem known-issues, không coi là đã sửa.
 
-Dữ liệu legacy trước mốc lịch sử có sao thiếu month/cycle provenance và chỉ còn là đường đọc. Mô hình deadline chung, mapping và season áp dụng ngay khi cấu hình; không còn thao tác kích hoạt cutover. Không tự sửa ledger/history hay tạo snapshot ngược trước mốc; tháng đầu của dữ liệu lịch sử có thể ngắn từ mốc tới đầu tháng UTC+7 tiếp theo.
+Dữ liệu cũ có sao thiếu month/cycle provenance chỉ còn là đường đọc. Mô hình deadline chung, mapping và season áp dụng ngay khi cấu hình. Không tự sửa ledger/history hay tạo snapshot ngược cho giai đoạn cũ.
 
 ## Chapter và bảng xếp hạng
 

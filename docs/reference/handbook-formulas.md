@@ -418,3 +418,20 @@ Thời gian bổ sung được tính từ thời điểm nội dung mới đư�
 | 11      | Deadline chung đổi chức vụ      | $\\max\left( D_{start} + T_{new},D_{change} + T_{added} \right)$ — **chưa chốt**     |
 | 12      | Admin giảm hạn                  | $\\max\left( D_{assigned} + T_{new},D_{adminChange} + 3d \right)$                    |
 | 13      | Thêm một bài vào khóa           | $\\max\left( \lceil T_{course}/L_{course}\rceil,3d \right)$                          |
+
+
+---
+
+## PHỤ LỤC SỬA ĐỔI (10/11/2026) — mục V thay đổi như sau
+
+Nội dung gốc ở trên được giữ nguyên để đối chiếu. Phụ lục này **thay thế** các quy tắc cùng chủ đề. Bản đọc dễ hiểu nằm ở [`../KHBB.md`](../KHBB.md). Các file `.docx` và `.pdf` cùng thư mục là bản cũ, chưa có các sửa đổi này.
+
+| Mục gốc | Sửa đổi |
+|---|---|
+| 18 (Deadline chung, đổi chức vụ/thêm khóa) | Chỉ tính các khóa **chưa xong**: hạn mới = max(D_start + tổng ngày các khóa chưa xong, D_change + tổng ngày các khóa mới chưa xong). Khóa đã xong không kéo dài hạn. Ví dụ: khóa A (100 ngày) xong ngày 5, thêm khóa C (10 ngày) ngày 5 → hạn ngày 15. Đổi ban dùng đúng công thức này; hạn có thể ngắn hơn hạn cũ. |
+| 17-18 (gỡ khóa khỏi tập nghĩa vụ) | Còn khóa chưa xong khác: hạn mới không sớm hơn D_change + 3 ngày. Hết khóa chưa xong: không còn hạn. |
+| 19 (Admin rút ngắn thời hạn) | Giữ nguyên, sàn D_adminChange + 3 ngày. |
+| Gia hạn tay (không có trong sổ tay gốc) | Chỉ dùng cho tài khoản đã bị khóa quá hạn; hạn mới = hôm nay + N ngày. Gia hạn tay không bao giờ bị tính lại làm rút ngắn (hạn mới = lớn hơn giữa hạn tính lại và hạn đang có). |
+| 20 (Thêm bài vào khóa đã xuất bản) | Số ngày bổ sung giữ công thức k × max(ceil(T_course / L_after), 3), **tính từ lúc thêm**. Người đã xong khóa: khóa mở lại thành chưa xong, hạn = lúc thêm + số ngày bổ sung. Người đang học dở: hạn hiện tại + số ngày bổ sung. Ví dụ: khóa 20 ngày, thêm 2 bài (7 bài sau khi thêm) = 6 ngày; hạn cũ ngày 20, thêm ngày 30 → ngày 36. |
+| 20 (tiến trình khi thêm bài/quiz) | Không mất tiến trình đã học, không chặn bài sau; bài/quiz mới gắn nhãn "Mới". Điểm thi cuối khóa đã đạt vẫn tính (kể cả khi đổi đề). |
+| Khóa tài khoản | Role ADMIN và LEAD không bị khóa vì quá hạn. Khóa quá hạn chỉ mở bằng "Mở khóa & Gia hạn"; khóa mật khẩu chỉ mở bằng mail đặt lại mật khẩu. |

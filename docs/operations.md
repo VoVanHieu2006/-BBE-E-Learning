@@ -41,9 +41,9 @@ Trước release:
 3. `/admin/courses/mandatory`: kiểm tra 18 target và mọi legacy rule ngoài target chuẩn. Một ngân sách ngày chung mỗi khóa; không âm thầm bỏ rule.
 4. Xử lý rõ alias `CHAPTER_MANAGER` thành **Lead Chapter** (không phải President — President là vị trí riêng, thuộc LT và vẫn nhận sao); kiểm tra binding, affiliation và readiness. Không bỏ gate để làm chạy.
 5. Cấu hình season không chồng lấn: `code`, `startsAt`, `endsAt`, `rewardBoundaryAt`; boundary 00:00 ngày 01/04 hoặc 01/10 UTC+7 và nằm trong season. Season phải phủ đúng **cửa sổ chuyển giao**: `01/01–30/06` (mốc `01/04`) và `01/07–31/12` (mốc `01/10`) — mọi thời điểm chuyển giao chuẩn hóa về mốc gần nhất, và mỗi cửa sổ chỉ được chuyển giao 1 lần. Applied season bất biến; season đang được batch `SCHEDULED` tham chiếu cũng không sửa; API chỉ cho sửa season tương lai/chưa dùng.
-6. Duyệt content/history, Chapter→DNA và release gates. Không còn thao tác kích hoạt cutover: cấu hình mapping/season có hiệu lực ngay khi lưu và scheduler áp dụng theo thời gian thực.
+6. Duyệt content/history, Chapter→DNA và release gates. Cấu hình mapping/season có hiệu lực ngay khi lưu và scheduler áp dụng theo thời gian thực.
 
-Mốc `learning_policy.cutover_at` chỉ còn là dữ liệu lịch sử để nhận diện dữ liệu legacy và chặn phân bổ ngược trước mốc. Không phân bổ lại ledger, reset progress hoặc cấp lại reward budget để làm đẹp mapping. Ngoại lệ nhiệm kỳ đầu theo [business-rules](business-rules.md), không dùng runbook cũ ép pause.
+Dữ liệu từ trước mô hình hạn chung chỉ được đọc để giữ lịch sử. Không phân bổ lại ledger, reset progress hoặc cấp lại reward budget để làm đẹp mapping. Ngoại lệ nhiệm kỳ đầu theo [business-rules](business-rules.md), không dùng runbook cũ ép pause.
 
 ## Scheduler
 

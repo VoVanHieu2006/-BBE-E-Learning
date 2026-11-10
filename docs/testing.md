@@ -23,7 +23,7 @@ Typecheck dùng `tsconfig.json`, hợp nhất config check trùng lặp. Unit d�
 | Chapter/BXH | `test:leaderboard-integration` và `scripts/test` | Roster/period/actual term, completed lessons, transfer/star history |
 | Tổ chức | `test:organization-integrity`, `test:organization-repair` | Single affiliation, Lead binding/tenure/import/concurrency, dry-run/repair/history |
 | Migration | `test:migration-rehearsal` | Apply/compatibility synthetic, không thay production-backup rehearsal |
-| FB fixes | `test:fb-fixes` | Invitation, duration, roster/history, readiness không cần cutover, rewards; DB riêng chặt |
+| FB fixes | `test:fb-fixes` | Invitation, duration, roster/history, readiness, rewards; DB riêng chặt |
 | Browser | `test:browser`, `test:video-player-browser`, `test:tab-cache`, `test:sidebar` | Player, cache/dedupe, navigation/motion; config riêng |
 | Load harness | `node --test load-tests/tests/safety.test.mjs load-tests/tests/profiler.test.mjs`, `node load-tests/tests/inspect.mjs`, `node load-tests/tests/harness-smoke.mjs` | Guards/profiler/k6 inspect/stub, không phải capacity evidence |
 

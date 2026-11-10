@@ -440,7 +440,7 @@ Nếu chapter **chưa từng** chuyển giao lần nào thì ngược lại: `1/
 
 ### 1.10 DNA reset độc lập
 
-DNA reset chạy ở **mốc đã qua gần nhất** do `chapterRewardBoundary(now)` trả về — hiện là `1/4` và `1/10` — và **hoàn toàn độc lập** với việc chapter có chuyển giao hay không: reset tiến độ bài học, hủy attempt `IN_PROGRESS` (lý do `DNA_SEASON_RESET`), kết thúc assignment. Hàm này **không đọc** bảng `transfer_seasons`; nó tự dựng `season = { id, starts_at }` từ mốc. DNA reset dùng advisory lock `dna-reset:{mốc}` và chỉ áp dụng nếu `context.cycle.starts_at < mốc`; không cần policy/cutover.
+DNA reset chạy ở **mốc đã qua gần nhất** do `chapterRewardBoundary(now)` trả về — hiện là `1/4` và `1/10` — và **hoàn toàn độc lập** với việc chapter có chuyển giao hay không: reset tiến độ bài học, hủy attempt `IN_PROGRESS` (lý do `DNA_SEASON_RESET`), kết thúc assignment. Hàm này **không đọc** bảng `transfer_seasons`; nó tự dựng `season = { id, starts_at }` từ mốc. DNA reset dùng advisory lock `dna-reset:{mốc}` và chỉ áp dụng nếu `context.cycle.starts_at < mốc`.
 
 ✅ `src/lib/dna-cycle-resets.ts:10-11`, `:24`
 
@@ -645,7 +645,7 @@ Nó thoát sớm **không ngừng thưởng** (`paused: false`) trong các trư�
 | Người dùng không có dòng `chapter_members`                | `:39-40` |
 | Không tìm thấy chapter                                         | `:41-42` |
 
-Nghĩa là: **thành viên DNA không bao giờ bị ngừng thưởng**; và cơ chế ngừng thưởng chỉ áp cho người đang thuộc một chapter. Không còn điều kiện policy/cutover.
+Nghĩa là: **thành viên DNA không bao giờ bị ngừng thưởng**; và cơ chế ngừng thưởng chỉ áp cho người đang thuộc một chapter. Không có điều kiện bổ sung nào khác.
 
 ### 4.2 Chưa từng chuyển giao → **vẫn nhận sao**
 
@@ -902,6 +902,27 @@ at70Rate      = 170/690 ≈ 0,2464  →  24,64%  < 50%  ❌ KHÔNG đạt
 
 Chapter bị loại với lý do `CORE_COMPLETION_BELOW_50_PERCENT`, **dù stage 2 có tỷ lệ đạt 50%**. Đây là lý do phải gia quyền theo **thời lượng**: stage nào chiếm nhiều thời gian hơn thì ảnh hưởng nhiều hơn.
 
+### 5.10 Người đã rời nhiệm kỳ hoặc bị vô hiệu hóa
+
+**Nguyên tắc:** bảng xếp hạng đã chốt là một **ảnh chụp (snapshot)** tại thời điểm chốt. Người rời đi sau đó không làm thay đổi ảnh chụp. Tài khoản bị vô hiệu hóa chỉ mất khả năng đăng nhập; dữ liệu và lịch sử **không bị xóa**.
+
+**Quy tắc ghi nhận:** một người xuất hiện trong một bảng xếp hạng nếu họ **còn hoạt động đến thời điểm chụp** của bảng đó. Quy tắc này áp dụng cho mọi loại bảng (bảng tháng và bảng nhiệm kỳ của Chapter, các bảng xếp hạng cá nhân).
+
+| Tình huống | Bảng tháng cũ | Bảng tháng đang diễn ra | Bảng nhiệm kỳ cũ |
+|---|---|---|---|
+| Còn hoạt động hết tháng 10/2025, rời giữa tháng 11/2025 | **Tháng 10 vẫn hiện người đó** (đã chốt) | **Tháng 11 không có** người đó (rời trước lúc chụp) | Không đổi |
+| Học trong nhiệm kỳ 1, rời trong nhiệm kỳ 2 | Các tháng nhiệm kỳ 1 vẫn hiện | Nhiệm kỳ 2: chỉ hiện nếu còn đến lúc chụp | **Nhiệm kỳ 1 vẫn hiện người đó bình thường** |
+| Chuyển giao / reset nhiệm kỳ | Giữ nguyên | Bắt đầu bảng mới | Giữ như một snapshot tại thời điểm đó |
+
+**Bảng đang diễn ra:** người đã bị vô hiệu hóa **ẩn khỏi bảng hiện tại** và không tính vào quân số kể từ lúc rời; bảng đã chốt không bị ảnh hưởng.
+
+**Câu hỏi còn mở:**
+
+- Tài khoản bị ẩn danh hóa (xóa thông tin cá nhân) hiện tên gì trong bảng cũ?
+- Người rời giữa nhiệm kỳ: điểm các tháng đã chốt nằm ở bảng tháng; bảng nhiệm kỳ của họ không có. Có cần cách xem tổng điểm nhiệm kỳ riêng cho họ không?
+
+📄 Chưa kiểm chứng trong code; cần đối chiếu `src/lib/competition-snapshots.ts` và `src/lib/period-leaderboard.ts` trước khi sửa mã.
+
 ---
 
 ## Phần 6 — Bảng quyết định tổng hợp
@@ -1003,7 +1024,7 @@ Tổng hợp mọi điểm đã đánh dấu 🔧 trong tài liệu. **Đợt P0
 | 9  | `src/test/chapter-six-month-transfer.test.ts` | ✅ Đã viết lại theo cửa sổ chuẩn | mốc `1/4`/`1/10` 00:00 — [2.4](#24-ví-dụ-số) | ✅ Xong |
 | 10 | `docs/business-rules.md` | ✅ Đã sửa 29/10/2026 | `1/1–30/6`, `1/7–31/12` — [1.2](#12-cửa-sổ-chuyển-giao) | ✅ Xong |
 | 11 | `src/lib/dna-cycle-resets.ts` | ✅ Dùng helper `anchorElapsed` / `chapterRewardBoundary` | tách helper mốc đã qua — [1.10](#110-dna-reset-độc-lập) | ✅ Xong |
-| 12 | `src/app/api/v1/admin/learning-policy/route.ts` | ✅ Đã bỏ nhánh cutover; chỉ còn cấu hình season/mapping | như mô tả — [1.6](#16-mùa-do-admin-cấu-hình) | ✅ Xong |
+| 12 | `src/app/api/v1/admin/learning-policy/route.ts` | ✅ Chỉ còn cấu hình season/mapping | như mô tả — [1.6](#16-mùa-do-admin-cấu-hình) | ✅ Xong |
 | 13 | `src/test/learning-cycles.test.ts` + `src/test/transfer-windows.test.ts` | ✅ Giữ test mốc đã qua; thêm test riêng cho mốc gần nhất | như mô tả | ✅ Xong |
 | 14 | `src/lib/chapter-term-rules.ts` | ✅ Đã xoá `firstEligibleAt` + `INITIAL_SEASON_SKIPPED` | chapter mới chuyển giao ngay — [2.1](#21-chapter-mới-chuyển-giao-được-ngay-không-phải-chờ) | ✅ Xong |
 | 15 | `CHAPTER_PRESIDENT` → `PRESIDENT` (7 file mã + 2 migration + 3 test + 1 component + 1 trang admin)                                                                                | hai mã cho cùng một vị trí: `CHAPTER_PRESIDENT` trong dữ liệu, `PRESIDENT` ở vài danh sách                                                          | **một mã duy nhất `PRESIDENT`** — [5.6](#56-ai-được-vào-bảng-xếp-hạng)                                                                                                      | 🟠 Vừa   |
@@ -1047,7 +1068,7 @@ Hệ quả: người giữ `CHAPTER_MANAGER` **không** được coi là learnin
 
 - Toàn bộ nội dung tài liệu này dựa trên **đọc mã + test tự động**, **chưa** đối chiếu dữ liệu production.
 - Supabase không truy cập được từ môi trường soạn tài liệu (lỗi TLS), nên không xác minh được cấu hình policy/mùa thật.
-- Cutover đã bỏ khỏi runtime; chưa đối chiếu dữ liệu legacy thật với mốc `learning_policy.cutover_at` trên production.
+- Chưa đối chiếu dữ liệu cũ thật trên production.
   ⚠️ `docs/known-issues.md:32-33`
 
 ---

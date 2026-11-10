@@ -16,6 +16,21 @@ Deadline chung mục 18 đã chốt `max(D_start+T_new,D_change+T_added)`, thay 
 
 Lần chạy sau sửa fixture trong đợt cleanup: **8 PASS / 3 FAIL**, gồm actual4/expected10 ở phân điểm, actual16/expected26 ở thêm bài, actualtrue/expectedfalse ở alias. Hai sai lệch sau đã tái hiện rõ; phân điểm **đã có kết luận đặc tả** (code đúng, expectation sai — xem bảng trên), không gộp thành một fixture error chưa chạy hoặc tự sửa công thức.
 
+## Hạn học và khóa tài khoản (prompt 01, đối chiếu KHBB mục 9)
+
+Đã xử lý trong nhánh `feat/han-va-khoa-tai-khoan` (chưa commit lúc ghi): dòng 2 (LEAD/ADMIN không bị khóa quá hạn; cron bỏ qua cả INACTIVE), 5 (khóa quá hạn chỉ mở bằng Mở khóa & Gia hạn), 6 (khóa mật khẩu 5 lần, `remainingAttempts`, không tự mở), 7 (chỉ tính khóa chưa xong), 8 (sàn `C + 3 ngày` ở đường `ROLE_CHANGED`), 9 (gia hạn tay không bị rút ngắn), 14 (gia hạn chỉ cho tài khoản đã bị khóa, hạn mới = hôm nay + N), 16 (hủy xuất bản/xuất bản lại khóa bắt buộc), 17 (chỉ tick khóa đã xuất bản), 20 (cửa sổ 3 ngày chống làm mới hạn).
+
+Còn lệch hoặc cần theo dõi:
+
+| Mục | Ghi chú |
+|---|---|
+| KHBB dòng 10, 11, 12, 18 | Thêm bài/quiz/bài thi cuối: thuộc prompt 02, chưa làm. |
+| KHBB dòng 1, 3, 4 | Đổi tên role/chức vụ/nhóm học: prompt 03. Trong code mới `LEAD` vẫn nhận diện qua role `CHAPTER_LEADER` và chức vụ `DNA_LEAD`/`DNA_MANAGER`/`CHAPTER_LEAD`/`CHAPTER_MANAGER`. |
+| Số lần sai tồn từ chính sách cũ | Tài khoản `ACTIVE` đang có `failed_login_count` từ 5 đến 9 (ngưỡng cũ là 10) sẽ bị khóa ngay ở lần sai kế tiếp. Không backfill. |
+| Khóa nháp đã có ô tick | Quy tắc cũ cho tick khóa nháp. Ô đã tick vẫn còn, vẫn cho bỏ tick/sửa ngày; reconcile coi khóa nháp là ngoài bộ khóa, và người chưa có assignment sẽ chỉ được tạo assignment khi có lần reconcile sau khi xuất bản. |
+| `learning_outbox` | Hủy xuất bản/xuất bản lại chỉ đặt việc vào outbox cho người đã có assignment của khóa; hạn chỉ đổi khi outbox được xử lý (cron/read-through). Giữa hai thời điểm, cron `enforce` đã bỏ qua khóa không còn PUBLISHED nên không ai bị khóa oan. |
+| Kiểm chứng | Route `enforce`, `extend-deadline`, `login` được test qua double trong bộ nhớ (không DB). Chưa chạy được suite tích hợp có DB riêng trong phiên này. |
+
 ## Hiệu năng và dữ liệu lớn
 
 GET chuyển giao hiện có side effect: `reorganizations`, `current-roster` và `dashboard/members` gọi `applyDueChapterReorganizations`. Fixture có batch `SCHEDULED` đã đến hạn chuyển thành `APPLIED` sau các GET Admin. Đây là hành vi source hiện hữu, được giữ trong cleanup; nếu muốn GET chỉ đọc cần thay đổi riêng với kiểm chứng scheduler/retry. Admin không còn quyền đặt lịch/áp dụng/hủy (các endpoint trả `403 AdminReadOnly`); GET tự áp dụng là catch-up của hệ thống, không phải quyết định của Admin. Browser countdown chỉ chứng minh client không gửi POST apply, không chứng minh backend GET không thay dữ liệu.
@@ -30,7 +45,7 @@ GET chuyển giao hiện có side effect: `reorganizations`, `current-roster` v�
 | Phạm vi | Giới hạn / bước tiếp |
 |---|---|
 | Production | Đối chiếu read-only revision/policy/mapping/season, index `chapter_transfers_one_applied_season`, provenance month/cycle và snapshots. Supabase timeout không có SELECT không chứng minh data đúng/sai; báo cáo phiên cũ không phải snapshot hiện tại. |
-| Readiness | API readiness không còn chặn theo policy/cutover; chỉ phản ánh kỳ hiện tại. Cần kiểm tra mapping/season thực tế trước khi vận hành; không tự tạo policy/đổi position để bypass. |
+| Readiness | API readiness chỉ phản ánh kỳ hiện tại. Cần kiểm tra mapping/season thực tế trước khi vận hành; không tự tạo policy/đổi position để bypass. |
 | Lịch sử | Chưa chứng nhận đủ evidence mọi tháng/kỳ; thiếu trả reason, không dựng lại frozen snapshot theo affiliation hôm nay. |
 | Điện thoại thật | Android/iPhone Safari/Chrome native/theater, xoay/Back/tab, browser chrome, rate/seek/buffer/session cần máy thật. Touch emulation không thay nghiệm thu thiết bị. |
 | Video/DB/browser | Mock browser bảo vệ UI contract, không thay YouTube thật + learner DB thật. PASS chỉ đúng phạm vi đã chạy. |
