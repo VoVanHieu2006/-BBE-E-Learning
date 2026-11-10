@@ -52,3 +52,6 @@ Các dòng 1, 2, 3, 4 của bảng mục 9 trong `docs/KHBB.md` đúng với cod
 
 ## Không được đụng tới
 Công thức hạn và khóa tài khoản (prompt 01), cập nhật khóa/nhãn Mới (prompt 02), `learning_policy` (prompt 04), mọi migration cũ (chỉ thêm migration mới), dữ liệu production.
+
+## Ngoại lệ cho worktree này
+Worktree `p03` có `node_modules` RIÊNG (bản sao), nên BẠN ĐƯỢC chạy `npx prisma generate` (và chỉ lệnh đó) sau khi đổi enum trong `prisma/schema.prisma`, để `npx tsc --noEmit` đúng. Vẫn cấm `prisma migrate`, `db push`, `npm install`, DB thật.
