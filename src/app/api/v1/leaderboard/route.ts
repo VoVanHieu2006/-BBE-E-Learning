@@ -5,6 +5,7 @@ import { getPublishedSystemData, calculateBatchUsersProgress } from '@/lib/progr
 import { getActiveMetricChapterIds } from '@/lib/active-chapters'
 import { getCachedMemberLeaderboard, setCachedMemberLeaderboard } from '@/lib/member-leaderboard-cache'
 import { periodLeaderboard } from '@/lib/period-leaderboard'
+import { publicDisplayName } from '@/lib/fun-display-name'
 
 /**
  * GET /api/v1/leaderboard
@@ -43,8 +44,8 @@ export async function GET(request: NextRequest) {
       ], position_assignments: { none: { position: { code: { in: ['DNA_LEAD', 'CHAPTER_LEAD', 'TT', 'TRAINEE'] } }, starts_at: { lte: new Date() }, OR: [{ ends_at: null }, { ends_at: { gt: new Date() } }] } } },
       select: {
         id: true,
-        email: true,
         display_name: true,
+        anonymized_at: true,
         chapter_members: {
           include: { chapter: true },
         },
@@ -78,7 +79,7 @@ export async function GET(request: NextRequest) {
 
       return {
         userId: m.id,
-        displayName: m.display_name,
+        displayName: publicDisplayName(m.id, m),
         chapterName,
         courseCompletionPercent: courseProgress,
         assessmentAverageScore: avgScore,

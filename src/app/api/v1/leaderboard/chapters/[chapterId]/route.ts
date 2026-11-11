@@ -6,6 +6,7 @@ import { getOrganizationUnitTreeIds } from '@/lib/learning-assignments'
 import { prisma } from '@/lib/prisma'
 import { calculateBatchUsersProgress, getPublishedSystemData } from '@/lib/progress/calculator'
 import { getActiveMetricChapterIds } from '@/lib/active-chapters'
+import { publicDisplayName } from '@/lib/fun-display-name'
 
 /** Individual member standings are ordered by Star balance, with learning progress as tie-break. */
 export async function GET(request: NextRequest, { params }: { params: { chapterId: string } }) {
@@ -73,7 +74,7 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
         },
       },
     },
-    select: { id: true, email: true, display_name: true, role: true },
+    select: { id: true, display_name: true, anonymized_at: true, role: true },
     take: 500,
   })
 
@@ -145,7 +146,7 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
     const positionTitle = posInfo?.name || (isLeadRole(member.role) ? 'Chủ tịch Chapter' : null)
     return {
       userId: member.id,
-      displayName: member.display_name,
+      displayName: publicDisplayName(member.id, member),
       department: deptByUser.get(member.id) || null,
       isLead,
       position: posInfo?.code || (isLead ? 'CHAPTER_LEAD' : null),
