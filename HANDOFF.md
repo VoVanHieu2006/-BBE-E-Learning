@@ -1,12 +1,12 @@
 # HANDOFF — prompt 06 (triển khai từ DB trống)
 
 Nhánh: `feat/p06-deploy`. DB thử: container `bbe-test-pg` (127.0.0.1:54329), chỉ database `bbe_test_*`.
-DB do mình tạo: `bbe_test_cut_strict`, `bbe_test_cut_cur`, `bbe_test_cut_hist`, `bbe_test_cut`, `bbe_test_baseline_verify`, `bbe_test_seed`, `bbe_test_seed_demo` (+ các DB tạo ở mục sau). Các DB `bbe_test_*` khác có sẵn từ trước: không đụng.
+DB do mình tạo: `bbe_test_cut_strict`, `bbe_test_cut_cur`, `bbe_test_cut_hist`, `bbe_test_cut`, `bbe_test_baseline_verify`, `bbe_test_seed`, `bbe_test_seed_demo`, `bbe_test_fresh_deploy_p06` (+ các DB tạo ở mục sau). Các DB `bbe_test_*` khác có sẵn từ trước: không đụng.
 
 ## Trạng thái
 1. Cắt lại baseline: **xong** (`scripts/db/cut-baseline.mjs`, cặp `prisma/bootstrap/20261110_*` được ghi đè, README cập nhật)
 2. Sửa seed: **xong** (`prisma/seed.ts`, `scripts/db/seed-demo-safe.ts`, `seed-rich-demo.ts`, `seed-rich-progress.ts`)
-3. `npm run test:fresh-deploy`: chưa
+3. `npm run test:fresh-deploy`: **xong** (`scripts/test/test-fresh-deploy.mjs`, test guard `scripts/test/fresh-deploy-guard.test.mjs` gộp vào `test:baseline-safety`)
 4. Test tích hợp: chưa
 5. Cập nhật docs (`operations.md`, `testing.md`): chưa (README bootstrap đã cập nhật ở mục 1)
 
@@ -17,6 +17,7 @@ DB do mình tạo: `bbe_test_cut_strict`, `bbe_test_cut_cur`, `bbe_test_cut_hist
 - Mục 2 trên `bbe_test_seed` (baseline → deploy "No pending" → seed): `npx prisma db seed` OK 2 lần liên tiếp (lần 2 trên DB đã có dữ liệu). Đếm: users 18 (ADMIN 1, LEAD 4, MEMBER 13), chapters 3, organization_units 29 (21 ban có code), positions 6, position_assignments 17, chapter_lead_bindings 3, learning_programs 4, learning_targets 18, courses 10, lessons 23, assessments 5 (COURSE_FINAL), questions 15, attempts 11. Truy vấn kiểm: 0 user có >1 chức vụ, 0 user vừa Chapter vừa DNA, mọi LEAD có CHAPTER_LEAD/DNA_LEAD.
 - `npm run db:seed-demo` trên DB trống `bbe_test_seed_demo` (2 lần) và trên DB đã seed: OK. `npm run db:seed-rich` (2 lần) + `npm run db:seed-rich-progress` trên `bbe_test_seed`: OK, sau đó vẫn 0 vi phạm các truy vấn kiểm trên.
 - `npx tsc --noEmit`, `-p prisma/tsconfig.seed.json`, `-p scripts/tsconfig.json`: sạch.
+- Mục 3: `TEST_DATABASE_URL=<loopback bbe_test_fresh_deploy_p06> npm run test:fresh-deploy` → exit 0, chạy 2 lần liên tiếp (lần 2 trên DB đã có dữ liệu). A: baseline 26s, deploy, seed; B: TRUNCATE (giữ `_prisma_migrations`), deploy, seed. Cả hai: 1 ADMIN, 17 user khác, 6 chức vụ, 4 chương trình/18 đối tượng, 5 version đề cuối khóa active, 0 vi phạm. Guard từ chối DB `postgres` và biến trống (exit 1). `test:baseline-safety` 11/11. `npx tsc --noEmit` sạch.
 
 ## Quyết định
 - Giữ tên cặp `20261110` (bằng ngày migration mới nhất `20261110_standardize_roles_positions`); `baseline-empty-database.mjs` giờ đọc hằng `baselineName`, cut script tự cập nhật.
@@ -33,6 +34,10 @@ DB do mình tạo: `bbe_test_cut_strict`, `bbe_test_cut_cur`, `bbe_test_cut_hist
 - `seed-demo-safe.ts`: không đổi role tài khoản đã có (trigger cấm MEMBER→LEAD), bỏ qua tài khoản đã có bố trí; chức vụ upsert không ghi đè tên; thêm `president.demo@bbe.vn` thay cho chức vụ thứ hai của `member.demo`; thêm catalog (skipDuplicates).
 - `seed-rich-demo.ts`: Lead Chapter/Chủ tịch nằm ở đơn vị Chapter (không ở ban), `leader.dna` role LEAD tại đơn vị DNA, thành viên DNA có DNA_MEMBER; ban dùng code chuẩn. **Bỏ** kịch bản `member.to.dna` (membership DNA lùi ngày trong khi còn là thành viên Chapter → SingleOrganizationAffiliationRequired); người này vẫn ở Chapter Checkpoint.
 - `seed-rich-progress.ts`: số bài của người DNA/LT cố định 50 → `coreLessons.length` (lỗi index khi lõi < 50 bài).
+
+## Quyết định mục 3
+- Kịch bản A tự làm trống DB đích bằng `DROP SCHEMA public CASCADE; CREATE SCHEMA public` (chỉ sau guard loopback + `bbe_test_*` + so `current_database()`), để lệnh chạy lại được. Không tạo/xóa database.
+- Kiểm tra sau mỗi kịch bản: mọi thư mục trong `prisma/migrations` đã applied, không attempt lỗi, và các bất biến tổ chức như mục 2. Output con được che URL.
 
 ## Nghi ngờ / xung đột có thể
 (chưa có)
