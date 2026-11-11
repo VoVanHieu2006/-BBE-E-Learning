@@ -6,7 +6,7 @@ Nhánh: `feat/p07-bxh-an-email`
 - [x] 1. `src/lib/fun-display-name.ts` (40 con vật × 30 tính từ = 1200; FNV-1a theo userId; kèm `publicDisplayName`, `publicRankingRow`)
 - [x] 2. Bỏ `email` khỏi payload bảng xếp hạng (`period-leaderboard.ts` hydrateRanking, `leaderboard/route.ts`, `leaderboard/chapters/[chapterId]/route.ts`, `organization/dna-leaderboard/route.ts`; `leaderboard/chapters/route.ts` không có trường người dùng)
 - [x] 3. Server luôn trả `displayName` hoàn chỉnh qua `publicDisplayName`/`publicRankingRow`
-- [ ] 4. `UnifiedLeaderboard.tsx` nhận diện bằng `userId`
+- [x] 4. `UnifiedLeaderboard.tsx` nhận diện bằng `userId` (bỏ email; bỏ nhánh `email.split('@')`, bỏ 2 khối hiển thị email, bỏ `email` khỏi interface). Giữ `email` ở modal hồ sơ (chỉ ADMIN/LEAD).
 - [ ] 5. Thống nhất tên mặc định ở màn hình khác
 - [ ] 6. Test
 - [ ] 7. `docs/api.md`

@@ -23,7 +23,6 @@ interface LeaderboardItem {
   chapterId?: string
   displayName?: string
   name?: string
-  email?: string
   chapterName?: string
   departmentName?: string
   positionName?: string
@@ -231,7 +230,7 @@ export default function UnifiedLeaderboard({
         ...item,
         rank: periodType === 'ACTUAL_TERM' ? null : item.rank,
         chapterId: item.chapterId || item.id,
-        displayName: item.displayName || item.name || (item.email ? item.email.split('@')[0] : 'Thành viên'),
+        displayName: item.displayName || item.name,
         name: item.name || item.displayName,
         score: item.score ?? null,
         stars: item.stars ?? item.totalStars ?? 0,
@@ -269,11 +268,7 @@ export default function UnifiedLeaderboard({
       )
     }
     const currentId = currentUser.id || currentUser.userId
-    const currentEmail = currentUser.email?.toLowerCase()
-    return (
-      (currentId && (item.userId === currentId || item.id === currentId)) ||
-      (currentEmail && item.email && item.email.toLowerCase() === currentEmail)
-    )
+    return Boolean(currentId && item.userId === currentId)
   }
 
   const topThree = periodType === 'ACTUAL_TERM' ? [] : items.filter(item => item.rank != null).slice(0, 3)
@@ -780,9 +775,6 @@ export default function UnifiedLeaderboard({
                                       {item.positionName}
                                     </span>
                                   )}
-                                  {item.email && currentUser && (
-                                    <p className="text-[11px] text-[#737686] group-hover:text-[#2563EB] transition-colors truncate">{item.email}</p>
-                                  )}
                                 </button>
                               ) : (
                                 <>
@@ -798,9 +790,6 @@ export default function UnifiedLeaderboard({
                                     <span className="text-[11px] text-slate-500 font-medium block truncate">
                                       {item.positionName}
                                     </span>
-                                  )}
-                                  {item.email && currentUser && group !== 'CHAPTER' && (
-                                    <p className="text-[11px] text-[#737686] truncate">{item.email}</p>
                                   )}
                                 </>
                               )}
