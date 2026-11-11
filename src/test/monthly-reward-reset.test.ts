@@ -1,6 +1,6 @@
 import { describe, it, TestContext } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { competitionMonthBounds } from '../lib/learning-cycle-rules'
 import { individualPeriodRows, hasNativeLearningEvidence, closeCompetitionTerms } from '../lib/competition-snapshots'
@@ -174,13 +174,10 @@ describe('Learning configuration route compatibility', () => {
     assert.doesNotMatch(migration, /DROP TABLE|CREATE CONSTRAINT TRIGGER/)
   })
 
-  it('legacy page redirects to learning config while keeping its existing controls', () => {
-    assert.match(read('src/app/admin/learning-policy/page.tsx'), /redirect\('\/admin\/learning-config'\)/)
-    const page = read('src/app/admin/learning-config/page.tsx')
-    assert.match(page, /Cấu hình học tập/)
-    assert.match(page, /normalizeOrganization: true/)
-    assert.match(page, /retryOutboxIds:/)
-    assert.match(page, /\/api\/v1\/admin\/learning-config/)
+  it('admin learning config pages are removed while the API contract stays for rollback', () => {
+    assert.equal(existsSync(path.join(root, 'src/app/admin/learning-config/page.tsx')), false)
+    assert.equal(existsSync(path.join(root, 'src/app/admin/learning-policy/page.tsx')), false)
+    assert.equal(existsSync(path.join(root, 'src/app/api/v1/admin/learning-config/route.ts')), true)
   })
 
   it('legacy API delegates both methods to the canonical handlers', () => {

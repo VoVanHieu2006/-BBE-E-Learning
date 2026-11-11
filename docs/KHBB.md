@@ -343,7 +343,7 @@ Danh sách này dùng để lên kế hoạch sửa code. Tài liệu này mô t
 | 10 | Thêm bài: tính hạn từ lúc thêm; khóa đã xong mở lại thành chưa xong | Code cộng vào hạn cũ (có thể vẫn quá hạn) và không mở lại khóa đã xong |
 | 11 | Bài/quiz mới có nhãn “Mới”, không chặn bài sau | Chưa có nhãn; bài chèn giữa chặn việc mở các bài kế tiếp |
 | 12 | Quiz mới thêm vào bài đã xong: bài vẫn xong, quiz có nhãn Mới | Quiz mới không hiện nhãn và hiển thị “Quiz đạt” sai |
-| 13 | Dữ liệu từ trước mô hình hạn chung chỉ để đọc lịch sử | Release1 bỏ phụ thuộc kích hoạt cũ; bảng/model `learning_policy` / `LearningPolicy` chỉ giữ để rollback. Trang Cấu hình học tập vẫn cần tại `/admin/learning-config`, không xóa; drop bảng/bỏ model chỉ khi release2 được duyệt sau (xem `operations.md`). |
+| 13 | Dữ liệu từ trước mô hình hạn chung chỉ để đọc lịch sử | Release1 bỏ phụ thuộc kích hoạt cũ; bảng/model `learning_policy` / `LearningPolicy` chỉ giữ để rollback. Trang `/admin/learning-config` và `/admin/learning-policy` đã bỏ (11/11/2026, chủ sản phẩm duyệt; gán chương trình cho khóa làm ở `/admin/courses`), API `/api/v1/admin/learning-config` và alias giữ để rollback; drop bảng/bỏ model chỉ khi release2 được duyệt sau (xem `operations.md`). |
 | 14 | “Mở khóa & Gia hạn” chỉ cho tài khoản đã bị khóa; hạn mới = hôm nay + N | Code cho gia hạn cả người chưa bị khóa và tính từ hạn hiện tại nếu còn ở tương lai |
 | 15 | Sửa khóa đã xuất bản qua bản nháp thay đổi + nút “Cập nhật khóa học” | Giao diện hạ khóa về nháp rồi xuất bản lại; luồng bản nháp có trong API nhưng giao diện không dùng và còn lỗi |
 | 16 | Hủy xuất bản khóa bắt buộc: tạm rời khỏi bộ khóa, xuất bản lại như thêm lại | Hạn vẫn chạy và người học có thể bị khóa dù không mở được khóa |

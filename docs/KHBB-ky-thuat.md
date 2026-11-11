@@ -596,7 +596,7 @@ Các lý do `MANDATORY_COURSE_ADDED`, `MANDATORY_COURSE_REMOVED` có trong enum 
 
 ### 3.12 Dữ liệu từ trước khi có hạn chung
 
-**Release1:** mô hình hạn chung luôn chạy, không có cổng kích hoạt policy. Bảng `learning_policy` và model `LearningPolicy` chỉ giữ để rollback, không còn được runtime đọc. Trang `/admin/learning-config` vẫn cần cho catalog, mapping, mùa, chuẩn hóa tổ chức và retry outbox; đường cũ chỉ là alias/redirect release1 (xem `operations.md`).
+**Release1:** mô hình hạn chung luôn chạy, không có cổng kích hoạt policy. Bảng `learning_policy` và model `LearningPolicy` chỉ giữ để rollback, không còn được runtime đọc. Trang `/admin/learning-config` và redirect `/admin/learning-policy` đã bỏ (11/11/2026); gán chương trình cho khóa làm ở `/admin/courses`; chuẩn hóa tổ chức và retry outbox chỉ còn qua API `/api/v1/admin/learning-config` (xem `operations.md`).
 
 - Assignment và lộ trình cũ giữ đường đọc lịch sử/read-only, gồm hạn riêng và `imported_due_at`; nhập tiến độ video như trước. Ghi mới dùng hạn chung từ `learning_paths` và số ngày từ `courses.mandatory_default_due_days`.
 - **Chu kỳ `LEGACY` đã tồn tại** vẫn đọc attempt có `learning_cycle_id = null` qua `currentCycleAttemptFilter`. Người chưa có chu kỳ nhận `NATIVE` bắt đầu từ `now`; **không tự nhập attempt null cũ** vào chu kỳ `NATIVE` mới. Ghi attempt mới luôn gắn chu kỳ.
