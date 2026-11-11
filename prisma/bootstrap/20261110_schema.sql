@@ -1,6 +1,5 @@
--- Baseline schema generated from the migration history at head (all migrations through 20261110).
--- Generated with pg_dump --schema-only from a database built by replaying every migration;
--- see prisma/bootstrap/README.md.
+-- Baseline schema at migration head 20261110_standardize_roles_positions, cut by scripts/db/cut-baseline.mjs.
+-- schema.prisma first, then every migration replayed statement by statement; see prisma/bootstrap/README.md.
 CREATE SCHEMA IF NOT EXISTS "public";
 
 CREATE TYPE public.assessment_type AS ENUM (
@@ -38,7 +37,7 @@ CREATE TYPE public.course_visibility AS ENUM (
 );
 
 CREATE TYPE public.invitation_role AS ENUM (
-    'CHAPTER_LEADER',
+    'LEAD',
     'DNA_LEAD',
     'MEMBER'
 );
@@ -114,7 +113,7 @@ CREATE TYPE public.star_reason AS ENUM (
 
 CREATE TYPE public.user_role AS ENUM (
     'ADMIN',
-    'CHAPTER_LEADER',
+    'LEAD',
     'MEMBER'
 );
 
@@ -175,21 +174,21 @@ BEGIN
     WHERE d.starts_at<d.ends_at AND c.starts_at<c.ends_at AND d.starts_at<c.ends_at AND c.starts_at<d.ends_at
       AND d.ends_at>at_time AND c.ends_at>at_time
   ) THEN RAISE EXCEPTION 'SingleOrganizationAffiliationRequired' USING ERRCODE='23514'; END IF;
-  IF actor_role='CHAPTER_LEADER' AND EXISTS(SELECT 1 FROM chapter_members m JOIN chapter_lead_bindings b ON b.user_id=m.user_id
+  IF actor_role='LEAD' AND EXISTS(SELECT 1 FROM chapter_members m JOIN chapter_lead_bindings b ON b.user_id=m.user_id
     WHERE m.user_id=target_user AND m.chapter_id<>b.chapter_id) THEN
     RAISE EXCEPTION 'ChapterLeadPermanentBinding' USING ERRCODE='23514';
   END IF;
   IF actor_role<>'ADMIN' AND EXISTS(
     SELECT 1 FROM position_assignments a JOIN positions p ON p.id=a.position_id
     JOIN position_assignments b ON b.user_id=a.user_id AND b.id>a.id JOIN positions q ON q.id=b.position_id
-    WHERE a.user_id=target_user AND p.code IN ('CHAPTER_LEAD','CHAPTER_MANAGER') AND q.code IN ('CHAPTER_LEAD','CHAPTER_MANAGER')
+    WHERE a.user_id=target_user AND p.code IN ('CHAPTER_LEAD') AND q.code IN ('CHAPTER_LEAD')
       AND (a.ends_at IS NULL OR a.ends_at>at_time) AND (b.ends_at IS NULL OR b.ends_at>at_time)
       AND a.starts_at<coalesce(a.ends_at,'infinity') AND b.starts_at<coalesce(b.ends_at,'infinity')
       AND a.starts_at<coalesce(b.ends_at,'infinity') AND b.starts_at<coalesce(a.ends_at,'infinity')
   ) THEN RAISE EXCEPTION 'ChapterLeadConflict' USING ERRCODE='23514'; END IF;
   IF actor_role<>'ADMIN' AND EXISTS(SELECT 1 FROM position_assignments a JOIN positions p ON p.id=a.position_id
     JOIN chapters c ON c.organization_unit_id=a.unit_id LEFT JOIN chapter_lead_bindings b ON b.user_id=a.user_id
-    WHERE a.user_id=target_user AND p.code IN ('CHAPTER_LEAD','CHAPTER_MANAGER') AND (a.ends_at IS NULL OR a.ends_at>at_time)
+    WHERE a.user_id=target_user AND p.code IN ('CHAPTER_LEAD') AND (a.ends_at IS NULL OR a.ends_at>at_time)
       AND a.starts_at<coalesce(a.ends_at,'infinity') AND c.id IS DISTINCT FROM b.chapter_id
   ) THEN RAISE EXCEPTION 'ChapterLeadPermanentBinding' USING ERRCODE='23514'; END IF;
   IF EXISTS(SELECT 1 FROM organization_memberships a JOIN organization_memberships b ON b.user_id=a.user_id AND b.unit_id=a.unit_id AND b.id>a.id
@@ -197,6 +196,40 @@ BEGIN
       AND a.starts_at<coalesce(a.ends_at,'infinity') AND b.starts_at<coalesce(b.ends_at,'infinity')
       AND a.starts_at<coalesce(b.ends_at,'infinity') AND b.starts_at<coalesce(a.ends_at,'infinity')
   ) THEN RAISE EXCEPTION 'MembershipExists' USING ERRCODE='23514'; END IF;
+
+  -- Future overlaps are checked as well: reaching a scheduled date fires no trigger.
+  IF EXISTS(SELECT 1 FROM position_assignments a JOIN position_assignments b ON b.user_id=a.user_id AND b.id>a.id
+    WHERE a.user_id=target_user AND a.starts_at<coalesce(a.ends_at,'infinity') AND b.starts_at<coalesce(b.ends_at,'infinity')
+      AND a.starts_at<coalesce(b.ends_at,'infinity') AND b.starts_at<coalesce(a.ends_at,'infinity')
+      AND coalesce(a.ends_at,'infinity')>at_time AND coalesce(b.ends_at,'infinity')>at_time)
+  THEN RAISE EXCEPTION 'SinglePositionRequired' USING ERRCODE='23514'; END IF;
+  IF EXISTS(SELECT 1 FROM organization_memberships a JOIN organization_memberships b ON b.user_id=a.user_id AND b.id>a.id
+    JOIN organization_units ua ON ua.id=a.unit_id JOIN organization_units ub ON ub.id=b.unit_id
+    WHERE a.user_id=target_user AND a.status='ACTIVE' AND b.status='ACTIVE'
+      AND ua.type IN ('DEPARTMENT','DNA_GROUP') AND ub.type IN ('DEPARTMENT','DNA_GROUP')
+      AND a.starts_at<coalesce(a.ends_at,'infinity') AND b.starts_at<coalesce(b.ends_at,'infinity')
+      AND a.starts_at<coalesce(b.ends_at,'infinity') AND b.starts_at<coalesce(a.ends_at,'infinity')
+      AND coalesce(a.ends_at,'infinity')>at_time AND coalesce(b.ends_at,'infinity')>at_time)
+  THEN RAISE EXCEPTION 'SingleDepartmentRequired' USING ERRCODE='23514'; END IF;
+  IF EXISTS(SELECT 1 FROM position_assignments a JOIN positions p ON p.id=a.position_id JOIN organization_units u ON u.id=a.unit_id
+    WHERE a.user_id=target_user AND a.starts_at<coalesce(a.ends_at,'infinity') AND coalesce(a.ends_at,'infinity')>at_time
+      AND NOT ((actor_role='LEAD' AND ((p.code='CHAPTER_LEAD' AND u.type='CHAPTER') OR (p.code='DNA_LEAD' AND u.type='DNA')))
+        OR (actor_role='MEMBER' AND ((p.code='PRESIDENT' AND u.type='CHAPTER') OR (p.code IN ('DEPARTMENT_LEAD','DEPARTMENT_MEMBER') AND u.type='DEPARTMENT') OR (p.code='DNA_MEMBER' AND u.type='DNA_GROUP')))))
+  THEN RAISE EXCEPTION 'PositionRoleMismatch' USING ERRCODE='23514'; END IF;
+  IF EXISTS(SELECT 1 FROM position_assignments a JOIN positions p ON p.id=a.position_id
+    JOIN organization_memberships m ON m.user_id=a.user_id JOIN organization_units u ON u.id=m.unit_id
+    WHERE a.user_id=target_user AND m.status='ACTIVE' AND u.type IN ('DEPARTMENT','DNA_GROUP') AND a.unit_id<>m.unit_id
+      AND a.starts_at<coalesce(a.ends_at,'infinity') AND m.starts_at<coalesce(m.ends_at,'infinity')
+      AND a.starts_at<coalesce(m.ends_at,'infinity') AND m.starts_at<coalesce(a.ends_at,'infinity')
+      AND coalesce(a.ends_at,'infinity')>at_time AND coalesce(m.ends_at,'infinity')>at_time)
+  THEN RAISE EXCEPTION 'PositionMembershipMismatch' USING ERRCODE='23514'; END IF;
+  IF EXISTS(SELECT 1 FROM position_assignments a JOIN positions p ON p.id=a.position_id
+    JOIN position_assignments b ON b.unit_id=a.unit_id AND b.id<>a.id JOIN positions q ON q.id=b.position_id
+    WHERE a.user_id=target_user AND p.code='PRESIDENT' AND q.code='PRESIDENT'
+      AND a.starts_at<coalesce(a.ends_at,'infinity') AND b.starts_at<coalesce(b.ends_at,'infinity')
+      AND a.starts_at<coalesce(b.ends_at,'infinity') AND b.starts_at<coalesce(a.ends_at,'infinity')
+      AND coalesce(a.ends_at,'infinity')>at_time AND coalesce(b.ends_at,'infinity')>at_time)
+  THEN RAISE EXCEPTION 'ChapterPresidentConflict' USING ERRCODE='23514'; END IF;
 END $$;
 
 CREATE FUNCTION public.enforce_organization_definition_integrity() RETURNS trigger
@@ -253,6 +286,14 @@ CREATE FUNCTION public.normalize_organization_email() RETURNS trigger
     AS $$
 BEGIN NEW.email := lower(btrim(NEW.email)); RETURN NEW; END $$;
 
+CREATE FUNCTION public.prevent_member_lead_promotion() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF OLD.role='MEMBER' AND NEW.role='LEAD' THEN RAISE EXCEPTION 'LeadInvitationRequiresNewAccount' USING ERRCODE='23514'; END IF;
+ RETURN NEW;
+END $$;
+
 CREATE FUNCTION public.record_learning_account_state() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
@@ -303,7 +344,7 @@ BEGIN
   IF TG_TABLE_NAME='position_assignments' AND TG_OP<>'DELETE' THEN
     SELECT p.code INTO code FROM positions p WHERE p.id=NEW.position_id;
     SELECT role::text INTO actor_role FROM users WHERE id=NEW.user_id;
-    IF code IN ('CHAPTER_LEAD','CHAPTER_MANAGER') AND actor_role<>'ADMIN' THEN
+    IF code IN ('CHAPTER_LEAD') AND actor_role<>'ADMIN' THEN
       SELECT id INTO lead_chapter FROM chapters WHERE organization_unit_id=NEW.unit_id;
       IF lead_chapter IS NULL THEN RAISE EXCEPTION 'ChapterLeadScopeInvalid' USING ERRCODE='23514'; END IF;
       INSERT INTO chapter_lead_bindings(user_id,chapter_id) VALUES(NEW.user_id,lead_chapter) ON CONFLICT(user_id) DO NOTHING;
@@ -900,7 +941,8 @@ CREATE TABLE public.transfer_seasons (
     code character varying(100) NOT NULL,
     starts_at timestamp(3) with time zone NOT NULL,
     ends_at timestamp(3) with time zone NOT NULL,
-    reward_boundary_at timestamp(3) with time zone
+    reward_boundary_at timestamp(3) with time zone,
+    CONSTRAINT reward_boundary_is_vietnam_half_year CHECK (((reward_boundary_at IS NULL) OR ((EXTRACT(month FROM (reward_boundary_at AT TIME ZONE 'Asia/Ho_Chi_Minh'::text)) = ANY (ARRAY[(4)::numeric, (10)::numeric])) AND (EXTRACT(day FROM (reward_boundary_at AT TIME ZONE 'Asia/Ho_Chi_Minh'::text)) = (1)::numeric) AND (((reward_boundary_at AT TIME ZONE 'Asia/Ho_Chi_Minh'::text))::time without time zone = '00:00:00'::time without time zone) AND (starts_at <= reward_boundary_at) AND (reward_boundary_at < ends_at))))
 );
 
 CREATE TABLE public.user_learning_assignments (
@@ -1255,6 +1297,8 @@ CREATE INDEX final_exam_versions_assessment_id_is_active_idx ON public.final_exa
 
 CREATE UNIQUE INDEX final_exam_versions_assessment_id_version_number_key ON public.final_exam_versions USING btree (assessment_id, version_number);
 
+CREATE UNIQUE INDEX final_exam_versions_one_active_per_assessment ON public.final_exam_versions USING btree (assessment_id) WHERE is_active;
+
 CREATE INDEX invitations_email_idx ON public.invitations USING btree (email);
 
 CREATE INDEX invitations_email_status_idx ON public.invitations USING btree (email, status);
@@ -1464,6 +1508,8 @@ CREATE TRIGGER learning_account_state AFTER INSERT OR UPDATE ON public.users FOR
 CREATE TRIGGER learning_chapter_affiliation AFTER INSERT OR DELETE OR UPDATE ON public.chapter_members FOR EACH ROW EXECUTE FUNCTION public.record_learning_chapter_affiliation();
 
 CREATE TRIGGER learning_course_publication AFTER INSERT OR UPDATE ON public.courses FOR EACH ROW EXECUTE FUNCTION public.record_learning_course_publication();
+
+CREATE TRIGGER no_member_lead_promotion BEFORE UPDATE OF role ON public.users FOR EACH ROW EXECUTE FUNCTION public.prevent_member_lead_promotion();
 
 CREATE TRIGGER organization_email BEFORE INSERT OR UPDATE OF email ON public.users FOR EACH ROW EXECUTE FUNCTION public.normalize_organization_email();
 
@@ -1705,5 +1751,3 @@ ALTER TABLE ONLY public.user_learning_assignments
 
 ALTER TABLE ONLY public.videos
     ADD CONSTRAINT videos_lesson_id_fkey FOREIGN KEY (lesson_id) REFERENCES public.lessons(id) ON UPDATE CASCADE ON DELETE CASCADE;
-
-
