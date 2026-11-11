@@ -10,7 +10,7 @@ import { ensureChapterStandardDepartments } from './chapter-departments'
 /** President is a Chapter position; seven departments remain independent units. */
 export async function updateChapterDepartment(input: { chapterId: string; userId: string; departmentUnitId: string | null; makeLead: boolean; actorId: string }) {
   const result = await prisma.$transaction(async (tx) => {
-    if (!input.departmentUnitId) throw new OrganizationConflict('MemberPositionRequired', 'Vui lòng chọn chức vụ và ban mới; đổi chức vụ là thay thế.')
+    // Clearing the department is allowed: the member stays in the Chapter with no department position (KHBB 2.3).
     // President replacement and transfers must acquire this scope before user locks.
     await tx.$queryRaw`SELECT id FROM chapters WHERE id = ${input.chapterId}::uuid FOR UPDATE`
     const now = await lockLearningUser(tx, input.userId)
