@@ -1,5 +1,5 @@
 import { Prisma } from '@prisma/client'
-import { lockLearningUser } from './learning-periods'
+import { lockLearningUser, enqueueAssignmentSync } from './learning-periods'
 import { assertLeadAppointment, OrganizationConflict } from './chapter-lead'
 import { canHoldPosition } from './roles'
 import { prepareOrganizationTransition } from './organization-transition'
@@ -14,16 +14,33 @@ export async function replaceUserPosition(tx: Prisma.TransactionClient, input: {
   userId: string; unitId: string; positionId: string; actorId?: string
   startsAt?: Date; endsAt?: Date | null; isPrimary?: boolean
 }) {
-  const now = await lockLearningUser(tx, input.userId)
-  const at = input.startsAt && input.startsAt > now ? input.startsAt : now
-  const user = await tx.user.findUniqueOrThrow({ where: { id: input.userId }, select: { role: true } })
   const position = await tx.position.findUniqueOrThrow({ where: { id: input.positionId } })
   const unit = await tx.organizationUnit.findUniqueOrThrow({ where: { id: input.unitId } })
+  // Match transfer lock order: Chapter before any of its users. In particular,
+  // reappointing the incumbent must not hold that user while waiting on Chapter.
+  if (position.code === 'PRESIDENT') await tx.$queryRaw`SELECT id FROM chapters WHERE organization_unit_id = ${unit.id}::uuid FOR UPDATE`
+  const now = await lockLearningUser(tx, input.userId)
+  if (input.startsAt && input.startsAt > now) throw new OrganizationConflict('FutureAppointmentNotAllowed', 'Bổ nhiệm chỉ có hiệu lực ngay; không hỗ trợ lên lịch tương lai.')
+  const at = now
+  const user = await tx.user.findUniqueOrThrow({ where: { id: input.userId }, select: { role: true } })
   if (!canHoldPosition(user.role, position.code)) throw new OrganizationConflict('PositionRoleMismatch', 'Chức vụ không phù hợp vai trò; không đổi MEMBER thành LEAD.')
   const expectedType = position.code === 'DNA_MEMBER' ? 'DNA_GROUP' : position.scope
   if (unit.type !== expectedType || unit.status !== 'ACTIVE') throw new OrganizationConflict('PositionScopeMismatch', 'Chức vụ không phù hợp đơn vị đang hoạt động.')
   if (input.endsAt && input.endsAt <= at) throw new OrganizationConflict('InvalidPositionDates', 'Ngày kết thúc phải sau ngày bắt đầu.')
-  if (at === now) await prepareOrganizationTransition(tx, input.userId, input.unitId, input.actorId)
+  await prepareOrganizationTransition(tx, input.userId, input.unitId, input.actorId)
+
+  if (position.code === 'PRESIDENT') {
+    const incumbents = await tx.positionAssignment.findMany({
+      where: { unit_id: unit.id, user_id: { not: input.userId }, position: { code: 'PRESIDENT' }, OR: [{ ends_at: null }, { ends_at: { gt: at } }] },
+      select: { id: true, user_id: true, starts_at: true }, orderBy: { user_id: 'asc' },
+    })
+    for (const userId of Array.from(new Set(incumbents.map(row => row.user_id)))) {
+      await lockLearningUser(tx, userId)
+      for (const row of incumbents.filter(row => row.user_id === userId)) await tx.positionAssignment.update({ where: { id: row.id }, data: { ends_at: replacementEnd(row.starts_at, at) } })
+      await tx.user.update({ where: { id: userId }, data: { auth_version: { increment: 1 } } })
+      await enqueueAssignmentSync(tx, userId, `president-replaced:${unit.id}:${userId}:${now.toISOString()}`)
+    }
+  }
 
   const previous = await tx.positionAssignment.findMany({ where: { user_id: input.userId, OR: [{ ends_at: null }, { ends_at: { gt: at } }] }, select: { id: true, starts_at: true } })
   for (const row of previous) await tx.positionAssignment.update({ where: { id: row.id }, data: { ends_at: replacementEnd(row.starts_at, at) } })
@@ -37,9 +54,8 @@ export async function replaceUserPosition(tx: Prisma.TransactionClient, input: {
     parentId = (await tx.organizationUnit.findUnique({ where: { id: parentId }, select: { parent_id: true } }))?.parent_id || null
   }
   const memberships = await tx.organizationMembership.findMany({ where: { user_id: input.userId, status: 'ACTIVE', OR: [{ ends_at: null }, { ends_at: { gt: at } }] }, select: { id: true, unit_id: true, starts_at: true, ends_at: true } })
-  for (const row of memberships.filter(row => !allowed.has(row.unit_id))) {
-    // Future replacements retain ACTIVE until their effective end; time predicates determine validity.
-    await tx.organizationMembership.update({ where: { id: row.id }, data: { ends_at: replacementEnd(row.starts_at, at), ...(at === now ? { status: 'ENDED' as const } : {}) } })
+  for (const row of memberships.filter(row => !allowed.has(row.unit_id) || row.starts_at > at)) {
+    await tx.organizationMembership.update({ where: { id: row.id }, data: { ends_at: replacementEnd(row.starts_at, at), status: 'ENDED' } })
   }
   if (!memberships.some(row => row.unit_id === unit.id && row.starts_at <= at)) {
     await tx.organizationMembership.create({ data: { user_id: input.userId, unit_id: unit.id, starts_at: at, ends_at: input.endsAt || null } })

@@ -37,4 +37,12 @@ describe('20261110_standardize_roles_positions migration (static checks)', () =>
     assert.match(sql, /prevent_member_lead_promotion/)
     assert.match(sql, /OLD\.role='MEMBER' AND NEW\.role='LEAD'/)
   })
+
+  it('closes duplicate active scopes before merging position IDs', () => {
+    const close = sql.indexOf('WITH merging_rules AS')
+    const merge = sql.indexOf('UPDATE learning_rules SET position_id=new_id')
+    assert.ok(close >= 0 && close < merge)
+    assert.match(sql, /PARTITION BY course_id,organization_unit_id/)
+    assert.match(sql, /SET effective_until=CURRENT_TIMESTAMP/)
+  })
 })

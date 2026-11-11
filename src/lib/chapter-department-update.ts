@@ -11,6 +11,8 @@ import { ensureChapterStandardDepartments } from './chapter-departments'
 export async function updateChapterDepartment(input: { chapterId: string; userId: string; departmentUnitId: string | null; makeLead: boolean; actorId: string }) {
   const result = await prisma.$transaction(async (tx) => {
     if (!input.departmentUnitId) throw new OrganizationConflict('MemberPositionRequired', 'Vui lòng chọn chức vụ và ban mới; đổi chức vụ là thay thế.')
+    // President replacement and transfers must acquire this scope before user locks.
+    await tx.$queryRaw`SELECT id FROM chapters WHERE id = ${input.chapterId}::uuid FOR UPDATE`
     const now = await lockLearningUser(tx, input.userId)
     if (await hasActiveDnaAffiliation(input.userId, tx)) throw new OrganizationConflict('DnaMembershipConflict', 'Thành viên đang thuộc DNA; không thể thêm lại vào Ban của Chapter.')
     const member = await tx.chapterMember.findUnique({ where: { user_id: input.userId } })

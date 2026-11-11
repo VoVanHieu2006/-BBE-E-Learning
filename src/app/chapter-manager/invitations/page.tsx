@@ -33,6 +33,7 @@ export default function ChapterManagerInvitationsPage() {
   const [inviteEmail, setInviteEmail] = useState('');
   const [departmentUnitId, setDepartmentUnitId] = useState('');
   const [departments, setDepartments] = useState<Array<{ id: string; name: string }>>([]);
+  const [departmentsError, setDepartmentsError] = useState('');
   const [inviteMode, setInviteMode] = useState<'single' | 'bulk'>('single');
   const [bulkText, setBulkText] = useState('');
   const [bulkResults, setBulkResults] = useState<BulkInviteResultItem[] | null>(null);
@@ -55,7 +56,8 @@ export default function ChapterManagerInvitationsPage() {
           loadInvitations(parsed.chapterId);
           apiFetch('/api/v1/organization/managed-units', { noCache: true }).then((res) => {
             if (res.ok) setDepartments((res.data?.items || []).filter((unit: any) => unit.type === 'DEPARTMENT' && unit.chapterId === parsed.chapterId && unit.canManageMembers));
-          });
+            else setDepartmentsError(res.error?.message || 'Không tải được danh sách ban. Vui lòng tải lại trang.');
+          }).catch(() => setDepartmentsError('Không tải được danh sách ban. Vui lòng tải lại trang.'));
         } catch {}
       }
     }
@@ -122,6 +124,7 @@ export default function ChapterManagerInvitationsPage() {
 
   async function handleBulkInvite(e: React.FormEvent) {
     e.preventDefault();
+    if (!departmentUnitId) { showToast('error', 'Vui lòng chọn ban cho thành viên.'); return; }
     if (!bulkPreview.valid.length) {
       showToast('error', 'Danh sách chưa có email hợp lệ nào.');
       return;
@@ -135,7 +138,7 @@ export default function ChapterManagerInvitationsPage() {
     try {
       const res = await apiFetch('/api/v1/invitations/member/bulk', {
         method: 'POST',
-        body: JSON.stringify({ emails: bulkText, chapterId: user?.chapterId }),
+        body: JSON.stringify({ emails: bulkText, organizationUnitId: departmentUnitId }),
       });
       if (res.ok && res.data?.results) {
         setBulkResults(res.data.results);
@@ -351,6 +354,7 @@ export default function ChapterManagerInvitationsPage() {
               <option value="">Chọn ban</option>
               {departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
             </select>
+            {departmentsError ? <p role="alert" className="text-sm text-red-700">{departmentsError}</p> : !departments.length && <p className="text-sm text-[#434655]">Chưa có ban có quyền mời thành viên. Vui lòng liên hệ quản trị viên nếu danh sách không tải được.</p>}
             <div className="flex gap-2" role="tablist" aria-label="Cách mời">
               {([
                 { key: 'single', label: 'Một email' },
@@ -414,7 +418,7 @@ export default function ChapterManagerInvitationsPage() {
                 <Button variant="outline" type="button" disabled={sending} onClick={() => setShowInviteModal(false)}>
                   {bulkResults ? 'Đóng' : 'Hủy'}
                 </Button>
-                <Button type="submit" loading={sending} loadingText="Đang gửi..." disabled={!bulkPreview.valid.length || bulkTotal > BULK_INVITE_MAX_EMAILS}>
+                <Button type="submit" loading={sending} loadingText="Đang gửi..." disabled={!departmentUnitId || !bulkPreview.valid.length || bulkTotal > BULK_INVITE_MAX_EMAILS}>
                   Gửi {bulkPreview.valid.length || ''} lời mời
                 </Button>
               </div>
@@ -441,7 +445,7 @@ export default function ChapterManagerInvitationsPage() {
                 >
                   Hủy
                 </Button>
-                <Button type="submit" loading={sending} loadingText="Đang gửi...">
+                <Button type="submit" loading={sending} loadingText="Đang gửi..." disabled={!departmentUnitId}>
                   Gửi lời mời
                 </Button>
               </div>

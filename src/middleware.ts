@@ -15,6 +15,7 @@ export async function middleware(request: NextRequest) {
   let role: string | null = null
   let isAuthenticated = false
   let newlyIssuedAccessToken: string | null = null
+  let sessionRejected = false
 
   // 1. Check access token
   if (token && JWT_ACCESS_SECRET) {
@@ -32,6 +33,21 @@ export async function middleware(request: NextRequest) {
     }
   }
 
+  // A valid signature does not prove the account's auth_version is still current.
+  // Check on login before redirecting, so a revoked session can sign in again.
+  if (pathname === '/login' && isAuthenticated && token) {
+    try {
+      const response = await fetch(new URL('/api/v1/auth/me', request.url), {
+        headers: { Authorization: `Bearer ${token}` }, cache: 'no-store',
+      })
+      if (!response.ok) {
+        isAuthenticated = false
+        role = null
+        sessionRejected = response.status === 401 || response.status === 403
+      }
+    } catch { isAuthenticated = false; role = null }
+  }
+
   // Refresh through the server so revocation and auth_version are checked against the DB.
   if (!isAuthenticated && refreshTokenCookie && JWT_ACCESS_SECRET) {
     try {
@@ -47,13 +63,19 @@ export async function middleware(request: NextRequest) {
           role = payload.role as string
           managerKind = (payload.managerKind as string) || null
           isAuthenticated = true
+          sessionRejected = false
         }
+      } else if (response.status === 401 || response.status === 403) {
+        sessionRejected = true
       }
     } catch { isAuthenticated = false; role = null }
   }
 
   // Helper to attach renewed cookies to outgoing responses
   const withCookies = (res: NextResponse): NextResponse => {
+    if (sessionRejected) {
+      for (const name of ['accessToken', 'refreshToken', 'userRole']) res.cookies.delete(name)
+    }
     if (newlyIssuedAccessToken) {
       res.cookies.set('accessToken', newlyIssuedAccessToken, {
         path: '/',
@@ -160,7 +182,7 @@ export async function middleware(request: NextRequest) {
       return withCookies(NextResponse.redirect(new URL('/student/dashboard', request.url)))
     }
 
-    return NextResponse.next()
+    return withCookies(NextResponse.next())
   }
 
   // 5. IMP-02: Redirect legacy /invitations/accept → /accept-invitation (canonical URL)

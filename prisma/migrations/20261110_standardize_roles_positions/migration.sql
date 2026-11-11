@@ -150,6 +150,17 @@ BEGIN
       INSERT INTO position_permissions(position_id,permission_id)
         SELECT new_id,permission_id FROM position_permissions WHERE position_id=old_id ON CONFLICT DO NOTHING;
       UPDATE position_assignments SET position_id=new_id WHERE position_id=old_id;
+      -- Preserve every rule, preferring the canonical position on an active-scope collision.
+      -- The partial unique index covers course/unit/position (NULL unit is one scope).
+      WITH merging_rules AS (
+        SELECT id,row_number() OVER (
+          PARTITION BY course_id,organization_unit_id
+          ORDER BY (position_id=new_id) DESC,effective_from DESC,created_at DESC,id
+        ) AS rank
+        FROM learning_rules WHERE position_id IN (old_id,new_id) AND effective_until IS NULL
+      )
+      UPDATE learning_rules r SET effective_until=CURRENT_TIMESTAMP
+      FROM merging_rules m WHERE r.id=m.id AND m.rank>1;
       UPDATE learning_rules SET position_id=new_id WHERE position_id=old_id;
       UPDATE chapter_reorganization_items SET position_id=new_id WHERE position_id=old_id;
       DELETE FROM position_permissions WHERE position_id=old_id;

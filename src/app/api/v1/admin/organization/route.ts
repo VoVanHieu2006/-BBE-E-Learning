@@ -317,7 +317,7 @@ async function mutateOrganization(request: NextRequest) {
     if (!body.userId || !body.unitId) return NextResponse.json({ error: { code: 'ValidationError' } }, { status: 400 })
     const startsAt = body.startsAt ? new Date(body.startsAt) : new Date()
     if (Number.isNaN(startsAt.getTime())) return NextResponse.json({ error: { code: 'ValidationError', message: 'Ngày bắt đầu không hợp lệ.' } }, { status: 400 })
-    if (startsAt > new Date()) return NextResponse.json({ error: { code: 'ValidationError', message: 'Membership đơn vị chỉ bắt đầu ngay hoặc trong quá khứ; chức vụ có thể được lên lịch trước.' } }, { status: 400 })
+    if (startsAt > new Date()) return NextResponse.json({ error: { code: 'FutureAppointmentNotAllowed', message: 'Thay đổi ban chỉ có hiệu lực ngay; không hỗ trợ lên lịch tương lai.' } }, { status: 400 })
     const [user, unit] = await Promise.all([
       prisma.user.findUnique({ where: { id: body.userId }, select: { id: true, role: true } }),
       prisma.organizationUnit.findUnique({ where: { id: body.unitId }, select: { id: true, type: true, parent_id: true, chapter: { select: { id: true } } } }),
@@ -399,6 +399,7 @@ async function mutateOrganization(request: NextRequest) {
     const startsAt = body.startsAt ? new Date(body.startsAt) : new Date()
     const endsAt = body.endsAt ? new Date(body.endsAt) : null
     if (Number.isNaN(startsAt.getTime()) || (endsAt && Number.isNaN(endsAt.getTime())) || (endsAt && endsAt <= startsAt)) return NextResponse.json({ error: { code: 'ValidationError' } }, { status: 400 })
+    if (startsAt > new Date()) return NextResponse.json({ error: { code: 'FutureAppointmentNotAllowed', message: 'Bổ nhiệm chỉ có hiệu lực ngay; không hỗ trợ lên lịch tương lai.' } }, { status: 400 })
     const [user, position, unit] = await Promise.all([
       prisma.user.findUnique({ where: { id: body.userId }, select: { id: true, role: true } }),
       prisma.position.findUnique({ where: { id: body.positionId }, select: { id: true, scope: true, code: true } }),
@@ -417,10 +418,6 @@ async function mutateOrganization(request: NextRequest) {
       const targetChapterId = await getChapterIdForUnit(unit.id)
       const currentChapter = await prisma.chapterMember.findUnique({ where: { user_id: user.id } })
       if (!targetChapterId || currentChapter?.chapter_id !== targetChapterId) return NextResponse.json({ error: { code: 'OrganizationMembershipRequired', message: 'Hãy chuyển tư cách tổ chức trước khi bổ nhiệm chức vụ Chapter/Ban.' } }, { status: 409 })
-    }
-    if (['DNA', 'DNA_GROUP'].includes(unit.type) && startsAt > new Date()) {
-      const dnaMembership = await prisma.organizationMembership.count({ where: { user_id: user.id, status: 'ACTIVE', starts_at: { lte: new Date() }, ends_at: null, unit: { type: { in: ['DNA', 'DNA_GROUP'] } } } })
-      if (!dnaMembership) return NextResponse.json({ error: { code: 'ImmediateOrganizationTransferRequired', message: 'Hãy chuyển tư cách sang DNA tại thời điểm bổ nhiệm có hiệu lực.' } }, { status: 409 })
     }
     const isPrimary = Boolean(body.isPrimary)
     const assignment = await prisma.$transaction(async (tx) => {

@@ -24,6 +24,9 @@ export default function ChapterManagerMembersPage() {
   const [mounted, setMounted] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
+  const [departmentUnitId, setDepartmentUnitId] = useState('');
+  const [departments, setDepartments] = useState<Array<{ id: string; name: string }>>([]);
+  const [departmentsError, setDepartmentsError] = useState('');
   const [sendingInvite, setSendingInvite] = useState(false);
   const [actionUserId, setActionUserId] = useState<string | null>(null);
   const [confirmToggle, setConfirmToggle] = useState<{
@@ -69,6 +72,10 @@ export default function ChapterManagerMembersPage() {
           const parsed = JSON.parse(u);
           setUser(parsed);
           currentChapter = parsed?.chapterId || 'me';
+          apiFetch('/api/v1/organization/managed-units', { noCache: true }).then((res) => {
+            if (res.ok) setDepartments((res.data?.items || []).filter((unit: any) => unit.type === 'DEPARTMENT' && unit.chapterId === parsed.chapterId && unit.canManageMembers));
+            else setDepartmentsError(res.error?.message || 'Không tải được danh sách ban. Vui lòng tải lại trang.');
+          }).catch(() => setDepartmentsError('Không tải được danh sách ban. Vui lòng tải lại trang.'));
         } catch {}
       }
 
@@ -159,6 +166,7 @@ export default function ChapterManagerMembersPage() {
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inviteEmail.trim()) return;
+    if (!departmentUnitId) { showToast('error', 'Vui lòng chọn ban cho thành viên.'); return; }
 
     setSendingInvite(true);
     clearApiCache('/api/v1/chapters');
@@ -166,7 +174,7 @@ export default function ChapterManagerMembersPage() {
 
     const res = await apiFetch('/api/v1/invitations/member', {
       method: 'POST',
-      body: JSON.stringify({ email: inviteEmail.trim(), chapterId: user?.chapterId }),
+      body: JSON.stringify({ email: inviteEmail.trim(), organizationUnitId: departmentUnitId }),
     });
 
     if (res.ok) {
@@ -609,6 +617,14 @@ export default function ChapterManagerMembersPage() {
             </p>
             <form onSubmit={handleInvite} className="space-y-4">
               <div>
+                <label htmlFor="member-invite-department" className="block text-sm font-semibold text-[#172554] mb-1">Ban của thành viên *</label>
+                <select id="member-invite-department" required value={departmentUnitId} onChange={(event) => setDepartmentUnitId(event.target.value)} disabled={sendingInvite} className="w-full px-4 py-2.5 border border-[#cbdbf5] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]">
+                  <option value="">Chọn ban</option>
+                  {departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
+                </select>
+                {departmentsError ? <p role="alert" className="text-sm text-red-700">{departmentsError}</p> : !departments.length && <p className="text-sm text-[#434655]">Chưa có ban có quyền mời thành viên. Vui lòng liên hệ quản trị viên nếu danh sách không tải được.</p>}
+              </div>
+              <div>
                 <label className="block text-sm font-semibold text-[#172554] mb-1">Email học viên *</label>
                 <input
                   type="email"
@@ -628,7 +644,7 @@ export default function ChapterManagerMembersPage() {
                 >
                   Hủy
                 </Button>
-                <Button type="submit" loading={sendingInvite} loadingText="Đang gửi...">
+                <Button type="submit" loading={sendingInvite} loadingText="Đang gửi..." disabled={!departmentUnitId}>
                   Gửi lời mời
                 </Button>
               </div>

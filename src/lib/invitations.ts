@@ -549,7 +549,13 @@ export async function getInvitations(params: {
 
   // If chapterId is specified (Admin querying specific chapter, or BĐHU with their chapter)
   if (chapterId) {
-    where.chapter_id = chapterId
+    where.OR = [
+      { chapter_id: chapterId, organization_unit_id: null },
+      { organization_unit: { OR: [
+        { chapter: { id: chapterId } },
+        { type: 'DEPARTMENT', parent: { chapter: { id: chapterId } } },
+      ] } },
+    ]
   }
   if (organizationUnitId) {
     where.organization_unit_id = organizationUnitId

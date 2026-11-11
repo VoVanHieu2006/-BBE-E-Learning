@@ -4,6 +4,7 @@ import { captureChapterActualTerm } from './chapter-actual-terms'
 import { learningContext, lockLearningUser, enqueueAssignmentSync } from './learning-periods'
 import { windowOf } from './transfer-windows'
 import { resolveSeasonForWindow } from './transfer-season-lookup'
+import { replaceChapterPlacements } from './chapter-placement-replacement'
 
 /** Applies scheduled Chapter department/LT changes atomically, then rebuilds learning paths. */
 export async function applyDueChapterReorganizations(now = new Date(), batchId?: string, applyNow = false): Promise<number> {
@@ -92,7 +93,7 @@ export async function applyDueChapterReorganizations(now = new Date(), batchId?:
       })
       const deptUnitIds = deptUnits.map((u) => u.id)
       if (fresh.items.some((item) => item.department_unit_id && !deptUnitIds.includes(item.department_unit_id))) throw new Error('TransferDepartmentScopeChanged')
-      const presidentItems = fresh.items.filter((item) => !item.department_unit_id)
+      const presidentItems = fresh.items.filter((item) => !item.department_unit_id && item.position_id)
       const scopedPositions = await tx.position.findMany({ where: { id: { in: fresh.items.flatMap((item) => item.position_id ? [item.position_id] : []) } }, select: { id: true, scope: true, code: true } })
       if (fresh.items.some((item) => item.position_id && !scopedPositions.some((position) => position.id === item.position_id && (item.department_unit_id ? position.scope === 'DEPARTMENT' : position.code === 'PRESIDENT')))) throw new Error('TransferPositionScopeChanged')
       if (presidentItems.length > 1) throw new Error('MultipleChapterPresidents')
@@ -113,21 +114,7 @@ export async function applyDueChapterReorganizations(now = new Date(), batchId?:
 
       // Kết thúc toàn bộ ban và chức vụ cũ trong các Ban của Chapter
       // Thành viên không có tên trong sheet chuyển giao sẽ mất ban và chuyển về chưa phân ban
-      if (deptUnitIds.length) {
-        await tx.organizationMembership.updateMany({
-          where: { unit_id: { in: deptUnitIds }, status: 'ACTIVE', ends_at: null },
-          data: { status: 'ENDED', ends_at: now },
-        })
-        await tx.positionAssignment.updateMany({
-          where: { unit_id: { in: deptUnitIds }, ends_at: null },
-          data: { ends_at: now },
-        })
-      }
-      await tx.positionAssignment.updateMany({ where: { unit_id: chapter.organization_unit_id, position: { code: 'PRESIDENT' }, ends_at: null }, data: { ends_at: now } })
-      const departmentItems = fresh.items.filter((item) => item.department_unit_id)
-      if (departmentItems.length) await tx.organizationMembership.createMany({ data: departmentItems.map((item) => ({ user_id: item.user_id, unit_id: item.department_unit_id!, starts_at: now })) })
-      const memberPosition = await tx.position.upsert({ where: { code: 'DEPARTMENT_MEMBER' }, update: {}, create: { code: 'DEPARTMENT_MEMBER', name: 'Thành viên ban', scope: 'DEPARTMENT' } })
-      await tx.positionAssignment.createMany({ data: fresh.items.map((item) => ({ user_id: item.user_id, unit_id: item.department_unit_id || chapter.organization_unit_id!, position_id: item.position_id || memberPosition.id, is_primary: item.is_primary, starts_at: now, appointed_by: batch.created_by_user_id })) })
+      await replaceChapterPlacements(tx, chapter.organization_unit_id, deptUnitIds, fresh.items, now, batch.created_by_user_id)
       return true
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 30_000 })
     if (result) applied++

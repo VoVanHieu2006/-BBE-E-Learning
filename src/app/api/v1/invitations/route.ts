@@ -3,7 +3,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { getInvitations } from '@/lib/invitations'
 import { getInvitationsServerCache, setInvitationsServerCache } from '@/lib/server-cache'
-import { canAccessChapterPermission, canAccessOrganizationUnitPermission } from '@/lib/authorization'
+import { canAccessChapterPermission } from '@/lib/authorization'
+import { canManageInvitationUnit } from '@/lib/invitation-management'
 import { isOrganizationId } from '@/lib/organization-admin-rules'
 
 const INVITATIONS_CACHE_TTL = 10000
@@ -33,7 +34,7 @@ export async function GET(request: NextRequest) {
   let effectiveOrganizationUnitId = requestedOrganizationUnitId
   if (effectiveOrganizationUnitId) {
     if (!isOrganizationId(effectiveOrganizationUnitId)) return NextResponse.json({ error: { code: 'ValidationError' } }, { status: 400 })
-    if ((auth as any).context!.role !== 'ADMIN' && !await canAccessOrganizationUnitPermission(auth.context!, effectiveOrganizationUnitId, 'MANAGE_CHAPTER_MEMBERS')) {
+    if (!await canManageInvitationUnit(auth.context!, effectiveOrganizationUnitId)) {
       return NextResponse.json({ error: { code: 'AccessDenied' } }, { status: 403 })
     }
   }

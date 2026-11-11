@@ -63,12 +63,14 @@ Bảy ban: **BTV** (Thành Viên), **BTK** (Thư Ký), **BND** (Nội Dung), **B
 
 ### 2.3 Quy tắc “một người, một chức vụ”
 
-Tại một thời điểm, một người chỉ có **đúng một** chức vụ:
+Tại một thời điểm, một người có **tối đa một** chức vụ. **Thành viên Chapter không ban** là trạng thái hợp lệ: vẫn thuộc Chapter nhưng không có chức vụ ban, không có nhóm học theo ban và không bị gán khóa bắt buộc theo ban. Khi bổ nhiệm PRESIDENT mới, PRESIDENT cũ kết thúc chức vụ và trở thành thành viên Chapter không ban; mỗi Chapter chỉ có một PRESIDENT.
 
 - Không thể vừa là thành viên ban BND vừa là thành viên ban BTV.
 - Không thể vừa ở Chapter vừa ở DNA.
 
 Đổi chức vụ là **thay thế**, không cộng dồn. Ví dụ hợp lệ:
+
+Bổ nhiệm/đổi ban qua API luôn có hiệu lực ngay, không lên lịch cho tương lai. Chuyển giao nhiệm kỳ thay thế toàn bộ bố trí theo danh sách chuyển giao, kết thúc cả các hàng còn hiệu lực lẫn hàng có ngày bắt đầu/kết thúc tương lai.
 
 | Từ | Sang |
 |---|---|
@@ -80,7 +82,7 @@ Tại một thời điểm, một người chỉ có **đúng một** chức v�
 
 ## 3. Mười tám nhóm học
 
-Hệ thống chia người học thành **18 nhóm học**. Tên nhóm = tên chức vụ + ban/nhóm. Mỗi người thuộc đúng **một** nhóm (vì chỉ có một chức vụ).
+Hệ thống chia người học thành **18 nhóm học**. Tên nhóm = tên chức vụ + ban/nhóm. Mỗi người thuộc tối đa **một** nhóm; thành viên Chapter không ban không thuộc nhóm nào.
 
 | # | Nhóm | Ai thuộc nhóm này |
 |---|---|---|

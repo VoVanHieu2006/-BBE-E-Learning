@@ -5,6 +5,14 @@ const ts = file => ['-r', 'ts-node/register', '-r', './scripts/test/alias-hook.c
 // Explicit lists: never discover and execute arbitrary scripts against a database.
 const suites = {
   unit: [
+    ts('src/test/chapter-placement-replacement.test.ts'),
+    ts('src/test/materialize-learning-rule.test.ts'),
+    ts('src/test/middleware-session.test.ts'),
+    ts('src/test/invitation-list-scope.test.ts'),
+    ts('src/test/invitation-management.test.ts'),
+    ts('src/test/dna-leaderboard-scope.test.ts'),
+    ts('src/test/member-invite-scope.test.ts'),
+    ts('src/test/chapter-transfer-history.test.ts'),
     ts('src/test/learning-unlocks.test.ts'),
     ['src/test/admin-chapters-state.test.cjs'],
     ...['manager-learning-exemption','position-replacement','standardize-migration','role-sessions','business-rules','video-playback-guard','video-progress-session','video-fullscreen-controls','video-controls-youtube-ux','video-switching-leak','video-player-ui','shared-learning-path','quiz-plan-b-selection','p1-rules','prompt1-verification','prompt2-verification','master-verification','video-continuity-security','chapter-initial-rewards','transfer-windows','pwa-standalone','viewport-reset','bulk-invite','quiz-timer-navigator','lesson-navigation','monthly-reward-reset','learning-cycles','account-lock-rules','deadline-enforcement','deadline-extension','login-lock','course-update-rules','lesson-new-label','course-draft','course-draft-publish','course-draft-routes','learning-display','content-deletion','content-management','ranking-departures'].map(name => ts(`src/test/${name}.test.ts`)),

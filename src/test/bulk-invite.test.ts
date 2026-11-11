@@ -63,4 +63,14 @@ describe('bulk invite route keeps the single-invite permission rules', () => {
     assert.match(source, /'ALREADY_MEMBER'/)
     assert.match(source, /BULK_INVITE_MAX_EMAILS/)
   })
+
+  it('both Chapter invite screens submit the selected department for single and bulk invites', () => {
+    for (const file of ['src/app/chapter-manager/invitations/page.tsx', 'src/app/chapter-manager/members/page.tsx']) {
+      const source = read(file)
+      assert.match(source, /organizationUnitId: departmentUnitId/, file)
+      assert.doesNotMatch(source, /JSON\.stringify\(\{ (?:email: inviteEmail\.trim\(\)|emails: bulkText), chapterId:/, file)
+      assert.match(source, /if \(!departmentUnitId\)/, file)
+      assert.match(source, /<select[^>]*value=\{departmentUnitId\}/, file)
+    }
+  })
 })
