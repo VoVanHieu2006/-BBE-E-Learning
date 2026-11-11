@@ -123,12 +123,12 @@ export default function LandingPage() {
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <Link href={isLoggedIn ? getDashboardHref() : '/student/courses'}>
                 <Button size="lg" className="w-full justify-center bg-orange-500 px-7 font-bold text-white shadow-lg shadow-orange-950/20 hover:bg-orange-400 sm:w-auto">
-                  {isLoggedIn ? '← Quay lại' : 'Xem khóa học cho thành viên →'}
+                  {isLoggedIn ? '← Quay lại' : 'Khóa học cho khách →'}
                 </Button>
               </Link>
               {!isLoggedIn && <Link href="/login">
                 <Button variant="outline" size="lg" className="w-full justify-center border-white/40 bg-white px-7 font-bold text-[#172554] hover:bg-blue-50 sm:w-auto">
-                  Đăng nhập để xem nhiều khóa học hơn và lưu tiến độ
+                  Đăng nhập để xem đầy đủ
                 </Button>
               </Link>}
             </div>
