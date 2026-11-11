@@ -6,8 +6,9 @@ import { fileURLToPath } from "node:url";
 import { Client } from "pg";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const manifestPath = path.join(root, "prisma", "bootstrap", "20261110_manifest.json");
-const schemaPath = path.join(root, "prisma", "bootstrap", "20261110_schema.sql");
+const baselineName = "20261110";
+const manifestPath = path.join(root, "prisma", "bootstrap", `${baselineName}_manifest.json`);
+const schemaPath = path.join(root, "prisma", "bootstrap", `${baselineName}_schema.sql`);
 const prismaCliPath = path.join(root, "node_modules", "prisma", "build", "index.js");
 
 export function validateBaselineTarget(databaseUrl, confirmedDatabaseName, allowRemote) {

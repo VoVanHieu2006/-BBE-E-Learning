@@ -7,6 +7,7 @@
  */
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcrypt";
+import { LEARNING_PROGRAMS, LEARNING_TARGETS, STANDARD_DEPARTMENTS } from "../src/lib/learning-catalog";
 
 require("dotenv").config({ path: ".env" });
 
@@ -28,48 +29,40 @@ function daysFromNow(n: number): Date {
 }
 
 async function wipeAll(): Promise<void> {
-  console.log("🧹 Wiping all records (FK-safe order)...");
-  // Con -> cha
-  await prisma.auditLog.deleteMany();
-  await prisma.chapterReorganizationItem.deleteMany();
-  await prisma.chapterReorganization.deleteMany();
-  await prisma.chapterMonthlyKpi.deleteMany();
-  await prisma.starLedger.deleteMany();
-  await prisma.accessRestriction.deleteMany();
-  await prisma.userLearningAssignment.deleteMany();
-  await prisma.learningRule.deleteMany();
-  await prisma.positionAssignment.deleteMany();
-  await prisma.positionPermission.deleteMany();
-  await prisma.permission.deleteMany();
-  await prisma.position.deleteMany();
-  await prisma.organizationMembership.deleteMany();
-  await prisma.refreshToken.deleteMany();
-  await prisma.passwordResetToken.deleteMany();
-  await prisma.attemptAnswer.deleteMany();
-  await prisma.attemptQuestion.deleteMany();
-  await prisma.attempt.deleteMany();
-  await prisma.questionOption.deleteMany();
-  await prisma.question.deleteMany();
-  await prisma.assessment.deleteMany();
-  await prisma.lessonProgress.deleteMany();
-  await prisma.document.deleteMany();
-  await prisma.video.deleteMany();
-  await prisma.lesson.deleteMany();
-  await prisma.session.deleteMany();
-  await prisma.course.deleteMany();
-  await prisma.invitation.deleteMany();
-  await prisma.chapterMember.deleteMany();
-  await prisma.chapter.deleteMany();
-  await prisma.organizationUnit.deleteMany();
-  await prisma.user.deleteMany();
+  console.log("🧹 Wiping all records (schema and migration history are kept)...");
+  // TRUNCATE skips the row triggers that make Lead bindings and history immutable.
+  const tables = await prisma.$queryRaw<{ tablename: string }[]>`
+    SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename <> '_prisma_migrations'`;
+  if (tables.length) {
+    await prisma.$executeRawUnsafe(`TRUNCATE TABLE ${tables.map((t) => `"public"."${t.tablename.replace(/"/g, '""')}"`).join(", ")} CASCADE`);
+  }
 }
+
+const POSITIONS = [
+  { code: "CHAPTER_LEAD", name: "Lead Chapter", scope: "CHAPTER", is_manager: true },
+  { code: "DNA_LEAD", name: "Lead DNA", scope: "DNA", is_manager: true },
+  { code: "PRESIDENT", name: "Chủ tịch Chapter", scope: "CHAPTER", is_manager: false },
+  { code: "DEPARTMENT_LEAD", name: "Trưởng ban", scope: "DEPARTMENT", is_manager: false },
+  { code: "DEPARTMENT_MEMBER", name: "Thành viên ban", scope: "DEPARTMENT", is_manager: false },
+  { code: "DNA_MEMBER", name: "Thành viên DNA", scope: "DNA", is_manager: false },
+] as const;
+type PositionCode = (typeof POSITIONS)[number]["code"];
+type DepartmentCode = (typeof STANDARD_DEPARTMENTS)[number][0];
+
+// Exactly one organization placement per account: a Chapter (with at most one
+// position) or DNA, never both. LEAD accounts hold CHAPTER_LEAD or DNA_LEAD.
+type Placement =
+  | { kind: "CHAPTER_LEAD"; chapter: number }
+  | { kind: "PRESIDENT"; chapter: number }
+  | { kind: "DEPARTMENT"; chapter: number; department: DepartmentCode; position: "DEPARTMENT_LEAD" | "DEPARTMENT_MEMBER" }
+  | { kind: "DNA_LEAD" }
+  | { kind: "DNA_MEMBER"; group: "TT" | "SGDC" | "LDC" };
 
 interface UserSpec {
   name: string;
   email: string;
-  role: "ADMIN" | "LEAD" | "MEMBER";
-  chapter?: string;
-  status?: "ACTIVE" | "INACTIVE" | "LOCKED";
+  role: "LEAD" | "MEMBER";
+  placement: Placement;
 }
 
 async function main(): Promise<void> {
@@ -84,36 +77,56 @@ async function main(): Promise<void> {
   const adminHash = await bcrypt.hash(adminPassword, 12);
 
   // ==========================================================
-  // 1. CHAPTERS
+  // 1. REFERENCE DATA (positions, permissions, learning catalog)
   // ==========================================================
-  console.log("📚 Creating chapters...");
-  const chapters = await Promise.all(
-    [
-      {
-        name: "Chi hội Hà Nội",
-        description: "Chi hội khu vực phía Bắc — tập trung đào tạo kỹ năng số và ngoại ngữ.",
-        created: 120,
-      },
-      {
-        name: "Chi hội TP. Hồ Chí Minh",
-        description: "Chi hội khu vực phía Nam — đào tạo chuyên sâu quản trị và tài chính.",
-        created: 110,
-      },
-      {
-        name: "Chi hội Đà Nẵng",
-        description: "Chi hội khu vực miền Trung — đào tạo kỹ năng mềm và truyền thông.",
-        created: 95,
-      },
-    ].map((c) =>
-      prisma.chapter.create({
-        data: { name: c.name, description: c.description, status: "ACTIVE", created_at: daysAgo(c.created) },
-      })
-    )
-  );
+  console.log("📌 Creating positions, permissions and learning catalog...");
+  const positions = {} as Record<PositionCode, { id: string }>;
+  for (const spec of POSITIONS) positions[spec.code] = await prisma.position.create({ data: spec });
+  const permissions = await Promise.all([
+    prisma.permission.create({ data: { code: "VIEW_MEMBER_PROGRESS", description: "Xem tiến độ thành viên trong phạm vi" } }),
+    prisma.permission.create({ data: { code: "MANAGE_CHAPTER_MEMBERS", description: "Quản lý thành viên Chapter" } }),
+    prisma.permission.create({ data: { code: "MANAGE_DNA_MEMBERS", description: "Quản lý thành viên DNA" } }),
+  ]);
+  await prisma.positionPermission.createMany({ data: [
+    { position_id: positions.DNA_LEAD.id, permission_id: permissions[0].id },
+    { position_id: positions.DNA_LEAD.id, permission_id: permissions[2].id },
+    { position_id: positions.CHAPTER_LEAD.id, permission_id: permissions[0].id },
+    { position_id: positions.CHAPTER_LEAD.id, permission_id: permissions[1].id },
+  ] });
+  await prisma.learningProgram.createMany({ data: LEARNING_PROGRAMS.map((program) => ({ ...program })) });
+  await prisma.learningTarget.createMany({ data: LEARNING_TARGETS });
+
+  // ==========================================================
+  // 2. ORGANIZATION (ROOT → DNA → groups; ROOT → Chapters → 7 standard departments)
+  // ==========================================================
+  console.log("🏢 Creating organization units and chapters...");
+  const rootUnit = await prisma.organizationUnit.create({ data: { name: "BBE Việt Nam", type: "ROOT" } });
+  const dnaUnit = await prisma.organizationUnit.create({ data: { name: "DNA Điều hành", type: "DNA", parent_id: rootUnit.id } });
+  const dnaGroups: Record<string, string> = {};
+  for (const code of ["TT", "SGDC", "LDC"]) {
+    dnaGroups[code] = (await prisma.organizationUnit.create({ data: { name: code, code, type: "DNA_GROUP", parent_id: dnaUnit.id } })).id;
+  }
+  const chapterSpecs = [
+    { name: "Chi hội Hà Nội", description: "Chi hội khu vực phía Bắc — tập trung đào tạo kỹ năng số và ngoại ngữ.", created: 120 },
+    { name: "Chi hội TP. Hồ Chí Minh", description: "Chi hội khu vực phía Nam — đào tạo chuyên sâu quản trị và tài chính.", created: 110 },
+    { name: "Chi hội Đà Nẵng", description: "Chi hội khu vực miền Trung — đào tạo kỹ năng mềm và truyền thông.", created: 95 },
+  ];
+  const chapters: { id: string; unitId: string; departments: Record<string, string> }[] = [];
+  for (const spec of chapterSpecs) {
+    const unit = await prisma.organizationUnit.create({ data: { name: spec.name, type: "CHAPTER", parent_id: rootUnit.id } });
+    const chapter = await prisma.chapter.create({
+      data: { name: spec.name, description: spec.description, status: "ACTIVE", organization_unit_id: unit.id, created_at: daysAgo(spec.created) },
+    });
+    const departments: Record<string, string> = {};
+    for (const [code, name] of STANDARD_DEPARTMENTS) {
+      departments[code] = (await prisma.organizationUnit.create({ data: { name, code, type: "DEPARTMENT", parent_id: unit.id } })).id;
+    }
+    chapters.push({ id: chapter.id, unitId: unit.id, departments });
+  }
   const [hn, hcm, dn] = chapters;
 
   // ==========================================================
-  // 2. USERS (1 Admin + 3 BĐHU + 8 TV + 1 TV khoá)
+  // 3. USERS (1 Admin + 3 Lead Chapter + 1 Lead DNA + members)
   // ==========================================================
   console.log("👤 Creating users...");
   const admin = await prisma.user.create({
@@ -127,24 +140,51 @@ async function main(): Promise<void> {
     },
   });
 
+  const member = (chapter: number, department: DepartmentCode): Placement => ({ kind: "DEPARTMENT", chapter, department, position: "DEPARTMENT_MEMBER" });
   const userSpecs: UserSpec[] = [
-    { name: "Lead DNA Demo", email: "dna.lead.demo@bbe.vn", role: "MEMBER" },
-    { name: "Lead Chapter Demo", email: "chapter.lead.demo@bbe.vn", role: "LEAD", chapter: hn.id },
-    { name: "LT Ban Demo", email: "department.lead.demo@bbe.vn", role: "MEMBER", chapter: hn.id },
-    { name: "Thành viên Demo", email: "member.demo@bbe.vn", role: "MEMBER", chapter: hn.id },
-    { name: "Thành viên DNA Demo", email: "dna.member.demo@bbe.vn", role: "MEMBER", chapter: hn.id },
-    { name: "Nguyễn Phương Hoa", email: "phuong.hoa@bbe.vn", role: "LEAD", chapter: hn.id },
-    { name: "Trần Quốc Bảo", email: "quoc.bao@bbe.vn", role: "LEAD", chapter: hcm.id },
-    { name: "Lê Thị Mai Anh", email: "mai.anh@bbe.vn", role: "LEAD", chapter: dn.id },
-    { name: "Phạm Văn Đức", email: "van.duc@bbe.vn", role: "MEMBER", chapter: hn.id },
-    { name: "Vũ Ngọc Linh", email: "ngoc.linh@bbe.vn", role: "MEMBER", chapter: hn.id },
-    { name: "Đặng Thu Trang", email: "thu.trang@bbe.vn", role: "MEMBER", chapter: hn.id },
-    { name: "Hoàng Minh Tuấn", email: "minh.tuan@bbe.vn", role: "MEMBER", chapter: hcm.id },
-    { name: "Bùi Khánh Vy", email: "khanh.vy@bbe.vn", role: "MEMBER", chapter: hcm.id },
-    { name: "Ngô Gia Hưng", email: "gia.hung@bbe.vn", role: "MEMBER", chapter: hcm.id },
-    { name: "Đỗ Bảo Châu", email: "bao.chau@bbe.vn", role: "MEMBER", chapter: dn.id },
-    { name: "Lý Thanh Hà", email: "thanh.ha@bbe.vn", role: "MEMBER", chapter: dn.id },
+    { name: "Lead DNA Demo", email: "dna.lead.demo@bbe.vn", role: "LEAD", placement: { kind: "DNA_LEAD" } },
+    { name: "Lead Chapter Demo", email: "chapter.lead.demo@bbe.vn", role: "LEAD", placement: { kind: "CHAPTER_LEAD", chapter: 0 } },
+    { name: "LT Ban Demo", email: "department.lead.demo@bbe.vn", role: "MEMBER", placement: { kind: "DEPARTMENT", chapter: 0, department: "BND", position: "DEPARTMENT_LEAD" } },
+    { name: "Thành viên Demo", email: "member.demo@bbe.vn", role: "MEMBER", placement: member(0, "BTV") },
+    { name: "Thành viên DNA Demo", email: "dna.member.demo@bbe.vn", role: "MEMBER", placement: { kind: "DNA_MEMBER", group: "TT" } },
+    { name: "Nguyễn Phương Hoa", email: "phuong.hoa@bbe.vn", role: "MEMBER", placement: { kind: "PRESIDENT", chapter: 0 } },
+    { name: "Trần Quốc Bảo", email: "quoc.bao@bbe.vn", role: "LEAD", placement: { kind: "CHAPTER_LEAD", chapter: 1 } },
+    { name: "Lê Thị Mai Anh", email: "mai.anh@bbe.vn", role: "LEAD", placement: { kind: "CHAPTER_LEAD", chapter: 2 } },
+    { name: "Phạm Văn Đức", email: "van.duc@bbe.vn", role: "MEMBER", placement: member(0, "BTK") },
+    { name: "Vũ Ngọc Linh", email: "ngoc.linh@bbe.vn", role: "MEMBER", placement: member(0, "BCL") },
+    { name: "Đặng Thu Trang", email: "thu.trang@bbe.vn", role: "MEMBER", placement: member(0, "BKM") },
+    { name: "Hoàng Minh Tuấn", email: "minh.tuan@bbe.vn", role: "MEMBER", placement: member(1, "BTV") },
+    { name: "Bùi Khánh Vy", email: "khanh.vy@bbe.vn", role: "MEMBER", placement: member(1, "BND") },
+    { name: "Ngô Gia Hưng", email: "gia.hung@bbe.vn", role: "MEMBER", placement: member(1, "BTTSK") },
+    { name: "Đỗ Bảo Châu", email: "bao.chau@bbe.vn", role: "MEMBER", placement: member(2, "BTV") },
+    { name: "Lý Thanh Hà", email: "thanh.ha@bbe.vn", role: "MEMBER", placement: member(2, "BDHU") },
   ];
+
+  const place = async (userId: string, placement: Placement, joinedAt: Date) => {
+    const assign = (unitId: string, code: PositionCode) => prisma.positionAssignment.create({
+      data: { user_id: userId, unit_id: unitId, position_id: positions[code].id, is_primary: true, appointed_by: admin.id, starts_at: joinedAt },
+    });
+    if (placement.kind === "DNA_LEAD") {
+      await prisma.organizationMembership.create({ data: { user_id: userId, unit_id: dnaUnit.id, starts_at: joinedAt } });
+      await assign(dnaUnit.id, "DNA_LEAD");
+      return;
+    }
+    if (placement.kind === "DNA_MEMBER") {
+      await prisma.organizationMembership.create({ data: { user_id: userId, unit_id: dnaGroups[placement.group], starts_at: joinedAt } });
+      await assign(dnaGroups[placement.group], "DNA_MEMBER");
+      return;
+    }
+    const chapter = chapters[placement.chapter];
+    await prisma.chapterMember.create({ data: { chapter_id: chapter.id, user_id: userId, joined_at: joinedAt } });
+    if (placement.kind === "DEPARTMENT") {
+      const unitId = chapter.departments[placement.department];
+      await prisma.organizationMembership.create({ data: { user_id: userId, unit_id: unitId, starts_at: joinedAt } });
+      await assign(unitId, placement.position);
+      return;
+    }
+    await prisma.organizationMembership.create({ data: { user_id: userId, unit_id: chapter.unitId, starts_at: joinedAt } });
+    await assign(chapter.unitId, placement.kind);
+  };
 
   const users: Record<string, { id: string; email: string; role: string }> = {};
   let dayOffset = 300;
@@ -160,11 +200,7 @@ async function main(): Promise<void> {
       },
     });
     users[spec.email] = { id: u.id, email: u.email, role: u.role };
-    if (spec.chapter) {
-      await prisma.chapterMember.create({
-        data: { chapter_id: spec.chapter, user_id: u.id, joined_at: daysAgo(dayOffset - 2) },
-      });
-    }
+    await place(u.id, spec.placement, daysAgo(dayOffset - 2));
     dayOffset -= 15;
   }
 
@@ -178,52 +214,7 @@ async function main(): Promise<void> {
       created_at: daysAgo(80),
     },
   });
-  await prisma.chapterMember.create({
-    data: { chapter_id: dn.id, user_id: lockedUser.id, joined_at: daysAgo(78) },
-  });
-
-  // ==========================================================
-  // 3. COURSES → SESSIONS → LESSONS (Video/Document)
-  // ==========================================================
-  console.log("Creating organization and demo role assignments...");
-  const rootUnit = await prisma.organizationUnit.create({ data: { name: "BBE Việt Nam", type: "ROOT" } });
-  const dnaUnit = await prisma.organizationUnit.create({ data: { name: "DNA Điều hành", type: "DNA", parent_id: rootUnit.id } });
-  const dnaGroups = await Promise.all(["TT", "LDC", "SGDC"].map((name) => prisma.organizationUnit.create({ data: { name, type: "DNA_GROUP", parent_id: dnaUnit.id } })));
-  const chapterUnits = await Promise.all(chapters.map((chapter) => prisma.organizationUnit.create({ data: { name: chapter.name, type: "CHAPTER", parent_id: rootUnit.id } })));
-  await Promise.all(chapters.map((chapter, index) => prisma.chapter.update({ where: { id: chapter.id }, data: { organization_unit_id: chapterUnits[index].id } })));
-  const departments = await Promise.all(["Ban Chất lượng", "Ban Nội dung", "Ban Khách mời", "Ban TT&SK", "Ban Thành viên", "Ban Thư ký", "Chủ tịch"].map((name) => prisma.organizationUnit.create({ data: { name, type: "DEPARTMENT", parent_id: chapterUnits[0].id } })));
-  const [dnaLeadPosition, chapterLeadPosition, departmentLeadPosition, memberPosition] = await Promise.all([
-    prisma.position.create({ data: { code: "DNA_LEAD", name: "Lead DNA", scope: "DNA", is_manager: true } }),
-    prisma.position.create({ data: { code: "CHAPTER_LEAD", name: "Trưởng Chapter", scope: "CHAPTER", is_manager: true } }),
-    prisma.position.create({ data: { code: "DEPARTMENT_LEAD", name: "LT Ban", scope: "DEPARTMENT", is_manager: true } }),
-    prisma.position.create({ data: { code: 'DEPARTMENT_MEMBER', name: "Thành viên", scope: "DEPARTMENT", is_manager: false } }),
-  ]);
-  const permissions = await Promise.all([
-    prisma.permission.create({ data: { code: "VIEW_MEMBER_PROGRESS", description: "Xem tiến độ thành viên trong phạm vi" } }),
-    prisma.permission.create({ data: { code: "MANAGE_CHAPTER_MEMBERS", description: "Quản lý thành viên Chapter" } }),
-    prisma.permission.create({ data: { code: "MANAGE_DNA_MEMBERS", description: "Quản lý thành viên DNA" } }),
-  ]);
-  await prisma.positionPermission.createMany({ data: [
-    { position_id: dnaLeadPosition.id, permission_id: permissions[0].id },
-    { position_id: dnaLeadPosition.id, permission_id: permissions[2].id },
-    { position_id: chapterLeadPosition.id, permission_id: permissions[0].id },
-    { position_id: chapterLeadPosition.id, permission_id: permissions[1].id },
-    { position_id: departmentLeadPosition.id, permission_id: permissions[0].id },
-  ] });
-  const demoAssignments = [
-    { email: "dna.lead.demo@bbe.vn", unit: dnaUnit, position: dnaLeadPosition },
-    { email: "chapter.lead.demo@bbe.vn", unit: chapterUnits[0], position: chapterLeadPosition },
-    { email: "department.lead.demo@bbe.vn", unit: departments[0], position: departmentLeadPosition },
-    { email: "member.demo@bbe.vn", unit: departments[6], position: memberPosition },
-    { email: "dna.member.demo@bbe.vn", unit: departments[0], position: memberPosition },
-  ];
-  for (const item of demoAssignments) {
-    const user = users[item.email];
-    await prisma.organizationMembership.create({ data: { user_id: user.id, unit_id: item.unit.id } });
-    await prisma.positionAssignment.create({ data: { user_id: user.id, unit_id: item.unit.id, position_id: item.position.id, is_primary: true, appointed_by: admin.id } });
-  }
-  await prisma.positionAssignment.create({ data: { user_id: users["member.demo@bbe.vn"].id, unit_id: departments[6].id, position_id: departmentLeadPosition.id, appointed_by: admin.id } });
-  await prisma.organizationMembership.create({ data: { user_id: users["dna.member.demo@bbe.vn"].id, unit_id: dnaGroups[0].id } });
+  await place(lockedUser.id, member(2, "BKM"), daysAgo(78));
 
   console.log("🎓 Creating courses, sessions, lessons...");
   const yt = (id: string, dur: number, title: string) => ({ id, dur, title });
@@ -595,28 +586,37 @@ async function main(): Promise<void> {
 
   // Lưu câu hỏi + option theo course để build attempt nhất quán
   const questionBank: Record<string, { id: string; type: string; correctOptionIds: string[]; optionIds: string[]; points: number }[]> = {};
+  const finalExamVersions: Record<string, string> = {};
 
   for (const [courseTitle, questions] of Object.entries(assessmentSpecs)) {
     const courseId = courses[courseTitle];
+    const title = `Bài kiểm tra cuối khoá — ${courseTitle}`;
+    const description = "Trả lời đúng ít nhất 85% để vượt qua bài kiểm tra.";
     const assessment = await prisma.assessment.create({
       data: {
+        type: "COURSE_FINAL",
         course_id: courseId,
-        title: `Bài kiểm tra cuối khoá — ${courseTitle}`,
-        description: "Trả lời đúng ít nhất 85% để vượt qua bài kiểm tra.",
+        title,
+        description,
+        question_count: questions.length,
         created_by: admin.id,
         created_at: daysAgo(25),
       },
     });
+    const version = await prisma.finalExamVersion.create({
+      data: { assessment_id: assessment.id, version_number: 1, is_active: true, question_count: questions.length, duration_minutes: assessment.duration_minutes, title, description, created_at: daysAgo(25) },
+    });
+    finalExamVersions[courseTitle] = version.id;
     questionBank[courseTitle] = [];
     for (let qi = 0; qi < questions.length; qi++) {
       const q = questions[qi];
       const question = await prisma.question.create({
         data: {
           assessment_id: assessment.id,
+          final_exam_version_id: version.id,
           question_text: q.text,
           question_type: q.type,
           points: 1,
-          duration_seconds: 45,
           sort_order: qi + 1,
           explanation: q.explanation,
         },
@@ -724,6 +724,7 @@ async function main(): Promise<void> {
     const attempt = await prisma.attempt.create({
       data: {
         assessment_id: assessment.id,
+        final_exam_version_id: finalExamVersions[spec.courseTitle],
         user_id: userId,
         attempt_number: spec.attemptNumber,
         status: "SUBMITTED",
@@ -764,6 +765,7 @@ async function main(): Promise<void> {
     const inProgress = await prisma.attempt.create({
       data: {
         assessment_id: resumeAssessment.id,
+        final_exam_version_id: finalExamVersions["Tin học văn phòng cơ bản"],
         user_id: users["bao.chau@bbe.vn"].id,
         attempt_number: 2,
         status: "IN_PROGRESS",
@@ -788,7 +790,7 @@ async function main(): Promise<void> {
       email: "new.member.hn@gmail.com",
       role: "MEMBER",
       chapter_id: hn.id,
-      invited_by: users["phuong.hoa@bbe.vn"].id,
+      invited_by: users["chapter.lead.demo@bbe.vn"].id,
       token_hash: "seed-pending-invite-token-hash-0001",
       status: "PENDING",
       expires_at: daysFromNow(7),
@@ -828,7 +830,7 @@ async function main(): Promise<void> {
   const auditSpecs: { actorEmail: string; action: string; entityType: string; entityId: string }[] = [
     { actorEmail: adminEmail, action: "COURSE_PUBLISH", entityType: "Course", entityId: courses["An toàn thông tin trong thời đại số"] },
     { actorEmail: adminEmail, action: "COURSE_CREATE", entityType: "Course", entityId: courses["Lãnh đạo và quản lý đội nhóm"] },
-    { actorEmail: "phuong.hoa@bbe.vn", action: "INVITATION_CREATE", entityType: "Invitation", entityId: hn.id },
+    { actorEmail: "chapter.lead.demo@bbe.vn", action: "INVITATION_CREATE", entityType: "Invitation", entityId: hn.id },
     { actorEmail: "quoc.bao@bbe.vn", action: "MEMBER_VIEW", entityType: "Chapter", entityId: hcm.id },
     { actorEmail: "van.duc@bbe.vn", action: "ATTEMPT_SUBMIT", entityType: "Assessment", entityId: courses["Tin học văn phòng cơ bản"] },
     { actorEmail: "minh.tuan@bbe.vn", action: "LESSON_COMPLETE", entityType: "Lesson", entityId: lessonsByCourse["Kỹ năng thuyết trình hiệu quả"][0] },
@@ -854,6 +856,13 @@ async function main(): Promise<void> {
     users: await prisma.user.count(),
     chapters: await prisma.chapter.count(),
     chapterMembers: await prisma.chapterMember.count(),
+    organizationUnits: await prisma.organizationUnit.count(),
+    organizationMemberships: await prisma.organizationMembership.count(),
+    positions: await prisma.position.count(),
+    positionAssignments: await prisma.positionAssignment.count(),
+    chapterLeadBindings: await prisma.chapterLeadBinding.count(),
+    learningPrograms: await prisma.learningProgram.count(),
+    learningTargets: await prisma.learningTarget.count(),
     courses: await prisma.course.count(),
     sessions: await prisma.session.count(),
     lessons: await prisma.lesson.count(),

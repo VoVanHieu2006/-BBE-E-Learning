@@ -73,3 +73,31 @@ test("refuses partial schemas, non-empty partial baselines, and unknown migratio
     migrationStates: new Map([[migrationNames[0], { applied: false, failed: true }]]),
   }), /unresolved failed attempt/);
 });
+
+test("cut-baseline replays dependent migrations after the migration that creates their objects", async () => {
+  const { orderMigrations } = await import("../db/cut-baseline.mjs");
+  const ordered = orderMigrations([
+    "20261025_organization_integrity", "20261013_profile_quiz_configuration", "20261025_lead_binding_guards",
+    "20261014_learning_governance", "20250831_init",
+  ]);
+  assert.deepEqual(ordered, [
+    "20250831_init", "20261014_learning_governance", "20261013_profile_quiz_configuration",
+    "20261025_organization_integrity", "20261025_lead_binding_guards",
+  ]);
+});
+
+test("cut-baseline keeps function bodies but drops top-level transactions", async () => {
+  const { stripTopLevelTransaction } = await import("../db/cut-baseline.mjs");
+  const sql = "BEGIN;\nCREATE FUNCTION f() RETURNS void LANGUAGE plpgsql AS $$\nBEGIN\n  NULL;\nEND $$;\nCOMMIT;\n";
+  assert.equal(stripTopLevelTransaction(sql), "\nCREATE FUNCTION f() RETURNS void LANGUAGE plpgsql AS $$\nBEGIN\n  NULL;\nEND $$;\n\n");
+});
+
+test("cut-baseline only accepts migration-only index, FK and default drift", async () => {
+  const { unexpectedDiffSections, validateCutTarget } = await import("../db/cut-baseline.mjs");
+  const known = '-- DropIndex\nDROP INDEX "a_idx";\n\n-- AlterTable\nALTER TABLE "t" ALTER COLUMN "id" DROP DEFAULT,\nALTER COLUMN "updated_at" DROP DEFAULT;\n';
+  assert.deepEqual(unexpectedDiffSections(known), []);
+  const drift = '-- CreateTable\nCREATE TABLE "x" ("id" UUID);\n\n-- AlterTable\nALTER TABLE "t" ADD COLUMN "c" INTEGER;\n';
+  assert.equal(unexpectedDiffSections(drift).length, 2);
+  assert.throws(() => validateCutTarget("postgresql://db.example.com/bbe_test_cut"), /loopback/);
+  assert.throws(() => validateCutTarget("postgresql://127.0.0.1/production"), /bbe_test_/);
+});

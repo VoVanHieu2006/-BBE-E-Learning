@@ -118,13 +118,13 @@ async function main() {
     }))
   }
 
-  // LT/President and DNA participants: 50/50 progress and a small Star history.
+  // LT/President and DNA participants: full core progress and a small Star history.
   const extraEmails = ['leader.dna@bbe.vn', 'dna.sgdc@bbe.vn', 'dna.ldc@bbe.vn', 'dna.tt@bbe.vn']
   const extras = await prisma.user.findMany({ where: { email: { in: extraEmails } }, include: { chapter_members: { select: { chapter_id: true } } } })
   for (const user of extras) {
     participants.push({
       id: user.id, email: user.email, chapterId: user.chapter_members[0]?.chapter_id || null,
-      chapterName: null, counts: 50, sepStars: 50, octStars: 60,
+      chapterName: null, counts: coreLessons.length, sepStars: 50, octStars: 60,
     })
   }
 

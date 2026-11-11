@@ -16,6 +16,7 @@ import { PrismaClient } from '@prisma/client'
 import bcrypt from 'bcryptjs'
 import { randomUUID } from 'crypto'
 import 'dotenv/config'
+import { STANDARD_DEPARTMENTS } from '../../src/lib/learning-catalog'
 
 const prisma = new PrismaClient()
 const APPLY = process.argv.includes('--apply')
@@ -139,11 +140,11 @@ async function main() {
     }
     if (!chapter) chapter = await prisma.chapter.create({ data: { name: spec.name, status: 'ACTIVE', organization_unit_id: unitId }, select: { id: true, organization_unit_id: true } })
     else if (chapter.organization_unit_id !== unitId) await prisma.chapter.update({ where: { id: chapter.id }, data: { organization_unit_id: unitId, status: 'ACTIVE' } })
-    const departmentNames = ['Ban Thành viên', 'Ban Nội dung', 'Ban Thư ký', 'Chủ tịch']
     const departments: string[] = []
-    for (const name of departmentNames) {
-      const department = await prisma.organizationUnit.findFirst({ where: { name, type: 'DEPARTMENT', parent_id: unitId } })
-        || await prisma.organizationUnit.create({ data: { name, type: 'DEPARTMENT', parent_id: unitId } })
+    for (const [code, name] of STANDARD_DEPARTMENTS) {
+      const department = await prisma.organizationUnit.findFirst({ where: { type: 'DEPARTMENT', parent_id: unitId, OR: [{ code }, { name, code: null }] } })
+        || await prisma.organizationUnit.create({ data: { name, code, type: 'DEPARTMENT', parent_id: unitId } })
+      if (department.code !== code) await prisma.organizationUnit.update({ where: { id: department.id }, data: { code } })
       departments.push(department.id)
     }
     chapters.set(spec.slug, { id: chapter.id, unitId, departments })
@@ -162,11 +163,11 @@ async function main() {
       plannedUsers.set(email, { email, display_name: email.split('@')[0], role: 'MEMBER', chapter: spec.slug })
     }
     plannedUsers.set(`leader.${spec.slug}@demo.bbe.vn`, {
-      email: `leader.${spec.slug}@demo.bbe.vn`, display_name: `Lead ${spec.name}`, role: 'LEAD', chapter: spec.slug,
+      email: `leader.${spec.slug}@demo.bbe.vn`, display_name: `Lead ${spec.name}`, role: 'LEAD', chapter: spec.slug, position: 'CHAPTER_LEAD',
     })
   }
   plannedUsers.set('admin.rich@bbe.vn', { email: 'admin.rich@bbe.vn', display_name: 'Quản trị viên Demo', role: 'ADMIN' })
-  plannedUsers.set('leader.dna@bbe.vn', { email: 'leader.dna@bbe.vn', display_name: 'Lead DNA Demo', role: 'MEMBER', dnaGroup: 'SGDC', position: 'DNA_LEAD' })
+  plannedUsers.set('leader.dna@bbe.vn', { email: 'leader.dna@bbe.vn', display_name: 'Lead DNA Demo', role: 'LEAD', dnaGroup: 'SGDC', position: 'DNA_LEAD' })
   plannedUsers.set('dna.sgdc@bbe.vn', { email: 'dna.sgdc@bbe.vn', display_name: 'DNA SGDC Demo', role: 'MEMBER', dnaGroup: 'SGDC' })
   plannedUsers.set('dna.ldc@bbe.vn', { email: 'dna.ldc@bbe.vn', display_name: 'DNA LDC Demo', role: 'MEMBER', dnaGroup: 'LDC' })
   plannedUsers.set('dna.tt@bbe.vn', { email: 'dna.tt@bbe.vn', display_name: 'DNA TT Demo', role: 'MEMBER', dnaGroup: 'TT' })
@@ -196,13 +197,14 @@ async function main() {
   const positionRows = [
     ['CHAPTER_LEAD', 'Lead Chapter', 'CHAPTER', true],
     ['PRESIDENT', 'Chủ tịch Chapter', 'CHAPTER', false],
-    ['DEPARTMENT_LEAD', 'LT Ban', 'DEPARTMENT', true],
+    ['DEPARTMENT_LEAD', 'Trưởng ban', 'DEPARTMENT', false],
     ['DNA_LEAD', 'Lead DNA', 'DNA', true],
     ['DEPARTMENT_MEMBER', 'Thành viên ban', 'DEPARTMENT', false],
+    ['DNA_MEMBER', 'Thành viên DNA', 'DNA', false],
   ] as const
   const positions = new Map<string, string>()
   for (const [code, name, scope, isManager] of positionRows) {
-    const position = await prisma.position.upsert({ where: { code }, update: { name, scope, is_manager: isManager }, create: { code, name, scope, is_manager: isManager } })
+    const position = await prisma.position.upsert({ where: { code }, update: {}, create: { code, name, scope, is_manager: isManager } })
     positions.set(code, position.id)
   }
   const dnaGroups = new Map<string, string>()
@@ -224,7 +226,7 @@ async function main() {
         const existing = await prisma.chapterMember.findUnique({ where: { user_id: leader.id } })
         if (existing) await prisma.chapterMember.update({ where: { id: existing.id }, data: { chapter_id: chapter.id } })
       })
-      await ensureOrgMembership(leader.id, chapter.departments[0])
+      await ensureOrgMembership(leader.id, chapter.unitId)
       await ensurePosition(leader.id, positions.get('CHAPTER_LEAD')!, chapter.unitId, admin.id)
       await ensureAccountInterval(leader.id, 'LEAD')
       await ensureAffiliation(leader.id, chapter.id)
@@ -243,36 +245,25 @@ async function main() {
       const existingChapterLink = await prisma.chapterMember.findUnique({ where: { user_id: user.id } })
       if (!existingChapterLink) await prisma.chapterMember.create({ data: { chapter_id: chapter.id, user_id: user.id } })
       else if (existingChapterLink.chapter_id !== chapter.id) await prisma.chapterMember.update({ where: { id: existingChapterLink.id }, data: { chapter_id: chapter.id } })
-      await ensureOrgMembership(user.id, chapter.departments[plan.position === 'PRESIDENT' ? 3 : 0])
-      if (plan.position) await ensurePosition(user.id, positions.get(plan.position)!, plan.position === 'DEPARTMENT_LEAD' ? chapter.departments[0] : chapter.unitId, admin.id)
+      const unitId = plan.position === 'PRESIDENT' || plan.position === 'CHAPTER_LEAD' ? chapter.unitId : chapter.departments[0]
+      await ensureOrgMembership(user.id, unitId)
+      if (plan.position) await ensurePosition(user.id, positions.get(plan.position)!, unitId, admin.id)
       await ensureAccountInterval(user.id, plan.role)
       await ensureAffiliation(user.id, chapter.id)
     }
     if (plan.dnaGroup) {
-      const groupId = dnaGroups.get(plan.dnaGroup)!
-      await ensureOrgMembership(user.id, groupId)
+      // A DNA Lead sits on the DNA unit itself; members sit on (and hold DNA_MEMBER in) one group.
+      const unitId = plan.position === 'DNA_LEAD' ? dnaUnit.id : dnaGroups.get(plan.dnaGroup)!
       await prisma.chapterMember.deleteMany({ where: { user_id: user.id } })
       await prisma.chapterAffiliationInterval.deleteMany({ where: { user_id: user.id } })
-      if (plan.position) await ensurePosition(user.id, positions.get(plan.position)!, dnaUnit.id, admin.id)
+      await ensureOrgMembership(user.id, unitId)
+      await ensurePosition(user.id, positions.get(plan.position || 'DNA_MEMBER')!, unitId, admin.id)
       await ensureAccountInterval(user.id, plan.role)
     }
   }
 
-  // Mid-month DNA transfer: user transfers to DNA on 2026-09-18
-  const dnaTransferUser = userByEmail.get('member.to.dna@demo.bbe.vn')
-  if (dnaTransferUser) {
-    const dnaGroupId = dnaGroups.get('SGDC')!
-    const existingDnaMem = await prisma.organizationMembership.findFirst({ where: { user_id: dnaTransferUser.id, unit_id: dnaGroupId } })
-    if (!existingDnaMem) {
-      await prisma.organizationMembership.create({
-        data: {
-          user_id: dnaTransferUser.id,
-          unit_id: dnaGroupId,
-          starts_at: new Date('2026-09-18T00:00:00.000Z'),
-        },
-      })
-    }
-  }
+  // member.to.dna stays a Chapter member: a back-dated DNA membership would overlap the
+  // Chapter placement (SingleOrganizationAffiliationRequired).
 
   // Existing seed users must be active in September for historical snapshots.
   const seedChapterIds = Array.from(chapters.values()).map((chapter) => chapter.id)

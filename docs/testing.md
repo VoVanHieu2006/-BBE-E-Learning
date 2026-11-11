@@ -17,7 +17,8 @@ Typecheck dùng `tsconfig.json`, hợp nhất config check trùng lặp. Unit d�
 | Rules | `test:business-rules`, `test:learning-cycles`, `test:shared-deadline` | Gating, reward/month/cycle, deadline coordinator/retry |
 | Video | `test:video-guard`, `test:video-progress-session`, `test:video-controls`, `test:video-youtube-ux`, `test:video-switching-leak`, `test:video-player-ui` | Observed time/seek, ACK/session, stale request, controls/fullscreen cleanup |
 | Formula regression | `test:formula-audit` | Hành vi kế thừa, không thay audit sổ tay độc lập |
-| Bootstrap | `test:baseline-safety` | Explicit destination/confirmation, populated/mismatch rejection, retry |
+| Bootstrap | `test:baseline-safety` | Explicit destination/confirmation, populated/mismatch rejection, retry, guard của cut-baseline/fresh-deploy |
+| Fresh deploy | `TEST_DATABASE_URL=<loopback bbe_test_*> npm run test:fresh-deploy` | DB trống và DB đã xóa dữ liệu: baseline/deploy/seed, migration applied, bất biến tổ chức; ghi DB đích |
 | DB integration runner | `npm run test:integration -- <tên-suite>`, ví dụ `npm run test:integration -- admin-program` | Bắt buộc chọn đúng một suite trước khi ghi; không filter sẽ liệt kê và exit 1; mỗi suite có DB/app env riêng |
 | Learning DB/API | `test:learning-flow-integration`, `test:learning-security`, `test:learning-cycles-integration`, `test:reward-pause-integration` | Submission concurrency, snapshots/replay/readiness/reset, no-backpay, resource scope |
 | Chapter/BXH | `test:leaderboard-integration` và `scripts/test` | Roster/period/actual term, completed lessons, transfer/star history |
@@ -42,6 +43,17 @@ Không dùng `DATABASE_URL` chung, cloud DB đang dùng hoặc `.env` fallback c
 | UI QA preparation | `TEST_DATABASE_URL` loopback `bbe_test_learning_ui` và `UI_QA_PASSWORD`; chỉ metadata khóa + synthetic accounts, không learner/credential/progress thật |
 | FB fixes | `FB_TEST_DATABASE_URL`, đúng `127.0.0.1:55438/fb_fixes_test`, không load `.env` |
 | Program/department, quiz và test DB khác | `TEST_DATABASE_URL`, dedicated `bbe_test_*` và guard/preload của runner; đọc guard riêng từng suite |
+| Six-month transfer (`chapter-six-month`) | `TEST_DATABASE_URL`, đúng loopback `bbe_test_learning_cycles` |
+| Organization integrity / repair | `ORGANIZATION_TEST_DATABASE_URL`, localhost `org_integrity*` / `org_integrity_repair*` |
+| Chapter transfer, completed lessons, star history | URL cố định: user `chapter_fix_test` (không mật khẩu), `127.0.0.1:55439`, DB `bbe_test_learning_cycles` |
+
+Chuẩn bị DB cho suite: `TEST_DATABASE_URL=<loopback DB của suite> npm run test:fresh-deploy` (baseline + deploy + seed; chạy lại trước mỗi lần để có dữ liệu sạch). Suite HTTP cần app build bằng cùng `JWT_ACCESS_SECRET`/`JWT_REFRESH_SECRET`/`TOKEN_HASH_PEPPER`/`CRON_SECRET` test và `next start -H 127.0.0.1`. Token test phải mang `role` và `authVersion` khớp `users.auth_version`, nếu không API trả 401. Mùa chuyển giao là dữ liệu Admin, không có trong migration/seed: suite cần mùa phải tự tạo và tự xóa. `chapter_lead_bindings` bị trigger cấm xóa; chỉ phần dọn của DB thử được dùng `SET LOCAL session_replication_role = replica` trong transaction.
+
+Giới hạn đã biết (kết quả prompt 06, PostgreSQL trong Docker `bbe-test-pg`):
+- Learning-flow, Chapter leaderboard và FB fixes còn kiểm `inet_server_addr()` phía server là loopback; qua port-forward Docker server thấy địa chỉ bridge nên BLOCKED. Cần PostgreSQL chạy trực tiếp trên loopback, không nới guard.
+- Organization integrity/repair và FB fixes đòi tên DB ngoài `bbe_test_*`; chapter transfer/completed lessons/star history đòi port 55439 và user `chapter_fix_test` (container dùng port khác) nên BLOCKED.
+- `chapter-six-month` T18/T19 đọc Chapter "BBE Chapter 1/2" và một tài khoản thật có 19 sao video: dựa dữ liệu production, FAIL trên DB seed; không đưa dữ liệu cá nhân thật vào seed.
+- `test-learning-security` FAIL: bảng xếp hạng kỳ trả `email` của mọi thành viên cho người đã đăng nhập (`src/lib/period-leaderboard.ts`, `hydrateRanking`); xem [known-issues](known-issues.md).
 
 Quy trình: tạo disposable cluster/DB → bootstrap/schema/guards theo harness → đặt URL bí mật trong process env → start app/harness cùng cấu hình → chạy suite → kiểm tra cleanup/log. Không in connection URL. Dọn đúng fixture/process đã xác nhận, không xóa toàn `scratch/` chứa PostgreSQL đang chạy.
 

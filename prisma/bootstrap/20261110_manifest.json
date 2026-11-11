@@ -7,10 +7,10 @@
     "20261011_strict_video_100_percent",
     "20261012_invitation_organization_unit",
     "20261013_course_final_assessment",
-    "20261013_profile_quiz_configuration",
     "20261013_single_chapter_membership",
     "20261014_dna_groups",
     "20261014_learning_governance",
+    "20261013_profile_quiz_configuration",
     "20261014_performance_indexes",
     "20261015_course_mandatory_default_days",
     "20261015_dna_lead_invitation",
@@ -26,7 +26,8 @@
     "20261025_organization_integrity",
     "20261025_lead_binding_guards",
     "20261027_mandatory_catalog_repair",
-    "20261110_learning_affiliation_without_policy"
+    "20261110_learning_affiliation_without_policy",
+    "20261110_standardize_roles_positions"
   ],
   "tables": [
     "access_restrictions",
