@@ -150,7 +150,7 @@ export default function CourseDetailPage({ params }: { params: { courseId: strin
                 </div>
               ) : (
                 <div className="bg-[#eff4ff] p-6 rounded-2xl border border-[#cbdbf5] min-w-[220px] text-center shrink-0 space-y-3">
-                  <p className="text-xs font-semibold text-[#172554]">Khóa học công khai miễn phí</p>
+                  <p className="text-xs font-semibold text-[#172554]">Khóa học khách cũng xem được</p>
                   <Link href="/login" className="block">
                     <Button size="sm" className="w-full">Đăng nhập để lưu tiến độ</Button>
                   </Link>

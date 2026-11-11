@@ -274,7 +274,7 @@ export default function ProgramCourseTree({ refreshTrigger, onDataLoaded }: Prog
                               <h4 className="truncate text-sm font-bold text-[#172554]">{course.title}</h4>
                               <p className="mt-0.5 text-[11px] font-medium text-slate-500">
                                 {flatLessons.length} bài · Đã hoàn thành {doneInCourse}/{flatLessons.length} ({coursePercent}%)
-                                {course.visibility === 'PUBLIC' && <span className="ml-2 rounded-full bg-sky-100 px-1.5 py-0.5 text-[9px] font-bold text-sky-700">Công khai</span>}
+                                {course.visibility === 'PUBLIC' && <span className="ml-2 rounded-full bg-sky-100 px-1.5 py-0.5 text-[9px] font-bold text-sky-700">Khách cũng xem được</span>}
                               </p>
                             </div>
                             <div className="flex shrink-0 items-center gap-2">

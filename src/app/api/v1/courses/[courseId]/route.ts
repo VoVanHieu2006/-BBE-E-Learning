@@ -74,7 +74,7 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
   // Check Private visibility permission
   if (courseDetail.visibility === 'PRIVATE') {
     if (!auth.ok || ((auth as any).context!.role !== 'ADMIN' && !isLeadRole((auth as any).context!.role) && (auth as any).context!.role !== 'MEMBER')) {
-      return NextResponse.json({ error: { code: 'AccessDenied', message: 'Khóa học Private — Vui lòng đăng nhập' } }, { status: 403 })
+      return NextResponse.json({ error: { code: 'AccessDenied', message: 'Khóa học chỉ dành cho thành viên BBE — Vui lòng đăng nhập' } }, { status: 403 })
     }
   }
   

@@ -66,7 +66,7 @@ export async function POST(request: NextRequest, { params }: { params: { courseI
         ? [`⚠️ Có ${activeAttempts} bài kiểm tra đang diễn ra sẽ bị ảnh hưởng.`]
         : []),
       ...(inProgressLearners.length > 0
-        ? [`⚠️ Có ${inProgressLearners.length} học viên đang trong tiến trình học. Họ sẽ không thể tiếp tục cho đến khi khóa học được công khai lại.`]
+        ? [`⚠️ Có ${inProgressLearners.length} học viên đang trong tiến trình học. Họ sẽ không thể tiếp tục cho đến khi khóa học được xuất bản lại.`]
         : []),
     ],
   }, { status: 200 })

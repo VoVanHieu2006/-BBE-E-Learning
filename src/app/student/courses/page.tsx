@@ -702,7 +702,7 @@ export default function StudentCoursesPage() {
                 <h2 className="text-xl font-bold text-[#172554] flex items-center gap-2" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
                   <span>📚</span> Tất cả khóa học ({enrichedCourses.length})
                 </h2>
-                <p className="text-xs text-[#737686] mt-0.5">Danh mục toàn bộ khóa học công khai và nội bộ</p>
+                <p className="text-xs text-[#737686] mt-0.5">Danh mục toàn bộ khóa học, gồm khóa khách cũng xem được và khóa chỉ thành viên BBE</p>
               </div>
 
               {/* Filter Tabs */}
@@ -938,7 +938,7 @@ export default function StudentCoursesPage() {
                 Khám phá các khóa học BBE
               </h1>
               <p className="text-[#737686] text-sm">
-                Đăng nhập để xem đầy đủ các khóa học nội bộ và bài kiểm tra cấp chứng chỉ.
+                Đăng nhập để xem đầy đủ các khóa chỉ thành viên BBE và bài kiểm tra cấp chứng chỉ.
               </p>
             </div>
 
@@ -953,7 +953,7 @@ export default function StudentCoursesPage() {
               </div>
             ) : courses.length === 0 ? (
               <Card className="text-center py-16">
-                <p className="text-lg font-bold text-[#172554] mb-2">Chưa có khóa học công khai</p>
+                <p className="text-lg font-bold text-[#172554] mb-2">Chưa có khóa học dành cho khách</p>
                 <p className="text-sm text-[#737686]">Vui lòng quay lại sau.</p>
               </Card>
             ) : (

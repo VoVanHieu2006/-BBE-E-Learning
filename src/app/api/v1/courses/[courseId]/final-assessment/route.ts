@@ -66,7 +66,7 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
     }, { headers: { 'Cache-Control': 'private, no-store' } })
   }
 
-  if (course.status !== 'PUBLISHED') return jsonError('CourseNotAvailable', 'Khóa học chưa được công khai.', 403)
+  if (course.status !== 'PUBLISHED') return jsonError('CourseNotAvailable', 'Khóa học chưa được xuất bản.', 403)
   if (!course.final_assessment) return jsonError('FinalAssessmentNotFound', 'Khóa học chưa có bài thi cuối khóa.', 404)
   const activeVersion = await prisma.finalExamVersion.findFirst({
     where: { assessment_id: course.final_assessment.id, is_active: true },

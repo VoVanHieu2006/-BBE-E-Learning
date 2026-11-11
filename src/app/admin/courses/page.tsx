@@ -130,9 +130,9 @@ export default function AdminCoursesPage() {
             : c
         )
       );
-      showToast('success', action === 'publish' ? 'Đã công khai khóa học thành công!' : 'Đã chuyển khóa học về bản nháp.');
+      showToast('success', action === 'publish' ? 'Đã xuất bản khóa học thành công!' : 'Đã chuyển khóa học về bản nháp.');
     } else {
-      showToast('error', res.error?.message || `Không thể ${action === 'publish' ? 'công khai' : 'bỏ công khai'} khóa học.`);
+      showToast('error', res.error?.message || `Không thể ${action === 'publish' ? 'xuất bản' : 'hạ về bản nháp'} khóa học.`);
     }
     setActionLoadingId(null);
   }
@@ -532,7 +532,7 @@ function CourseCardRow({
             <span>📚 Buổi học: <strong>{course.sessionCount || 0}</strong></span>
             {course.publishedAt && (
               <span suppressHydrationWarning>
-                📅 Ngày công khai: {new Date(course.publishedAt).toLocaleDateString('vi-VN')}
+                📅 Ngày xuất bản: {new Date(course.publishedAt).toLocaleDateString('vi-VN')}
               </span>
             )}
           </div>

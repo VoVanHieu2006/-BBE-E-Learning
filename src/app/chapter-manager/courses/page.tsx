@@ -230,8 +230,8 @@ export default function ChapterManagerCoursesPage() {
           <div className="text-center py-12 text-[#737686]">Đang tải dữ liệu...</div>
         ) : courses.length === 0 ? (
           <Card className="text-center py-12">
-            <p className="text-[#172554] font-semibold text-lg mb-2">Chưa có khóa học nào được công khai</p>
-            <p className="text-sm text-[#737686]">Các khóa học do Admin công khai sẽ hiển thị tại đây.</p>
+            <p className="text-[#172554] font-semibold text-lg mb-2">Chưa có khóa học nào được xuất bản</p>
+            <p className="text-sm text-[#737686]">Các khóa học do Admin xuất bản sẽ hiển thị tại đây.</p>
           </Card>
         ) : (
           <div className="grid md:grid-cols-2 gap-6">
