@@ -1,3 +1,4 @@
+import { isLeadRole } from '@/lib/roles'
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -23,7 +24,7 @@ async function getGlobalMetadata() {
     publishedCourses,
   ] = await Promise.all([
     prisma.user.count({ where: { role: 'MEMBER' } }),
-    prisma.user.count({ where: { role: 'CHAPTER_LEADER' } }),
+    prisma.user.count({ where: { role: 'LEAD' } }),
     prisma.user.count({ where: { role: { not: 'ADMIN' }, status: 'ACTIVE' } }),
     prisma.user.count({ where: { role: { not: 'ADMIN' }, status: 'INACTIVE' } }),
     prisma.course.findMany({
@@ -87,8 +88,8 @@ export async function GET(request: NextRequest) {
     ]
   }
 
-  if (role === 'CHAPTER_LEADER') {
-    where.role = 'CHAPTER_LEADER'
+  if (isLeadRole(role)) {
+    where.role = 'LEAD'
   } else if (role === 'MEMBER' || role === 'CHAPTER_MEMBER') {
     where.role = 'MEMBER'
     where.chapter_members = {
@@ -202,11 +203,11 @@ export async function GET(request: NextRequest) {
   ])
 
   const sys = await getPublishedSystemData()
-  const memberUserIds = users.filter((u) => u.role !== 'CHAPTER_LEADER').map((u) => u.id)
+  const memberUserIds = users.filter((u) => !isLeadRole(u.role)).map((u) => u.id)
   const progressMap = await calculateBatchUsersProgress(memberUserIds, sys)
 
   const items = users.map((u) => {
-    const isLeader = u.role === 'CHAPTER_LEADER'
+    const isLeader = isLeadRole(u.role)
     const p = progressMap.get(u.id)
 
     const completedCoursesCount = isLeader ? sys.totalCourses : (p?.completedCourses || 0)

@@ -1,4 +1,6 @@
 'use client';
+import { isLeadRole } from '@/lib/roles'
+import { accountHome, canOpenManagerArea } from '@/lib/session-role'
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -71,7 +73,7 @@ export default function LoginPage() {
         document.cookie = `userRole=${data.user.role}; path=/; max-age=604800; SameSite=Lax`;
 
         const role = data.user.role;
-        if (role !== 'ADMIN' && role !== 'CHAPTER_LEADER') {
+        if (role !== 'ADMIN' && !isLeadRole(role)) {
           try {
             const effectiveResponse = await fetch('/api/v1/auth/me', { headers: { Authorization: `Bearer ${data.accessToken}`, 'Cache-Control': 'no-cache' } });
             const effectiveData = await effectiveResponse.json();
@@ -89,11 +91,11 @@ export default function LoginPage() {
             router.replace(callbackUrl);
             return;
           }
-          if (callbackUrl.startsWith('/chapter-manager') && (role === 'CHAPTER_LEADER' || role === 'ADMIN' || data.user.isChapterManager)) {
+          if (callbackUrl.startsWith('/chapter-manager') && canOpenManagerArea('CHAPTER', role, data.user.managerKind)) {
             router.replace(callbackUrl);
             return;
           }
-          if (callbackUrl.startsWith('/organization-manager') && data.user.isOrganizationManager) {
+          if (callbackUrl.startsWith('/organization-manager') && canOpenManagerArea('DNA', role, data.user.managerKind)) {
             router.replace(callbackUrl);
             return;
           }
@@ -103,10 +105,7 @@ export default function LoginPage() {
           }
         }
 
-        if (role === 'ADMIN') router.replace('/admin/dashboard');
-        else if (role === 'CHAPTER_LEADER') router.replace('/chapter-manager/dashboard');
-        else if (data.user.isOrganizationManager) router.replace('/organization-manager');
-        else router.replace('/student/dashboard');
+        router.replace(accountHome(role, data.user.managerKind));
       } else {
         setError('Phản hồi từ máy chủ không hợp lệ.');
       }

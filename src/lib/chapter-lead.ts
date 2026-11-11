@@ -1,7 +1,8 @@
+import { isLeadRole } from '@/lib/roles'
 import { Prisma } from '@prisma/client'
 import { prisma } from './prisma'
 
-export const CHAPTER_LEAD_CODES = ['CHAPTER_LEAD', 'CHAPTER_MANAGER']
+export const CHAPTER_LEAD_CODES = ['CHAPTER_LEAD']
 type Db = Prisma.TransactionClient | typeof prisma
 
 /** PositionAssignment is the authority. ChapterMember is affiliation, never a grant. */
@@ -21,11 +22,11 @@ export async function chapterLeadScope(userId: string, db: Db = prisma, now = ne
   if (!user || user.role === 'ADMIN') return { isLead: false, chapterId: null, conflict: false }
   const assignments = user.position_assignments
   const chapters = Array.from(new Set(assignments.map(row => row.unit.chapter?.id).filter((id): id is string => Boolean(id))))
-  const legacyMismatch = user.role === 'CHAPTER_LEADER' && chapters.length === 1 && user.chapter_members.some(row => row.chapter_id !== chapters[0])
+  const legacyMismatch = isLeadRole(user.role) && chapters.length === 1 && user.chapter_members.some(row => row.chapter_id !== chapters[0])
   const bindingMismatch = chapters.length === 1 && user.chapter_lead_binding?.chapter_id !== chapters[0]
   const conflict = assignments.length > 1 || legacyMismatch || bindingMismatch
   return {
-    isLead: user.role === 'CHAPTER_LEADER' || assignments.length > 0,
+    isLead: isLeadRole(user.role) && (assignments.length > 0 || Boolean(user.chapter_lead_binding)),
     chapterId: !conflict && assignments.length === 1 && assignments[0].unit.status === 'ACTIVE' ? chapters[0] || null : null,
     conflict,
   }

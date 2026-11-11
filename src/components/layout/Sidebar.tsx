@@ -1,4 +1,5 @@
 'use client';
+import { isLeadRole } from '@/lib/roles'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -78,7 +79,7 @@ const chapterManagerNav: NavItem[] = [
 function getNav(role: string, chapterId?: string | null, isOrganizationManager = false, managerKind?: string | null) {
   if (role === 'ADMIN') return adminNav;
   if (managerKind === 'LEAD_DNA') return dnaLeadNav;
-  if (role === 'CHAPTER_LEADER') {
+  if (isLeadRole(role)) {
     if (!chapterId) return chapterManagerNav;
     // Hover prefetch dữ liệu tab đích (URL khớp cache key của apiFetch)
     return [
@@ -343,10 +344,10 @@ export default function Sidebar({
   const roleLabel =
     effectiveRole === 'ADMIN'
       ? 'Quản trị viên'
-      : effectiveRole === 'CHAPTER_LEADER'
-      ? 'Lead Chapter'
       : managerKind === 'LEAD_DNA'
       ? 'Lead DNA'
+      : isLeadRole(effectiveRole)
+      ? 'Lead Chapter'
       : 'Học viên';
 
   return (

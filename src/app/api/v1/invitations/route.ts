@@ -1,8 +1,10 @@
+import { isLeadRole } from '@/lib/roles'
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { getInvitations } from '@/lib/invitations'
 import { getInvitationsServerCache, setInvitationsServerCache } from '@/lib/server-cache'
-import { canAccessChapterPermission, canAccessOrganizationUnitPermission } from '@/lib/authorization'
+import { canAccessChapterPermission } from '@/lib/authorization'
+import { canManageInvitationUnit } from '@/lib/invitation-management'
 import { isOrganizationId } from '@/lib/organization-admin-rules'
 
 const INVITATIONS_CACHE_TTL = 10000
@@ -15,8 +17,8 @@ export async function GET(request: NextRequest) {
 
   const url = new URL(request.url)
   const kind = url.searchParams.get('kind') || undefined
-  if (kind && kind !== 'LEAD') return NextResponse.json({ error: { code: 'ValidationError' } }, { status: 400 })
-  if (kind === 'LEAD' && auth.context!.role !== 'ADMIN') return NextResponse.json({ error: { code: 'AccessDenied' } }, { status: 403 })
+  if (kind && !isLeadRole(kind)) return NextResponse.json({ error: { code: 'ValidationError' } }, { status: 400 })
+  if (isLeadRole(kind) && auth.context!.role !== 'ADMIN') return NextResponse.json({ error: { code: 'AccessDenied' } }, { status: 403 })
   const status = url.searchParams.get('status') as any
   const chapterId = url.searchParams.get('chapterId') || undefined
   const requestedOrganizationUnitId = url.searchParams.get('organizationUnitId') || undefined
@@ -32,11 +34,11 @@ export async function GET(request: NextRequest) {
   let effectiveOrganizationUnitId = requestedOrganizationUnitId
   if (effectiveOrganizationUnitId) {
     if (!isOrganizationId(effectiveOrganizationUnitId)) return NextResponse.json({ error: { code: 'ValidationError' } }, { status: 400 })
-    if ((auth as any).context!.role !== 'ADMIN' && !await canAccessOrganizationUnitPermission(auth.context!, effectiveOrganizationUnitId, 'MANAGE_CHAPTER_MEMBERS')) {
+    if (!await canManageInvitationUnit(auth.context!, effectiveOrganizationUnitId)) {
       return NextResponse.json({ error: { code: 'AccessDenied' } }, { status: 403 })
     }
   }
-  if ((auth as any).context!.role === 'CHAPTER_LEADER') {
+  if (isLeadRole(auth.context!.role)) {
     if (requestedOrganizationUnitId) {
       effectiveChapterId = undefined
       effectiveOrganizationUnitId = requestedOrganizationUnitId
@@ -62,7 +64,7 @@ export async function GET(request: NextRequest) {
   }
 
   const result = await getInvitations({
-    kind: kind === 'LEAD' ? kind : undefined,
+    kind: isLeadRole(kind) ? kind : undefined,
     actorId: (auth as any).context!.userId,
     actorRole: (auth as any).context!.role,
     status: status || undefined,

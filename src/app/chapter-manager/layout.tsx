@@ -1,4 +1,5 @@
 'use client';
+import { canOpenManagerArea, accountHome } from '@/lib/session-role'
 import Sidebar from '@/components/layout/Sidebar';
 import ContentTransition from '@/components/layout/ContentTransition';
 import { apiFetch } from '@/lib/api/client';
@@ -36,7 +37,7 @@ function ChapterManagerLayoutInner({ children }: { children: React.ReactNode }) 
     if (!token || !uRaw) return false;
     try {
       const u = JSON.parse(uRaw);
-      return u.role === 'CHAPTER_LEADER' || u.role === 'ADMIN';
+      return canOpenManagerArea('CHAPTER', u.role, u.managerKind);
     } catch {
       return false;
     }
@@ -65,7 +66,7 @@ function ChapterManagerLayoutInner({ children }: { children: React.ReactNode }) 
               localStorage.setItem('accessToken', data.accessToken);
               localStorage.setItem('user', JSON.stringify(data.user));
               setUser(data.user);
-              if (data.user.role === 'CHAPTER_LEADER' || data.user.role === 'ADMIN') {
+              if (canOpenManagerArea('CHAPTER', data.user.role, data.user.managerKind)) {
                 setIsAuthorized(true);
                 return;
               }
@@ -86,7 +87,7 @@ function ChapterManagerLayoutInner({ children }: { children: React.ReactNode }) 
         return;
       }
 
-      if (u.role === 'CHAPTER_LEADER' || u.role === 'ADMIN') {
+      if (canOpenManagerArea('CHAPTER', u.role, u.managerKind)) {
         setIsAuthorized(true);
         return;
       }
@@ -103,7 +104,7 @@ function ChapterManagerLayoutInner({ children }: { children: React.ReactNode }) 
             setIsAuthorized(true);
             return;
           }
-          router.replace('/student/dashboard');
+          router.replace(accountHome(u?.role, u?.managerKind));
         })
         .catch(() => router.replace('/student/dashboard'));
     }
@@ -151,7 +152,7 @@ function ChapterManagerLayoutInner({ children }: { children: React.ReactNode }) 
 
   return (
     <div className="min-h-screen bg-[#f8f9ff] flex">
-      <Sidebar role="CHAPTER_LEADER" user={{ email: user?.email, chapterName: user?.chapterName, canManageMembers: user?.canManageMembers }} />
+      <Sidebar role="LEAD" user={{ email: user?.email, chapterName: user?.chapterName, canManageMembers: user?.canManageMembers }} />
       <main className="md:ml-64 flex-1 px-4 pb-8 pt-20 md:px-8 md:py-10 w-full min-w-0">
         {user?.managedChapters?.length > 1 && (
           <div className="mb-5 flex flex-wrap items-center justify-end gap-2">

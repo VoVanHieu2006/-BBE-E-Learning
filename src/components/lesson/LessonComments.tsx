@@ -1,4 +1,5 @@
 'use client';
+import { isLeadRole } from '@/lib/roles'
 import { useState, useEffect } from 'react';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
@@ -8,7 +9,7 @@ export interface LessonCommentItem {
   lessonId: string;
   userId: string;
   userEmail: string;
-  userRole: 'ADMIN' | 'CHAPTER_LEADER' | 'MEMBER';
+  userRole: 'ADMIN' | 'LEAD' | 'MEMBER';
   content: string;
   parentId: string | null;
   createdAt: string;
@@ -22,7 +23,7 @@ interface LessonCommentsProps {
     id?: string;
     userId?: string;
     email?: string;
-    role?: 'ADMIN' | 'CHAPTER_LEADER' | 'MEMBER';
+    role?: 'ADMIN' | 'LEAD' | 'MEMBER';
   } | null;
   accessToken: string;
   onToast?: (type: 'success' | 'error' | 'info', message: string, title?: string) => void;
@@ -266,7 +267,7 @@ export default function LessonComments({
         </span>
       );
     }
-    if (role === 'CHAPTER_LEADER') {
+    if (isLeadRole(role)) {
       return (
         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
           ⭐ Ban điều hành

@@ -1,10 +1,12 @@
 import { NextRequest } from 'next/server'
-import { jwtVerify } from 'jose'
+import { jwtVerify, JWTPayload } from 'jose'
+import { hashToken } from './tokens'
+import { hasCurrentSessionClaims, sessionMatchesAccount } from './session-role'
 import { prisma } from './prisma'
 import { chapterLeadScope } from './chapter-lead'
 import { hasActiveAffiliation } from './affiliation-access'
 
-type UserRole = 'ADMIN' | 'CHAPTER_LEADER' | 'MEMBER';
+type UserRole = 'ADMIN' | 'LEAD' | 'MEMBER';
 
 export interface AuthContext {
   userId: string
@@ -28,18 +30,26 @@ export async function authenticate(request: NextRequest): Promise<AuthResult> {
   const header = request.headers.get('Authorization')
   const accessToken = header?.startsWith('Bearer ') ? header.slice(7) : request.cookies.get('accessToken')?.value
   const refreshToken = request.cookies.get('refreshToken')?.value
-  let userId: string | undefined
+  let payload: JWTPayload | undefined
+  let usedRefresh = false
   if (accessToken) {
-    try { userId = (await jwtVerify(accessToken, secret)).payload.sub } catch {}
+    try { payload = (await jwtVerify(accessToken, secret)).payload } catch {}
   }
-  if (!userId && refreshToken && process.env.JWT_REFRESH_SECRET) {
-    try { userId = (await jwtVerify(refreshToken, new TextEncoder().encode(process.env.JWT_REFRESH_SECRET))).payload.sub } catch {}
+  if (!payload && refreshToken && process.env.JWT_REFRESH_SECRET) {
+    try {
+      payload = (await jwtVerify(refreshToken, new TextEncoder().encode(process.env.JWT_REFRESH_SECRET))).payload
+      usedRefresh = true
+    } catch {}
   }
-  if (!userId) return { ok: false, error: { code: 'UNAUTHORIZED', message: 'Missing or invalid credentials' } }
+  const userId = payload?.sub
+  if (!payload || !userId || !hasCurrentSessionClaims(payload)) return { ok: false, error: { code: 'UNAUTHORIZED', message: 'Phiên đã hết hiệu lực. Vui lòng đăng nhập lại.' } }
+  if (usedRefresh && !await prisma.refreshToken.findFirst({ where: { user_id: userId, token_hash: hashToken(refreshToken!), revoked_at: null, expires_at: { gt: new Date() } }, select: { id: true } })) {
+    return { ok: false, error: { code: 'UNAUTHORIZED', message: 'Phiên đã bị thu hồi. Vui lòng đăng nhập lại.' } }
+  }
   const user = await prisma.user.findUnique({ where: { id: userId }, select: {
-    id: true, role: true, status: true, chapter_members: { select: { chapter_id: true } },
+    id: true, role: true, status: true, auth_version: true, chapter_members: { select: { chapter_id: true } },
   } })
-  if (!user || user.status !== 'ACTIVE' || !await hasActiveAffiliation(user.id, user.role)) {
+  if (!user || !sessionMatchesAccount(payload, user) || user.status !== 'ACTIVE' || !await hasActiveAffiliation(user.id, user.role)) {
     return { ok: false, error: { code: 'AccountInactive', message: 'Account is inactive or has no active affiliation' } }
   }
   const lead = await chapterLeadScope(user.id)

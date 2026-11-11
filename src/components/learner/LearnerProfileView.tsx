@@ -1,4 +1,5 @@
 'use client';
+import { isLeadRole } from '@/lib/roles'
 
 import { useState } from 'react';
 import Card from '@/components/ui/Card';
@@ -110,8 +111,8 @@ export default function LearnerProfileView({
 
   const isLead =
     user.isLead ||
-    user.role === 'CHAPTER_LEADER' ||
-    user.effectivePositions?.some((p: any) => p.code === 'DEPARTMENT_LEAD' || p.code === 'CHAPTER_PRESIDENT');
+    isLeadRole(user.role) ||
+    user.effectivePositions?.some((p: any) => p.code === 'DEPARTMENT_LEAD' || p.code === 'PRESIDENT');
 
   const chapterDisplay = user.chapterName || user.chapter?.name || 'Chưa gán Chapter';
   const deptDisplay = user.departmentName || user.department?.name || 'Chưa phân ban';

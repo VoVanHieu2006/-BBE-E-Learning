@@ -52,8 +52,8 @@ describe('bulk invite route keeps the single-invite permission rules', () => {
 
   it('chapter leads are bound to their own chapter', () => {
     const source = read('src/lib/member-invite-scope.ts')
-    assert.match(source, /role === 'CHAPTER_LEADER' \? undefined : requestedChapterId/)
-    assert.match(source, /role === 'CHAPTER_LEADER'\) chapterId = context\.chapterId/)
+    assert.match(source, /isLeadRole\(role\) \? undefined : requestedChapterId/)
+    assert.match(source, /isLeadRole\(role\)\) chapterId = context\.chapterId/)
   })
 
   it('bulk route reports existing members and live invitations instead of re-inviting', () => {
@@ -62,5 +62,15 @@ describe('bulk invite route keeps the single-invite permission rules', () => {
     assert.match(source, /'ALREADY_INVITED'/)
     assert.match(source, /'ALREADY_MEMBER'/)
     assert.match(source, /BULK_INVITE_MAX_EMAILS/)
+  })
+
+  it('both Chapter invite screens submit the selected department for single and bulk invites', () => {
+    for (const file of ['src/app/chapter-manager/invitations/page.tsx', 'src/app/chapter-manager/members/page.tsx']) {
+      const source = read(file)
+      assert.match(source, /organizationUnitId: departmentUnitId/, file)
+      assert.doesNotMatch(source, /JSON\.stringify\(\{ (?:email: inviteEmail\.trim\(\)|emails: bulkText), chapterId:/, file)
+      assert.match(source, /if \(!departmentUnitId\)/, file)
+      assert.match(source, /<select[^>]*value=\{departmentUnitId\}/, file)
+    }
   })
 })

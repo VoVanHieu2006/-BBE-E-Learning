@@ -1,3 +1,4 @@
+import { isLeadRole } from '@/lib/roles'
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { canAccessChapterPermission } from '@/lib/authorization'
@@ -220,7 +221,7 @@ export async function POST(request: NextRequest, { params }: { params: { chapter
   }> = []
 
   for (const m of currentMembers) {
-    if (m.role === 'CHAPTER_LEADER' || m.role === 'ADMIN' || m.email === 'chapter.lead.demo@bbe.vn') continue
+    if (isLeadRole(m.role) || m.role === 'ADMIN' || m.email === 'chapter.lead.demo@bbe.vn') continue
     if (!candidateEmails.has(m.email.toLowerCase())) {
       unmatchedCurrentMembers.push({
         userId: m.userId,

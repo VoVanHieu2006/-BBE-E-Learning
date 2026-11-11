@@ -1,4 +1,6 @@
 'use client'
+import { isLeadRole } from '@/lib/roles'
+import { accountHome } from '@/lib/session-role'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
@@ -39,15 +41,13 @@ export default function LandingPage() {
 
   const getDashboardHref = () => {
     if (!user) return '/login'
-    if (user.role === 'ADMIN') return '/admin/dashboard'
-    if (user.role === 'CHAPTER_LEADER') return '/chapter-manager/dashboard'
-    return '/student/dashboard'
+    return accountHome(user.role, user.managerKind)
   }
 
   const getDashboardLabel = () => {
     if (!user) return 'Đăng nhập để học ngay'
     if (user.role === 'ADMIN') return 'Mở trang quản trị'
-    if (user.role === 'CHAPTER_LEADER') return 'Mở không gian Chapter'
+    if (isLeadRole(user.role)) return 'Mở không gian Chapter'
     return 'Tiếp tục học tập'
   }
 

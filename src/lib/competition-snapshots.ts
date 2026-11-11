@@ -57,7 +57,7 @@ export async function competitionCohortAt(tx: Tx, at: Date) {
     const departmentName = deptMembership?.unit.name || deptPosition?.unit.name || (dna.length ? 'Khối DNA' : null)
 
     // Historical Position name at time `at`
-    const ltPos = userPositions.find((row) => ['PRESIDENT', 'CHAPTER_PRESIDENT', 'DEPARTMENT_LEAD', 'DEPARTMENT_LEADER'].includes(row.position.code))
+    const ltPos = userPositions.find((row) => ['PRESIDENT', 'DEPARTMENT_LEAD'].includes(row.position.code))
     const primaryPos = userPositions.find((row) => (row as any).is_primary) || userPositions[0]
     const positionName = group === 'LT'
       ? (ltPos?.position.name || 'Ban Lãnh Đạo (LT)')

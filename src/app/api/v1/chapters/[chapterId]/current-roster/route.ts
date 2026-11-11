@@ -1,3 +1,4 @@
+import { isLeadRole } from '@/lib/roles'
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { canAccessChapterPermission } from '@/lib/authorization'
@@ -15,7 +16,7 @@ export async function GET(
   const auth = await authenticate(request)
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: 401 })
 
-  const isLeader = auth.context!.role === 'ADMIN' || (auth.context!.role === 'CHAPTER_LEADER' && auth.context!.chapterId === params.chapterId)
+  const isLeader = auth.context!.role === 'ADMIN' || (isLeadRole(auth.context!.role) && auth.context!.chapterId === params.chapterId)
   const hasPerm = await canAccessChapterPermission(auth.context!, params.chapterId, 'VIEW_MEMBER_PROGRESS')
   if (!isLeader && !hasPerm) {
     return NextResponse.json({ error: { code: 'AccessDenied' } }, { status: 403 })
@@ -83,7 +84,7 @@ export async function GET(
       include: { items: true },
       orderBy: { effective_at: 'asc' },
     }),
-    prisma.positionAssignment.findMany({ where: { unit_id: chapter.organization_unit_id, position: { code: 'CHAPTER_PRESIDENT' }, starts_at: { lte: new Date() }, OR: [{ ends_at: null }, { ends_at: { gt: new Date() } }], user: { role: 'MEMBER', status: 'ACTIVE' } }, include: { user: { select: { id: true, email: true, display_name: true, role: true, status: true } } } }),
+    prisma.positionAssignment.findMany({ where: { unit_id: chapter.organization_unit_id, position: { code: 'PRESIDENT' }, starts_at: { lte: new Date() }, OR: [{ ends_at: null }, { ends_at: { gt: new Date() } }], user: { role: 'MEMBER', status: 'ACTIVE' } }, include: { user: { select: { id: true, email: true, display_name: true, role: true, status: true } } } }),
   ])
 
   const deptMap = new Map(departments.map((d) => [d.name, d]))
@@ -111,7 +112,7 @@ export async function GET(
 
     const leadPositions = dept.positions.filter(
       (p) =>
-        p.position.scope === 'DEPARTMENT' && ['DEPARTMENT_LEAD', 'DEPARTMENT_LEADER'].includes(p.position.code)
+        p.position.scope === 'DEPARTMENT' && ['DEPARTMENT_LEAD'].includes(p.position.code)
     )
     const leadUserIds = new Set(leadPositions.map((p) => p.user_id))
 

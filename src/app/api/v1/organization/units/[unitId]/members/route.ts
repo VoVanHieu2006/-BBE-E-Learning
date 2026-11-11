@@ -1,3 +1,4 @@
+import { assignMembershipPosition } from '@/lib/position-replacement'
 import { hasActiveDnaAffiliation } from '@/lib/affiliation-access'
 import { OrganizationConflict } from '@/lib/chapter-lead'
 import { lockLearningUser } from '@/lib/learning-periods'
@@ -203,6 +204,7 @@ export async function POST(request: NextRequest, { params }: { params: { unitId:
             update: {},
           })
         }
+        await assignMembershipPosition(tx, user.id, unit.id, auth.context!.userId)
         await tx.auditLog.create({
           data: {
             actor_user_id: auth.context!.userId,
@@ -220,7 +222,7 @@ export async function POST(request: NextRequest, { params }: { params: { unitId:
       return NextResponse.json({ membership }, { status: 201 })
     } catch (error: any) {
       if (error instanceof OrganizationConflict) return NextResponse.json({ error: { code: error.code, message: error.message } }, { status: 409 })
-      if (/SingleOrganizationAffiliationRequired|MembershipExists|ChapterLead/.test(error?.message || '')) return NextResponse.json({ error: { code: 'OrganizationConflict' } }, { status: 409 })
+      if (/SingleOrganizationAffiliationRequired|SinglePositionRequired|SingleDepartmentRequired|MembershipExists|ChapterLead/.test(error?.message || '')) return NextResponse.json({ error: { code: 'OrganizationConflict' } }, { status: 409 })
       if (error?.code === 'P2034') return NextResponse.json({ error: { code: 'MembershipChangedConcurrently' } }, { status: 409 })
       if (error?.code === 'P2002') return NextResponse.json({ error: { code: 'MembershipExists' } }, { status: 409 })
       throw error

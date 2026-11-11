@@ -1,4 +1,5 @@
 'use client';
+import { isLeadRole } from '@/lib/roles'
 
 import { FormEvent, useEffect, useState } from 'react';
 import Link from 'next/link';
@@ -64,7 +65,7 @@ export default function OrganizationManagerPage() {
       setLoading(true);
       const params = new URLSearchParams({ page: String(page), limit: '20', search, includeInactive: '1' });
       const invitationParams = new URLSearchParams({ page: '1', limit: '50' });
-      if (profile?.role === 'CHAPTER_LEADER' && selected.type === 'CHAPTER' && selected.chapterId) invitationParams.set('chapterId', selected.chapterId);
+      if (isLeadRole(profile?.role) && selected.type === 'CHAPTER' && selected.chapterId) invitationParams.set('chapterId', selected.chapterId);
       else invitationParams.set('organizationUnitId', selected.id);
       const [roster, inviteList] = await Promise.all([
         apiFetch(`/api/v1/organization/units/${selected.id}/members?${params.toString()}`),
@@ -96,6 +97,7 @@ export default function OrganizationManagerPage() {
   const addExistingMember = async (event: FormEvent) => {
     event.preventDefault();
     if (!selectedUnit || !addEmail.trim()) return;
+    if (!['DEPARTMENT', 'DNA_GROUP'].includes(selectedUnit.type)) { setMessage('Chọn một ban hoặc nhóm DNA trước khi thêm thành viên.'); return; }
     setBusy(true);
     clearApiCache(`/api/v1/organization/units/${selectedUnit.id}/members`);
     setMessage('');
@@ -116,10 +118,11 @@ export default function OrganizationManagerPage() {
   const inviteMember = async (event: FormEvent) => {
     event.preventDefault();
     if (!selectedUnit || !inviteEmail.trim()) return;
+    if (!['DEPARTMENT', 'DNA_GROUP'].includes(selectedUnit.type)) { setMessage('Chọn một ban hoặc nhóm DNA trước khi mời thành viên.'); return; }
     setBusy(true);
     clearApiCache('/api/v1/invitations');
     setMessage('');
-    const body = profile?.role === 'CHAPTER_LEADER' && selectedUnit.type === 'CHAPTER' && selectedUnit.chapterId
+    const body = isLeadRole(profile?.role) && selectedUnit.type === 'CHAPTER' && selectedUnit.chapterId
       ? { email: inviteEmail.trim(), chapterId: selectedUnit.chapterId }
       : { email: inviteEmail.trim(), organizationUnitId: selectedUnit.id };
     const result = await apiFetch('/api/v1/invitations/member', { method: 'POST', body: JSON.stringify(body), noCache: true });
@@ -128,7 +131,7 @@ export default function OrganizationManagerPage() {
     setInviteEmail('');
     setMessage(result.data?.emailSent ? 'Đã gửi lời mời thành viên.' : 'Đã tạo lời mời, nhưng email chưa gửi được.');
     const params = new URLSearchParams({ page: '1', limit: '50' });
-    if (profile?.role === 'CHAPTER_LEADER' && selectedUnit.type === 'CHAPTER' && selectedUnit.chapterId) params.set('chapterId', selectedUnit.chapterId);
+    if (isLeadRole(profile?.role) && selectedUnit.type === 'CHAPTER' && selectedUnit.chapterId) params.set('chapterId', selectedUnit.chapterId);
     else params.set('organizationUnitId', selectedUnit.id);
     const updated = await apiFetch(`/api/v1/invitations?${params.toString()}`, { noCache: true });
     if (updated.ok) setInvitations(updated.data?.items || []);

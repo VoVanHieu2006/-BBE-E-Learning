@@ -36,10 +36,10 @@ export async function GET(request: NextRequest, { params }: { params: { chapterI
   const limit = Number.isFinite(parsedLimit) ? Math.min(Math.max(parsedLimit, 1), 100) : 20
   const skip = (page - 1) * limit
 
-  // Admin can see CHAPTER_LEADER members too; BĐHU only MEMBERS
+  // Admin can see LEAD members too; BĐHU only MEMBERS
   const roleFilter = (auth as any).context!.role === 'ADMIN' ? undefined : 'MEMBER'
   const allMembers = await listChapterMembers(chapterId, {
-    ...(roleFilter ? { roles: [roleFilter as 'MEMBER' | 'CHAPTER_LEADER'] } : {}),
+    ...(roleFilter ? { roles: [roleFilter as 'MEMBER' | 'LEAD'] } : {}),
     ...((statusParam || !mayViewInactive) ? { status: (statusParam || 'ACTIVE') as 'ACTIVE' | 'INACTIVE' | 'LOCKED' } : {}),
     search,
   })

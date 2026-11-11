@@ -141,7 +141,7 @@ export function chapterCompetitionScore(
 }
 
 export function competitionGroup(role: string, positionCodes: string[], dna: boolean) {
-  if (role !== 'MEMBER' || positionCodes.some((code) => ['DNA_LEAD', 'DNA_MANAGER', 'CHAPTER_LEAD', 'CHAPTER_MANAGER', 'TT', 'TRAINEE'].includes(code))) return null
+  if (role !== 'MEMBER' || positionCodes.some((code) => ['DNA_LEAD', 'CHAPTER_LEAD', 'TT', 'TRAINEE'].includes(code))) return null
   if (dna) return 'DNA' as const
-  return positionCodes.some((code) => ['PRESIDENT', 'CHAPTER_PRESIDENT', 'DEPARTMENT_LEAD', 'DEPARTMENT_LEADER'].includes(code)) ? 'LT' as const : 'MEMBER' as const
+  return positionCodes.some((code) => ['PRESIDENT', 'DEPARTMENT_LEAD'].includes(code)) ? 'LT' as const : 'MEMBER' as const
 }

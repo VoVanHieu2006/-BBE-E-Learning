@@ -13,7 +13,7 @@ const results = []
 try {
   await db.connect()
   await db.query(await readFile('prisma/migrations/20261022_learning_guards/migration.sql', 'utf8'))
-  const user = await prisma.user.create({ data: { email: `${randomUUID()}@repair-test.invalid`, password_hash: 'test-only', role: 'CHAPTER_LEADER' } })
+  const user = await prisma.user.create({ data: { email: `${randomUUID()}@repair-test.invalid`, password_hash: 'test-only', role: 'LEAD' } })
   const makeChapter = async name => {
     const unit = await prisma.organizationUnit.create({ data: { name: `${name}-${randomUUID()}`, type: 'CHAPTER' } })
     const chapter = await prisma.chapter.create({ data: { name: unit.name, organization_unit_id: unit.id } })
@@ -21,7 +21,7 @@ try {
   }
   const keep = await makeChapter('Chapter Demo'), wrong = await makeChapter('Seed Chapter')
   await prisma.chapterMember.create({ data: { user_id: user.id, chapter_id: wrong.chapter.id } })
-  const position = await prisma.position.create({ data: { code: 'CHAPTER_MANAGER', name: 'Lead', scope: 'CHAPTER', is_manager: true } })
+  const position = await prisma.position.create({ data: { code: 'CHAPTER_LEAD', name: 'Lead', scope: 'CHAPTER', is_manager: true } })
   const assignment = await prisma.positionAssignment.create({ data: { user_id: user.id, unit_id: keep.unit.id, position_id: position.id } })
   await prisma.starLedger.create({ data: { user_id: user.id, amount: 7, reason: 'VIDEO_COMPLETION', source_type: 'TEST', source_id: randomUUID(), reward_key: randomUUID() } })
   const migration = await readFile('prisma/migrations/20261025_organization_integrity/migration.sql', 'utf8')

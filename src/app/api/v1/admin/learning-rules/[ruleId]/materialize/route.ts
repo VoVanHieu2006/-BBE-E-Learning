@@ -3,6 +3,7 @@ import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getOrganizationUnitTreeIds } from '@/lib/learning-assignments'
 import { isOrganizationId } from '@/lib/organization-admin-rules'
+import { learningTargetsForUser } from '@/lib/learning-targets'
 
 /** Converts a rule to stable per-user assignments. Historical assignments are never deleted. */
 export async function POST(request: NextRequest, { params }: { params: { ruleId: string } }) {
@@ -30,6 +31,7 @@ export async function POST(request: NextRequest, { params }: { params: { ruleId:
   const users = await prisma.user.findMany({
     where: {
       status: 'ACTIVE',
+      role: 'MEMBER',
       ...(eligibleUnitIds ? { organization_memberships: { some: { unit_id: { in: eligibleUnitIds }, status: 'ACTIVE', starts_at: { lte: now }, OR: [{ ends_at: null }, { ends_at: { gt: now } }] } } } : {}),
       ...(rule.position_id ? { position_assignments: { some: {
         position_id: rule.position_id,
@@ -41,7 +43,11 @@ export async function POST(request: NextRequest, { params }: { params: { ruleId:
     select: { id: true },
   })
   let created = 0
+  let eligible = 0
   for (const user of users) {
+    const targets = await learningTargetsForUser(prisma, user.id, now)
+    if (!targets.size || (rule.target_code && !targets.has(rule.target_code))) continue
+    eligible++
     const existing = await prisma.userLearningAssignment.findFirst({ where: { user_id: user.id, rule_id: rule.id, ended_at: null }, select: { id: true } })
     if (!existing) {
       await prisma.userLearningAssignment.create({ data: {
@@ -51,5 +57,5 @@ export async function POST(request: NextRequest, { params }: { params: { ruleId:
       created++
     }
   }
-  return NextResponse.json({ ruleId: rule.id, eligibleUsers: users.length, createdAssignments: created })
+  return NextResponse.json({ ruleId: rule.id, eligibleUsers: eligible, createdAssignments: created })
 }

@@ -88,10 +88,10 @@ async function check(id, expected, run, validate) {
     return (due - at(0)) / DAY_MS
   }, actual => assert.equal(actual, 26))
   results.push({ id: 'BOOK-17/18 decision', expected: 'Shared deadline using section 18', actual: 'Confirmed by user on 2026-10-25; section 17 separate deadlines are superseded', status: 'PASS' })
-  await check('BOOK-VI management accounts: CHAPTER_MANAGER alias cannot earn stars', false, async () => {
+  await check('BOOK-VI management accounts: CHAPTER_LEAD alias cannot earn stars', false, async () => {
     const tx = {
       user: { findUnique: async () => ({ role: 'MEMBER', status: 'ACTIVE', anonymized_at: null }) },
-      positionAssignment: { count: async ({ where }) => where.position.code.in.includes('CHAPTER_MANAGER') ? 1 : 0 },
+      positionAssignment: { count: async ({ where }) => where.position.code.in.includes('CHAPTER_LEAD') ? 1 : 0 },
       course: { findUnique: async () => ({ status: 'PUBLISHED' }) },
     }
     return rewardEligibility(tx, 'manager', 'course', at(20))

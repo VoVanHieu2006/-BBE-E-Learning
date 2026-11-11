@@ -5,7 +5,7 @@ import { enforceOverdueAssignments } from '../lib/deadline-enforcement'
 
 const NOW = new Date('2026-05-20T10:00:00.000Z')
 
-type Role = 'MEMBER' | 'ADMIN' | 'CHAPTER_LEADER'
+type Role = 'MEMBER' | 'ADMIN' | 'LEAD'
 interface FakeUser { id: string; role: Role; status: 'ACTIVE' | 'INACTIVE' | 'LOCKED'; lock_reason: string | null; leadPositions: string[] }
 interface FakeAssignment { id: string; user_id: string; course_id: string; status: string; courseStatus: 'PUBLISHED' | 'DRAFT'; title: string }
 
@@ -86,9 +86,9 @@ describe('Overdue enforcement (KHBB 7.1)', () => {
   it('never locks ADMIN, LEAD by role, LEAD by position, or an INACTIVE account, and leaves their assignments untouched', async () => {
     const users = [
       member('admin', { role: 'ADMIN' }),
-      member('lead', { role: 'CHAPTER_LEADER' }),
+      member('lead', { role: 'LEAD' }),
       member('dna-lead', { leadPositions: ['DNA_LEAD'] }),
-      member('chapter-manager', { leadPositions: ['CHAPTER_MANAGER'] }),
+      member('chapter-manager', { leadPositions: ['CHAPTER_LEAD'] }),
       member('inactive', { status: 'INACTIVE' }),
     ]
     const assignments = users.map((user, index) => overdue(`a${index}`, user.id))

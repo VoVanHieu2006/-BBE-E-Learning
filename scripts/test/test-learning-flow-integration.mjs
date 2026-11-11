@@ -174,15 +174,15 @@ try {
   const adminId = await createUser('ADMIN', 'admin')
   const learnerId = await createUser('MEMBER', 'learner')
   const viewerId = await createUser('MEMBER', 'viewer')
-  const chapterLeaderId = await createUser('CHAPTER_LEADER', 'chapter-leader')
-  const chapterOutsiderId = await createUser('CHAPTER_LEADER', 'chapter-outsider')
+  const chapterLeaderId = await createUser('LEAD', 'chapter-leader')
+  const chapterOutsiderId = await createUser('LEAD', 'chapter-outsider')
   const dnaManagerId = await createUser('MEMBER', 'dna-manager')
   const dnaOutsiderId = await createUser('MEMBER', 'dna-outsider')
   const deadlineUserId = await createUser('MEMBER', 'deadline-user')
   const adminToken = await issueAccessToken(adminId, 'ADMIN')
   const learnerToken = await issueAccessToken(learnerId, 'MEMBER')
   const viewerToken = await issueAccessToken(viewerId, 'MEMBER')
-  const chapterLeaderToken = await issueAccessToken(chapterLeaderId, 'CHAPTER_LEADER')
+  const chapterLeaderToken = await issueAccessToken(chapterLeaderId, 'LEAD')
   const dnaManagerToken = await issueAccessToken(dnaManagerId, 'MEMBER')
 
   const chapterRoot = await prisma.organizationUnit.create({ data: { name: `${prefix}-chapter-root`, type: 'ROOT' }, select: { id: true } })
@@ -207,8 +207,8 @@ try {
     { chapter_id: chapterA.id, user_id: viewerId },
     { chapter_id: chapterB.id, user_id: chapterOutsiderId },
   ] })
-  const existingLeadPosition = await prisma.position.findUnique({ where: { code: 'CHAPTER_MANAGER' } })
-  const leadPosition = existingLeadPosition || await prisma.position.create({ data: { code: 'CHAPTER_MANAGER', name: 'Lead Chapter', scope: 'CHAPTER', is_manager: true } })
+  const existingLeadPosition = await prisma.position.findUnique({ where: { code: 'CHAPTER_LEAD' } })
+  const leadPosition = existingLeadPosition || await prisma.position.create({ data: { code: 'CHAPTER_LEAD', name: 'Lead Chapter', scope: 'CHAPTER', is_manager: true } })
   if (!existingLeadPosition) positionIds.push(leadPosition.id)
   await prisma.positionAssignment.createMany({ data: [
     { user_id: chapterLeaderId, unit_id: chapterUnitA.id, position_id: leadPosition.id },
@@ -513,7 +513,7 @@ try {
   assert.equal(lockedLearnerRequest.status, 401, 'locked accounts cannot continue using authenticated learning APIs')
 
   const outsiderManagerCannotUnlock = await callApi('/api/v1/admin/restrictions', {
-    method: 'POST', token: await issueAccessToken(chapterOutsiderId, 'CHAPTER_LEADER'),
+    method: 'POST', token: await issueAccessToken(chapterOutsiderId, 'LEAD'),
     body: { action: 'LIFT', targetType: 'CHAPTER', targetId: chapterA.id },
   })
   assert.equal(outsiderManagerCannotUnlock.status, 403, 'Chapter managers cannot lift restrictions')
@@ -554,7 +554,7 @@ try {
   const deadlineRestriction = await prisma.accessRestriction.findFirst({ where: { user_id: deadlineUserId, type: 'DEADLINE', lifted_at: null } })
   assert.ok(deadlineRestriction?.source_reference === `learning-assignment:${deadlineAssignment.id}`, 'deadline lock is tied to the exact overdue assignment')
   const managerCannotUnlockDeadline = await callApi('/api/v1/admin/restrictions', {
-    method: 'POST', token: await issueAccessToken(chapterOutsiderId, 'CHAPTER_LEADER'),
+    method: 'POST', token: await issueAccessToken(chapterOutsiderId, 'LEAD'),
     body: { action: 'LIFT', targetType: 'USER', targetId: deadlineUserId },
   })
   assert.equal(managerCannotUnlockDeadline.status, 403, 'only Admin may reopen a deadline-locked account')

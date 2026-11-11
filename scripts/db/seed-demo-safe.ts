@@ -27,7 +27,7 @@ async function main() {
   const users = [
     ['admin.demo@bbe.vn', 'Quản trị viên Demo', 'ADMIN'],
     ['dna.lead.demo@bbe.vn', 'Lead DNA Demo', 'MEMBER'],
-    ['chapter.lead.demo@bbe.vn', 'Lead Chapter Demo', 'CHAPTER_LEADER'],
+    ['chapter.lead.demo@bbe.vn', 'Lead Chapter Demo', 'LEAD'],
     ['department.lead.demo@bbe.vn', 'LT Ban Demo', 'MEMBER'],
     ['member.demo@bbe.vn', 'Thành viên Demo', 'MEMBER'],
     ['dna.member.demo@bbe.vn', 'Thành viên DNA Demo', 'MEMBER'],
@@ -64,7 +64,7 @@ async function main() {
     prisma.position.upsert({ where: { code: 'DNA_LEAD' }, update: { name: 'Lead DNA', scope: 'DNA', is_manager: true }, create: { code: 'DNA_LEAD', name: 'Lead DNA', scope: 'DNA', is_manager: true } }),
     prisma.position.upsert({ where: { code: 'CHAPTER_LEAD' }, update: { name: 'Trưởng Chapter', scope: 'CHAPTER', is_manager: true }, create: { code: 'CHAPTER_LEAD', name: 'Trưởng Chapter', scope: 'CHAPTER', is_manager: true } }),
     prisma.position.upsert({ where: { code: 'DEPARTMENT_LEAD' }, update: { name: 'LT Ban', scope: 'DEPARTMENT', is_manager: true }, create: { code: 'DEPARTMENT_LEAD', name: 'LT Ban', scope: 'DEPARTMENT', is_manager: true } }),
-    prisma.position.upsert({ where: { code: 'MEMBER' }, update: { name: 'Thành viên', scope: 'DEPARTMENT', is_manager: false }, create: { code: 'MEMBER', name: 'Thành viên', scope: 'DEPARTMENT', is_manager: false } }),
+    prisma.position.upsert({ where: { code: 'DEPARTMENT_MEMBER' }, update: { name: 'Thành viên', scope: 'DEPARTMENT', is_manager: false }, create: { code: 'DEPARTMENT_MEMBER', name: 'Thành viên', scope: 'DEPARTMENT', is_manager: false } }),
   ])
   const assignments = [
     ['dna.lead.demo@bbe.vn', dna.id, positions[0].id],

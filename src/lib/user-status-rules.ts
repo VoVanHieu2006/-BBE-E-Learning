@@ -1,3 +1,4 @@
+import { isLeadRole } from '@/lib/roles'
 export interface UserStatusActor {
   userId: string
   role: string
@@ -51,7 +52,7 @@ export function assertCanChangeUserStatus(
   }
 
   // Non-Admin checks:
-  if (target.role === 'ADMIN' || target.role === 'CHAPTER_LEADER' || target.id === actor.userId) {
+  if (target.role === 'ADMIN' || isLeadRole(target.role) || target.id === actor.userId) {
     return {
       allowed: false,
       code: 'AccessDenied',

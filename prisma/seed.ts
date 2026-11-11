@@ -67,7 +67,7 @@ async function wipeAll(): Promise<void> {
 interface UserSpec {
   name: string;
   email: string;
-  role: "ADMIN" | "CHAPTER_LEADER" | "MEMBER";
+  role: "ADMIN" | "LEAD" | "MEMBER";
   chapter?: string;
   status?: "ACTIVE" | "INACTIVE" | "LOCKED";
 }
@@ -129,13 +129,13 @@ async function main(): Promise<void> {
 
   const userSpecs: UserSpec[] = [
     { name: "Lead DNA Demo", email: "dna.lead.demo@bbe.vn", role: "MEMBER" },
-    { name: "Lead Chapter Demo", email: "chapter.lead.demo@bbe.vn", role: "CHAPTER_LEADER", chapter: hn.id },
+    { name: "Lead Chapter Demo", email: "chapter.lead.demo@bbe.vn", role: "LEAD", chapter: hn.id },
     { name: "LT Ban Demo", email: "department.lead.demo@bbe.vn", role: "MEMBER", chapter: hn.id },
     { name: "Thành viên Demo", email: "member.demo@bbe.vn", role: "MEMBER", chapter: hn.id },
     { name: "Thành viên DNA Demo", email: "dna.member.demo@bbe.vn", role: "MEMBER", chapter: hn.id },
-    { name: "Nguyễn Phương Hoa", email: "phuong.hoa@bbe.vn", role: "CHAPTER_LEADER", chapter: hn.id },
-    { name: "Trần Quốc Bảo", email: "quoc.bao@bbe.vn", role: "CHAPTER_LEADER", chapter: hcm.id },
-    { name: "Lê Thị Mai Anh", email: "mai.anh@bbe.vn", role: "CHAPTER_LEADER", chapter: dn.id },
+    { name: "Nguyễn Phương Hoa", email: "phuong.hoa@bbe.vn", role: "LEAD", chapter: hn.id },
+    { name: "Trần Quốc Bảo", email: "quoc.bao@bbe.vn", role: "LEAD", chapter: hcm.id },
+    { name: "Lê Thị Mai Anh", email: "mai.anh@bbe.vn", role: "LEAD", chapter: dn.id },
     { name: "Phạm Văn Đức", email: "van.duc@bbe.vn", role: "MEMBER", chapter: hn.id },
     { name: "Vũ Ngọc Linh", email: "ngoc.linh@bbe.vn", role: "MEMBER", chapter: hn.id },
     { name: "Đặng Thu Trang", email: "thu.trang@bbe.vn", role: "MEMBER", chapter: hn.id },
@@ -196,7 +196,7 @@ async function main(): Promise<void> {
     prisma.position.create({ data: { code: "DNA_LEAD", name: "Lead DNA", scope: "DNA", is_manager: true } }),
     prisma.position.create({ data: { code: "CHAPTER_LEAD", name: "Trưởng Chapter", scope: "CHAPTER", is_manager: true } }),
     prisma.position.create({ data: { code: "DEPARTMENT_LEAD", name: "LT Ban", scope: "DEPARTMENT", is_manager: true } }),
-    prisma.position.create({ data: { code: "MEMBER", name: "Thành viên", scope: "DEPARTMENT", is_manager: false } }),
+    prisma.position.create({ data: { code: 'DEPARTMENT_MEMBER', name: "Thành viên", scope: "DEPARTMENT", is_manager: false } }),
   ]);
   const permissions = await Promise.all([
     prisma.permission.create({ data: { code: "VIEW_MEMBER_PROGRESS", description: "Xem tiến độ thành viên trong phạm vi" } }),
@@ -798,7 +798,7 @@ async function main(): Promise<void> {
   await prisma.invitation.create({
     data: {
       email: "expired.leader.hcm@gmail.com",
-      role: "CHAPTER_LEADER",
+      role: "LEAD",
       chapter_id: hcm.id,
       invited_by: admin.id,
       token_hash: "seed-expired-invite-token-hash-0002",

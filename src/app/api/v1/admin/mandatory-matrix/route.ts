@@ -94,10 +94,10 @@ async function resolveScopes(): Promise<Map<string, Scope[]>> {
   const result = new Map<string, Scope[]>()
 
   for (const target of CANONICAL_TARGETS) {
-    const position = target.positionCode && target.positionCode !== 'MEMBER'
+    const position = target.positionCode
       ? positions.find((row) => row.code === target.positionCode)
       : null
-    if (target.positionCode && target.positionCode !== 'MEMBER' && !position) {
+    if (target.positionCode && !position) {
       result.set(target.key, [])
       continue
     }

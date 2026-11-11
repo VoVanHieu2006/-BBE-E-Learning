@@ -1,3 +1,4 @@
+import { isLeadRole } from '@/lib/roles'
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate, invalidateUserAuthCache } from '@/lib/auth'
 import { canAccessChapterPermission } from '@/lib/authorization'
@@ -62,7 +63,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { userId
       return NextResponse.json({ error: { code: 'AccessDenied', message: 'Thiếu thông tin Chapter quản lý.' } }, { status: 403 })
     }
 
-    const hasPermission = actor.role === 'CHAPTER_LEADER'
+    const hasPermission = isLeadRole(actor.role)
       ? actor.chapterId === managedChapterId
       : await canAccessChapterPermission(actor, managedChapterId, 'MANAGE_CHAPTER_MEMBERS')
     if (!hasPermission) {
@@ -92,7 +93,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { userId
 
     if (status === 'INACTIVE') {
       // 1. Check if deactivating a Chapter Leader by Admin -> Cascade deactivation to active members
-      const isLead = target.role === 'CHAPTER_LEADER'
+      const isLead = isLeadRole(target.role)
       const cascadeScopes = (isAdmin && isLead) ? await getUserManagedChapterScopes(userId, true, tx) : []
 
       if (cascadeScopes.length) {
@@ -147,7 +148,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { userId
     } else {
       // 2. Reactivating account (status: ACTIVE)
       // If activating a Chapter Leader by Admin -> Auto-reactivate members that were cascade-deactivated by this Lead
-      if (isAdmin && (target.role === 'CHAPTER_LEADER' || target.cascade_lead_id)) {
+      if (isAdmin && (isLeadRole(target.role) || target.cascade_lead_id)) {
         const cascadedMembers = await tx.user.findMany({
           where: { cascade_lead_id: userId, status: 'INACTIVE', anonymized_at: null },
           select: { id: true },

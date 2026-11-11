@@ -81,7 +81,7 @@ export async function rewardEligibility(tx: LearningTx, userId: string, courseId
   const user = await tx.user.findUnique({ where: { id: userId }, select: { role: true, status: true, anonymized_at: true } })
   if (!user || user.role !== 'MEMBER' || user.status !== 'ACTIVE' || user.anonymized_at) return false
   const lead = await tx.positionAssignment.count({ where: {
-    user_id: userId, position: { code: { in: ['DNA_LEAD', 'DNA_MANAGER', 'CHAPTER_LEAD'] } },
+    user_id: userId, position: { code: { in: ['DNA_LEAD', 'CHAPTER_LEAD'] } },
     starts_at: { lte: now }, OR: [{ ends_at: null }, { ends_at: { gt: now } }],
   } })
   if (lead) return false

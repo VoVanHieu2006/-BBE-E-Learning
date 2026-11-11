@@ -26,7 +26,7 @@ async function call(path, bearer, method = 'GET', body) {
 }
 try {
   const admin = await createUser({ data: { email: `${prefix}-admin@example.invalid`, role: 'ADMIN', password_hash: '-' } })
-  const lead = await createUser({ data: { email: `${prefix}-lead@example.invalid`, role: 'CHAPTER_LEADER', password_hash: '-' } })
+  const lead = await createUser({ data: { email: `${prefix}-lead@example.invalid`, role: 'LEAD', password_hash: '-' } })
   const member = await createUser({ data: { email: `${prefix}-member@example.invalid`, role: 'MEMBER', password_hash: '-' } })
   const root = await db.organizationUnit.create({ data: { type: 'ROOT', name: prefix } })
   fixture.rootId = root.id
@@ -41,8 +41,8 @@ try {
   }
   await db.chapterMember.create({ data: { chapter_id: chapters[0].id, user_id: lead.id } })
   // Role and affiliation alone are not a management grant in the current model.
-  const existingPosition = await db.position.findUnique({ where: { code: 'CHAPTER_MANAGER' } })
-  const position = existingPosition || await db.position.create({ data: { code: 'CHAPTER_MANAGER', name: 'Lead Chapter', scope: 'CHAPTER', is_manager: true } })
+  const existingPosition = await db.position.findUnique({ where: { code: 'CHAPTER_LEAD' } })
+  const position = existingPosition || await db.position.create({ data: { code: 'CHAPTER_LEAD', name: 'Lead Chapter', scope: 'CHAPTER', is_manager: true } })
   if (!existingPosition) fixture.positionId = position.id
   const existingPermission = await db.permission.findUnique({ where: { code: 'MANAGE_CHAPTER_MEMBERS' } })
   const permission = existingPermission || await db.permission.create({ data: { code: 'MANAGE_CHAPTER_MEMBERS', description: 'Security fixture' } })

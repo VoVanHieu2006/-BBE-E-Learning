@@ -186,7 +186,7 @@ test('history rejects invalid or unknown chapters', async () => {
 })
 
 test('non-admin cannot read transfer progress or chapter history', async () => {
-  authContext = { userId: 'leader', role: 'CHAPTER_LEADER' }
+  authContext = { userId: 'leader', role: 'LEAD' }
   const progress = await getProgress()
   assert.equal(progress.status, 403)
   assert.equal(progress.body.error.code, 'AccessDenied')

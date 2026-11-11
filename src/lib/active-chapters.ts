@@ -6,9 +6,9 @@ export async function getActiveMetricChapterIds(now = new Date()): Promise<strin
     where: {
       status: 'ACTIVE',
       OR: [
-        { chapter_members: { some: { user: { status: 'ACTIVE', role: 'CHAPTER_LEADER' } } } },
+        { chapter_members: { some: { user: { status: 'ACTIVE', role: 'LEAD' } } } },
         { organization_unit: { positions: { some: {
-          position: { code: 'CHAPTER_MANAGER' }, user: { status: 'ACTIVE' },
+          position: { code: 'CHAPTER_LEAD' }, user: { status: 'ACTIVE' },
           starts_at: { lte: now }, OR: [{ ends_at: null }, { ends_at: { gt: now } }],
         } } } },
       ],

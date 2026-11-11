@@ -24,9 +24,9 @@ try {
   await db.query('COMMIT')
 
   const canonical = new Set([
-    'MEMBER_BTV', 'MEMBER_BTK', 'MEMBER_BND', 'MEMBER_BCL', 'MEMBER_BDH', 'MEMBER_BKM', 'MEMBER_BTTSK',
-    'LEADER_BTV', 'LEADER_BTK', 'LEADER_BND', 'LEADER_BCL', 'LEADER_BDH', 'LEADER_BKM', 'LEADER_BTTSK',
-    'CHAPTER_PRESIDENT', 'DNA_TT', 'DNA_SGDC', 'DNA_LDC',
+    'DEPARTMENT_MEMBER_BTV', 'DEPARTMENT_MEMBER_BTK', 'DEPARTMENT_MEMBER_BND', 'DEPARTMENT_MEMBER_BCL', 'DEPARTMENT_MEMBER_BDHU', 'DEPARTMENT_MEMBER_BKM', 'DEPARTMENT_MEMBER_BTTSK',
+    'DEPARTMENT_LEAD_BTV', 'DEPARTMENT_LEAD_BTK', 'DEPARTMENT_LEAD_BND', 'DEPARTMENT_LEAD_BCL', 'DEPARTMENT_LEAD_BDHU', 'DEPARTMENT_LEAD_BKM', 'DEPARTMENT_LEAD_BTTSK',
+    'PRESIDENT', 'DNA_MEMBER_TT', 'DNA_MEMBER_SGDC', 'DNA_MEMBER_LDC',
   ])
   const legacyRules = rules.rows.filter((rule) => rule.target_code && !canonical.has(rule.target_code))
   const missingTargets = [...canonical].filter((code) => !targets.rows.some((target) => target.code === code))

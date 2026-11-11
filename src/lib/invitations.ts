@@ -1,3 +1,5 @@
+import { assignMembershipPosition } from './position-replacement'
+import { isLeadRole } from '@/lib/roles'
 import { invalidateOrganizationViews } from './organization-view-cache'
 import { prepareOrganizationTransition } from './organization-transition'
 import { prisma } from './prisma'
@@ -6,8 +8,8 @@ import { sendInvitationEmail } from './email'
 import { reconcileLearningAssignmentsForUser } from './learning-assignments'
 import { invalidateChapterLeaderboardCache } from './chapter-leaderboard-cache'
 import { invalidateMemberLeaderboardCache } from './member-leaderboard-cache'
-type UserRole = 'ADMIN' | 'CHAPTER_LEADER' | 'MEMBER';
-type InvitationRole = 'CHAPTER_LEADER' | 'DNA_LEAD' | 'MEMBER';
+type UserRole = 'ADMIN' | 'LEAD' | 'MEMBER';
+type InvitationRole = 'LEAD' | 'DNA_LEAD' | 'MEMBER';
 type InvitationStatus = 'PENDING' | 'ACCEPTED' | 'EXPIRED' | 'CANCELLED';
 import bcrypt from 'bcryptjs'
 import { ensureChapterStandardDepartments } from './chapter-departments'
@@ -57,6 +59,10 @@ export async function sendMemberInvitation(
 ): Promise<SendInvitationResult | SendInvitationError> {
   if (Boolean(opts.chapterId) === Boolean(opts.organizationUnitId)) {
     return { ok: false, code: 'ValidationError', message: 'Choose exactly one Chapter or Organization Unit scope.' }
+  }
+  if (opts.role === 'MEMBER') {
+    const unit = opts.organizationUnitId ? await prisma.organizationUnit.findUnique({ where: { id: opts.organizationUnitId }, select: { type: true, status: true } }) : null
+    if (!unit || unit.status !== 'ACTIVE' || !['DEPARTMENT', 'DNA_GROUP'].includes(unit.type)) return { ok: false, code: 'MemberPositionRequired', message: 'Vui lòng chọn một ban hoặc nhóm DNA cho thành viên.' }
   }
   // BR-02 (issue #10): no invitation if email already belongs to ANY account (Active or Inactive)
   if (await emailHasAnyAccount(opts.email)) {
@@ -143,7 +149,7 @@ export async function sendChapterLeaderInvitation(
     return { ok: false, code: 'ChapterNameConflict', message: 'Tên chapter đã tồn tại' }
   }
 
-  const pendingName = await prisma.invitation.findFirst({ where: { role: 'CHAPTER_LEADER', status: 'PENDING', chapter_name: chapterName, expires_at: { gt: new Date() } }, select: { id: true } })
+  const pendingName = await prisma.invitation.findFirst({ where: { role: 'LEAD', status: 'PENDING', chapter_name: chapterName, expires_at: { gt: new Date() } }, select: { id: true } })
   if (pendingName) return { ok: false, code: 'ChapterNameConflict', message: 'Chapter name is reserved by a pending invitation' }
 
   // Persist the invitation only; the Chapter is created on acceptance.
@@ -166,7 +172,7 @@ export async function sendChapterLeaderInvitation(
     const invitation = await tx.invitation.create({
       data: {
         email,
-        role: 'CHAPTER_LEADER',
+        role: 'LEAD',
         chapter_name: chapterName,
         chapter_description: chapterDescription,
         invited_by: invitedBy,
@@ -187,7 +193,7 @@ export async function sendChapterLeaderInvitation(
   // Send chapter leader invitation email via Resend OUTSIDE transaction
   const emailResult = await sendInvitationEmail({
     to: email,
-    role: 'CHAPTER_LEADER',
+    role: 'LEAD',
     chapterName,
     token: created.token,
     expiresAt: created.expiresAt,
@@ -216,19 +222,7 @@ export async function sendDnaLeaderInvitation(email: string, invitedBy: string) 
   })
   if (activeLead) return { ok: false as const, code: 'DnaLeadExists', message: 'Hệ thống đã có một Lead DNA đang hoạt động.' }
   const existingUser = await prisma.user.findUnique({ where: { email: email.trim().toLowerCase() } })
-  if (existingUser) {
-    if (existingUser.status !== 'ACTIVE') return { ok: false as const, code: 'AccountInactive', message: 'Tài khoản hiện có đang bị vô hiệu hóa.' }
-    const assignment = await prisma.$transaction(async (tx) => {
-      const effectiveAt = await prepareOrganizationTransition(tx, existingUser.id, dnaUnit.id, invitedBy)
-      const membership = await tx.organizationMembership.findFirst({ where: { user_id: existingUser.id, unit_id: dnaUnit.id, status: 'ACTIVE', ends_at: null } })
-      if (!membership) await tx.organizationMembership.create({ data: { user_id: existingUser.id, unit_id: dnaUnit.id, starts_at: effectiveAt } })
-      const position = await tx.position.upsert({ where: { code: 'DNA_LEAD' }, update: { name: 'Lead DNA', scope: 'DNA', is_manager: true }, create: { code: 'DNA_LEAD', name: 'Lead DNA', scope: 'DNA', is_manager: true } })
-      return tx.positionAssignment.create({ data: { user_id: existingUser.id, position_id: position.id, unit_id: dnaUnit.id, is_primary: true, starts_at: effectiveAt, appointed_by: invitedBy } })
-    })
-    await reconcileLearningAssignmentsForUser(existingUser.id)
-    invalidateOrganizationViews()
-    return { ok: true as const, invitationId: assignment.id, organizationUnitId: dnaUnit.id, status: 'ACCEPTED' as InvitationStatus, expiresAt: new Date(), token: '', emailSent: true, assignedExisting: true }
-  }
+  if (existingUser) return { ok: false as const, code: 'LeadInvitationRequiresNewAccount', message: 'LEAD phải là tài khoản mới được mời làm LEAD; không đổi vai trò tài khoản hiện có.' }
   return sendMemberInvitation({ email, role: 'DNA_LEAD', organizationUnitId: dnaUnit.id, invitedBy })
 }
 
@@ -367,6 +361,11 @@ export async function acceptInvitation(
     return { ok: false, code: 'TokenExpired', message: 'Token đã hết hạn' }
   }
 
+  if (invitation.role === 'MEMBER') {
+    const unit = invitation.organization_unit_id ? await prisma.organizationUnit.findUnique({ where: { id: invitation.organization_unit_id }, select: { type: true, status: true } }) : null
+    if (!unit || unit.status !== 'ACTIVE' || !['DEPARTMENT', 'DNA_GROUP'].includes(unit.type)) return { ok: false, code: 'MemberPositionRequired', message: 'Lời mời cần được gửi lại với một ban hoặc nhóm DNA cụ thể.' }
+  }
+
   // Hash password with bcrypt
   const passwordHash = await bcrypt.hash(password, 12)
 
@@ -376,7 +375,7 @@ export async function acceptInvitation(
       data: {
         email: invitation.email.trim().toLowerCase(),
         password_hash: passwordHash,
-        role: (invitation.role === 'DNA_LEAD' ? 'MEMBER' : invitation.role) as UserRole,
+        role: (invitation.role === 'DNA_LEAD' ? 'LEAD' : invitation.role) as UserRole,
         status: 'ACTIVE',
         failed_login_count: 0,
       },
@@ -384,7 +383,7 @@ export async function acceptInvitation(
 
     let chapterId = invitation.chapter_id
     let organizationUnitId = invitation.organization_unit_id
-    if (!chapterId && invitation.role === 'CHAPTER_LEADER' && invitation.chapter_name) {
+    if (!chapterId && isLeadRole(invitation.role) && invitation.chapter_name) {
       const unit = await tx.organizationUnit.create({ data: { name: invitation.chapter_name, type: 'CHAPTER' } })
       const chapter = await tx.chapter.create({
         data: {
@@ -443,11 +442,11 @@ export async function acceptInvitation(
     }
     await tx.organizationMembership.create({ data: { user_id: user.id, unit_id: organizationUnitId } })
 
-    if (invitation.role === 'CHAPTER_LEADER') {
+    if (isLeadRole(invitation.role)) {
       const position = await tx.position.upsert({
-        where: { code: 'CHAPTER_MANAGER' },
+        where: { code: 'CHAPTER_LEAD' },
         update: {},
-        create: { code: 'CHAPTER_MANAGER', name: 'Lead Chapter', scope: 'CHAPTER', is_manager: true },
+        create: { code: 'CHAPTER_LEAD', name: 'Lead Chapter', scope: 'CHAPTER', is_manager: true },
       })
       const existingPrimary = await tx.positionAssignment.findFirst({ where: { unit_id: organizationUnitId, is_primary: true, starts_at: { lte: new Date() }, OR: [{ ends_at: null }, { ends_at: { gt: new Date() } }] }, select: { id: true } })
       await tx.positionAssignment.create({
@@ -470,15 +469,18 @@ export async function acceptInvitation(
       await tx.positionAssignment.create({
         data: { user_id: user.id, position_id: position.id, unit_id: organizationUnitId, is_primary: true, starts_at: new Date(), appointed_by: invitation.invited_by },
       })
-      const managePermission = await tx.permission.upsert({
-        where: { code: 'MANAGE_CHAPTER_MEMBERS' }, update: {},
-        create: { code: 'MANAGE_CHAPTER_MEMBERS', description: 'Manage members within a scoped Chapter.' },
-      })
-      await tx.positionPermission.upsert({
-        where: { position_id_permission_id: { position_id: position.id, permission_id: managePermission.id } },
-        update: {}, create: { position_id: position.id, permission_id: managePermission.id },
-      })
+
     }
+
+    if (invitation.role !== 'MEMBER') {
+      const code = invitation.role === 'DNA_LEAD' ? 'DNA_LEAD' : 'CHAPTER_LEAD'
+      const position = await tx.position.findUniqueOrThrow({ where: { code } })
+      for (const permissionCode of ['VIEW_MEMBER_PROGRESS', code === 'DNA_LEAD' ? 'MANAGE_DNA_MEMBERS' : 'MANAGE_CHAPTER_MEMBERS']) {
+        const permission = await tx.permission.upsert({ where: { code: permissionCode }, update: {}, create: { code: permissionCode } })
+        await tx.positionPermission.upsert({ where: { position_id_permission_id: { position_id: position.id, permission_id: permission.id } }, update: {}, create: { position_id: position.id, permission_id: permission.id } })
+      }
+    }
+    if (invitation.role === 'MEMBER') await assignMembershipPosition(tx, user.id, organizationUnitId, invitation.invited_by)
 
     // Update invitation status
     await tx.invitation.update({
@@ -532,9 +534,9 @@ export async function getInvitations(params: {
 
   // Build where clause
   const where: Record<string, unknown> = {}
-  if (params.kind === 'LEAD') {
+  if (isLeadRole(params.kind)) {
     if (actorRole !== 'ADMIN') throw new Error('AccessDenied')
-    where.role = { in: ['CHAPTER_LEADER', 'DNA_LEAD'] }
+    where.role = { in: ['LEAD', 'DNA_LEAD'] }
   }
 
   // Filter by status
@@ -547,7 +549,13 @@ export async function getInvitations(params: {
 
   // If chapterId is specified (Admin querying specific chapter, or BĐHU with their chapter)
   if (chapterId) {
-    where.chapter_id = chapterId
+    where.OR = [
+      { chapter_id: chapterId, organization_unit_id: null },
+      { organization_unit: { OR: [
+        { chapter: { id: chapterId } },
+        { type: 'DEPARTMENT', parent: { chapter: { id: chapterId } } },
+      ] } },
+    ]
   }
   if (organizationUnitId) {
     where.organization_unit_id = organizationUnitId

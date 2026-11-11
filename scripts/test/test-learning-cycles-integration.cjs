@@ -232,7 +232,7 @@ async function main() {
   const pendingAttempt = await makeAttempt()
   // Replace the synthetic early-transfer evidence to exercise the actual reset path.
   await prisma.chapterReorganization.update({ where: { id: earlyFixture.id }, data: { status: 'CANCELLED' } })
-  const presidentPosition = await prisma.position.upsert({ where: { code: 'CHAPTER_PRESIDENT' }, update: {}, create: { code: 'CHAPTER_PRESIDENT', name: 'President', scope: 'CHAPTER' } })
+  const presidentPosition = await prisma.position.upsert({ where: { code: 'PRESIDENT' }, update: {}, create: { code: 'PRESIDENT', name: 'President', scope: 'CHAPTER' } })
   const transfer = await prisma.chapterReorganization.create({ data: { transfer_season_id: season.id, chapter_id: chapter.id, created_by_user_id: admin.id, status: 'SCHEDULED', effective_at: new Date(Date.now() - 60_000), items: { create: { user_id: user.id, department_unit_id: null, position_id: presidentPosition.id } } } })
   await applyDueChapterReorganizations(new Date(), transfer.id)
   await applyDueChapterReorganizations(new Date(), transfer.id)

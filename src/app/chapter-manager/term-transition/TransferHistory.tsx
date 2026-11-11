@@ -239,6 +239,16 @@ export default function TransferHistory({
               </div>
             </div>
 
+            {(selectedHistoryTerm.items || []).some((item: any) => item.departmentName === 'Chưa phân ban') && (
+              <div className="space-y-2 text-sm text-[#172554]">
+                <p className="font-semibold">Thành viên Chapter không ban</p>
+                <ul className="list-disc pl-5 space-y-1">
+                  {(selectedHistoryTerm.items || []).filter((item: any) => item.departmentName === 'Chưa phân ban').map((item: any) => (
+                    <li key={item.id || item.user_id || item.email} className="break-words">{item.displayName} · {item.email}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <div className="flex justify-end pt-3 border-t border-[#eff4ff]">
               <Button onClick={() => setSelectedHistoryTerm(null)}>Đóng</Button>
             </div>

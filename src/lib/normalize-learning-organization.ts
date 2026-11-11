@@ -7,7 +7,7 @@ const normalize = (value: string) => value.normalize('NFD').replace(/[\u0300-\u0
 /** Exact aliases only. Duplicates abort the transaction for Admin review. */
 export async function normalizeLearningOrganization(tx: Prisma.TransactionClient, actorId?: string, convertPresidents = false) {
   const chapters = await tx.organizationUnit.findMany({ where: { type: 'CHAPTER' } })
-  const president = await tx.position.upsert({ where: { code: 'CHAPTER_PRESIDENT' }, update: {}, create: { code: 'CHAPTER_PRESIDENT', name: 'Chủ tịch Chapter', scope: 'CHAPTER' } })
+  const president = await tx.position.upsert({ where: { code: 'PRESIDENT' }, update: {}, create: { code: 'PRESIDENT', name: 'Chủ tịch Chapter', scope: 'CHAPTER' } })
   const changes: { unitId: string; action: string; code?: string }[] = []
   for (const chapter of chapters) {
     const departments = await tx.organizationUnit.findMany({ where: { parent_id: chapter.id, type: 'DEPARTMENT' } })

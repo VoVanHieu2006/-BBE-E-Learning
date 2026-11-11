@@ -1,6 +1,6 @@
 export type ChapterKpiStatus = 'BLACK' | 'RED' | 'YELLOW' | 'GREEN'
 
-export const CHAPTER_LEADERBOARD_WEIGHTS = {
+export const LEADBOARD_WEIGHTS = {
   completion: 30,
   stars: 30,
   chapterSize: 20,
@@ -145,10 +145,10 @@ export function scoreChapterLeaderboard(
   metrics: ChapterLeaderboardMetrics,
 ): ChapterLeaderboardScore {
   const starScore = metrics.averageStars
-  const kpiBonus = metrics.kpiStatus === 'GREEN' ? CHAPTER_LEADERBOARD_WEIGHTS.greenKpiBonus : 0
-  const score = metrics.completionScore * (CHAPTER_LEADERBOARD_WEIGHTS.completion / 100)
-    + starScore * (CHAPTER_LEADERBOARD_WEIGHTS.stars / 100)
-    + metrics.sizeScore * (CHAPTER_LEADERBOARD_WEIGHTS.chapterSize / 100)
+  const kpiBonus = metrics.kpiStatus === 'GREEN' ? LEADBOARD_WEIGHTS.greenKpiBonus : 0
+  const score = metrics.completionScore * (LEADBOARD_WEIGHTS.completion / 100)
+    + starScore * (LEADBOARD_WEIGHTS.stars / 100)
+    + metrics.sizeScore * (LEADBOARD_WEIGHTS.chapterSize / 100)
     + kpiBonus
 
   return { starScore, kpiBonus, score }
