@@ -21,9 +21,10 @@ Kiểm tra `.env.example` và `process.env` tại revision deploy cho danh sách
 ## Database và release
 
 - SQL migration và `migration_lock.toml` bất biến, đối chiếu checksum trước/sau. Không sửa migration đã applied để che lỗi replay.
-- **DB mới, trống:** theo [bootstrap](../prisma/bootstrap/README.md). Snapshot/manifest là cặp baseline. `BASELINE_DATABASE_URL`/`BASELINE_CONFIRM_DATABASE` xác nhận đích riêng; remote chỉ khi explicit guard và đã xác minh DB mới/rỗng.
+- **DB mới, trống:** theo [bootstrap](../prisma/bootstrap/README.md): `npm run db:baseline-empty` → `prisma migrate deploy` (phải báo không còn migration chờ, trừ migration thêm sau baseline) → nếu là môi trường demo/thử: `prisma db seed`. Snapshot/manifest là cặp baseline, cắt lại bằng `scripts/db/cut-baseline.mjs` mỗi khi thêm migration. `BASELINE_DATABASE_URL`/`BASELINE_CONFIRM_DATABASE` xác nhận đích riêng; remote chỉ khi explicit guard và đã xác minh DB mới/rỗng.
+- **Diễn tập triển khai từ DB trống:** `TEST_DATABASE_URL=<loopback bbe_test_*> npm run test:fresh-deploy`. Kịch bản A làm trống schema `public` của DB đích rồi baseline → deploy → seed; kịch bản B xóa dữ liệu (giữ `_prisma_migrations`) rồi deploy → seed. Sau mỗi kịch bản kiểm mọi migration đã applied, không attempt lỗi, có Admin/chức vụ/chương trình/khóa học, mỗi người đúng một chức vụ, không ai vừa thuộc Chapter vừa DNA, mọi LEAD có chức vụ Lead. Guard chỉ nhận loopback + tên `bbe_test_*` + so `current_database()`; không tạo/xóa database, che URL trong output.
 - **DB có dữ liệu:** backup, kiểm tra history/`prisma migrate status`, dùng forward migrations với `prisma migrate deploy` qua quy trình release. Không bootstrap để “sửa” DB populated.
-- Không push/reset/seed production. Seed chính xóa dữ liệu; seed demo ghi ledger/progress mô phỏng. `db:migrate` dành development, `db:generate` chỉ sinh client.
+- Không push/reset/seed production. Seed chính (`prisma db seed`) TRUNCATE mọi bảng trừ `_prisma_migrations` rồi tạo dữ liệu tham chiếu (6 chức vụ chuẩn, chương trình/đối tượng học từ `src/lib/learning-catalog.ts`, 7 ban chuẩn mỗi Chapter) cùng tài khoản demo theo trigger tổ chức; dữ liệu tham chiếu này production có từ migration, baseline không có. Seed demo (`db:seed-demo`, `db:seed-rich`, `db:seed-rich-progress`) chạy lặp được, không đổi role tài khoản đã có, ghi ledger/progress mô phỏng. `db:migrate` dành development, `db:generate` chỉ sinh client.
 - `load-tests/init-db.mjs` dùng baseline/forward migration trên loopback load-test DB hợp lệ, không thay bằng reset/push accept-data-loss.
 
 Trước release:

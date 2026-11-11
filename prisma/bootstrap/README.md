@@ -12,6 +12,16 @@ The script checks the target name, public table set, migration history, and whet
 
 Do not run this against an existing database to repair it. Existing databases retain their current migration history and require ordinary forward migrations. The snapshot and manifest are a paired baseline artifact; update them only when deliberately cutting a new baseline. The snapshot does not include future migrations added after this baseline.
 
+## Full fresh deployment
+
+A new environment is: `npm run db:baseline-empty`, then `prisma migrate deploy` (it reports no pending migrations until a migration newer than the baseline exists), then, for demo or test environments only, `prisma db seed`. The seed truncates every public table except `_prisma_migrations` and creates the reference data that production received through migrations: the six standard positions, the learning programs and targets from `src/lib/learning-catalog.ts`, and the seven coded departments per Chapter. Then it creates demo accounts that satisfy the organization triggers (one position each, never both Chapter and DNA, every `LEAD` holding a Lead position). Transfer seasons are Admin data and are not seeded.
+
+To rehearse it, run `TEST_DATABASE_URL=<loopback bbe_test_* URL> npm run test:fresh-deploy`. It accepts only a loopback PostgreSQL database named `bbe_test_*` (checked against `current_database()`), never creates or drops databases and redacts URLs in its output.
+- **Scenario A** resets the `public` schema, then runs baseline → deploy → seed.
+- **Scenario B** truncates all data but keeps `_prisma_migrations`, then runs deploy → seed.
+
+After each scenario it checks that every migration directory is applied with no failed attempt, plus the organization invariants above.
+
 ## Re-cutting the baseline (after adding migrations)
 
 The old migration history cannot be replayed on an empty database: `20261013_course_final_assessment` expects the pre-init assessment shape, several later migrations depend on tables that production received through `db push`, `20261013_profile_quiz_configuration` alters a table that `20261014_learning_governance` creates, and `20261025_lead_binding_guards` patches a function created by `20261025_organization_integrity`. Therefore a fresh database is always initialised from the snapshot plus `prisma migrate deploy`, and the snapshot must be re-cut whenever migrations are added. `scripts/db/cut-baseline.mjs` does it:

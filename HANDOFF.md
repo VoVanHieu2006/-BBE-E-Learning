@@ -8,7 +8,7 @@ DB do mình tạo: `bbe_test_cut_strict`, `bbe_test_cut_cur`, `bbe_test_cut_hist
 2. Sửa seed: **xong** (`prisma/seed.ts`, `scripts/db/seed-demo-safe.ts`, `seed-rich-demo.ts`, `seed-rich-progress.ts`)
 3. `npm run test:fresh-deploy`: **xong** (`scripts/test/test-fresh-deploy.mjs`, test guard `scripts/test/fresh-deploy-guard.test.mjs` gộp vào `test:baseline-safety`)
 4. Test tích hợp: **xong** (đã chạy mọi suite chạy được; 1 FAIL do lỗi nghiệp vụ/bảo mật thật, 1 FAIL do test dựa dữ liệu production, 8 BLOCKED vì guard của suite; xem mục 4 bên dưới)
-5. Cập nhật docs (`operations.md`, `testing.md`): chưa (README bootstrap đã cập nhật ở mục 1)
+5. Cập nhật docs: **xong** (`docs/operations.md`: quy trình DB trống + diễn tập fresh-deploy + seed; `docs/testing.md`: lệnh fresh-deploy, bảng DB của từng suite, chuẩn bị DB/app/token/mùa, giới hạn Docker và BLOCKED/FAIL; `prisma/bootstrap/README.md`: mục "Full fresh deployment"; `docs/known-issues.md`: cập nhật 2 dòng đã xử lý ở prompt 03/06, thêm dòng "Email trên BXH kỳ"). `npx tsc --noEmit` sạch.
 
 ## Lệnh đã chạy / kết quả
 - Cut: `CUT_BASELINE_DATABASE_URL=<loopback bbe_test_cut> PG_DOCKER_CONTAINER=bbe-test-pg node scripts/db/cut-baseline.mjs` → 27 migration, 57 bảng. Lỗi được bỏ qua chỉ thuộc loại "already exists", bước dữ liệu trên temp table/nhãn enum cũ, LOCK TABLE ngoài transaction (log: `artifacts/baseline-cut/20261110-replay.log`).
@@ -54,7 +54,7 @@ Cách chạy: mỗi DB thử chuẩn bị bằng `TEST_DATABASE_URL=<loopback bb
 | test-chapter-leaderboard-integration | `bbe_test_leaderboard` + app :3113 | BLOCKED: cùng assert loopback phía server |
 | test-organization-integrity | — | BLOCKED: cần `ORGANIZATION_TEST_DATABASE_URL` tên `org_integrity*` (không phải `bbe_test_*`) |
 | test-organization-repair | — | BLOCKED: cần `org_integrity_repair*` |
-| chapter-transfer / completed-lessons / star-history | — | BLOCKED: guard đòi URL cố định port 55439 `chapter_fix_test` |
+| chapter-transfer / completed-lessons / star-history | — | BLOCKED: guard đòi URL cố định user `chapter_fix_test`, `127.0.0.1:55439`, DB `bbe_test_learning_cycles` (container ở port khác) |
 | test-fb-fixes | — | BLOCKED: cần `127.0.0.1:55438/fb_fixes_test`, kiểm cả `inet_server_addr` |
 
 Không đổi host/tên DB/guard của suite nào để lách.
