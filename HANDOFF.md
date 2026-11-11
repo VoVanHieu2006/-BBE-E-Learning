@@ -8,8 +8,8 @@ Nhánh: `feat/p07-bxh-an-email`
 - [x] 3. Server luôn trả `displayName` hoàn chỉnh qua `publicDisplayName`/`publicRankingRow`
 - [x] 4. `UnifiedLeaderboard.tsx` nhận diện bằng `userId` (bỏ email; bỏ nhánh `email.split('@')`, bỏ 2 khối hiển thị email, bỏ `email` khỏi interface). Giữ `email` ở modal hồ sơ (chỉ ADMIN/LEAD).
 - [ ] 5. Thống nhất tên mặc định ở màn hình khác
-- [ ] 6. Test
-- [ ] 7. `docs/api.md`
+- [x] 6. Test (orchestrator added src/test/fun-display-name.test.ts)
+- [x] 7. `docs/api.md`
 
 ## Đang làm
 Khảo sát code.

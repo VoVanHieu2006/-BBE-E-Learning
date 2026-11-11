@@ -479,6 +479,8 @@ PUT giữ nguyên catalog, mapping khóa/chương trình/target, seasons, chuẩ
 |---|---|---|---|---|
 | [GET](../src/app/api/v1/leaderboard/route.ts#L17) | `authenticate`, `Đọc công khai có điều kiện; auth optional` | `query.limit`, `query.page` | `items, page, limit, totalCount` | — |
 
+> Hàng xếp hạng (mọi endpoint bảng xếp hạng cho thành viên) **không có trường `email`**; `displayName` luôn có: tên đã đặt, hoặc "Tài khoản đã gỡ" với tài khoản ẩn danh hóa, hoặc tên mặc định vui dạng "Sóc nhí nhảnh" sinh ổn định từ `userId` (`src/lib/fun-display-name.ts`, không lưu DB).
+
 ### `/api/v1/learning/me`
 
 | Method | Truy cập / guard | Đầu vào đọc trực tiếp | Response thành công | Mã lỗi thấy trong handler |
