@@ -320,7 +320,7 @@ Mở lần lượt: **gia hạn trước** (mở khóa quá hạn), **rồi gử
 
 - **Chuyển giao Chapter hoặc DNA:** người học bắt đầu một chu kỳ mới. Tiến độ học bị reset, nghĩa vụ cũ kết thúc, hạn mới tính từ đầu theo 5.2 (dòng “Bắt đầu lộ trình”).
 - **Đổi ban trong cùng Chapter:** **không** reset. Tiến độ giữ, nghĩa vụ và hạn đổi theo 5.3.
-- **Sang tháng mới:** **không** reset nghĩa vụ hay hạn. Chỉ mở kỳ thưởng sao mới.
+- **Sang tháng mới:** **không** reset nghĩa vụ hay hạn. Chỉ mở kỳ thưởng sao mới. Bài đã xem xong **không** bị tự reset: vẫn xem tự do; người học bấm **"Xem lại tháng này"** (theo từng bài) thì mới bắt đầu xem lại và làm lại quiz của đúng phần đó để nhận sao của tháng.
 - **Lịch sử luôn được giữ.** Chuyển giao hay reset nhiệm kỳ giống như chụp một **ảnh (snapshot)** tại thời điểm đó; dữ liệu cũ không bị xóa. Tài khoản bị vô hiệu hóa chỉ không đăng nhập được nữa. Chi tiết quy tắc bảng xếp hạng ở `CKNK.md`, mục 5.10.
 
 ---

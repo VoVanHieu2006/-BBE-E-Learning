@@ -39,7 +39,7 @@ Course → Session → Lesson, video YouTube và 0..n tài liệu. DRAFT/PUBLISH
 
 Bài sau mở khi video và quiz bài trước (nếu có) hoàn thành. Quiz dưới 85% vẫn khóa bài sau. Lifetime progress, training cycle completion và replay thưởng tháng là trạng thái riêng; không lấy lifetime completion thay cycle completion. Khách xem công khai tự do, không ghi tiến độ.
 
-Tháng mới giữ training progress/bài đã mở. Muốn thi lại/kiếm sao cần xem đủ video lượt replay mới trong tháng; sau đó không phải xem lại sau mỗi quiz trượt. Video replacement/arbitrary edit bài cũ không tự tạo supplemental obligation; cơ chế hiện tại xử lý publish bài mới.
+Tháng mới giữ training progress/bài đã mở và **không tự reset** bài đã xem xong: các bài này vẫn xem tự do (tua được tới phần đã xem), nhưng không mở lượt replay tháng và không tính sao. Muốn thi lại/kiếm sao tháng mới, người học bấm **"Xem lại tháng này"** cho một bài (`POST /api/v1/learning/monthly-review`, idempotent, chỉ mở bài đã xem xong video); sau đó cần xem đủ video lượt replay mới trong tháng; rồi không phải xem lại sau mỗi quiz trượt. Bài chưa xem xong vẫn tự mở lượt replay của tháng như trước. Video replacement/arbitrary edit bài cũ không tự tạo supplemental obligation; cơ chế hiện tại xử lý publish bài mới.
 
 ## Quiz và sao
 

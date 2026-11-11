@@ -15,6 +15,7 @@ import { persistLearningUnlocks } from './learning-unlocks'
 import { checkLessonProgression } from './progression'
 import { chapterRewardState } from './chapter-reward-gate'
 import { readinessForReason } from './learning-readiness-rules'
+import { isFreeReviewLesson, cycleVideoAlreadyComplete } from './monthly-review'
 
 export type VideoHeartbeatEvent = 'PLAY' | 'HEARTBEAT' | 'PAUSE' | 'ENDED'
 
@@ -171,6 +172,7 @@ export async function recordVideoHeartbeat(
     })
 
     // ---- Monthly replay progress (independent from training completion) ----
+    const freeReview = isFreeReviewLesson(alreadyCycleVideoComplete, Boolean(replay))
     let replayFurthest = 0
     let rewardComplete = false
     {
@@ -183,14 +185,16 @@ export async function recordVideoHeartbeat(
         replay?.completed_at ||
         (safeDuration > 0 && oldReplayFurthest >= safeDuration - endedCompletionToleranceSeconds(safeDuration))
       )
-      replayFurthest = replay
+      // A replay row the learner opened with "Xem lại" has no heartbeat yet: it
+      // starts at zero exactly like a brand-new one.
+      replayFurthest = replay?.last_heartbeat_at
         ? Math.min(
             safeDuration > 0 ? safeDuration : Number.MAX_SAFE_INTEGER,
             capVideoProgress(oldReplayFurthest, position, furthest, elapsed, playbackRate, grace)
               .furthestWatchedPositionSeconds,
           )
         : 0
-      rewardComplete = alreadyReplayComplete || hasCompletedVideoAtEnd(replayFurthest, safeDuration, event)
+      rewardComplete = !freeReview && (alreadyReplayComplete || hasCompletedVideoAtEnd(replayFurthest, safeDuration, event))
       const finalReplayFurthest = rewardComplete && safeDuration > 0 ? safeDuration : Math.floor(replayFurthest)
       const replayCompletedAt = replay?.completed_at || (rewardComplete ? now : null)
       const replayData = {
@@ -199,7 +203,9 @@ export async function recordVideoHeartbeat(
         last_heartbeat_at: now,
         completed_at: replayCompletedAt,
       }
-      await tx.monthlyVideoReplay.upsert({
+      // Free review (KHBB 8): a lesson whose video was already finished in this cycle
+      // does not open a monthly replay by itself; the learner opts in with "Xem lại".
+      if (!freeReview) await tx.monthlyVideoReplay.upsert({
         where: { user_id_video_id_competition_month_id_learning_cycle_id: replayKey },
         create: { ...replayKey, ...replayData },
         update: replayData,
@@ -220,7 +226,7 @@ export async function recordVideoHeartbeat(
     let amount = 0
     let rewardKey: string | null = null
     let rewardBalance: number | null = null
-    let rewardReason = 'REPLAY_INCOMPLETE'
+    let rewardReason = freeReview ? 'REVIEW_NOT_STARTED' : 'REPLAY_INCOMPLETE'
     let rewardSuppressed = Boolean(replay?.reward_suppressed_at)
     if (rewardComplete) {
       const rewardState = await chapterRewardState(tx, userId, now)
@@ -289,7 +295,8 @@ export async function recordVideoHeartbeat(
       progressContext: {
         learningCycleId: context.cycle.id,
         competitionMonthId: context.month.id,
-        monthlyReplayRequired: true,
+        // Free review: the floor for seeking is the cycle progress, not a zeroed monthly replay.
+        monthlyReplayRequired: !freeReview,
       },
       lifetime: { completed: updated.completed, completedAt: updated.completed_at, furthestWatchedPositionSeconds: updated.furthest_watched_position_seconds },
       cycleProgress: { learningCycleId: context.cycle.id, completed: cycleCompleted, videoCompleted: cycleVideoComplete, completedAt: cycleCompletedAt, furthestWatchedPositionSeconds: Math.floor(finalCycleFurthest) },
@@ -318,6 +325,8 @@ export async function recordVideoHeartbeat(
         watchedSeconds: Math.floor(rewardComplete && safeDuration > 0 ? safeDuration : replayFurthest),
         completed: rewardComplete,
         suppressed: rewardSuppressed,
+        started: !freeReview,
+        reviewAvailable: freeReview,
       },
       starReward: {
         awarded: amount > 0,
@@ -334,20 +343,29 @@ export async function getVideoReplayState(userId: string, lessonId: string, at =
   const [cycle, month, video] = await Promise.all([
     prisma.learningCycle.findFirst({ where: { user_id: userId, starts_at: { lte: at }, ends_at: null } }),
     prisma.competitionMonth.findFirst({ where: { starts_at: { lte: at }, ends_at: { gt: at } } }),
-    prisma.video.findUnique({ where: { lesson_id: lessonId }, select: { id: true } }),
+    prisma.video.findUnique({ where: { lesson_id: lessonId }, select: { id: true, duration_seconds: true } }),
   ])
   if (!cycle || !month || !video) return null
-  const replay = await prisma.monthlyVideoReplay.findUnique({
-    where: {
-      user_id_video_id_competition_month_id_learning_cycle_id: {
-        user_id: userId,
-        video_id: video.id,
-        competition_month_id: month.id,
-        learning_cycle_id: cycle.id,
+  const [replay, cycleProgress] = await Promise.all([
+    prisma.monthlyVideoReplay.findUnique({
+      where: {
+        user_id_video_id_competition_month_id_learning_cycle_id: {
+          user_id: userId,
+          video_id: video.id,
+          competition_month_id: month.id,
+          learning_cycle_id: cycle.id,
+        },
       },
-    },
-  })
+    }),
+    prisma.cycleLessonProgress.findUnique({
+      where: { user_id_lesson_id_learning_cycle_id: { user_id: userId, lesson_id: lessonId, learning_cycle_id: cycle.id } },
+      select: { completed_at: true, furthest_seconds: true },
+    }),
+  ])
+  const reviewAvailable = isFreeReviewLesson(cycleVideoAlreadyComplete(cycleProgress, Number(video.duration_seconds) || 0), Boolean(replay))
   return {
+    started: !reviewAvailable,
+    reviewAvailable,
     competitionMonth: month.key,
     competitionMonthId: month.id,
     learningCycleId: cycle.id,

@@ -5,6 +5,7 @@ export const learningReasonMessages: Record<string, string> = {
   HISTORICAL_SEASON_UNAVAILABLE: 'Mùa lịch sử chưa có dữ liệu học theo mô hình hiện hành hoặc snapshot đã lưu.',
   SNAPSHOT_MISSING: 'Kỳ đã kết thúc nhưng chưa có snapshot.', CYCLE_NOT_STARTED: 'Chưa có chu kỳ học; tiến độ lịch sử được giữ riêng.',
   REPLAY_INCOMPLETE: 'Chưa xem đủ video trong lượt xem tháng này.', REPLAY_NOT_STARTED: 'Chưa bắt đầu lượt xem tháng này.',
+  REVIEW_NOT_STARTED: 'Bạn đã xem xong video này. Bấm "Xem lại tháng này" nếu muốn xem lại để nhận Star của tháng.',
   AWARDED: 'Đã cộng sao video.', ALREADY_AWARDED: 'Lượt xem này đã nhận sao.', SUPPRESSED: 'Lượt xem đã bị chặn thưởng; không cộng bù.',
   TRANSFER_SEASON_NOT_CONFIGURED: 'Chưa cấu hình mùa chuyển giao cho giai đoạn này.',
   CHAPTER_TRANSFER_OVERDUE: 'Chapter chưa hoàn tất chuyển giao nên thưởng đang tạm dừng.',

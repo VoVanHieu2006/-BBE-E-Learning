@@ -487,6 +487,14 @@ PUT giữ nguyên catalog, mapping khóa/chương trình/target, seasons, chuẩ
 |---|---|---|---|---|
 | [GET](../src/app/api/v1/learning/me/route.ts#L9) | `authenticate`, `role MEMBER` | — | `payload` | — |
 
+### `/api/v1/learning/monthly-review`
+
+| Method | Truy cập / guard | Đầu vào đọc trực tiếp | Response thành công | Mã lỗi thấy trong handler |
+|---|---|---|---|---|
+| [POST](../src/app/api/v1/learning/monthly-review/route.ts) | `authenticate`, không phải tài khoản quản lý | `body.lessonId` (UUID, bắt buộc) | `status` (`STARTED` / `ALREADY_STARTED`), `message`, `competitionMonth`, `started`, `alreadyStarted`, `lessonIds` | 400 `InvalidReviewScope` (thiếu `lessonId`, sai UUID hoặc gửi `courseId`), 403 `ManagementOnlyAccount`, 404 `ReviewScopeNotFound`, 409 `NothingToReview` |
+
+"Xem lại tháng này": mở lượt xem thưởng của tháng hiện tại cho đúng một bài đã xem xong video. Idempotent; không cộng sao; không đổi tiến độ chu kỳ.
+
 ### `/api/v1/learning/periods`
 
 | Method | Truy cập / guard | Đầu vào đọc trực tiếp | Response thành công | Mã lỗi thấy trong handler |
