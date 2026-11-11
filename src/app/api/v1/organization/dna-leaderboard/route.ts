@@ -3,6 +3,7 @@ import { authenticate } from '@/lib/auth'
 import { listManagedOrganizationUnits } from '@/lib/authorization'
 import { getLearningManagerKind } from '@/lib/manager-learning-access'
 import { prisma } from '@/lib/prisma'
+import { publicDisplayName } from '@/lib/fun-display-name'
 
 export async function GET(request: NextRequest) {
   const auth = await authenticate(request)
@@ -24,13 +25,13 @@ export async function GET(request: NextRequest) {
       starts_at: { lte: now }, OR: [{ ends_at: null }, { ends_at: { gt: now } }],
       user: { status: 'ACTIVE', role: 'MEMBER' },
     },
-    select: { user: { select: { id: true, email: true, display_name: true } }, unit: { select: { name: true, type: true, code: true } } },
+    select: { user: { select: { id: true, display_name: true, anonymized_at: true } }, unit: { select: { name: true, type: true, code: true } } },
   })
-  const users = new Map<string, { userId: string; displayName: string | null; groupName: string | null }>()
+  const users = new Map<string, { userId: string; displayName: string; groupName: string | null }>()
   for (const row of participants) {
     const current = users.get(row.user.id)
     users.set(row.user.id, {
-      userId: row.user.id, displayName: row.user.display_name,
+      userId: row.user.id, displayName: publicDisplayName(row.user.id, row.user),
       groupName: row.unit.type === 'DNA_GROUP' ? row.unit.name : current?.groupName || null,
     })
   }

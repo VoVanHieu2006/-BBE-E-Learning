@@ -10,6 +10,7 @@ import { listAccessibleChapterIds, listManagedOrganizationUnits } from './author
 import { listChapterLearners } from './chapter-members'
 import { currentLearningAffiliation } from './affiliation-access'
 import { readinessForReason } from './learning-readiness-rules'
+import { publicRankingRow } from './fun-display-name'
 
 async function currentChapterMetadata(chapterIds: string[], asOf: Date) {
   return new Map(await Promise.all(chapterIds.map(async id => [id, {
@@ -177,7 +178,7 @@ export async function periodLeaderboard(request: NextRequest) {
       }
     }
     if (group === 'CHAPTER') payload = { ...payload, excluded: (snapshot.payload as any).items?.filter((row: any) => row.eligible === false && (!chapterId || row.chapterId === chapterId)) || [] }
-    return NextResponse.json(await hydrateRanking(payload, isGuest), { headers: { 'Cache-Control': 'no-store' } })
+    return NextResponse.json(await hydrateRanking(payload), { headers: { 'Cache-Control': 'no-store' } })
   }
   if (period.ends_at && period.ends_at <= now) {
     if (group === 'DNA' && periodType === 'TERM' && !await hasNativeLearningEvidence(prisma, period.starts_at, period.ends_at)) {
@@ -259,11 +260,11 @@ export async function periodLeaderboard(request: NextRequest) {
     period,
     state: 'OPEN',
     formula: INDIVIDUAL_FORMULA,
-  }, isGuest)
+  })
   return NextResponse.json(individualPayload, { headers: { 'Cache-Control': 'no-store' } })
 }
 
-async function hydrateRanking(payload: any, isGuest = false) {
+async function hydrateRanking(payload: any) {
   if (payload.group === 'CHAPTER') return payload
   const items = payload.items || []
   if (!items.length) return payload
@@ -272,7 +273,7 @@ async function hydrateRanking(payload: any, isGuest = false) {
   const users = userIds.length
     ? await prisma.user.findMany({
         where: { id: { in: userIds } },
-        select: { id: true, display_name: true, email: true, anonymized_at: true },
+        select: { id: true, display_name: true, anonymized_at: true },
       })
     : []
 
@@ -297,22 +298,14 @@ async function hydrateRanking(payload: any, isGuest = false) {
       const chapterName = row.chapterName || historical?.chapterName || null
       const groupName = row.dnaUnitName || departmentName || row.groupName || null
 
-      const baseRow: any = {
-        ...row,
-        displayName: user?.anonymized_at ? 'Tài khoản đã gỡ' : user?.display_name || row.displayName || 'Thành viên',
+      return {
+        ...publicRankingRow(row, user),
         departmentName,
         positionName,
         chapterName,
         groupName,
         stars: row.stars ?? 0,
       }
-
-      if (isGuest) {
-        delete baseRow.email
-      } else {
-        baseRow.email = user?.email || row.email || null
-      }
-      return baseRow
     }),
   }
 }
