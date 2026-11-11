@@ -7,7 +7,7 @@ DB do mình tạo: `bbe_test_cut_strict`, `bbe_test_cut_cur`, `bbe_test_cut_hist
 1. Cắt lại baseline: **xong** (`scripts/db/cut-baseline.mjs`, cặp `prisma/bootstrap/20261110_*` được ghi đè, README cập nhật)
 2. Sửa seed: **xong** (`prisma/seed.ts`, `scripts/db/seed-demo-safe.ts`, `seed-rich-demo.ts`, `seed-rich-progress.ts`)
 3. `npm run test:fresh-deploy`: **xong** (`scripts/test/test-fresh-deploy.mjs`, test guard `scripts/test/fresh-deploy-guard.test.mjs` gộp vào `test:baseline-safety`)
-4. Test tích hợp: chưa
+4. Test tích hợp: **xong** (đã chạy mọi suite chạy được; 1 FAIL do lỗi nghiệp vụ/bảo mật thật, 1 FAIL do test dựa dữ liệu production, 8 BLOCKED vì guard của suite; xem mục 4 bên dưới)
 5. Cập nhật docs (`operations.md`, `testing.md`): chưa (README bootstrap đã cập nhật ở mục 1)
 
 ## Lệnh đã chạy / kết quả
@@ -39,5 +39,36 @@ DB do mình tạo: `bbe_test_cut_strict`, `bbe_test_cut_cur`, `bbe_test_cut_hist
 - Kịch bản A tự làm trống DB đích bằng `DROP SCHEMA public CASCADE; CREATE SCHEMA public` (chỉ sau guard loopback + `bbe_test_*` + so `current_database()`), để lệnh chạy lại được. Không tạo/xóa database.
 - Kiểm tra sau mỗi kịch bản: mọi thư mục trong `prisma/migrations` đã applied, không attempt lỗi, và các bất biến tổ chức như mục 2. Output con được che URL.
 
+## Mục 4 — test tích hợp
+Cách chạy: mỗi DB thử chuẩn bị bằng `TEST_DATABASE_URL=<loopback bbe_test_*> npm run test:fresh-deploy` (baseline + deploy + seed), app Next build một lần (`npx next build`, secret chỉ dùng cho test) rồi `next start` trên 127.0.0.1 cho suite cần app; mỗi suite chạy riêng `npm run test:integration -- <suite>` qua `artifacts/p06-run-with-app.sh` (log đã che URL: `artifacts/p06-it-*.log`). `npm run test:unit`: PASS 63 suite.
+
+| Suite | DB | Kết quả |
+|---|---|---|
+| quiz-and-refresh | `bbe_test_it_quiz` | PASS 4/4 |
+| admin-program | `bbe_test_it_admin_program` | PASS (sau khi sửa test) |
+| test-learning-cycles-integration | `bbe_test_learning_cycles` | PASS (sau khi sửa test) |
+| test-reward-pause-integration | `bbe_test_learning_cycles` | PASS |
+| chapter-six-month | `bbe_test_learning_cycles` | FAIL 17/19: T18 cần Chapter tên "BBE Chapter 1/2", T19 cần email thật `vobahoaan@gmail.com` có 19 sao video → test dựa dữ liệu production, không đưa dữ liệu cá nhân thật vào seed |
+| test-learning-security | `bbe_test_learning_cycles` + app :3112 | **FAIL** tại dòng 96: hàng bảng xếp hạng `/api/v1/leaderboard?group=MEMBER&periodType=MONTH` có `email` (lỗi bảo mật thật, xem dưới). Bản tạm bỏ đúng assertion đó: mọi assertion còn lại PASS |
+| test-learning-flow-integration | `bbe_test_learning_flow` | BLOCKED: assert server-side `inet_server_addr()` ∈ {127.0.0.1, ::1, null}; Docker port-forward trả 172.17.0.2 |
+| test-chapter-leaderboard-integration | `bbe_test_leaderboard` + app :3113 | BLOCKED: cùng assert loopback phía server |
+| test-organization-integrity | — | BLOCKED: cần `ORGANIZATION_TEST_DATABASE_URL` tên `org_integrity*` (không phải `bbe_test_*`) |
+| test-organization-repair | — | BLOCKED: cần `org_integrity_repair*` |
+| chapter-transfer / completed-lessons / star-history | — | BLOCKED: guard đòi URL cố định port 55439 `chapter_fix_test` |
+| test-fb-fixes | — | BLOCKED: cần `127.0.0.1:55438/fb_fixes_test`, kiểm cả `inet_server_addr` |
+
+Không đổi host/tên DB/guard của suite nào để lách.
+
+Sửa test (lỗi hạ tầng test do schema/quy tắc mới, không đổi nghiệp vụ):
+- `src/test/admin-program-and-lead-dept.test.ts`: bước "bỏ ban" giờ kỳ vọng `MemberPositionRequired` (p03: `chapter-department-update.ts:13`, mỗi người giữ đúng 1 chức vụ, đổi là thay thế) và chức vụ hiện tại giữ nguyên.
+- `scripts/test/test-learning-cycles-integration.cjs`: cycle đầu tiên của người có progress chưa gắn cycle là `LEGACY` (quy tắc p04 f4fbc95, `learning-periods.ts:57-59`), không theo tuổi tài khoản.
+- `scripts/test/test-learning-security.mjs`: JWT mang `authVersion` (p03 `session-role.ts`, thiếu → 401); tự tạo mùa chuyển giao cho nửa năm hiện tại (mùa là dữ liệu Admin, trước đây test ăn ké mùa do suite khác để lại → batch kẹt SCHEDULED với last_error "Chưa có mùa chuyển giao…"); dọn `chapter_lead_bindings` bằng `session_replication_role=replica` trong transaction như `test-fb-fixes.cjs` (trigger `immutable_lead_binding` chặn xóa và che lỗi thật); in `last_error` khi batch không APPLIED; xóa mùa đã tạo.
+
+Lỗi nghiệp vụ thật (chưa sửa, cần quyết định):
+- `src/lib/period-leaderboard.ts:310-314` (`hydrateRanking`) thêm `email` vào mỗi hàng bảng xếp hạng kỳ cho mọi người đã đăng nhập (chỉ khách bị xóa). `UnifiedLeaderboard.tsx:783,802` hiển thị email đó. Thêm ở commit 0e41c4a ("feat: update learning experience and leaderboard rules") trong khi `test-learning-security.mjs` (từ b4095fd) yêu cầu không có email. Một MEMBER thấy email của mọi thành viên khác. Vì UI dùng có chủ đích nên đây là xung đột yêu cầu, không tự gỡ; đề xuất: bỏ `email` khỏi hàng (UI đã fallback `displayName`, nhận diện "bạn" bằng `userId`).
+
+DB: tạo thêm `bbe_test_it_admin_program`, `bbe_test_it_quiz`, `bbe_test_it_six_month`, `bbe_test_learning_flow`, `bbe_test_leaderboard`. `bbe_test_learning_cycles` có sẵn nhưng trống (0 bảng); dùng vì 4 suite đòi đúng tên này, đã trả về trống (`DROP SCHEMA public CASCADE; CREATE SCHEMA public`). Không còn tiến trình app nào chạy.
+
 ## Nghi ngờ / xung đột có thể
-(chưa có)
+- `test-learning-flow-integration.mjs`: `issueAccessToken` cũng thiếu `authVersion` và phần dọn xóa `chapterLeadBinding` → nhiều khả năng FAIL khi chạy được guard (chưa xác minh).
+- `chapter-six-month` T18/T19 phụ thuộc dữ liệu production, không thể pass trên DB trống.

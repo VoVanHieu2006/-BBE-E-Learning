@@ -19,7 +19,7 @@ async function createUser(input) {
   fixture.userIds.push(user.id)
   return user
 }
-const token = (user) => new SignJWT({ role: user.role }).setProtectedHeader({ alg: 'HS256' }).setSubject(user.id).setIssuedAt().setExpirationTime('10m').sign(new TextEncoder().encode(process.env.JWT_ACCESS_SECRET))
+const token = (user) => new SignJWT({ role: user.role, authVersion: user.auth_version }).setProtectedHeader({ alg: 'HS256' }).setSubject(user.id).setIssuedAt().setExpirationTime('10m').sign(new TextEncoder().encode(process.env.JWT_ACCESS_SECRET))
 async function call(path, bearer, method = 'GET', body) {
   const response = await fetch(new URL(path, app), { method, headers: { ...(bearer ? { authorization: `Bearer ${bearer}` } : {}), 'content-type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) })
   return { status: response.status, body: await response.json().catch(() => null) }
@@ -56,6 +56,14 @@ try {
   await db.positionAssignment.create({ data: { user_id: lead.id, unit_id: chapters[0].organization_unit_id, position_id: position.id } })
   await db.chapterMember.create({ data: { chapter_id: chapters[1].id, user_id: member.id } })
   await db.organizationMembership.create({ data: { unit_id: chapters[1].organization_unit_id, user_id: member.id } })
+  // Seasons are Admin data, not migrations: own one for the current half-year window (Asia/Ho_Chi_Minh).
+  const vietnamMidnight = (year, month) => new Date(Date.UTC(year, month, 1) - 7 * 3_600_000)
+  const local = new Date(Date.now() + 7 * 3_600_000)
+  const [year, firstHalf] = [local.getUTCFullYear(), local.getUTCMonth() < 6]
+  const anchor = vietnamMidnight(year, firstHalf ? 3 : 9)
+  if (!await db.transferSeason.findUnique({ where: { reward_boundary_at: anchor } })) {
+    fixture.seasonId = (await db.transferSeason.create({ data: { code: `SEC_${prefix}`, reward_boundary_at: anchor, starts_at: vietnamMidnight(year, firstHalf ? 0 : 6), ends_at: firstHalf ? vietnamMidnight(year, 6) : vietnamMidnight(year + 1, 0) } })).id
+  }
   const batch = await db.chapterReorganization.create({ data: { chapter_id: chapters[1].id, effective_at: new Date(Date.now() - 60_000), status: 'SCHEDULED', created_by_user_id: admin.id, items: { create: { user_id: member.id, department_unit_id: chapters[1].department.id } } } })
   const [adminToken, leadToken, memberToken] = await Promise.all([token(admin), token(lead), token(member)])
   const batchPath = `/api/v1/chapters/${chapters[1].id}/reorganizations/${batch.id}`
@@ -67,7 +75,8 @@ try {
   for (const path of [`/api/v1/chapters/${chapters[1].id}/reorganizations`, `/api/v1/chapters/${chapters[1].id}/current-roster`, `/api/v1/chapters/${chapters[1].id}/dashboard/members`]) assert.equal((await call(path, adminToken)).status, 200)
   // Current compatibility behavior: these GET handlers apply due transfers.
   // A future read-only contract is tracked in docs/known-issues.md, not changed here.
-  assert.equal((await db.chapterReorganization.findUniqueOrThrow({ where: { id: batch.id } })).status, 'APPLIED', 'compatibility GETs retain the current due-transfer application behavior')
+  const appliedBatch = await db.chapterReorganization.findUniqueOrThrow({ where: { id: batch.id } })
+  assert.equal(appliedBatch.status, 'APPLIED', `compatibility GETs retain the current due-transfer application behavior (last_error: ${appliedBatch.last_error})`)
   assert.equal((await call('/api/v1/admin/learning-config', memberToken)).status, 403)
   assert.equal((await call('/api/v1/admin/learning-config', adminToken)).status, 200)
   assert.equal((await call('/api/v1/admin/learning-config', adminToken, 'PUT', { targets: [{ code: 'not valid' }] })).status, 400)
@@ -109,7 +118,11 @@ try {
 } finally {
   try {
     await db.chapterReorganization.deleteMany({ where: { chapter_id: { in: fixture.chapterIds } } })
-    await db.chapterLeadBinding.deleteMany({ where: { user_id: { in: fixture.userIds } } })
+    // Lead bindings are immutable by trigger; only this disposable-DB cleanup bypasses it (as test-fb-fixes does).
+    await db.$transaction([
+      db.$executeRawUnsafe('SET LOCAL session_replication_role = replica'),
+      db.chapterLeadBinding.deleteMany({ where: { user_id: { in: fixture.userIds } } }),
+    ])
     await db.starLedger.deleteMany({ where: { user_id: { in: fixture.userIds } } })
     await db.learningOutbox.deleteMany({ where: { OR: [{ user_id: { in: fixture.userIds } }, { event_key: `bad:${prefix}` }] } })
     await db.user.deleteMany({ where: { id: { in: fixture.userIds } } })
@@ -122,5 +135,6 @@ try {
     if (fixture.grant) await db.positionPermission.delete({ where: { position_id_permission_id: fixture.grant } })
     if (fixture.positionId) await db.position.delete({ where: { id: fixture.positionId } })
     if (fixture.permissionId) await db.permission.delete({ where: { id: fixture.permissionId } })
+    if (fixture.seasonId) await db.transferSeason.delete({ where: { id: fixture.seasonId } })
   } finally { await db.$disconnect() }
 }
