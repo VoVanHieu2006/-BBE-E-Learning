@@ -4,7 +4,10 @@ import { prisma } from '@/lib/prisma'
 import { sendMemberInvitation } from '@/lib/invitations'
 import { invalidateInvitationsServerCache } from '@/lib/server-cache'
 import { resolveMemberInviteScope } from '@/lib/member-invite-scope'
-import { BULK_INVITE_MAX_EMAILS, BulkInviteResultItem, parseBulkInviteEmails } from '@/lib/bulk-invite'
+import { BULK_INVITE_MAX_EMAILS, BULK_INVITE_TIME_BUDGET_MS, parseBulkInviteEmails, runBulkInvites, summarizeBulkResults } from '@/lib/bulk-invite'
+
+// Up to 50 emails are sent per call; allow the platform to keep the function alive long enough.
+export const maxDuration = 60
 
 /**
  * POST /api/v1/invitations/member/bulk
@@ -43,47 +46,19 @@ export async function POST(request: NextRequest) {
   const hasAccount = new Set(existingUsers.map((row) => row.email.toLowerCase()))
   const hasPending = new Set(pendingInvitations.map((row) => row.email.toLowerCase()))
 
-  const results: BulkInviteResultItem[] = [
-    ...invalid.map((email) => ({ email, status: 'INVALID' as const })),
-    ...duplicates.map((email) => ({ email, status: 'DUPLICATE' as const })),
-  ]
-  let sentAny = false
-  // Sequential on purpose: keeps email provider rate limits and DB load predictable.
-  for (const email of valid) {
-    if (hasAccount.has(email)) { results.push({ email, status: 'ALREADY_MEMBER' }); continue }
-    if (hasPending.has(email)) { results.push({ email, status: 'ALREADY_INVITED' }); continue }
-    try {
-      const result = await sendMemberInvitation({
-        email, role: 'MEMBER', chapterId: scope.chapterId, organizationUnitId: scope.organizationUnitId, invitedBy: context.userId,
-      })
-      if (result.ok === false) {
-        const status = result.code === 'EmailAlreadyActive' || result.code === 'EmailAlreadyExists' ? 'ALREADY_MEMBER' : 'FAILED'
-        results.push({ email, status, message: result.message })
-        continue
-      }
-      sentAny = true
-      results.push(result.emailSent
-        ? { email, status: 'SENT' }
-        : { email, status: 'SENT_EMAIL_FAILED', message: result.emailError || 'không rõ lý do' })
-    } catch {
-      results.push({ email, status: 'FAILED', message: 'Lỗi hệ thống khi tạo lời mời.' })
-    }
-  }
+  // Limited parallelism + a time budget (see runBulkInvites): one slow or failing
+  // email never blocks or breaks the rest, and the request answers before timing out.
+  const results = await runBulkInvites({ valid, invalid, duplicates }, {
+    hasAccount,
+    hasPending,
+    deadline: Date.now() + BULK_INVITE_TIME_BUDGET_MS,
+    send: (email) => sendMemberInvitation({
+      email, role: 'MEMBER', chapterId: scope.chapterId, organizationUnitId: scope.organizationUnitId, invitedBy: context.userId,
+    }),
+  })
+  const sentAny = results.some((row) => row.status === 'SENT' || row.status === 'SENT_EMAIL_FAILED')
 
   if (sentAny) invalidateInvitationsServerCache()
 
-  const count = (status: BulkInviteResultItem['status']) => results.filter((row) => row.status === status).length
-  return NextResponse.json({
-    results,
-    summary: {
-      total: results.length,
-      sent: count('SENT') + count('SENT_EMAIL_FAILED'),
-      emailFailed: count('SENT_EMAIL_FAILED'),
-      invalid: count('INVALID'),
-      duplicate: count('DUPLICATE'),
-      alreadyMember: count('ALREADY_MEMBER'),
-      alreadyInvited: count('ALREADY_INVITED'),
-      failed: count('FAILED'),
-    },
-  })
+  return NextResponse.json({ results, summary: summarizeBulkResults(results) })
 }
