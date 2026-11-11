@@ -47,3 +47,7 @@ graphify-out/
 
 # Generated audits, learning mapping, migration and load-test output
 /artifacts/
+
+# Playwright / test artifacts
+test-results/
+.impeccable/
