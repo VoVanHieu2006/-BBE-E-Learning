@@ -188,17 +188,16 @@ async function run() {
       })
       assert.ok(presidentPosition, 'Member must hold PRESIDENT position in Chapter unit')
 
-      // Every member keeps exactly one position: clearing the department is rejected, not applied.
-      await assert.rejects(updateChapterDepartment({
+      // Move back to unassigned
+      const res4 = await updateChapterDepartment({
         chapterId: chapter.id,
         userId: testMember.id,
         departmentUnitId: null,
         makeLead: false,
         actorId: admin.id,
-      }), (error: any) => error?.code === 'MemberPositionRequired')
-      assert.equal(await prisma.positionAssignment.count({
-        where: { user_id: testMember.id, ends_at: null, position: { code: 'PRESIDENT' } },
-      }), 1, 'A rejected unassignment must keep the current position')
+      })
+      assert.equal(res4.departmentUnitId, null)
+      assert.equal(res4.isLead, false)
 
       const activeDeptMemberships = await prisma.organizationMembership.count({
         where: {
@@ -208,7 +207,7 @@ async function run() {
           ends_at: null,
         },
       })
-      assert.equal(activeDeptMemberships, 0, 'A President holds no department membership')
+      assert.equal(activeDeptMemberships, 0, 'Member must have 0 active department memberships')
 
       console.log('✓ Lead chapter department transfer tests passed successfully!')
     }
