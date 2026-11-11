@@ -516,7 +516,7 @@ function CourseCardRow({
                   : 'bg-slate-100 text-slate-700 border border-slate-200'
               }`}
             >
-              {course.visibility === 'PUBLIC' ? '🌐 Công khai' : '🔒 Nội bộ BBE'}
+              {course.visibility === 'PUBLIC' ? '🌐 Khách cũng xem được' : '🔒 Chỉ thành viên BBE'}
             </span>
           </div>
 
@@ -576,7 +576,7 @@ function CourseCardRow({
               onClick={() => onTogglePublish(cId, course.status)}
               className="text-xs whitespace-nowrap shadow-2xs"
             >
-              {isPublished ? 'Hạ về nháp' : 'Công khai'}
+              {isPublished ? 'Hạ về nháp' : 'Xuất bản'}
             </Button>
 
             <button

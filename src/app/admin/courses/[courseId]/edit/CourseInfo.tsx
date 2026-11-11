@@ -106,7 +106,7 @@ export default function CourseInfo({
                         onChange={() => setForm({ ...form, visibility: 'PUBLIC' })}
                         className="text-[#2563EB]"
                       />
-                      Công khai (Public — Xem không cần đăng nhập)
+                      Khách cũng xem được (không cần đăng nhập)
                     </label>
                     <label className="flex items-center gap-2 text-sm font-medium text-[#172554] cursor-pointer">
                       <input
@@ -118,7 +118,7 @@ export default function CourseInfo({
                         onChange={() => setForm({ ...form, visibility: 'PRIVATE' })}
                         className="text-[#2563EB]"
                       />
-                      Nội bộ (Private — Chỉ thành viên đăng nhập)
+                      Chỉ thành viên BBE (phải đăng nhập)
                     </label>
                   </div>
 

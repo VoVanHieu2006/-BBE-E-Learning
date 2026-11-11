@@ -5,6 +5,7 @@ import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import { apiFetch, getCachedApiData } from '@/lib/api/client';
 import { useRouter } from 'next/navigation';
+import { greetingName } from '@/lib/fun-display-name';
 
 export default function StudentDashboard() {
   const router = useRouter();
@@ -15,6 +16,17 @@ export default function StudentDashboard() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [profileName, setProfileName] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const cached = getCachedApiData<any>('/api/v1/users/me');
+    if (cached) setProfileName(cached.displayName || null);
+    apiFetch('/api/v1/users/me', { tabCache: true }).then((res) => {
+      if (!cancelled && res.ok && res.data) setProfileName(res.data.displayName || null);
+    });
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     setMounted(true);
@@ -94,7 +106,7 @@ export default function StudentDashboard() {
       <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-4xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
-            Chào mừng, <span suppressHydrationWarning>{mounted && user?.email ? user.email.split('@')[0] : 'bạn'}</span>
+            Chào mừng, <span suppressHydrationWarning>{mounted ? greetingName(user?.id, profileName ?? user?.displayName) ?? 'bạn' : 'bạn'}</span>
           </h1>
           <p className="text-[#737686] mt-1">
             Chapter: <span suppressHydrationWarning className="font-semibold text-[#172554]">{mounted && user?.chapterName ? user.chapterName : 'BBE Core'}</span> • Tiếp tục học nhé!

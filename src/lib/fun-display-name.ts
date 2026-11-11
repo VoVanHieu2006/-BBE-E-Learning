@@ -43,6 +43,16 @@ export function publicDisplayName(userId: string, user: PublicNameSource): strin
   return user?.display_name?.trim() || funDisplayName(userId)
 }
 
+/**
+ * Name for the member's own greeting: the saved display name, else the stable fun name.
+ * Never derived from email. Returns null only when neither a name nor a user id is known yet.
+ */
+export function greetingName(userId: string | null | undefined, displayName: string | null | undefined): string | null {
+  const saved = typeof displayName === 'string' ? displayName.trim() : ''
+  if (saved) return saved
+  return userId ? funDisplayName(userId) : null
+}
+
 /** Ranking row safe for members: drops `email` and fills a complete `displayName`. */
 export function publicRankingRow<T extends { userId: string }>(row: T, user: PublicNameSource): Omit<T, 'email' | 'displayName'> & { displayName: string } {
   const { email: _email, displayName: _displayName, ...rest } = row as T & { email?: unknown; displayName?: unknown }

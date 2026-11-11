@@ -113,7 +113,7 @@ export default function AdminNewCoursePage() {
                     onChange={handleChange}
                     className="h-4 w-4 text-[#2563EB]"
                   />
-                  <span className="text-sm font-medium text-[#172554]">Công khai (Khách & Thành viên đều xem được)</span>
+                  <span className="text-sm font-medium text-[#172554]">Khách cũng xem được (không cần đăng nhập)</span>
                 </label>
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
@@ -124,7 +124,7 @@ export default function AdminNewCoursePage() {
                     onChange={handleChange}
                     className="h-4 w-4 text-[#2563EB]"
                   />
-                  <span className="text-sm font-medium text-[#172554]">Nội bộ (Chỉ thành viên đăng nhập)</span>
+                  <span className="text-sm font-medium text-[#172554]">Chỉ thành viên BBE (phải đăng nhập)</span>
                 </label>
               </div>
             </div>

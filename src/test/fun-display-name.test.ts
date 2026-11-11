@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import {
   FUN_NAME_COMBINATIONS,
   funDisplayName,
+  greetingName,
   publicDisplayName,
   publicRankingRow,
   RETIRED_ACCOUNT_NAME,
@@ -53,5 +54,22 @@ describe('publicRankingRow', () => {
     assert.ok(!('email' in row))
     assert.equal(row.displayName, funDisplayName('u1'))
     assert.equal(row.stars, 5)
+  })
+})
+
+describe('greetingName', () => {
+  it('uses the saved display name, trimmed', () => {
+    assert.equal(greetingName('u1', '  Minh  '), 'Minh')
+  })
+
+  it('falls back to the stable fun name when no name is saved, never to an email', () => {
+    assert.equal(greetingName('u1', null), funDisplayName('u1'))
+    assert.equal(greetingName('u1', '   '), funDisplayName('u1'))
+    assert.equal(greetingName('u1', undefined), funDisplayName('u1'))
+  })
+
+  it('returns null when neither a name nor a user id is known', () => {
+    assert.equal(greetingName(undefined, undefined), null)
+    assert.equal(greetingName(null, ''), null)
   })
 })

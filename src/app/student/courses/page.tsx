@@ -308,9 +308,9 @@ export default function StudentCoursesPage() {
                   <span>🏛️</span>
                   <span>
                     {user.currentDepartment?.name
-                      ? `Thành viên · Ban ${user.currentDepartment.name}${user.currentTermLabel ? ` (${user.currentTermLabel})` : ''}`
+                      ? `Thành viên · ${user.currentDepartment.name}${user.currentTermLabel ? ` (${user.currentTermLabel})` : ''}`
                       : user.department?.name
-                      ? `Thành viên · Ban ${user.department.name}`
+                      ? `Thành viên · ${user.department.name}`
                       : '⚠️ Thành viên · Chưa có Ban'}
                   </span>
                   {user.chapterName && <span>• {user.chapterName}</span>}
@@ -804,7 +804,7 @@ export default function StudentCoursesPage() {
                                     : 'bg-white/90 text-slate-700 backdrop-blur-xs'
                                 }`}
                               >
-                                {c.visibility === 'PUBLIC' ? '🌐 Public' : '🔒 Private'}
+                                {c.visibility === 'PUBLIC' ? '🌐 Khách cũng xem được' : '🔒 Chỉ thành viên BBE'}
                               </span>
                             </div>
                           </div>

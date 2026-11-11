@@ -119,7 +119,7 @@ export default function CourseDetailPage({ params }: { params: { courseId: strin
                         : 'bg-slate-100 text-slate-700'
                     }`}
                   >
-                    {course.visibility === 'PUBLIC' ? '🌐 Khóa học Công khai' : '🔒 Khóa học Nội bộ'}
+                    {course.visibility === 'PUBLIC' ? '🌐 Khách cũng xem được' : '🔒 Chỉ thành viên BBE'}
                   </span>
                 </div>
                 <h1 className="text-3xl font-extrabold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
