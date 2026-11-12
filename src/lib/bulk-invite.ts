@@ -9,7 +9,7 @@ export const INVITE_EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 export type BulkInviteStatus =
   | 'SENT'
-  | 'SENT_EMAIL_FAILED'
+  | 'LINK_NEEDED'
   | 'INVALID'
   | 'DUPLICATE'
   | 'ALREADY_MEMBER'
@@ -21,37 +21,11 @@ export interface BulkInviteResultItem {
   email: string
   status: BulkInviteStatus
   message?: string
-  /** Set when the invitation was saved but the email could not be sent, so it can be re-sent. */
+  /** Set when the invitation was saved but no email went out (daily quota or send error): its link can be fetched with this id. */
   invitationId?: string
 }
 
-export const BULK_INVITE_RESEND_FAILED_MESSAGE = 'Không gửi lại được email, vui lòng thử lại sau.'
-export const BULK_INVITE_NO_INVITATION_MESSAGE = 'Không tìm thấy lời mời đã lưu để gửi lại. Hãy tải lại danh sách lời mời rồi gửi lại từ đó.'
 export const BULK_INVITE_RETRY_NO_CHANGE_MESSAGE = 'Đã thử lại nhưng chưa có email nào gửi được. Xem lý do ở từng dòng bên dưới.'
-
-/** Phần của kết quả apiFetch mà việc gửi lại cần đọc. */
-export interface BulkInviteResendResponse {
-  ok: boolean
-  status?: number
-  data?: { emailSent?: boolean; emailError?: string } | null
-  error?: { code?: string; message?: string } | null
-}
-
-/**
- * Trạng thái mới của một dòng "đã lưu lời mời nhưng mail lỗi" sau khi gọi gửi lại.
- * Luôn trả về một dòng (kể cả khi thất bại) để người dùng thấy lý do thay vì im lặng.
- */
-export function resolveResendOutcome(row: BulkInviteResultItem, res: BulkInviteResendResponse | null): BulkInviteResultItem {
-  if (!row.invitationId) return { ...row, message: BULK_INVITE_NO_INVITATION_MESSAGE }
-  if (res?.ok) {
-    return res.data?.emailSent === false
-      ? { ...row, message: res.data.emailError || 'không rõ lý do' }
-      : { email: row.email, status: 'SENT' }
-  }
-  const message = res?.error?.message || BULK_INVITE_RESEND_FAILED_MESSAGE
-  if (res?.error?.code === 'AccessDenied' || res?.status === 403) return { email: row.email, status: 'DENIED', message }
-  return { ...row, message }
-}
 
 /** Sau khi thử lại, có dòng nào đổi trạng thái so với trước đó hay không (chỉ đổi message thì chưa tính). */
 export function bulkRetryChangedAnything(before: BulkInviteResultItem[], updates: BulkInviteResultItem[]): boolean {
@@ -92,7 +66,7 @@ export function parseBulkInviteEmails(text: string) {
 
 /** Statuses the user may retry from the result table. */
 export function isRetryableBulkStatus(status: BulkInviteStatus): boolean {
-  return status === 'FAILED' || status === 'SENT_EMAIL_FAILED'
+  return status === 'FAILED'
 }
 
 export type BulkInviteRowKind = 'valid' | 'invalid' | 'duplicate'
@@ -136,8 +110,10 @@ export function summarizeBulkResults(results: BulkInviteResultItem[]) {
   const count = (status: BulkInviteStatus) => results.filter((row) => row.status === status).length
   return {
     total: results.length,
-    sent: count('SENT') + count('SENT_EMAIL_FAILED'),
-    emailFailed: count('SENT_EMAIL_FAILED'),
+    /** Lời mời đã tạo (gửi email hoặc cần lấy link). */
+    created: count('SENT') + count('LINK_NEEDED'),
+    emailed: count('SENT'),
+    linkNeeded: count('LINK_NEEDED'),
     invalid: count('INVALID'),
     duplicate: count('DUPLICATE'),
     alreadyMember: count('ALREADY_MEMBER'),
@@ -203,7 +179,7 @@ export async function runBulkInvites(parsed: { valid: string[]; invalid: string[
       }
       return result.emailSent
         ? { email, status: 'SENT' }
-        : { email, status: 'SENT_EMAIL_FAILED', message: result.emailError || 'không rõ lý do', invitationId: result.invitationId }
+        : { email, status: 'LINK_NEEDED', message: result.emailError || 'không rõ lý do', invitationId: result.invitationId }
     } catch {
       return { email, status: 'FAILED', message: 'Lỗi hệ thống khi tạo lời mời.' }
     }
@@ -212,8 +188,8 @@ export async function runBulkInvites(parsed: { valid: string[]; invalid: string[
 }
 
 export const BULK_INVITE_STATUS_LABELS: Record<BulkInviteStatus, string> = {
-  SENT: 'Đã gửi lời mời',
-  SENT_EMAIL_FAILED: 'Đã lưu lời mời, gửi email thất bại',
+  SENT: 'Đã gửi email',
+  LINK_NEEDED: 'Chưa gửi mail, lấy link mời',
   INVALID: 'Email không hợp lệ',
   DUPLICATE: 'Trùng lặp trong danh sách',
   ALREADY_MEMBER: 'Đã có tài khoản / đã là thành viên',

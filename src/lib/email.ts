@@ -2,6 +2,15 @@ import { isLeadRole } from '@/lib/roles'
 import fs from 'fs'
 import path from 'path'
 import { Resend } from 'resend'
+import { buildInvitationUrl } from '@/lib/invitation-link'
+import {
+  EMAIL_NOT_CONFIGURED_MESSAGE,
+  EMAIL_QUOTA_EXHAUSTED_MESSAGE,
+  emailProviderLimit,
+  shouldRefundSlot,
+  type MailAttemptOutcome,
+} from '@/lib/email-quota-core'
+import { releaseEmailSlots, reserveEmailSlots } from '@/lib/email-quota'
 
 const resendApiKey = process.env.RESEND_API_KEY
 const emailFrom = process.env.EMAIL_FROM || 'onboarding@resend.dev'
@@ -29,6 +38,8 @@ export interface SendInvitationEmailParams {
   chapterName?: string
   token: string
   expiresAt: Date
+  /** Ngày UTC của slot mà người gọi đã đặt chỗ sẵn (gửi hàng loạt). Bỏ trống thì hàm tự đặt chỗ 1 slot. */
+  slotDay?: string
 }
 
 export interface SendPasswordResetEmailParams {
@@ -37,12 +48,86 @@ export interface SendPasswordResetEmailParams {
   expiresAt: Date
 }
 
+export interface SendEmailResult {
+  success: boolean
+  error?: string
+  /** Hết hạn mức ngày: không gọi Resend. Người gọi nên chuyển sang link mời. */
+  quotaExhausted?: boolean
+}
+
+interface ResendPayload {
+  subject: string
+  html: string
+  logoBase64: string | null
+}
+
+/**
+ * Cửa duy nhất gọi Resend: mọi email đều phải có slot hạn mức. Nếu người gọi chưa đặt chỗ (`slotDay`),
+ * hàm tự đặt 1 slot (lời mời theo hạn mức lời mời; mail hệ thống được dùng tới trần của nhà cung cấp).
+ * Slot được giữ khi mail có thể đã đi, hoàn lại khi chắc chắn chưa gửi (xem shouldRefundSlot).
+ */
+async function sendThroughResend(
+  kind: 'invitation' | 'password_reset',
+  to: string,
+  payload: ResendPayload,
+  slotDay: string | undefined,
+  mockSuccess: boolean,
+): Promise<SendEmailResult> {
+  let day = slotDay
+  if (!day) {
+    const reservation = await reserveEmailSlots(1, kind === 'password_reset'
+      ? { cap: emailProviderLimit(), onError: 'allow' }
+      : { onError: 'deny' })
+    if (reservation.granted < 1) {
+      console.warn(`[EMAIL] ${kind}: daily quota exhausted, email skipped`)
+      return { success: false, error: EMAIL_QUOTA_EXHAUSTED_MESSAGE, quotaExhausted: true }
+    }
+    day = reservation.day
+  }
+
+  let outcome: MailAttemptOutcome
+  let result: SendEmailResult
+  if (!resend) {
+    console.log('[EMAIL] RESEND_API_KEY not configured. Running in Mock/Log mode.')
+    outcome = { kind: 'no_client' }
+    result = mockSuccess ? { success: true } : { success: false, error: EMAIL_NOT_CONFIGURED_MESSAGE }
+  } else {
+    try {
+      const { data, error } = await resend.emails.send({
+        from: emailFrom,
+        to: [to],
+        subject: payload.subject,
+        html: payload.html,
+        attachments: payload.logoBase64
+          ? [{ filename: 'logo-white.png', content: payload.logoBase64, contentType: 'image/png', contentId: 'bbe-logo-white' }]
+          : undefined,
+      })
+      if (error) {
+        console.error('[RESEND ERROR]:', error.name, error.message)
+        outcome = { kind: 'api_error', statusCode: (error as { statusCode?: number | null }).statusCode }
+        result = { success: false, error: error.message }
+      } else {
+        console.log('[RESEND SUCCESS] Email sent id:', data?.id)
+        outcome = { kind: 'sent' }
+        result = { success: true }
+      }
+    } catch (err: any) {
+      console.error('[RESEND EXCEPTION]:', err?.message)
+      outcome = { kind: 'exception' }
+      result = { success: false, error: err?.message || 'Lỗi gửi email' }
+    }
+  }
+
+  if (shouldRefundSlot(outcome)) await releaseEmailSlots(day, 1)
+  return result
+}
+
 /**
  * Send an invitation email to a new Chapter Leader or Member
  */
-export async function sendInvitationEmail(params: SendInvitationEmailParams): Promise<{ success: boolean; error?: string }> {
-  const { to, role, chapterName, token, expiresAt } = params
-  const inviteUrl = `${appUrl}/accept-invitation?token=${token}`
+export async function sendInvitationEmail(params: SendInvitationEmailParams): Promise<SendEmailResult> {
+  const { to, role, chapterName, token, expiresAt, slotDay } = params
+  const inviteUrl = buildInvitationUrl(token)
   const roleName = isLeadRole(role) ? 'Lead Chapter' : role === 'DNA_LEAD' ? 'Lead DNA' : 'Thành viên học tập'
 
   const logoBase64 = getLogoBase64()
@@ -119,41 +204,14 @@ export async function sendInvitationEmail(params: SendInvitationEmailParams): Pr
 </html>
 `
 
-  console.log(`[EMAIL DISPATCH] To: ${to} | Role: ${role} | Link: ${inviteUrl}`)
-
-  if (!resend) {
-    console.log('[EMAIL] RESEND_API_KEY not configured. Running in Mock/Log mode.')
-    return { success: false, error: 'RESEND_API_KEY chưa cấu hình — email không được gửi (chế độ Mock/Log)' }
-  }
-
-  try {
-    const { data, error } = await resend.emails.send({
-      from: emailFrom,
-      to: [to],
-      subject: `[BBE E-Learning] Lời mời tham gia với vai trò ${roleName}`,
-      html,
-      attachments: logoBase64
-        ? [{ filename: 'logo-white.png', content: logoBase64, contentType: 'image/png', contentId: 'bbe-logo-white' }]
-        : undefined,
-    })
-
-    if (error) {
-      console.error('[RESEND ERROR]:', error)
-      return { success: false, error: error.message }
-    }
-
-    console.log('[RESEND SUCCESS] Email sent id:', data?.id)
-    return { success: true }
-  } catch (err: any) {
-    console.error('[RESEND EXCEPTION]:', err.message)
-    return { success: false, error: err.message }
-  }
+  console.log(`[EMAIL DISPATCH] invitation role=${role}`)
+  return sendThroughResend('invitation', to, { subject: `[BBE E-Learning] Lời mời tham gia với vai trò ${roleName}`, html, logoBase64 }, slotDay, false)
 }
 
 /**
  * Send a password reset email
  */
-export async function sendPasswordResetEmail(params: SendPasswordResetEmailParams): Promise<{ success: boolean; error?: string }> {
+export async function sendPasswordResetEmail(params: SendPasswordResetEmailParams): Promise<SendEmailResult> {
   const { to, token, expiresAt } = params
   const resetUrl = `${appUrl}/reset-password?token=${token}`
 
@@ -226,33 +284,6 @@ export async function sendPasswordResetEmail(params: SendPasswordResetEmailParam
 </html>
 `
 
-  console.log(`[PASSWORD RESET DISPATCH] To: ${to} | Link: ${resetUrl}`)
-
-  if (!resend) {
-    console.log('[EMAIL] RESEND_API_KEY not configured. Running in Mock/Log mode.')
-    return { success: true }
-  }
-
-  try {
-    const { data, error } = await resend.emails.send({
-      from: emailFrom,
-      to: [to],
-      subject: '[BBE E-Learning] Yêu cầu đặt lại mật khẩu',
-      html,
-      attachments: logoBase64
-        ? [{ filename: 'logo-white.png', content: logoBase64, contentType: 'image/png', contentId: 'bbe-logo-white' }]
-        : undefined,
-    })
-
-    if (error) {
-      console.error('[RESEND ERROR]:', error)
-      return { success: false, error: error.message }
-    }
-
-    console.log('[RESEND SUCCESS] Email sent id:', data?.id)
-    return { success: true }
-  } catch (err: any) {
-    console.error('[RESEND EXCEPTION]:', err.message)
-    return { success: false, error: err.message }
-  }
+  console.log('[PASSWORD RESET DISPATCH]')
+  return sendThroughResend('password_reset', to, { subject: '[BBE E-Learning] Yêu cầu đặt lại mật khẩu', html, logoBase64 }, undefined, true)
 }

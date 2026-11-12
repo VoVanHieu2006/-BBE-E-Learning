@@ -4,7 +4,8 @@ import { invalidateOrganizationViews } from './organization-view-cache'
 import { prepareOrganizationTransition } from './organization-transition'
 import { prisma } from './prisma'
 import { hashToken, generateToken } from './tokens'
-import { sendInvitationEmail } from './email'
+import { sendInvitationEmail, type SendInvitationEmailParams } from './email'
+import { EMAIL_QUOTA_EXHAUSTED_MESSAGE, LINK_RATE_WINDOW_MS, isLinkRequestRateLimited } from './email-quota-core'
 import { reconcileLearningAssignmentsForUser } from './learning-assignments'
 import { invalidateChapterLeaderboardCache } from './chapter-leaderboard-cache'
 import { invalidateMemberLeaderboardCache } from './member-leaderboard-cache'
@@ -14,12 +15,22 @@ type InvitationStatus = 'PENDING' | 'ACCEPTED' | 'EXPIRED' | 'CANCELLED';
 import bcrypt from 'bcryptjs'
 import { ensureChapterStandardDepartments } from './chapter-departments'
 
+/**
+ * Cách xử lý mail của một lời mời:
+ * - auto: tự đặt chỗ 1 slot hạn mức rồi gửi (mời đơn, gửi lại);
+ * - reserved: người gọi đã đặt chỗ sẵn (mời hàng loạt), `day` là ngày UTC của slot;
+ * - link: người gọi biết đã hết slot, bỏ qua mail và giao bằng link.
+ */
+export type InvitationMailPlan = { kind: 'auto' } | { kind: 'reserved'; day: string } | { kind: 'link' }
+export type InvitationDeliveryMethod = 'EMAIL' | 'LINK'
+
 export interface SendInvitationOptions {
   email: string
   role: InvitationRole
   chapterId?: string
   organizationUnitId?: string
   invitedBy: string
+  mail?: InvitationMailPlan
 }
 
 export interface SendInvitationResult {
@@ -33,6 +44,8 @@ export interface SendInvitationResult {
   token: string
   emailSent: boolean
   emailError?: string
+  /** EMAIL = đã gửi mail; LINK = chưa gửi được mail, cần lấy link mời để giao. */
+  delivery: InvitationDeliveryMethod
 }
 
 export interface SendInvitationError {
@@ -51,6 +64,40 @@ export async function isEmailActive(email: string): Promise<boolean> {
 export async function emailHasAnyAccount(email: string): Promise<boolean> {
   const user = await prisma.user.findUnique({ where: { email: email.trim().toLowerCase() } })
   return user !== null
+}
+
+interface MailDelivery {
+  emailSent: boolean
+  emailError?: string
+  delivery: InvitationDeliveryMethod
+}
+
+/**
+ * Giao mail cho lời mời đã lưu rồi ghi lại cách giao. Hết hạn mức, thiếu cấu hình hoặc lỗi gửi
+ * không bao giờ làm hỏng việc mời: lời mời vẫn đang chờ, chỉ chuyển sang giao bằng link.
+ */
+async function deliverInvitationMail(
+  invitationId: string,
+  params: Omit<SendInvitationEmailParams, 'slotDay'>,
+  plan: InvitationMailPlan,
+  currentDelivery: InvitationDeliveryMethod,
+): Promise<MailDelivery> {
+  let delivery: InvitationDeliveryMethod = 'LINK'
+  let emailError: string | undefined = EMAIL_QUOTA_EXHAUSTED_MESSAGE
+  if (plan.kind !== 'link') {
+    try {
+      const result = await sendInvitationEmail({ ...params, slotDay: plan.kind === 'reserved' ? plan.day : undefined })
+      if (result.success) delivery = 'EMAIL'
+      emailError = result.success ? undefined : result.error || 'không rõ lý do'
+    } catch (error) {
+      console.error('[INVITATION] email dispatch threw:', (error as Error)?.message)
+      emailError = 'Lỗi hệ thống khi gửi email.'
+    }
+  }
+  if (delivery !== currentDelivery) {
+    await prisma.invitation.update({ where: { id: invitationId }, data: { delivery_method: delivery } })
+  }
+  return { emailSent: delivery === 'EMAIL', emailError, delivery }
 }
 
 /** Send an invitation to a member (BĐHU or Admin) */
@@ -103,13 +150,8 @@ export async function sendMemberInvitation(
     },
   })
 
-  // Send invitation email via Resend
-  const emailResult = await sendInvitationEmail({
-    to: opts.email,
-    role: opts.role,
-    token,
-    expiresAt,
-  })
+  // Send invitation email via Resend (hạn mức ngày được tính trong email.ts); lỗi → giao bằng link
+  const mail = await deliverInvitationMail(invitation.id, { to: opts.email, role: opts.role, token, expiresAt }, opts.mail ?? { kind: 'auto' }, 'EMAIL')
 
   return {
     ok: true,
@@ -119,8 +161,7 @@ export async function sendMemberInvitation(
     status: 'PENDING',
     expiresAt,
     token, // return plain token for email
-    emailSent: emailResult.success,
-    emailError: emailResult.success ? undefined : emailResult.error,
+    ...mail,
   }
 }
 
@@ -130,7 +171,7 @@ export async function sendChapterLeaderInvitation(
   chapterName: string,
   chapterDescription: string | undefined,
   invitedBy: string
-): Promise<{ ok: true; invitationId: string; chapterId: string | null; status: InvitationStatus; expiresAt: Date; token: string; emailSent: boolean; emailError?: string } | SendInvitationError> {
+): Promise<{ ok: true; invitationId: string; chapterId: string | null; status: InvitationStatus; expiresAt: Date; token: string; emailSent: boolean; emailError?: string; delivery: InvitationDeliveryMethod } | SendInvitationError> {
   email = email.trim().toLowerCase()
   // BR-02 (issue #10): no invitation if email already belongs to ANY account
   if (await emailHasAnyAccount(email)) {
@@ -191,13 +232,7 @@ export async function sendChapterLeaderInvitation(
   })
 
   // Send chapter leader invitation email via Resend OUTSIDE transaction
-  const emailResult = await sendInvitationEmail({
-    to: email,
-    role: 'LEAD',
-    chapterName,
-    token: created.token,
-    expiresAt: created.expiresAt,
-  })
+  const mail = await deliverInvitationMail(created.invitationId, { to: email, role: 'LEAD', chapterName, token: created.token, expiresAt: created.expiresAt }, { kind: 'auto' }, 'EMAIL')
 
   return {
     ok: true as const,
@@ -206,8 +241,7 @@ export async function sendChapterLeaderInvitation(
     status: 'PENDING' as InvitationStatus,
     expiresAt: created.expiresAt,
     token: created.token,
-    emailSent: emailResult.success,
-    emailError: emailResult.success ? undefined : emailResult.error,
+    ...mail,
   }
 }
 
@@ -232,7 +266,7 @@ export async function resendInvitation(
   actorId: string,
   actorRole: UserRole,
   hasScopedManagePermission = false,
-): Promise<{ ok: true; invitationId: string; status: InvitationStatus; expiresAt: Date; token: string; emailSent: boolean; emailError?: string } | SendInvitationError> {
+): Promise<{ ok: true; invitationId: string; status: InvitationStatus; expiresAt: Date; token: string; emailSent: boolean; emailError?: string; delivery: InvitationDeliveryMethod } | SendInvitationError> {
   const invitation = await prisma.invitation.findUnique({ where: { id: invitationId } })
 
   if (!invitation) {
@@ -253,8 +287,9 @@ export async function resendInvitation(
   const tokenHash = hashToken(token)
   const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000)
 
-  await prisma.invitation.update({
-    where: { id: invitationId },
+  // Điều kiện nằm trong câu UPDATE: nếu lời mời vừa được kích hoạt (ACCEPTED) thì không làm sống lại.
+  const renewed = await prisma.invitation.updateMany({
+    where: { id: invitationId, status: { not: 'ACCEPTED' } },
     data: {
       token_hash: tokenHash,
       status: 'PENDING',
@@ -263,16 +298,64 @@ export async function resendInvitation(
       cancelled_at: null,
     },
   })
+  if (renewed.count !== 1) {
+    return { ok: false, code: 'InvalidState', message: 'Invitation đã được chấp nhận' }
+  }
 
-  // Send resend invitation email via Resend
-  const emailResult = await sendInvitationEmail({
-    to: invitation.email,
-    role: invitation.role,
-    token,
-    expiresAt,
+  // Gửi lại bằng email (tính hạn mức). Hết hạn mức hoặc lỗi thì chuyển sang giao bằng link.
+  const mail = await deliverInvitationMail(invitationId, { to: invitation.email, role: invitation.role, token, expiresAt }, { kind: 'auto' }, invitation.delivery_method)
+
+  return { ok: true, invitationId, status: 'PENDING', expiresAt, token, ...mail }
+}
+
+/**
+ * Lấy link mời mới cho lời mời đang chờ giao bằng link (không gửi mail). Mỗi lần gọi đổi token nên
+ * link cũ hết hiệu lực; hạn 24 giờ của lời mời giữ nguyên. Token chỉ lưu dạng băm nên không thể hiện lại link cũ.
+ * Quyền kiểm tra giống resend/cancel (route kiểm tra thêm quyền theo đơn vị). Ghi audit log, không chứa token.
+ */
+export async function issueInvitationLink(
+  invitationId: string,
+  actorId: string,
+  actorRole: UserRole,
+  hasScopedManagePermission = false,
+): Promise<{ ok: true; invitationId: string; token: string; expiresAt: Date } | SendInvitationError> {
+  const invitation = await prisma.invitation.findUnique({ where: { id: invitationId } })
+  if (!invitation) return { ok: false, code: 'InvitationNotFound', message: 'Lời mời không tồn tại' }
+  if (actorRole !== 'ADMIN' && !hasScopedManagePermission && invitation.invited_by !== actorId) {
+    return { ok: false, code: 'AccessDenied', message: 'Không có quyền lấy link của lời mời này' }
+  }
+  const now = new Date()
+  if (invitation.status !== 'PENDING' || invitation.expires_at <= now) {
+    return { ok: false, code: 'InvalidState', message: 'Chỉ lấy được link của lời mời còn đang chờ và chưa hết hạn.' }
+  }
+  if (invitation.delivery_method !== 'LINK') {
+    return { ok: false, code: 'NotLinkDelivery', message: 'Lời mời này đã gửi qua email. Dùng "Gửi lại" để gửi email mới.' }
+  }
+
+  const since = new Date(now.getTime() - LINK_RATE_WINDOW_MS)
+  const [byActor, byInvitation] = await Promise.all([
+    prisma.auditLog.count({ where: { actor_user_id: actorId, action: 'INVITATION_LINK_ISSUED', created_at: { gte: since } } }),
+    prisma.auditLog.count({ where: { entity_type: 'INVITATION', entity_id: invitationId, action: 'INVITATION_LINK_ISSUED', created_at: { gte: since } } }),
+  ])
+  if (isLinkRequestRateLimited({ byActor, byInvitation })) {
+    return { ok: false, code: 'RateLimited', message: 'Bạn đã lấy link quá nhiều lần trong ít phút. Vui lòng thử lại sau.' }
+  }
+
+  const token = generateToken()
+  const issued = await prisma.$transaction(async (tx) => {
+    // Điều kiện nằm trong câu UPDATE: nếu lời mời vừa được kích hoạt/hủy/hết hạn thì không đổi gì.
+    const updated = await tx.invitation.updateMany({
+      where: { id: invitationId, status: 'PENDING', delivery_method: 'LINK', expires_at: { gt: now } },
+      data: { token_hash: hashToken(token) },
+    })
+    if (updated.count !== 1) return false
+    await tx.auditLog.create({
+      data: { actor_user_id: actorId, action: 'INVITATION_LINK_ISSUED', entity_type: 'INVITATION', entity_id: invitationId, metadata: { email: invitation.email, role: invitation.role } },
+    })
+    return true
   })
-
-  return { ok: true, invitationId, status: 'PENDING', expiresAt, token, emailSent: emailResult.success, emailError: emailResult.success ? undefined : emailResult.error }
+  if (!issued) return { ok: false, code: 'InvalidState', message: 'Lời mời vừa thay đổi trạng thái, hãy tải lại danh sách.' }
+  return { ok: true, invitationId, token, expiresAt: invitation.expires_at }
 }
 
 /** Cancel invitation */
@@ -296,10 +379,14 @@ export async function cancelInvitation(
     return { ok: false, code: 'InvalidState', message: 'Chỉ hủy được invitation đang PENDING' }
   }
 
-  await prisma.invitation.update({
-    where: { id: invitationId },
+  // Điều kiện PENDING nằm trong câu UPDATE: lời mời vừa được kích hoạt thì không bị đổi thành CANCELLED.
+  const cancelled = await prisma.invitation.updateMany({
+    where: { id: invitationId, status: 'PENDING' },
     data: { status: 'CANCELLED', cancelled_at: new Date() },
   })
+  if (cancelled.count !== 1) {
+    return { ok: false, code: 'InvalidState', message: 'Lời mời vừa thay đổi trạng thái, hãy tải lại danh sách.' }
+  }
 
   return { ok: true, invitationId, status: 'CANCELLED' }
 }
@@ -340,6 +427,18 @@ export async function validateInvitationToken(
   }
 }
 
+const INVITATION_NO_LONGER_VALID_MESSAGE = 'Link không còn hiệu lực, vui lòng xin link mới'
+
+/** Ném trong transaction của acceptInvitation để rollback khi lời mời không còn khớp token/PENDING/chưa hết hạn. */
+// Không dùng `class extends Error` + instanceof: target biên dịch ES5 làm instanceof sai với lớp con của Error.
+const INVITATION_NO_LONGER_VALID_FLAG = 'invitationNoLongerValid'
+function createInvitationNoLongerValidError(): Error {
+  return Object.assign(new Error(INVITATION_NO_LONGER_VALID_MESSAGE), { [INVITATION_NO_LONGER_VALID_FLAG]: true })
+}
+function isInvitationNoLongerValidError(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && (error as Record<string, unknown>)[INVITATION_NO_LONGER_VALID_FLAG] === true
+}
+
 /** Accept invitation — create user account and activate */
 export async function acceptInvitation(
   token: string,
@@ -369,8 +468,20 @@ export async function acceptInvitation(
   // Hash password with bcrypt
   const passwordHash = await bcrypt.hash(password, 12)
 
-  // Use transaction: create user + link to chapter + update invitation
-  const accepted = await prisma.$transaction(async (tx) => {
+  // Use transaction: claim invitation + create user + link to chapter
+  let accepted
+  try {
+    accepted = await prisma.$transaction(async (tx) => {
+    // Chiếm lời mời trước tiên và đúng theo token đã dùng: nếu trong lúc băm mật khẩu người quản lý đã đổi link
+    // (token_hash mới), hủy hoặc lời mời hết hạn thì không khớp dòng nào → hủy cả transaction, chưa tạo gì.
+    // Hai lượt kích hoạt cùng lúc cũng chỉ một lượt chiếm được (lượt sau chờ khóa dòng rồi thấy status đã ACCEPTED).
+    const claimedAt = new Date()
+    const claimed = await tx.invitation.updateMany({
+      where: { id: invitation.id, token_hash: tokenHash, status: 'PENDING', expires_at: { gt: claimedAt } },
+      data: { status: 'ACCEPTED', accepted_at: claimedAt },
+    })
+    if (claimed.count !== 1) throw createInvitationNoLongerValidError()
+
     const user = await tx.user.create({
       data: {
         email: invitation.email.trim().toLowerCase(),
@@ -482,12 +593,6 @@ export async function acceptInvitation(
     }
     if (invitation.role === 'MEMBER') await assignMembershipPosition(tx, user.id, organizationUnitId, invitation.invited_by)
 
-    // Update invitation status
-    await tx.invitation.update({
-      where: { id: invitation.id },
-      data: { status: 'ACCEPTED', accepted_at: new Date() },
-    })
-
     console.log(`[ACCOUNT] User created (${user.role})`)
 
     return {
@@ -497,7 +602,13 @@ export async function acceptInvitation(
       role: user.role,
       status: 'ACTIVE' as const,
     }
-  })
+    })
+  } catch (error) {
+    if (isInvitationNoLongerValidError(error)) {
+      return { ok: false, code: 'TokenAlreadyUsed', message: INVITATION_NO_LONGER_VALID_MESSAGE }
+    }
+    throw error
+  }
   if (accepted.ok) {
     invalidateChapterLeaderboardCache()
     invalidateMemberLeaderboardCache()
@@ -589,6 +700,7 @@ export async function getInvitations(params: {
       invitedBy: inv.invited_by,
       invitedByEmail: inv.invited_by_user?.email || 'N/A',
       status: inv.status,
+      deliveryMethod: inv.delivery_method,
       createdAt: inv.created_at,
       expiresAt: inv.expires_at,
       accountStatus: inv.status === 'ACCEPTED' ? 'ACTIVE' : 'NONE',

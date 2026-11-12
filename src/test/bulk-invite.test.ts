@@ -4,11 +4,9 @@ import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import {
   BULK_INVITE_MAX_EMAILS,
-  BULK_INVITE_NO_INVITATION_MESSAGE,
-  BULK_INVITE_RESEND_FAILED_MESSAGE,
+  BULK_INVITE_STATUS_LABELS,
   bulkInviteRowsFromText,
   bulkRetryChangedAnything,
-  resolveResendOutcome,
   classifyBulkInviteRows,
   isRetryableBulkStatus,
   isValidInviteEmail,
@@ -165,13 +163,16 @@ describe('bulk invite per-email results', () => {
     assert.deepEqual(results.map((r) => [r.email, r.status]), [
       ['nope', 'INVALID'], ['new@bbe.vn', 'DUPLICATE'],
       ['new@bbe.vn', 'SENT'], ['member@bbe.vn', 'ALREADY_MEMBER'], ['pending@bbe.vn', 'ALREADY_INVITED'],
-      ['denied@bbe.vn', 'DENIED'], ['boom@bbe.vn', 'FAILED'], ['mail@bbe.vn', 'SENT_EMAIL_FAILED'],
+      ['denied@bbe.vn', 'DENIED'], ['boom@bbe.vn', 'FAILED'], ['mail@bbe.vn', 'LINK_NEEDED'],
       ['inactive@bbe.vn', 'ALREADY_MEMBER'], ['bad-code@bbe.vn', 'FAILED'],
     ])
     assert.ok(!calls.includes('member@bbe.vn') && !calls.includes('pending@bbe.vn'), 'existing accounts and pending invites are never re-sent')
     assert.equal(results.find((r) => r.email === 'mail@bbe.vn')?.invitationId, 'inv-1')
     const s = summarizeBulkResults(results)
-    assert.deepEqual([s.sent, s.emailFailed, s.denied, s.failed, s.alreadyMember, s.alreadyInvited, s.invalid, s.duplicate], [2, 1, 1, 2, 2, 1, 1, 1])
+    assert.equal(s.emailed, 1)
+    assert.equal(BULK_INVITE_STATUS_LABELS.LINK_NEEDED, 'Chưa gửi mail, lấy link mời')
+    assert.equal(BULK_INVITE_STATUS_LABELS.SENT, 'Đã gửi email')
+    assert.deepEqual([s.created, s.linkNeeded, s.denied, s.failed, s.alreadyMember, s.alreadyInvited, s.invalid, s.duplicate], [2, 1, 1, 2, 2, 1, 1, 1])
   })
 
   it('stops starting new emails after the deadline and marks them retryable', async () => {
@@ -182,26 +183,12 @@ describe('bulk invite per-email results', () => {
     )
     assert.deepEqual(results.map((r) => r.status), ['SENT', 'SENT', 'FAILED'])
     assert.ok(isRetryableBulkStatus(results[2].status))
-    assert.ok(!isRetryableBulkStatus('ALREADY_MEMBER') && !isRetryableBulkStatus('DENIED') && isRetryableBulkStatus('SENT_EMAIL_FAILED'))
-  })
-
-  it('turns every resend outcome into a visible row state', () => {
-    const failedMail = { email: 'a@bbe.vn', status: 'SENT_EMAIL_FAILED' as const, invitationId: 'inv1', message: 'cũ' }
-    assert.deepEqual(resolveResendOutcome(failedMail, { ok: true, data: { emailSent: true } }), { email: 'a@bbe.vn', status: 'SENT' })
-    assert.deepEqual(resolveResendOutcome(failedMail, { ok: true, data: { emailSent: false, emailError: 'hộp thư đầy' } }), { ...failedMail, message: 'hộp thư đầy' })
-    assert.equal(resolveResendOutcome(failedMail, { ok: true, data: { emailSent: false } }).message, 'không rõ lý do')
-    assert.equal(resolveResendOutcome(failedMail, { ok: false, status: 500, error: { message: 'Máy chủ bận' } }).message, 'Máy chủ bận')
-    assert.deepEqual(resolveResendOutcome(failedMail, { ok: false, status: 500 }), { ...failedMail, message: BULK_INVITE_RESEND_FAILED_MESSAGE })
-    assert.deepEqual(resolveResendOutcome(failedMail, null), { ...failedMail, message: BULK_INVITE_RESEND_FAILED_MESSAGE })
-    const denied = resolveResendOutcome(failedMail, { ok: false, status: 403, error: { code: 'AccessDenied', message: 'Không đủ quyền' } })
-    assert.deepEqual([denied.status, denied.message], ['DENIED', 'Không đủ quyền'])
-    const noId = resolveResendOutcome({ email: 'b@bbe.vn', status: 'SENT_EMAIL_FAILED' }, null)
-    assert.deepEqual([noId.status, noId.message], ['SENT_EMAIL_FAILED', BULK_INVITE_NO_INVITATION_MESSAGE])
+    assert.ok(!isRetryableBulkStatus('ALREADY_MEMBER') && !isRetryableBulkStatus('DENIED') && !isRetryableBulkStatus('LINK_NEEDED') && isRetryableBulkStatus('FAILED'))
   })
 
   it('detects whether a retry changed any status', () => {
-    const before = [{ email: 'a@bbe.vn', status: 'SENT_EMAIL_FAILED' as const }, { email: 'b@bbe.vn', status: 'FAILED' as const }]
-    assert.equal(bulkRetryChangedAnything(before, [{ email: 'a@bbe.vn', status: 'SENT_EMAIL_FAILED', message: 'lỗi khác' }]), false)
+    const before = [{ email: 'a@bbe.vn', status: 'FAILED' as const }, { email: 'b@bbe.vn', status: 'FAILED' as const }]
+    assert.equal(bulkRetryChangedAnything(before, [{ email: 'a@bbe.vn', status: 'FAILED', message: 'lỗi khác' }]), false)
     assert.equal(bulkRetryChangedAnything(before, [{ email: 'b@bbe.vn', status: 'SENT' }]), true)
     assert.equal(bulkRetryChangedAnything(before, []), false)
   })

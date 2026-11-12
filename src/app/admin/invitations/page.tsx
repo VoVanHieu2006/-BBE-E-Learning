@@ -7,6 +7,9 @@ import Toast, { ToastMessage } from '@/components/ui/Toast';
 import Modal from '@/components/ui/Modal';
 import { apiFetch, clearApiCache, getCachedApiData } from '@/lib/api/client';
 import { useAdmin } from '../AdminContext';
+import EmailQuotaNotice, { useEmailQuota } from '@/components/invitations/EmailQuotaNotice';
+import InviteLinkButton from '@/components/invitations/InviteLinkButton';
+import DeliveryNote from '@/components/invitations/DeliveryNote';
 
 export default function AdminInvitationsPage() {
   const { mounted } = useAdmin();
@@ -15,6 +18,8 @@ export default function AdminInvitationsPage() {
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [quotaTick, setQuotaTick] = useState(0);
+  const quota = useEmailQuota(quotaTick);
 
   const showToast = (type: 'success' | 'error' | 'info', message: string) => {
     setToast({ type, message });
@@ -68,12 +73,13 @@ export default function AdminInvitationsPage() {
 
     if (res.ok) {
       if (res.data?.emailSent === false) {
-        showToast('info', `Đã tạo lời mời cho ${leaderForm.email}, nhưng GỬI EMAIL THẤT BẠI: ${res.data.emailError || 'không rõ lý do'}`);
+        showToast('info', `Đã tạo lời mời cho ${leaderForm.email} nhưng chưa gửi được mail (${res.data.emailError || 'không rõ lý do'}). Bấm "Link mời ${leaderForm.email}" ở bảng để lấy link gửi cho họ.`);
       } else {
         showToast('success', `Đã gửi lời mời Trưởng Chapter đến ${leaderForm.email}!`);
       }
       setShowLeaderModal(false);
       setLeaderForm({ email: '', chapterName: '' });
+      setQuotaTick((n) => n + 1);
       loadInvitations();
     } else {
       showToast('error', res.error?.message || 'Lỗi gửi lời mời Trưởng Chapter');
@@ -86,8 +92,9 @@ export default function AdminInvitationsPage() {
     setLeaderSending(true);
     const res = await apiFetch('/api/v1/invitations/dna-leader', { method: 'POST', body: JSON.stringify({ email: dnaEmail.trim().toLowerCase() }) });
     if (res.ok) {
-      showToast('success', res.data?.assignedExisting ? `Đã gán quyền Lead DNA cho tài khoản ${dnaEmail}.` : `Đã gửi lời mời Lead DNA đến ${dnaEmail}.`);
-      setDnaEmail(''); setShowDnaModal(false); loadInvitations();
+      if (res.data?.emailSent === false) showToast('info', `Đã tạo lời mời Lead DNA cho ${dnaEmail} nhưng chưa gửi được mail (${res.data.emailError || 'không rõ lý do'}). Bấm "Link mời ${dnaEmail}" ở bảng để lấy link gửi cho họ.`);
+      else showToast('success', res.data?.assignedExisting ? `Đã gán quyền Lead DNA cho tài khoản ${dnaEmail}.` : `Đã gửi lời mời Lead DNA đến ${dnaEmail}.`);
+      setDnaEmail(''); setShowDnaModal(false); setQuotaTick((n) => n + 1); loadInvitations();
     } else showToast('error', res.error?.message || 'Không gửi được lời mời Lead DNA.');
     setLeaderSending(false);
   }
@@ -99,10 +106,11 @@ export default function AdminInvitationsPage() {
       const res = await apiFetch(`/api/v1/invitations/${invitationId}/resend`, { method: 'POST' });
       if (res.ok) {
         if (res.data?.emailSent === false) {
-          showToast('info', `Lời mời đã được làm mới nhưng GỬI EMAIL THẤT BẠI: ${res.data.emailError || 'không rõ lý do'}`);
+          showToast('info', `Lời mời đã được làm mới nhưng chưa gửi được mail (${res.data.emailError || 'không rõ lý do'}). Dùng nút "Link mời" của dòng này để lấy link.`);
         } else {
           showToast('success', 'Đã gửi lại lời mời thành công!');
         }
+        setQuotaTick((n) => n + 1);
         loadInvitations();
       } else {
         showToast('error', res.error?.message || 'Lỗi gửi lại lời mời');
@@ -149,6 +157,7 @@ export default function AdminInvitationsPage() {
             </Button>
           </div>
         </div>
+        <EmailQuotaNotice quota={quota} className="-mt-3 mb-4" />
 
         {/* Invitations Table */}
         <Card className="p-0 overflow-hidden border border-[#eff4ff] shadow-sm">
@@ -211,6 +220,7 @@ export default function AdminInvitationsPage() {
                               ? 'Đã hết hạn'
                               : 'Đã hủy'}
                           </span>
+                          <DeliveryNote status={inv.status} deliveryMethod={inv.deliveryMethod} />
                         </td>
                         <td className="px-6 py-4 text-xs text-[#737686]" suppressHydrationWarning>
                           {inv.expiresAt ? new Date(inv.expiresAt).toLocaleDateString('vi-VN') : '—'}
@@ -218,13 +228,22 @@ export default function AdminInvitationsPage() {
                         <td className="px-6 py-4 text-right">
                           {isPending && (
                             <div className="flex items-center justify-end gap-2">
-                              <button
-                                onClick={() => handleResend(inv.id)}
-                                disabled={busyAction !== null}
-                                className="text-xs font-semibold text-[#2563EB] hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
-                              >
-                                {busyAction === `${inv.id}:resend` ? 'Đang gửi...' : 'Gửi lại'}
-                              </button>
+                              {inv.deliveryMethod === 'LINK' ? (
+                                <InviteLinkButton
+                                  invitationId={inv.id}
+                                  email={inv.email}
+                                  disabled={busyAction !== null}
+                                  onMessage={(type, text) => { showToast(type, text); loadInvitations(); }}
+                                />
+                              ) : (
+                                <button
+                                  onClick={() => handleResend(inv.id)}
+                                  disabled={busyAction !== null}
+                                  className="text-xs font-semibold text-[#2563EB] hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  {busyAction === `${inv.id}:resend` ? 'Đang gửi...' : 'Gửi lại'}
+                                </button>
+                              )}
                               <span className="text-slate-300">|</span>
                               <button
                                 onClick={() => handleCancel(inv.id)}
@@ -258,6 +277,7 @@ export default function AdminInvitationsPage() {
             <p className="text-xs text-[#737686]">
               Nhập email của Trưởng Chapter và tên Chapter mới cần khởi tạo.
             </p>
+            <EmailQuotaNotice quota={quota} />
             <form onSubmit={handleSendLeaderInvite} className="space-y-4">
               <div>
                 <label className="block text-sm font-semibold text-[#172554] mb-1">Email *</label>
@@ -301,6 +321,7 @@ export default function AdminInvitationsPage() {
           <form onSubmit={handleSendDnaInvite} className="p-6 space-y-4">
             <h3 className="text-xl font-bold text-[#172554]">Mời Lead DNA</h3>
             <p className="text-sm text-[#737686]">Hệ thống chỉ cho phép một Lead DNA đang hoạt động.</p>
+            <EmailQuotaNotice quota={quota} />
             <input type="email" required value={dnaEmail} onChange={(e) => setDnaEmail(e.target.value)} placeholder="dna.lead@bbe.vn" className="w-full px-4 py-2.5 border border-[#cbdbf5] rounded-xl text-sm" />
             <div className="flex justify-end gap-3"><Button variant="outline" type="button" onClick={() => setShowDnaModal(false)}>Hủy</Button><Button type="submit" loading={leaderSending}>Gửi lời mời</Button></div>
           </form>

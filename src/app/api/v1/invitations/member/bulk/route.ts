@@ -4,6 +4,8 @@ import { prisma } from '@/lib/prisma'
 import { sendMemberInvitation } from '@/lib/invitations'
 import { invalidateInvitationsServerCache } from '@/lib/server-cache'
 import { resolveMemberInviteScope } from '@/lib/member-invite-scope'
+import { releaseEmailSlots, reserveEmailSlots } from '@/lib/email-quota'
+import { splitBatchByQuota, unusedSlots } from '@/lib/email-quota-core'
 import { BULK_INVITE_MAX_EMAILS, BULK_INVITE_TIME_BUDGET_MS, parseBulkInviteEmails, runBulkInvites, summarizeBulkResults } from '@/lib/bulk-invite'
 
 // Up to 50 emails are sent per call; allow the platform to keep the function alive long enough.
@@ -46,17 +48,35 @@ export async function POST(request: NextRequest) {
   const hasAccount = new Set(existingUsers.map((row) => row.email.toLowerCase()))
   const hasPending = new Set(pendingInvitations.map((row) => row.email.toLowerCase()))
 
+  // Hạn mức email: đặt chỗ nguyên tử TRƯỚC khi gửi (xem reserveEmailSlots), tối đa số slot còn lại.
+  // Các email còn lại vẫn được mời nhưng bỏ qua mail và giao bằng link (trạng thái LINK_NEEDED).
+  const candidates = valid.filter((email) => !hasAccount.has(email) && !hasPending.has(email))
+  const reservation = await reserveEmailSlots(candidates.length)
+  const mailSet = new Set(splitBatchByQuota(candidates, reservation.granted).email)
+  const consumed = new Set<string>()
+
   // Limited parallelism + a time budget (see runBulkInvites): one slow or failing
   // email never blocks or breaks the rest, and the request answers before timing out.
-  const results = await runBulkInvites({ valid, invalid, duplicates }, {
-    hasAccount,
-    hasPending,
-    deadline: Date.now() + BULK_INVITE_TIME_BUDGET_MS,
-    send: (email) => sendMemberInvitation({
-      email, role: 'MEMBER', chapterId: scope.chapterId, organizationUnitId: scope.organizationUnitId, invitedBy: context.userId,
-    }),
-  })
-  const sentAny = results.some((row) => row.status === 'SENT' || row.status === 'SENT_EMAIL_FAILED')
+  let results
+  try {
+    results = await runBulkInvites({ valid, invalid, duplicates }, {
+      hasAccount,
+      hasPending,
+      deadline: Date.now() + BULK_INVITE_TIME_BUDGET_MS,
+      send: async (email) => {
+        const result = await sendMemberInvitation({
+          email, role: 'MEMBER', chapterId: scope.chapterId, organizationUnitId: scope.organizationUnitId, invitedBy: context.userId,
+          mail: mailSet.has(email) ? { kind: 'reserved', day: reservation.day } : { kind: 'link' },
+        })
+        // Slot đã giao cho một lời mời được tạo thì email.ts lo giữ/hoàn; các slot còn lại hoàn ở dưới.
+        if (result.ok && mailSet.has(email)) consumed.add(email)
+        return result
+      },
+    })
+  } finally {
+    await releaseEmailSlots(reservation.day, unusedSlots(reservation.granted, consumed.size))
+  }
+  const sentAny = results.some((row) => row.status === 'SENT' || row.status === 'LINK_NEEDED')
 
   if (sentAny) invalidateInvitationsServerCache()
 

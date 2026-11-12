@@ -417,7 +417,33 @@ PUT giữ nguyên catalog, mapping khóa/chương trình/target, seasons, chuẩ
 
 | Method | Truy cập / guard | Đầu vào đọc trực tiếp | Response thành công | Mã lỗi thấy trong handler |
 |---|---|---|---|---|
-| [POST](../src/app/api/v1/invitations/[id]/resend/route.ts#L9) | `authenticate`, `canAccessOrganizationUnitPermission`, `role ADMIN` | — | `invitationId, status, expiresAt, emailSent, emailError` | `AccessDenied`, `InvitationNotFound`, `ValidationError` |
+| [POST](../src/app/api/v1/invitations/[id]/resend/route.ts#L9) | `authenticate`, `canAccessOrganizationUnitPermission`, `role ADMIN` | — | `invitationId, status, expiresAt, emailSent, emailError, delivery` | `AccessDenied`, `InvitationNotFound`, `ValidationError` |
+
+Gửi lại tính vào hạn mức email ngày. Hết hạn mức hoặc gửi lỗi thì không báo lỗi: lời mời vẫn `PENDING`, `delivery = LINK`, `emailSent = false`.
+
+### `/api/v1/invitations/[id]/link`
+
+| Method | Truy cập / guard | Đầu vào đọc trực tiếp | Response thành công | Mã lỗi thấy trong handler |
+|---|---|---|---|---|
+| [POST](../src/app/api/v1/invitations/[id]/link/route.ts) | `authenticate`, `canManageInvitationUnit` (cùng quyền với resend/hủy), `role ADMIN` | — | `invitationId, expiresAt, link` (`Cache-Control: no-store`) | `AccessDenied` (403), `InvitationNotFound` (404), `InvalidState` (409: không còn chờ / đã hết hạn / vừa đổi trạng thái), `NotLinkDelivery` (409: lời mời đã gửi qua email), `RateLimited` (429), `ValidationError` |
+
+Chỉ dùng cho lời mời `PENDING`, chưa hết hạn và `delivery_method = LINK`. Mỗi lần gọi **đổi token** (token chỉ lưu băm, link cũ hết hiệu lực), giữ nguyên `expiresAt` (24 giờ), dùng một lần, đúng email. `link` chỉ có trong phản hồi này: không lưu, không ghi log; client chỉ sao chép vào clipboard. Mỗi lần ghi `audit_logs` (`INVITATION_LINK_ISSUED`, entity `INVITATION`, metadata email và role, không có token). Giới hạn: 60 lần/10 phút mỗi người, 10 lần/10 phút mỗi lời mời.
+
+### `/api/v1/invitations/email-quota`
+
+| Method | Truy cập / guard | Đầu vào đọc trực tiếp | Response thành công | Mã lỗi thấy trong handler |
+|---|---|---|---|---|
+| [GET](../src/app/api/v1/invitations/email-quota/route.ts) | `authenticate`, `role ADMIN` / `role LEAD` / `MEMBER` quản lý thành viên của một ban/nhóm | — | `limit, used, remaining, resetsAt` (`Cache-Control: no-store`) | `AccessDenied` |
+
+Hạn mức email của ngày lịch UTC hiện tại (mặc định `limit = 90`, đổi bằng `EMAIL_DAILY_LIMIT`). `resetsAt` là 0h UTC ngày kế tiếp = 7h sáng giờ Việt Nam.
+
+### `/api/v1/invitations/member/bulk`
+
+| Method | Truy cập / guard | Đầu vào đọc trực tiếp | Response thành công | Mã lỗi thấy trong handler |
+|---|---|---|---|---|
+| [POST](../src/app/api/v1/invitations/member/bulk/route.ts) | như `/api/v1/invitations/member` (`resolveMemberInviteScope`) | `body.emails`, `body.chapterId`, `body.organizationUnitId` | `results[]` (`email, status, message, invitationId`), `summary` | `AccessDenied`, `ValidationError`, `TooManyEmails` |
+
+Đặt chỗ hạn mức email nguyên tử trước khi gửi (một phần nếu lô lớn hơn số slot còn lại). `status` mỗi dòng: `SENT` (đã gửi email), `LINK_NEEDED` (đã tạo lời mời nhưng chưa gửi mail: hết hạn mức hoặc mail lỗi; lấy link bằng `/api/v1/invitations/[id]/link`), `INVALID`, `DUPLICATE`, `ALREADY_MEMBER`, `ALREADY_INVITED`, `DENIED`, `FAILED`.
 
 ### `/api/v1/invitations/[id]`
 
@@ -435,25 +461,25 @@ PUT giữ nguyên catalog, mapping khóa/chương trình/target, seasons, chuẩ
 
 | Method | Truy cập / guard | Đầu vào đọc trực tiếp | Response thành công | Mã lỗi thấy trong handler |
 |---|---|---|---|---|
-| [POST](../src/app/api/v1/invitations/chapter-leader/route.ts#L11) | `authenticate`, `role ADMIN` | `body.chapterDescription`, `body.chapterName`, `body.email` | `invitationId, chapterId, status, expiresAt, emailSent, emailError` | `AccessDenied`, `ValidationError` |
+| [POST](../src/app/api/v1/invitations/chapter-leader/route.ts#L11) | `authenticate`, `role ADMIN` | `body.chapterDescription`, `body.chapterName`, `body.email` | `invitationId, chapterId, status, expiresAt, emailSent, emailError, delivery` | `AccessDenied`, `ValidationError` |
 
 ### `/api/v1/invitations/dna-leader`
 
 | Method | Truy cập / guard | Đầu vào đọc trực tiếp | Response thành công | Mã lỗi thấy trong handler |
 |---|---|---|---|---|
-| [POST](../src/app/api/v1/invitations/dna-leader/route.ts#L7) | `authenticate`, `role ADMIN` | `body.email` | `result` | `AccessDenied`, `ValidationError` |
+| [POST](../src/app/api/v1/invitations/dna-leader/route.ts#L7) | `authenticate`, `role ADMIN` | `body.email` | `invitationId, status, expiresAt, emailSent, emailError, delivery` (không còn trả token) | `AccessDenied`, `ValidationError` |
 
 ### `/api/v1/invitations/member`
 
 | Method | Truy cập / guard | Đầu vào đọc trực tiếp | Response thành công | Mã lỗi thấy trong handler |
 |---|---|---|---|---|
-| [POST](../src/app/api/v1/invitations/member/route.ts#L18) | `authenticate`, `canAccessChapterPermission`, `canAccessOrganizationUnitPermission`, `role ADMIN`, `role LEAD` | `body.chapterId`, `body.email`, `body.organizationUnitId` | `invitationId, id, chapterId, organizationUnitId, status, expiresAt, emailSent, emailError` | `AccessDenied`, `OrganizationUnitNotFound`, `ValidationError` |
+| [POST](../src/app/api/v1/invitations/member/route.ts#L18) | `authenticate`, `canAccessChapterPermission`, `canAccessOrganizationUnitPermission`, `role ADMIN`, `role LEAD` | `body.chapterId`, `body.email`, `body.organizationUnitId` | `invitationId, id, chapterId, organizationUnitId, status, expiresAt, emailSent, emailError, delivery` | `AccessDenied`, `OrganizationUnitNotFound`, `ValidationError` |
 
 ### `/api/v1/invitations`
 
 | Method | Truy cập / guard | Đầu vào đọc trực tiếp | Response thành công | Mã lỗi thấy trong handler |
 |---|---|---|---|---|
-| [GET](../src/app/api/v1/invitations/route.ts#L10) | `authenticate`, `canAccessChapterPermission`, `canAccessOrganizationUnitPermission`, `role ADMIN`, `role LEAD`, `role MEMBER` | `query.chapterId`, `query.kind`, `query.limit`, `query.organizationUnitId`, `query.page`, `query.status` | `cached`, `result` | `AccessDenied`, `ValidationError` |
+| [GET](../src/app/api/v1/invitations/route.ts#L10) | `authenticate`, `canAccessChapterPermission`, `canAccessOrganizationUnitPermission`, `role ADMIN`, `role LEAD`, `role MEMBER` | `query.chapterId`, `query.kind`, `query.limit`, `query.organizationUnitId`, `query.page`, `query.status` | `cached`, `result` (mỗi item có `deliveryMethod`: `EMAIL` hoặc `LINK`) | `AccessDenied`, `ValidationError` |
 
 ### `/api/v1/invitations/validate`
 
@@ -628,7 +654,17 @@ Với `GET /api/v1/leaderboard?group=DNA&periodType=TERM`, cửa sổ xếp hạ
 
 | Method | Truy cập / guard | Đầu vào đọc trực tiếp | Response thành công | Mã lỗi thấy trong handler |
 |---|---|---|---|---|
-| [POST](../src/app/api/v1/users/[userId]/password-reset/route.ts#L7) | `authenticate`, `role ADMIN` | — | `message` | `AccessDenied`, `EmailSendFailed`, `UserNotFound` |
+| [POST](../src/app/api/v1/users/[userId]/password-reset/route.ts#L7) | `authenticate`, `role ADMIN` | — | `message, emailSent, delivery` (+ `emailError, quotaExhausted` khi `emailSent = false`) | `AccessDenied`, `EmailSendFailed` (502, chỉ với tài khoản không lấy được link), `UserNotFound` |
+
+Gửi email đặt lại mật khẩu (tính vào hạn mức email, trần 100). Gửi được: `emailSent: true, delivery: 'EMAIL'`. Không gửi được (hết hạn mức, thiếu cấu hình hoặc lỗi gửi) với tài khoản `ACTIVE` hoặc bị khóa mật khẩu: vẫn **200** với `emailSent: false, delivery: 'LINK'`; phản hồi **không chứa token hay link**, giao diện hiện nút "Link đặt lại mật khẩu <email>" gọi route bên dưới. Tài khoản khác giữ 502 `EmailSendFailed`. Đường công khai `/api/v1/auth/password-reset/request` không đổi và không bao giờ trả link.
+
+### `/api/v1/users/[userId]/password-reset/link`
+
+| Method | Truy cập / guard | Đầu vào đọc trực tiếp | Response thành công | Mã lỗi thấy trong handler |
+|---|---|---|---|---|
+| [POST](../src/app/api/v1/users/[userId]/password-reset/link/route.ts) | `authenticate`, `role ADMIN` | — | `userId, expiresAt, link` (`Cache-Control: no-store`) | `AccessDenied` (403), `ValidationError` (400), `UserNotFound` (404), `InvalidState` (409: tài khoản không `ACTIVE` và không bị khóa mật khẩu), `RateLimited` (429) |
+
+Tạo link đặt lại mật khẩu mới (`/reset-password?token=...`) khi email không gửi được. Mỗi lần gọi vô hiệu mọi token chưa dùng của user và **đổi token** (chỉ lưu băm), hạn 15 phút, dùng một lần, đúng user. `link` chỉ có trong phản hồi này: không lưu, không ghi log; client chỉ sao chép vào clipboard. Mỗi lần ghi `audit_logs` (`PASSWORD_RESET_LINK_ISSUED`, entity `USER`, metadata chỉ có email, không có token). Giới hạn: 30 lần/10 phút mỗi Admin, 5 lần/10 phút mỗi tài khoản. Logic dùng chung nằm ở `src/lib/password-reset-link.ts`.
 
 ### `/api/v1/users/[userId]/profile`
 

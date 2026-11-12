@@ -6,6 +6,9 @@ import Toast, { ToastMessage } from '@/components/ui/Toast';
 import Modal from '@/components/ui/Modal';
 import { apiFetch, clearApiCache, getCachedApiData } from '@/lib/api/client';
 import BulkInvitePanel from '@/components/invitations/BulkInvitePanel';
+import EmailQuotaNotice, { useEmailQuota } from '@/components/invitations/EmailQuotaNotice';
+import InviteLinkButton from '@/components/invitations/InviteLinkButton';
+import DeliveryNote from '@/components/invitations/DeliveryNote';
 
 export default function ChapterManagerInvitationsPage() {
   const [user, setUser] = useState<any>(null);
@@ -22,6 +25,8 @@ export default function ChapterManagerInvitationsPage() {
   const [sending, setSending] = useState(false);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
+  const [quotaTick, setQuotaTick] = useState(0);
+  const quota = useEmailQuota(quotaTick);
 
   const showToast = (type: 'success' | 'error' | 'info', message: string) => {
     setToast({ type, message });
@@ -82,12 +87,13 @@ export default function ChapterManagerInvitationsPage() {
 
     if (res.ok) {
       if (res.data?.emailSent === false) {
-        showToast('info', `Đã lưu lời mời cho ${inviteEmail}, nhưng GỬI EMAIL THẤT BẠI: ${res.data.emailError || 'không rõ lý do'}`);
+        showToast('info', `Đã tạo lời mời cho ${inviteEmail} nhưng chưa gửi được mail (${res.data.emailError || 'không rõ lý do'}). Bấm "Link mời ${inviteEmail}" ở bảng để lấy link gửi cho họ.`);
       } else {
         showToast('success', `Đã gửi lời mời tham gia thành công đến ${inviteEmail}!`);
       }
       setShowInviteModal(false);
       setInviteEmail('');
+      setQuotaTick((n) => n + 1);
       loadInvitations();
     } else {
       showToast('error', res.error?.message || 'Lỗi khi gửi lời mời');
@@ -107,10 +113,11 @@ export default function ChapterManagerInvitationsPage() {
       const res = await apiFetch(`/api/v1/invitations/${invitationId}/resend`, { method: 'POST' });
       if (res.ok) {
         if (res.data?.emailSent === false) {
-          showToast('info', `Lời mời đã được làm mới nhưng GỬI EMAIL THẤT BẠI: ${res.data.emailError || 'không rõ lý do'}`);
+          showToast('info', `Lời mời đã được làm mới nhưng chưa gửi được mail (${res.data.emailError || 'không rõ lý do'}). Dùng nút "Link mời" của dòng này để lấy link.`);
         } else {
           showToast('success', 'Đã gửi lại lời mời thành công!');
         }
+        setQuotaTick((n) => n + 1);
         loadInvitations();
       } else {
         showToast('error', res.error?.message || 'Lỗi khi gửi lại lời mời');
@@ -194,6 +201,7 @@ export default function ChapterManagerInvitationsPage() {
             ＋ Mời thành viên mới
           </Button>
         </div>
+        <EmailQuotaNotice quota={quota} className="-mt-3 mb-4" />
 
         {/* Filter Tabs */}
         <div className="flex gap-2 mb-6 overflow-x-auto pb-1">
@@ -246,7 +254,7 @@ export default function ChapterManagerInvitationsPage() {
                   {filteredItems.map((inv) => (
                     <tr key={inv.id} className="hover:bg-[#f8f9ff] transition">
                       <td className="px-6 py-4 font-semibold text-[#172554]">{inv.email}</td>
-                      <td className="px-6 py-4 text-center">{getStatusBadge(inv.status)}</td>
+                      <td className="px-6 py-4 text-center">{getStatusBadge(inv.status)}<DeliveryNote status={inv.status} deliveryMethod={inv.deliveryMethod} /></td>
                       <td className="px-6 py-4 text-xs text-[#737686]" suppressHydrationWarning>
                         {inv.createdAt ? new Date(inv.createdAt).toLocaleString('vi-VN') : '—'}
                       </td>
@@ -256,13 +264,22 @@ export default function ChapterManagerInvitationsPage() {
                       <td className="px-6 py-4 text-right">
                         {inv.status === 'PENDING' && inv.invitedBy === user?.id && (
                           <div className="flex items-center justify-end gap-2">
-                            <button
-                              onClick={() => handleResend(inv.id)}
-                              disabled={busyAction !== null}
-                              className="text-xs font-semibold text-[#2563EB] hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                              {busyAction === `${inv.id}:resend` ? 'Đang gửi...' : 'Gửi lại'}
-                            </button>
+                            {inv.deliveryMethod === 'LINK' ? (
+                              <InviteLinkButton
+                                invitationId={inv.id}
+                                email={inv.email}
+                                disabled={busyAction !== null}
+                                onMessage={(type, text) => { showToast(type, text); loadInvitations(undefined, true); }}
+                              />
+                            ) : (
+                              <button
+                                onClick={() => handleResend(inv.id)}
+                                disabled={busyAction !== null}
+                                className="text-xs font-semibold text-[#2563EB] hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                {busyAction === `${inv.id}:resend` ? 'Đang gửi...' : 'Gửi lại'}
+                              </button>
+                            )}
                             <span className="text-slate-300">|</span>
                             <button
                               onClick={() => handleCancel(inv.id)}
@@ -296,6 +313,7 @@ export default function ChapterManagerInvitationsPage() {
             <p className="text-xs text-[#737686]">
               Gửi email lời mời tham gia Chapter <span suppressHydrationWarning>{mounted && user?.chapterName ? user.chapterName : ''}</span>. Lời mời có hiệu lực trong 24 giờ.
             </p>
+            {inviteMode === 'single' && <EmailQuotaNotice quota={quota} />}
             <label className="block text-sm font-semibold" htmlFor="invite-department">Ban của thành viên *</label>
             <select id="invite-department" value={departmentUnitId} onChange={(event) => setDepartmentUnitId(event.target.value)} disabled={sending} className="w-full rounded-lg border px-3 py-2">
               <option value="">Chọn ban</option>
@@ -326,7 +344,7 @@ export default function ChapterManagerInvitationsPage() {
             <BulkInvitePanel
               organizationUnitId={departmentUnitId}
               missingScopeMessage="Chọn ban của thành viên ở trên trước khi mời."
-              onSent={() => loadInvitations(undefined, true)}
+              onSent={() => { setQuotaTick((n) => n + 1); loadInvitations(undefined, true); }}
               onClose={() => setShowInviteModal(false)}
               disabled={sending}
             />

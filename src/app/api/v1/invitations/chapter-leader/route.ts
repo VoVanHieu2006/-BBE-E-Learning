@@ -73,5 +73,6 @@ export async function POST(request: NextRequest) {
     expiresAt: result.expiresAt.toISOString(),
     emailSent: result.emailSent,
     emailError: result.emailError,
+    delivery: result.delivery,
   }, { status: 201 })
 }

@@ -8,6 +8,8 @@ import Toast, { ToastMessage } from '@/components/ui/Toast';
 import Modal from '@/components/ui/Modal';
 import { apiFetch, clearApiCache, getCachedApiData } from '@/lib/api/client';
 import LearnerProfileView from '@/components/learner/LearnerProfileView';
+import ResetLinkButton from '@/components/admin/ResetLinkButton';
+import EmailQuotaNotice from '@/components/invitations/EmailQuotaNotice';
 import { useAdmin } from '../AdminContext';
 
 export default function AdminUsersPage() {
@@ -59,6 +61,9 @@ export default function AdminUsersPage() {
   } | null>(null);
 
   const [toast, setToast] = useState<ToastMessage | null>(null);
+  // Tài khoản mà email đặt lại mật khẩu không gửi được: hiện nút lấy link (userId -> email).
+  const [resetLinkUsers, setResetLinkUsers] = useState<Record<string, string>>({});
+  const [quotaRefreshKey, setQuotaRefreshKey] = useState(0);
 
   const showToast = (type: 'success' | 'error' | 'info', message: string, title?: string) => {
     setToast({ type, message, title });
@@ -325,7 +330,14 @@ export default function AdminUsersPage() {
     const userId = user.userId || user.id;
     setActionUserId(userId);
     const res = await apiFetch(`/api/v1/users/${userId}/password-reset`, { method: 'POST' });
-    showToast(res.ok ? 'success' : 'error', res.ok ? (res.data?.message || 'Đã gửi email đặt lại mật khẩu.') : (res.error?.message || 'Không gửi được email đặt lại mật khẩu.'));
+    if (res.ok && res.data?.emailSent === false) {
+      // Email không gửi được (hết hạn mức/lỗi gửi): hiện nút lấy link để Admin gửi trực tiếp.
+      setResetLinkUsers((prev) => ({ ...prev, [userId]: user.email }));
+      showToast('info', res.data?.message || 'Chưa gửi được email. Hãy bấm nút lấy link đặt lại mật khẩu.');
+    } else {
+      showToast(res.ok ? 'success' : 'error', res.ok ? (res.data?.message || 'Đã gửi email đặt lại mật khẩu.') : (res.error?.message || 'Không gửi được email đặt lại mật khẩu.'));
+    }
+    setQuotaRefreshKey((key) => key + 1);
     setActionUserId(null);
   };
 
@@ -371,6 +383,8 @@ export default function AdminUsersPage() {
             </Link>
           </div>
         </div>
+
+        <EmailQuotaNotice refreshKey={quotaRefreshKey} className="-mt-3 mb-4 px-1" lowHint=" Email đặt lại mật khẩu có thể không gửi được: hãy dùng nút lấy link." />
 
         {/* Global Stat Cards (Non-Admin Users Total) */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -708,6 +722,15 @@ export default function AdminUsersPage() {
                               >
                                 Gửi link đặt lại MK
                               </button>
+                            )}
+                            {resetLinkUsers[uId] && (
+                              <ResetLinkButton
+                                userId={uId}
+                                email={resetLinkUsers[uId]}
+                                disabled={isBusy}
+                                onMessage={showToast}
+                                onIssued={() => setQuotaRefreshKey((key) => key + 1)}
+                              />
                             )}
 
                             {/* Status and unlock actions */}
@@ -1115,6 +1138,16 @@ export default function AdminUsersPage() {
                 >
                   ✉️ Gửi link đặt lại mật khẩu
                 </button>
+                {resetLinkUsers[selectedUserDetail.userId || selectedUserDetail.id] && (
+                  <ResetLinkButton
+                    userId={selectedUserDetail.userId || selectedUserDetail.id}
+                    email={resetLinkUsers[selectedUserDetail.userId || selectedUserDetail.id]}
+                    disabled={Boolean(actionUserId)}
+                    onMessage={showToast}
+                    onIssued={() => setQuotaRefreshKey((key) => key + 1)}
+                    className="px-3 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition shadow-2xs disabled:opacity-50 text-left break-all max-w-full"
+                  />
+                )}
 
                 {selectedUserDetail.accountState === 'OVERDUE_LOCK' ? (
                   <>

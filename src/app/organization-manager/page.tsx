@@ -129,7 +129,7 @@ export default function OrganizationManagerPage() {
     setBusy(false);
     if (!result.ok) { setMessage(result.error?.message || 'Không thể gửi lời mời.'); return; }
     setInviteEmail('');
-    setMessage(result.data?.emailSent ? 'Đã gửi lời mời thành viên.' : 'Đã tạo lời mời, nhưng email chưa gửi được.');
+    setMessage(result.data?.emailSent ? 'Đã gửi lời mời thành viên.' : `Đã tạo lời mời, nhưng chưa gửi được mail (${result.data?.emailError || 'không rõ lý do'}). Vào trang Lời mời để lấy link mời gửi cho họ.`);
     const params = new URLSearchParams({ page: '1', limit: '50' });
     if (isLeadRole(profile?.role) && selectedUnit.type === 'CHAPTER' && selectedUnit.chapterId) params.set('chapterId', selectedUnit.chapterId);
     else params.set('organizationUnitId', selectedUnit.id);

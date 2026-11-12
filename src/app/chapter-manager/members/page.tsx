@@ -178,7 +178,8 @@ export default function ChapterManagerMembersPage() {
     });
 
     if (res.ok) {
-      showToast('success', `Đã gửi lời mời tham gia đến ${inviteEmail}!`);
+      if (res.data?.emailSent === false) showToast('info', `Đã tạo lời mời cho ${inviteEmail} nhưng chưa gửi được mail (${res.data.emailError || 'không rõ lý do'}). Vào trang Lời mời, bấm "Link mời ${inviteEmail}" để lấy link gửi cho họ.`);
+      else showToast('success', `Đã gửi lời mời tham gia đến ${inviteEmail}!`);
       setShowInviteModal(false);
       setInviteEmail('');
       loadMembers();

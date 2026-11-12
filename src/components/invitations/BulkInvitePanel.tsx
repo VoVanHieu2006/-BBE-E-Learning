@@ -11,16 +11,18 @@ import {
   BulkInviteStatus,
   bulkInviteRowsFromText,
   bulkRetryChangedAnything,
-  resolveResendOutcome,
   classifyBulkInviteRows,
   isRetryableBulkStatus,
   summarizeBulkInviteRows,
   summarizeBulkResults,
 } from '@/lib/bulk-invite'
+import { formatBatchQuotaNotice } from '@/lib/email-quota-core'
+import EmailQuotaNotice, { useEmailQuota } from '@/components/invitations/EmailQuotaNotice'
+import InviteLinkButton from '@/components/invitations/InviteLinkButton'
 
 const STATUS_STYLES: Record<BulkInviteStatus, string> = {
   SENT: 'bg-green-100 text-green-800',
-  SENT_EMAIL_FAILED: 'bg-amber-100 text-amber-800',
+  LINK_NEEDED: 'bg-amber-100 text-amber-800',
   INVALID: 'bg-red-100 text-red-800',
   DUPLICATE: 'bg-slate-100 text-slate-700',
   ALREADY_MEMBER: 'bg-blue-100 text-blue-800',
@@ -61,6 +63,10 @@ export default function BulkInvitePanel({ organizationUnitId, missingScopeMessag
   const [results, setResults] = useState<BulkInviteResultItem[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [linkNotice, setLinkNotice] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null)
+  /** Tăng sau mỗi lần gửi để tải lại hạn mức email còn lại. */
+  const [quotaRefresh, setQuotaRefresh] = useState(0)
+  const quota = useEmailQuota(`${quotaRefresh}:${phase}`)
 
   const inputSummary = summarizeBulkInviteRows(bulkInviteRowsFromText(text))
   const summary = summarizeBulkInviteRows(rows)
@@ -111,8 +117,10 @@ export default function BulkInvitePanel({ organizationUnitId, missingScopeMessag
       if (!outcome) return
       const merged = [...invalid.map((email) => ({ email, status: 'INVALID' as const })), ...outcome]
       setResults(merged)
+      setLinkNotice(null)
       setPhase('results')
-      if (outcome.some((row) => row.status === 'SENT' || row.status === 'SENT_EMAIL_FAILED')) onSent?.()
+      setQuotaRefresh((n) => n + 1)
+      if (outcome.some((row) => row.status === 'SENT' || row.status === 'LINK_NEEDED')) onSent?.()
     } finally {
       setBusy(false)
     }
@@ -123,13 +131,6 @@ export default function BulkInvitePanel({ organizationUnitId, missingScopeMessag
     setError('')
     try {
       const updates = new Map<string, BulkInviteResultItem>()
-      // Lời mời đã lưu nhưng mail lỗi: gửi lại bằng chức năng gửi lại của từng lời mời (cùng quyền).
-      for (const row of retryable.filter((item) => item.status === 'SENT_EMAIL_FAILED')) {
-        const res = row.invitationId
-          ? await apiFetch(`/api/v1/invitations/${row.invitationId}/resend`, { method: 'POST', noCache: true })
-          : null
-        updates.set(row.email, resolveResendOutcome(row, res))
-      }
       // Email lỗi hệ thống: chạy lại cả quy trình kiểm tra phía server.
       const failedEmails = retryable.filter((item) => item.status === 'FAILED').map((item) => item.email)
       let bulkRequestFailed = false
@@ -140,6 +141,7 @@ export default function BulkInvitePanel({ organizationUnitId, missingScopeMessag
       }
       if (updates.size) setResults((current) => current.map((row) => updates.get(row.email) || row))
       if (bulkRequestFailed) return
+      setQuotaRefresh((n) => n + 1)
       if (bulkRetryChangedAnything(retryable, Array.from(updates.values()))) onSent?.()
       else setError(BULK_INVITE_RETRY_NO_CHANGE_MESSAGE)
     } finally {
@@ -152,6 +154,7 @@ export default function BulkInvitePanel({ organizationUnitId, missingScopeMessag
     setRows([])
     setResults([])
     setError('')
+    setLinkNotice(null)
     setPhase('input')
   }
 
@@ -179,6 +182,7 @@ export default function BulkInvitePanel({ organizationUnitId, missingScopeMessag
             <p className="text-[11px] text-[#737686] mt-1">
               Dán từ Excel hoặc Google Sheets đều được (mỗi dòng một email), hoặc phân tách bằng dấu phẩy, dấu chấm phẩy, khoảng trắng. Tối đa {BULK_INVITE_MAX_EMAILS} email mỗi lần. Tất cả sẽ vào cùng ban hoặc nhóm đã chọn ở trên.
             </p>
+            <EmailQuotaNotice quota={quota} className="mt-1" />
             {text.trim() && (
               <p className="text-xs mt-1 text-[#434655]" data-testid="bulk-invite-preview">
                 <strong className="text-green-700">{inputSummary.valid}</strong> hợp lệ
@@ -206,6 +210,12 @@ export default function BulkInvitePanel({ organizationUnitId, missingScopeMessag
             {summary.duplicate > 0 && <> · <strong>{summary.duplicate}</strong> trùng (bỏ qua)</>}
             {summary.overLimit && <span className="text-red-700"> · vượt quá {BULK_INVITE_MAX_EMAILS} email, hãy bỏ bớt</span>}
           </p>
+          <EmailQuotaNotice quota={quota} />
+          {quota && formatBatchQuotaNotice(summary.valid, quota.remaining) && (
+            <p role="status" data-testid="bulk-invite-quota-split" className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              {formatBatchQuotaNotice(summary.valid, quota.remaining)} Email dùng link mời vẫn được mời bình thường; bạn lấy link ở bước kết quả để gửi cho họ.
+            </p>
+          )}
           <ul className="max-h-72 overflow-y-auto border border-[#eff4ff] rounded-xl divide-y divide-[#eff4ff]" data-testid="bulk-invite-rows">
             {rows.length === 0 && <li className="px-3 py-4 text-xs text-[#737686] text-center">Danh sách trống. Quay lại để dán thêm email.</li>}
             {rows.map((row) => (
@@ -235,8 +245,8 @@ export default function BulkInvitePanel({ organizationUnitId, missingScopeMessag
       {phase === 'results' && (
         <div className="space-y-3">
           <p className="text-xs text-[#434655]" data-testid="bulk-invite-result-summary">
-            Đã gửi <strong className="text-green-700">{resultSummary.sent}</strong>/{resultSummary.total} lời mời
-            {resultSummary.emailFailed > 0 && <> · <strong className="text-amber-700">{resultSummary.emailFailed}</strong> chưa gửi được email</>}
+            Đã tạo <strong className="text-green-700">{resultSummary.created}</strong>/{resultSummary.total} lời mời: <strong className="text-green-700">{resultSummary.emailed}</strong> đã gửi email
+            {resultSummary.linkNeeded > 0 && <> · <strong className="text-amber-700">{resultSummary.linkNeeded}</strong> chưa gửi mail, cần lấy link mời</>}
             {resultSummary.alreadyMember > 0 && <> · {resultSummary.alreadyMember} đã có tài khoản</>}
             {resultSummary.alreadyInvited > 0 && <> · {resultSummary.alreadyInvited} đã có lời mời đang chờ</>}
             {resultSummary.invalid > 0 && <> · {resultSummary.invalid} sai định dạng</>}
@@ -251,10 +261,16 @@ export default function BulkInvitePanel({ organizationUnitId, missingScopeMessag
                 <span className="sm:shrink-0 sm:text-right">
                   <span className={`inline-block whitespace-nowrap px-2 py-0.5 rounded-full font-bold ${STATUS_STYLES[row.status]}`}>{BULK_INVITE_STATUS_LABELS[row.status]}</span>
                   {row.message && row.status !== 'ALREADY_MEMBER' && <span className="block text-[10px] text-[#737686] mt-0.5">{row.message}</span>}
+                  {row.status === 'LINK_NEEDED' && row.invitationId && (
+                    <span className="mt-1 block">
+                      <InviteLinkButton invitationId={row.invitationId} email={row.email} disabled={locked} onMessage={(type, text) => setLinkNotice({ type, text })} />
+                    </span>
+                  )}
                 </span>
               </div>
             ))}
           </div>
+          {linkNotice && <p role={linkNotice.type === 'error' ? 'alert' : 'status'} data-testid="bulk-invite-link-notice" className={`text-xs ${linkNotice.type === 'error' ? 'text-red-700' : 'text-green-700'}`}>{linkNotice.text}</p>}
           {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
           <div className="flex flex-wrap justify-end gap-3">
             {retryable.length > 0 && (

@@ -60,6 +60,14 @@ enum InvitationStatus {
   @@map("invitation_status")
 }
 
+/// Cách giao lời mời: EMAIL = đã gửi qua Resend; LINK = chưa gửi được mail (hết hạn mức hoặc lỗi), người mời lấy link để tự giao.
+enum InvitationDelivery {
+  EMAIL
+  LINK
+
+  @@map("invitation_delivery")
+}
+
 enum CourseStatus {
   DRAFT
   PUBLISHED
@@ -290,6 +298,7 @@ model Invitation {
   invited_by    String            @db.Uuid
   token_hash    String            @unique @db.VarChar(255)
   status        InvitationStatus  @default(PENDING)
+  delivery_method InvitationDelivery @default(EMAIL)
   expires_at    DateTime          @db.Timestamp
   accepted_at   DateTime?         @db.Timestamp
   cancelled_at  DateTime?         @db.Timestamp
@@ -593,6 +602,15 @@ model PasswordResetToken {
   @@map("password_reset_tokens")
   @@index([user_id])
   @@index([expires_at])
+}
+
+/// Số email đã đặt chỗ/gửi qua Resend trong một ngày lịch UTC (hạn mức gói miễn phí). Chỉ cập nhật bằng SQL nguyên tử trong src/lib/email-quota.ts.
+model EmailDailyUsage {
+  day        DateTime @id @db.Date
+  count      Int      @default(0)
+  updated_at DateTime @default(now()) @db.Timestamp
+
+  @@map("email_daily_usage")
 }
 
 model AuditLog {
