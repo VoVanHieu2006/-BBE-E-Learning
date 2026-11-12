@@ -118,6 +118,10 @@ export function useCourseEditor(params: { courseId: string }) {
     manualDuration: '',
   });
   const [lessonSaving, setLessonSaving] = useState(false);
+
+  // Bulk lesson creation (paste many YouTube links, one per line)
+  const [bulkLessonSessionId, setBulkLessonSessionId] = useState<string | null>(null);
+  const [bulkLessonSaving, setBulkLessonSaving] = useState(false);
   const [videoPreviewTitle, setVideoPreviewTitle] = useState('');
   const [fetchingDuration, setFetchingDuration] = useState(false);
   const [durationFetchError, setDurationFetchError] = useState('');
@@ -968,6 +972,68 @@ export function useCourseEditor(params: { courseId: string }) {
     setLessonSaving(false);
   };
 
+  // ─── Bulk lesson creation ─────────────────────────────────────────────────────
+  const openBulkLessonModal = (sessionId: string) => setBulkLessonSessionId(sessionId);
+  const closeBulkLessonModal = () => { if (!bulkLessonSaving) setBulkLessonSessionId(null); };
+
+  /** Mọi video YouTube đang có trong khóa học (mọi buổi) — để bỏ link trùng. */
+  const existingYoutubeVideoIds: string[] = (course?.sessions || []).flatMap((s: any) =>
+    (s.lessons || []).map((l: any) => l.video?.youtubeVideoId || l.youtubeVideoId).filter(Boolean)
+  );
+
+  /** Tạo nhiều bài học liền một lúc, đúng thứ tự `items`, nối tiếp cuối buổi học. */
+  const handleBulkCreateLessons = async (
+    items: { youtubeVideoId: string; title: string; durationSeconds: number }[]
+  ): Promise<boolean> => {
+    const targetSessionId = bulkLessonSessionId;
+    if (!targetSessionId || items.length === 0 || bulkLessonSaving) return false;
+
+    setBulkLessonSaving(true);
+    clearApiCache('/api/v1/courses');
+    try {
+      if (draftRef.current) {
+        // Khóa học đã xuất bản: tất cả bài mới vào bản nháp trong MỘT lần lưu (hoặc không bài nào).
+        const ok = await savePublishedDraft(c => {
+          const session = c.sessions.find(s => s.id === targetSessionId)!;
+          for (const it of items) {
+            session.lessons.push({
+              title: it.title,
+              description: '',
+              video: { youtubeVideoId: it.youtubeVideoId, durationSeconds: it.durationSeconds },
+              id: tempId(),
+              documents: [],
+              assessment: null,
+            });
+          }
+        });
+        if (ok) { showToast('success', `Đã thêm ${items.length} bài học vào bản nháp.`); setBulkLessonSessionId(null); }
+        return ok;
+      }
+
+      // Nối tiếp từng bài để server gán sort_order đúng thứ tự link (server khóa dòng session cha).
+      let created = 0;
+      let failedMessage = '';
+      for (const it of items) {
+        const res = await apiFetch(`/api/v1/sessions/${targetSessionId}/lessons`, {
+          method: 'POST',
+          body: JSON.stringify({ title: it.title, youtubeVideoId: it.youtubeVideoId, durationSeconds: it.durationSeconds }),
+        });
+        if (!res.ok) { failedMessage = res.error?.message || 'Lỗi thêm bài học'; break; }
+        created++;
+      }
+      await loadCourse();
+      if (failedMessage) {
+        showToast('error', `Đã tạo ${created}/${items.length} bài rồi dừng tại bài ${created + 1}: ${failedMessage}`);
+        return false;
+      }
+      showToast('success', `Đã tạo ${created} bài học.`);
+      setBulkLessonSessionId(null);
+      return true;
+    } finally {
+      setBulkLessonSaving(false);
+    }
+  };
+
   const handleDeleteLesson = async (sessionId: string, lessonId: string) => {
     if (!window.confirm('Xóa bài học này?')) return;
     if (draftRef.current) { await savePublishedDraft(c => { const session = c.sessions.find(s => s.id === sessionId)!; session.lessons = session.lessons.filter(l => l.id !== lessonId); }); return; }
@@ -1648,6 +1714,12 @@ export function useCourseEditor(params: { courseId: string }) {
     setLessonForm,
     lessonSaving,
     handleSaveLesson,
+    bulkLessonSessionId,
+    bulkLessonSaving,
+    openBulkLessonModal,
+    closeBulkLessonModal,
+    existingYoutubeVideoIds,
+    handleBulkCreateLessons,
     showAssessmentModal,
     closeAssessmentModal,
     activeAssessmentMode,
