@@ -17,5 +17,5 @@
     "paths": { "@/*": ["./src/*"] }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules", "prisma/seed.ts", "src/lib/prisma.ts", "src/test"]
+  "exclude": ["node_modules", "video-studio", "prisma/seed.ts", "src/lib/prisma.ts", "src/test"]
 }
