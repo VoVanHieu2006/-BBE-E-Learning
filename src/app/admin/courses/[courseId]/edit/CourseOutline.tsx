@@ -11,6 +11,7 @@ type Props = Pick<CourseEditorState,
   'handleMoveSession' |
   'openEditSessionModal' |
   'openAddLessonModal' |
+  'openBulkLessonModal' |
   'handleDeleteSession' |
   'handleMoveLesson' |
   'openAssessmentEditorForLesson' |
@@ -28,6 +29,7 @@ export default function CourseOutline({
   handleMoveSession,
   openEditSessionModal,
   openAddLessonModal,
+  openBulkLessonModal,
   handleDeleteSession,
   handleMoveLesson,
   openAssessmentEditorForLesson,
@@ -117,6 +119,9 @@ export default function CourseOutline({
                               </button>
                               <Button size="sm" variant="secondary" onClick={() => openAddLessonModal(sId)}>
                                 ＋ Thêm bài học
+                              </Button>
+                              <Button size="sm" variant="outline" onClick={() => openBulkLessonModal(sId)}>
+                                ＋ Thêm hàng loạt
                               </Button>
                               <button
                                 type="button"

@@ -11,6 +11,7 @@ import CourseOutline from './CourseOutline';
 import LessonQuizOverview from './LessonQuizOverview';
 import CourseSessionModal from './CourseSessionModal';
 import CourseLessonModal from './CourseLessonModal';
+import CourseBulkLessonModal from './CourseBulkLessonModal';
 import CourseAssessmentEditor from './CourseAssessmentEditor';
 
 export default function AdminEditCoursePage({ params }: { params: { courseId: string } }) {
@@ -143,6 +144,9 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
 
         {/* Modal: Add / Edit Lesson */}
         <CourseLessonModal {...editor} />
+
+        {/* Modal: Bulk add lessons from pasted YouTube links */}
+        <CourseBulkLessonModal {...editor} />
 
         {/* Modal: Assessment Multi-Type Question Builder with Question Reordering */}
         <CourseAssessmentEditor {...editor} />
