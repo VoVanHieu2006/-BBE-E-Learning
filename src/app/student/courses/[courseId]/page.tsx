@@ -7,7 +7,6 @@ import Button from '@/components/ui/Button';
 import NewContentChip from '@/components/learning/NewContentChip';
 import { allCourseLessonsDone } from '@/lib/learning-display';
 import { apiFetch, getCachedApiData } from '@/lib/api/client';
-
 export default function CourseDetailPage({ params }: { params: { courseId: string } }) {
   const [user, setUser] = useState<any>(null);
   const [mounted, setMounted] = useState(false);
@@ -146,8 +145,7 @@ export default function CourseDetailPage({ params }: { params: { courseId: strin
                   </div>
                   <div className="text-xs text-[#434655]">
                     Đã học {completedLessons} / {totalLessons} bài
-                  </div>
-                </div>
+                  </div>                </div>
               ) : (
                 <div className="bg-[#eff4ff] p-6 rounded-2xl border border-[#cbdbf5] min-w-[220px] text-center shrink-0 space-y-3">
                   <p className="text-xs font-semibold text-[#172554]">Khóa học khách cũng xem được</p>

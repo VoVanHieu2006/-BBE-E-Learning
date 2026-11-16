@@ -108,7 +108,7 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
           return NextResponse.json({
             error: {
               code: 'MonthlyVideoReplayRequired',
-              message: 'Bạn cần xem lại toàn bộ video bài học trong tháng này trước khi làm bài kiểm tra.',
+              message: 'Muốn làm lại bài kiểm tra để nhận Star tháng này, hãy bấm "Xem lại tháng này" ở bài học rồi xem hết video trước.',
             },
           }, { status: 403 })
         }

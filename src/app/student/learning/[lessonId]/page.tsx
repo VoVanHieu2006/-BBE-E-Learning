@@ -4,6 +4,7 @@ import Link from 'next/link';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import NewContentChip from '@/components/learning/NewContentChip';
+import MonthlyReviewButton from '@/components/learning/MonthlyReviewButton';
 import Toast, { ToastMessage } from '@/components/ui/Toast';
 import YouTubePlayer from '@/components/YouTubePlayer';
 import type { VideoProgressPayload } from '@/lib/video-progress-session';
@@ -693,8 +694,21 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                   <p className="text-[10px] opacity-80 mt-0.5">
                     {progress?.rewardStatus?.message || ((progress?.videoStarsThisMonth?.awardedStars || 0) > 0 || progress?.videoStarsThisMonth?.completed
                       ? 'Đủ lượt xem nhận thưởng trong tháng hiện tại.'
-                      : 'Xem lại toàn bộ video trong tháng để nhận sao.')}
+                      : progress?.replay?.reviewAvailable
+                        ? 'Bài đã xong vẫn xem tự do. Bấm "Xem lại tháng này" nếu muốn xem lại để nhận sao của tháng.'
+                        : 'Xem lại toàn bộ video trong tháng để nhận sao.')}
                   </p>
+                  {progress?.replay?.reviewAvailable && !isAdmin && (
+                    <div className="mt-2">
+                      <MonthlyReviewButton
+                        compact
+                        scope={{ lessonId: currentLessonId }}
+                        monthLabel={progress?.replay?.competitionMonth ? formatWatchMonth(progress.replay.competitionMonth) : undefined}
+                        label="Xem lại tháng này"
+                        onDone={() => { void revalidateProgress(); }}
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
 
