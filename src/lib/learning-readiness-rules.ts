@@ -3,7 +3,7 @@ export const learningReasonMessages: Record<string, string> = {
   MONTH_NOT_CONFIGURED: 'Chưa khởi tạo tháng thi đua phù hợp.',
   TERM_NOT_CONFIGURED: 'Chưa khởi tạo nhiệm kỳ Chapter phù hợp.', SEASON_NOT_CONFIGURED: 'Chưa khởi tạo mùa chuyển giao phù hợp.',
   HISTORICAL_SEASON_UNAVAILABLE: 'Mùa lịch sử chưa có dữ liệu học theo mô hình hiện hành hoặc snapshot đã lưu.',
-  SNAPSHOT_MISSING: 'Kỳ đã kết thúc nhưng chưa có snapshot.', CYCLE_NOT_STARTED: 'Chưa có chu kỳ học; tiến độ lịch sử được giữ riêng.',
+  SNAPSHOT_MISSING: 'Kỳ đã kết thúc nhưng chưa có snapshot.', CYCLE_NOT_STARTED: 'Chưa có nhiệm kỳ học; tiến độ lịch sử được giữ riêng.',
   REPLAY_INCOMPLETE: 'Chưa xem đủ video trong lượt xem tháng này.', REPLAY_NOT_STARTED: 'Chưa bắt đầu lượt xem tháng này.',
   REVIEW_NOT_STARTED: 'Bạn đã xem xong video này. Bấm "Xem lại tháng này" nếu muốn xem lại để nhận Star của tháng.',
   AWARDED: 'Đã cộng sao video.', ALREADY_AWARDED: 'Lượt xem này đã nhận sao.', SUPPRESSED: 'Lượt xem đã bị chặn thưởng; không cộng bù.',

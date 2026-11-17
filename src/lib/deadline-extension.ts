@@ -40,7 +40,7 @@ export async function extendOverdueLock(
     where: { user_id: userId, ends_at: null },
     select: { id: true },
   })
-  if (!activeCycle) throw new ExtendDeadlineError(409, 'NoActiveLearningCycle', 'Tài khoản chưa có chu kỳ học đang hoạt động.')
+  if (!activeCycle) throw new ExtendDeadlineError(409, 'NoActiveLearningCycle', 'Tài khoản chưa có nhiệm kỳ học đang hoạt động.')
   const path = await tx.learningPath.findUnique({ where: { learning_cycle_id: activeCycle.id } })
   if (!path) throw new ExtendDeadlineError(409, 'NoActiveLearningPath', 'Tài khoản chưa có lộ trình học đang hoạt động.')
 

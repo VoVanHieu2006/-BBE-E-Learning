@@ -2,7 +2,7 @@
 
 > **Đây là phụ lục dành cho lập trình viên.** Tài liệu nghiệp vụ chuẩn, viết cho mọi người, nằm ở [`KHBB.md`](KHBB.md). Khi hai tài liệu khác nhau thì **`KHBB.md` là đúng**; phụ lục này mô tả mã tại ngày biên soạn (29/10/2026) và chỉ ra chỗ mã chưa theo kịp.
 >
-> **Phạm vi:** cách một khóa học trở thành “bắt buộc”, hạn hoàn thành được tính thế nào, mọi trường hợp Admin thay đổi, quá hạn/khóa tài khoản, chuyển giao chu kỳ, và các điểm còn lệch giữa đặc tả với mã. Không sửa mã, schema, dữ liệu hay quyền.
+> **Phạm vi:** cách một khóa học trở thành “bắt buộc”, hạn hoàn thành được tính thế nào, mọi trường hợp Admin thay đổi, quá hạn/khóa tài khoản, chuyển giao nhiệm kỳ, và các điểm còn lệch giữa đặc tả với mã. Không sửa mã, schema, dữ liệu hay quyền.
 >
 > **Cách đọc:** mỗi quy tắc quan trọng có ví dụ số và nguồn `file:line`. Mô hình hạn chung (một hạn cho cả lộ trình) là mô hình duy nhất đang chạy.
 >
@@ -41,8 +41,8 @@
 | Câu hỏi                                   | Trả lời ngắn                                                                                                                                                                                                | Chi tiết      |
 | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
 | Ai bị ràng buộc?                         | Không phải “role” trong DB. Hệ thống dùng **18 đối tượng học** suy ra từ đơn vị và chức vụ đang hiệu lực; một người có thể khớp nhiều đối tượng.                              | Phần 1        |
-| “Bắt buộc” được định hình ra sao? | Không có cờ `is_mandatory` trên khóa học. Bắt buộc = **rule đang hiệu lực** khớp người học, sau đó được **materialize** thành assignment cho từng người/chu kỳ.                       | Phần 2        |
-| Mỗi khóa có một hạn riêng không?     | **Không**. Mỗi chu kỳ có **một hạn chung**; số ngày của từng khóa chỉ là **ngân sách ngày** đóng góp vào hạn chung.                                                                       | Phần 3.1      |
+| “Bắt buộc” được định hình ra sao? | Không có cờ `is_mandatory` trên khóa học. Bắt buộc = **rule đang hiệu lực** khớp người học, sau đó được **materialize** thành assignment cho từng người/nhiệm kỳ.                       | Phần 2        |
+| Mỗi khóa có một hạn riêng không?     | **Không**. Mỗi nhiệm kỳ có **một hạn chung**; số ngày của từng khóa chỉ là **ngân sách ngày** đóng góp vào hạn chung.                                                                       | Phần 3.1      |
 | Hạn được tính như thế nào?          | Khởi tạo: `D_start + T_new`. Khi đổi tập nghĩa vụ: `max(D_start + T_new, D_change + T_added)`.                                                                                                          | Phần 3        |
 | Admin thêm khóa bắt buộc?               | Tạo/thêm assignment; hạn chung được tính lại; khóa mới góp `T_added` nhưng không được “cộng dồn” vào hạn cũ. Người đang bị khóa **không tự mở khóa**.                          | Phần 4.1      |
 | Admin bỏ khóa?                            | Assignment kết thúc, tiến độ giữ nguyên; hạn chung tính lại và **có thể tụt về đúng lúc thay đổi**, không có sàn 3 ngày.                                                               | Phần 4.2, 5   |
@@ -52,7 +52,7 @@
 | Chưa học tới mà Admin thêm vào?       | Assignment mới, tiến độ cũ không mất; người học nhận ngân sách của khóa mới tính từ lúc thay đổi, nhưng không thấp hơn tổng kế hoạch từ `D_start`.                                | Phần 4.1.1, 6 |
 | Quá hạn thì sao?                         | Cron đánh `OVERDUE`, khóa tài khoản người không phải Admin và tạo `AccessRestriction` loại `DEADLINE`. Admin không bị khóa tự động.                                                          | Phần 4.6, 7.5 |
 | Làm sao mở khóa?                         | Chỉ Admin, qua luồng “Mở khóa & Gia hạn” (hoặc luồng kích hoạt tài khoản có nhập số ngày — hành vi khác, xem Phần 9).                                                                     | Phần 4.6, 8.6 |
-| Chuyển giao thì sao?                      | Đóng chu kỳ cũ, mở chu kỳ mới, reset tiến độ học, kết thúc assignment cũ; hạn mới được khởi tạo lại từ chu kỳ mới.                                                                    | Phần 4.9      |
+| Chuyển giao thì sao?                      | Đóng nhiệm kỳ cũ, mở nhiệm kỳ mới, reset tiến độ học, kết thúc assignment cũ; hạn mới được khởi tạo lại từ nhiệm kỳ mới.                                                                    | Phần 4.9      |
 | Có khi nào thời gian giảm?              | Có. Giảm ngân sách, bỏ khóa, thu hẹp vai trò, hoặc bất kỳ lần tính lại nào cũng có thể ghi đè một hạn đã được gia hạn tay.                                                         | Phần 5        |
 | Sang tháng mới có reset không?          | Không. Sang tháng chỉ mở cửa sổ thưởng mới; nghĩa vụ và hạn học không reset.                                                                                                                    | Phần 7.6      |
 
@@ -67,14 +67,14 @@
 | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Đối tượng học** (target)           | Một trong 18 nhóm người học do hệ thống suy ra từ đơn vị/chức vụ, ví dụ `MEMBER_BTV`, `LEADER_BTV`, `CHAPTER_PRESIDENT`, `DNA_TT`.                                         |
 | **Rule** (`LearningRule`)                 | Cấu hình “khóa học này áp cho đối tượng/đơn vị/chức vụ nào, bắt buộc hay không, bao nhiêu ngày”. Rule có thời gian hiệu lực.                                   |
-| **Assignment** (`UserLearningAssignment`) | Nghĩa vụ cụ thể của **một người** với **một khóa** trong **một chu kỳ học**. Đây là nơi có trạng thái `ASSIGNED`, `COMPLETED`, `OVERDUE`…                           |
-| **Chu kỳ học** (`LearningCycle`)        | Đơn vị reset tiến độ của một người. Chuyển giao Chapter/DNA tạo chu kỳ mới. Sang tháng **không** tạo chu kỳ mới.                                                       |
-| **Lộ trình học** (`LearningPath`)      | Bản ghi một-hai với chu kỳ, giữ `starts_at`, `due_at`, ngân sách và fingerprint.                                                                                                  |
+| **Assignment** (`UserLearningAssignment`) | Nghĩa vụ cụ thể của **một người** với **một khóa** trong **một nhiệm kỳ học**. Đây là nơi có trạng thái `ASSIGNED`, `COMPLETED`, `OVERDUE`…                           |
+| **Nhiệm kỳ học** (`LearningCycle`)        | Đơn vị reset tiến độ của một người. Chuyển giao Chapter/DNA tạo nhiệm kỳ mới. Sang tháng **không** tạo nhiệm kỳ mới.                                                       |
+| **Lộ trình học** (`LearningPath`)      | Bản ghi một-hai với nhiệm kỳ, giữ `starts_at`, `due_at`, ngân sách và fingerprint.                                                                                                  |
 | **Ngân sách ngày** (budget)            | Số ngày cấu hình của một khóa, lấy từ `courses.mandatory_default_due_days`; là “phần đóng góp” vào hạn chung, không phải hạn riêng của khóa.                      |
-| **Hạn chung** (shared deadline)          | Một timestamp `learning_paths.due_at` dùng cho toàn bộ assignment bắt buộc chưa hoàn thành trong chu kỳ.                                                                        |
-| **Tập nghĩa vụ** (required set)        | Tập các assignment `mandatory = true`, chưa `ended_at`, trong chu kỳ hiện tại.                                                                                                      |
+| **Hạn chung** (shared deadline)          | Một timestamp `learning_paths.due_at` dùng cho toàn bộ assignment bắt buộc chưa hoàn thành trong nhiệm kỳ.                                                                        |
+| **Tập nghĩa vụ** (required set)        | Tập các assignment `mandatory = true`, chưa `ended_at`, trong nhiệm kỳ hiện tại.                                                                                                      |
 | **Materialize**                           | Quá trình biến rule cấu hình thành assignment cụ thể cho từng người.                                                                                                           |
-| **Reconcile**                             | Quá trình đối chiếu lại tập nghĩa vụ khi rule, đơn vị, chức vụ hoặc chu kỳ thay đổi; tạo/kết thúc assignment và tính lại hạn.                                    |
+| **Reconcile**                             | Quá trình đối chiếu lại tập nghĩa vụ khi rule, đơn vị, chức vụ hoặc nhiệm kỳ thay đổi; tạo/kết thúc assignment và tính lại hạn.                                    |
 | **Quá hạn** (overdue)                   | Assignment bắt buộc còn hiệu lực, chưa hoàn thành, có `due_at < now`.                                                                                                            |
 | **Restriction**                           | Bản ghi chặn tài khoản. Loại `DEADLINE` là do quá hạn học; `DIRECT_ADMIN` và `CHAPTER_CASCADE` là các lý do độc lập.                                                      |
 
@@ -93,8 +93,8 @@ Ngoài ra còn **4 chương trình học**: `CORE_MEMBER`, `CORE_LEADER`, `CORE_
 | ------------------------------- | ---------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
 | `courses`                     | Trạng thái `DRAFT`/`PUBLISHED`, chương trình, **`mandatory_default_due_days`** (mặc định 30)     | `prisma/schema.prisma:310-337`, đặc biệt `:325`      |
 | `learning_rules`              | Course, target/đơn vị/chức vụ, `mandatory`, các quyền, `due_days`, thời gian hiệu lực          | `prisma/schema.prisma:758-782`                          |
-| `user_learning_assignments`   | Nghĩa vụ theo người/khóa/chu kỳ; trạng thái, `due_at`, `assigned_at`, `completed_at`, `ended_at` | `prisma/schema.prisma:784-813`                          |
-| `learning_cycles`             | Chu kỳ học của từng người; `starts_at`, `ends_at`, `provenance`                                    | `prisma/schema.prisma:983-1000`                         |
+| `user_learning_assignments`   | Nghĩa vụ theo người/khóa/nhiệm kỳ; trạng thái, `due_at`, `assigned_at`, `completed_at`, `ended_at` | `prisma/schema.prisma:784-813`                          |
+| `learning_cycles`             | Nhiệm kỳ học của từng người; `starts_at`, `ends_at`, `provenance`                                    | `prisma/schema.prisma:983-1000`                         |
 | `learning_paths`              | Hạn chung, ngân sách, fingerprint                                                                     | `prisma/schema.prisma:1048-1059`                        |
 | `learning_path_changes`       | Lịch sử tính lại hạn của lộ trình                                                                | `prisma/schema.prisma:1061-1071`                        |
 | `course_requirement_versions` | Ảnh chụp bài học/quiz/final tại mỗi lần publish                                                   | `prisma/schema.prisma:1116-1127`                        |
@@ -115,7 +115,7 @@ LearningRule (course + target/đơn vị/chức vụ + số ngày + hiệu lực
 Reconcile cho từng người: rule nào đang hiệu lực và khớp?
         |
         v
-UserLearningAssignment (mỗi người × khóa × chu kỳ)
+UserLearningAssignment (mỗi người × khóa × nhiệm kỳ)
         |
         v
 LearningPath: một hạn chung = f(ngân sách các khóa, mốc bắt đầu, mốc thay đổi)
@@ -255,7 +255,7 @@ Nguồn: `src/lib/learning-catalog.ts:1-6`. Việc gợi ý chương trình theo
 
 1. Có **rule đang hiệu lực** trỏ tới khóa và khớp người họ
 2. Rule đó có `mandatory = true`.
-3. Hệ thống đã **materialize** rule thành assignment cho người học trong chu kỳ hiện tại.
+3. Hệ thống đã **materialize** rule thành assignment cho người học trong nhiệm kỳ hiện tại.
 
 Ba bước này độc lập. Vì vậy có thể có các trạng thái trung gian:
 
@@ -304,7 +304,7 @@ Thông tin quan trọng:
 2. Lấy membership, position đang hiệu lực và các rule đang hiệu lực.
 3. Lọc rule khớp target/đơn vị/chức vụ.
 4. Gộp rule theo `course_id`.
-5. Với assignment hiện có trong chu kỳ mà khóa không còn trong tập rule → kết thúc:
+5. Với assignment hiện có trong nhiệm kỳ mà khóa không còn trong tập rule → kết thúc:
    - `mandatory = false`, `ended_at = now`;
    - status `ENDED`, trừ khi đã hoàn thành thì giữ `COMPLETED`.
 6. Với mỗi khóa trong tập rule:
@@ -313,7 +313,7 @@ Thông tin quan trọng:
 7. Đồng bộ hoàn thành cho từng khóa (`syncCourseAssignmentCompletion`).
 8. Gọi `reconcileSharedPath()` để tính hạn chung.
 
-Ràng buộc unique `(user_id, course_id, learning_cycle_id)` bảo đảm không có hai assignment cho cùng người/khóa/chu kỳ. Rule trùng được gộp, không nhân đôi thời gian.
+Ràng buộc unique `(user_id, course_id, learning_cycle_id)` bảo đảm không có hai assignment cho cùng người/khóa/nhiệm kỳ. Rule trùng được gộp, không nhân đôi thời gian.
 
 ### 2.5 Bảng trạng thái assignment
 
@@ -335,7 +335,7 @@ Lưu ý: bắt đầu học một bài **không** tự chuyển assignment từ 
 
 `syncCourseAssignmentCompletion()` (`src/lib/learning-assignments.ts:180-228`) coi là hoàn thành khi **đồng thời**:
 
-1. **Tất cả bài học** của khóa đã có tiến độ hoàn thành trong **chu kỳ hiện tại** (`cycle_lesson_progress.completed_at` khác null). Nếu người học chưa có chu kỳ, dùng `lesson_progress` legacy.
+1. **Tất cả bài học** của khóa đã có tiến độ hoàn thành trong **nhiệm kỳ hiện tại** (`cycle_lesson_progress.completed_at` khác null). Nếu người học chưa có nhiệm kỳ, dùng `lesson_progress` legacy.
 2. **Tất cả quiz gắn với bài học** đã pass.
 3. **Bài thi cuối khóa** (nếu có) đã pass.
 
@@ -370,7 +370,7 @@ Có bảng `SupplementalLearningRequirement` (`prisma/schema.prisma:1129-1144`) 
 
 ### 3.1 Một hạn chung, nhiều ngân sách ngày
 
-Trong mô hình hiện hành, mỗi chu kỳ học có **một** `LearningPath` và **một** `due_at`. Tất cả assignment bắt buộc chưa hoàn thành trong chu kỳ được gán cùng một `due_at` (`src/lib/shared-learning-path.ts:53-55`). Vì vậy:
+Trong mô hình hiện hành, mỗi nhiệm kỳ học có **một** `LearningPath` và **một** `due_at`. Tất cả assignment bắt buộc chưa hoàn thành trong nhiệm kỳ được gán cùng một `due_at` (`src/lib/shared-learning-path.ts:53-55`). Vì vậy:
 
 - Không có chuyện “khóa A còn 3 ngày, khóa B còn 10 ngày” trong mô hình chung.
 - Con số ngày của từng khóa trong ma trận là **ngân sách đóng góp** vào tổng thời gian của cả lộ trình.
@@ -382,7 +382,7 @@ Trong mô hình hiện hành, mỗi chu kỳ học có **một** `LearningPath` 
 
 | Ký hiệu            | Nghĩa                                                                                             | Nguồn dữ liệu                        |
 | ---------------------- | ---------------------------------------------------------------------------------------------------- | ----------------------------------------- |
-| `D_start`            | Mốc bắt đầu lộ trình của chu kỳ.                                                           | `learning_paths.starts_at`              |
+| `D_start`            | Mốc bắt đầu lộ trình của nhiệm kỳ.                                                           | `learning_paths.starts_at`              |
 | `D_change`           | Mốc Admin/đơn vị thay đổi tập nghĩa vụ (thời điểm reconcile).                          | `now` trong lần reconcile              |
 | `D_assigned(course)` | Mốc khóa được giao cho người học.                                                          | `user_learning_assignments.assigned_at` |
 | `D_adminChange`      | Mốc Admin lưu thay đổi.                                                                        | `now` trong lần reconcile              |
@@ -395,7 +395,7 @@ Trong mô hình hiện hành, mỗi chu kỳ học có **một** `LearningPath` 
 
 Một ngày = đúng **24 giờ** (`86_400_000 ms`). Hạn là một **timestamp tuyệt đối**, không phải “cuối ngày”. Ví dụ lộ trình bắt đầu lúc 15:30 ngày 1/1 với 20 ngày thì hạn là 15:30 ngày 21/1, không phải 23:59 ngày 21/1. Việt Nam không có DST (`src/lib/learning-cycle-rules.ts:1-2`).
 
-### 3.3 Công thức 1 — Khởi tạo chu kỳ
+### 3.3 Công thức 1 — Khởi tạo nhiệm kỳ
 
 ```text
 D = D_start + T_new
@@ -404,7 +404,7 @@ D = D_start + T_new
 - Chỉ áp dụng khi lộ trình vừa được tạo trong lần reconcile đầu tiên (trong vòng 5 phút) và trước đó chưa có ngân sách (`CYCLE_INITIALIZED`, `src/lib/learning-cycle-rules.ts:52-53`; điều kiện chọn lý do ở `src/lib/shared-learning-path.ts:24-30`).
 - Đây là hạn của toàn bộ kế hoạch, không phải hạn riêng của từng khóa.
 
-**Ví dụ:** chu kỳ bắt đầu ngày 0; bắt buộc A = 10 ngày, B = 10 ngày. `T_new = 20` → hạn ngày 20.
+**Ví dụ:** nhiệm kỳ bắt đầu ngày 0; bắt buộc A = 10 ngày, B = 10 ngày. `T_new = 20` → hạn ngày 20.
 
 **Trường hợp đặc biệt:** nếu người học đã có lộ trình mở từ trước nhưng **chưa có khóa bắt buộc nào**, và hôm nay Admin thêm khóa đầu tiên, lộ trình không còn “vừa tạo trong 5 phút”. Khi đó hệ thống dùng công thức đổi tập nghĩa vụ (mục 3.4), không dùng `D_start + T_new`; người học nhận đủ ngân sách từ lúc thêm. Điều này được chú thích rõ trong `src/lib/shared-learning-path.ts:24-30` và có test `src/test/shared-learning-path.test.ts:45-49`.
 
@@ -484,7 +484,7 @@ Nguồn: `src/app/api/v1/admin/users/[userId]/extend-deadline/route.ts:47-51`; c
 - Nếu đã quá hạn hoặc chưa có hạn: cộng từ `now`.
 - Chỉ Admin được gọi (`:9-11`).
 - `N` phải là số nguyên dương (`:18-22`). UI giới hạn 1–365; backend không kiểm tra trần.
-- Cập nhật `learning_paths.due_at` và **tất cả assignment bắt buộc chưa hoàn thành** trong chu kỳ, đưa chúng về `IN_PROGRESS` (`:71-83`).
+- Cập nhật `learning_paths.due_at` và **tất cả assignment bắt buộc chưa hoàn thành** trong nhiệm kỳ, đưa chúng về `IN_PROGRESS` (`:71-83`).
 - Gỡ **tất cả** restriction loại `DEADLINE` đang mở (`:86-96`).
 - Chỉ mở tài khoản nếu:
   - tài khoản không ở `INACTIVE`;
@@ -500,7 +500,7 @@ Nguồn: `src/app/api/v1/admin/users/[userId]/extend-deadline/route.ts:47-51`; c
 - Hạn ngày 5, hôm nay ngày 20 (đã quá hạn), gia hạn 7 → hạn ngày 27.
 - Hạn đúng bằng hôm nay, gia hạn 7 → hạn ngày 27.
 
-**Điều kiện tiên quyết:** người học phải có chu kỳ học đang mở và lộ trình. Nếu không, endpoint ném `NoActiveLearningCycle` hoặc `NoActiveLearningPath` (`:32-45`). Người chưa từng phát sinh chu kỳ/lộ trình có thể không có hai bản ghi này; lần học hoặc reconcile đầu tiên sẽ tạo chúng.
+**Điều kiện tiên quyết:** người học phải có nhiệm kỳ học đang mở và lộ trình. Nếu không, endpoint ném `NoActiveLearningCycle` hoặc `NoActiveLearningPath` (`:32-45`). Người chưa từng phát sinh nhiệm kỳ/lộ trình có thể không có hai bản ghi này; lần học hoặc reconcile đầu tiên sẽ tạo chúng.
 
 ### 3.7 Công thức 5 — Thêm bài vào khóa đã publish
 
@@ -589,17 +589,17 @@ Các lý do `MANDATORY_COURSE_ADDED`, `MANDATORY_COURSE_REMOVED` có trong enum 
 
 ### 3.11 Thời điểm bắt đầu `D_start` được lấy từ đâu?
 
-- Release1: người học **chưa có chu kỳ** nhận chu kỳ `NATIVE` với `learning_cycles.starts_at = now` tại lần học/reconcile đầu tiên, kể cả tài khoản đã có từ trước. Không chọn `LEGACY` theo ngày tạo tài khoản và không lùi chu kỳ mới về `assigned_at` cũ (`src/lib/learning-periods.ts`).
-- Lộ trình nhập lần đầu giữ `learning_paths.starts_at` là `assigned_at` sớm nhất của assignment cũ, hoặc `now` nếu không có (`src/lib/learning-periods.ts`); lộ trình mới sau chuyển giao được tạo từ `now` khi reconcile (`src/lib/shared-learning-path.ts`). Tiến độ video cũ và hạn cũ muộn nhất qua `imported_due_at` vẫn được nhập như trước; nhập tiến độ không đồng nghĩa nhập attempt null vào chu kỳ `NATIVE` mới.
-- Với người vừa chuyển giao: chu kỳ mới bắt đầu tại thời điểm apply; lộ trình mới được tạo khi reconcile chạy, nên `D_start` có thể **muộn hơn** thời điểm chuyển giao nếu reconcile bị trễ. Đây là điểm cần lưu ý khi kiểm tra số liệu (xem Phần 9).
-- `imported_due_at` giữ nguyên trường và ý nghĩa: chỉ làm **sàn** trong lần tính lại đầu tiên khi chưa có `learning_path_changes`; sau khi đã có thay đổi, sàn này không còn áp dụng. Không dùng hạn nhập làm mốc bắt đầu chu kỳ.
+- Release1: người học **chưa có nhiệm kỳ** nhận nhiệm kỳ `NATIVE` với `learning_cycles.starts_at = now` tại lần học/reconcile đầu tiên, kể cả tài khoản đã có từ trước. Không chọn `LEGACY` theo ngày tạo tài khoản và không lùi nhiệm kỳ mới về `assigned_at` cũ (`src/lib/learning-periods.ts`).
+- Lộ trình nhập lần đầu giữ `learning_paths.starts_at` là `assigned_at` sớm nhất của assignment cũ, hoặc `now` nếu không có (`src/lib/learning-periods.ts`); lộ trình mới sau chuyển giao được tạo từ `now` khi reconcile (`src/lib/shared-learning-path.ts`). Tiến độ video cũ và hạn cũ muộn nhất qua `imported_due_at` vẫn được nhập như trước; nhập tiến độ không đồng nghĩa nhập attempt null vào nhiệm kỳ `NATIVE` mới.
+- Với người vừa chuyển giao: nhiệm kỳ mới bắt đầu tại thời điểm apply; lộ trình mới được tạo khi reconcile chạy, nên `D_start` có thể **muộn hơn** thời điểm chuyển giao nếu reconcile bị trễ. Đây là điểm cần lưu ý khi kiểm tra số liệu (xem Phần 9).
+- `imported_due_at` giữ nguyên trường và ý nghĩa: chỉ làm **sàn** trong lần tính lại đầu tiên khi chưa có `learning_path_changes`; sau khi đã có thay đổi, sàn này không còn áp dụng. Không dùng hạn nhập làm mốc bắt đầu nhiệm kỳ.
 
 ### 3.12 Dữ liệu từ trước khi có hạn chung
 
 **Release1:** mô hình hạn chung luôn chạy, không có cổng kích hoạt policy. Bảng `learning_policy` và model `LearningPolicy` chỉ giữ để rollback, không còn được runtime đọc. Trang `/admin/learning-config` và redirect `/admin/learning-policy` đã bỏ (11/11/2026); gán chương trình cho khóa làm ở `/admin/courses`; chuẩn hóa tổ chức và retry outbox chỉ còn qua API `/api/v1/admin/learning-config` (xem `operations.md`).
 
 - Assignment và lộ trình cũ giữ đường đọc lịch sử/read-only, gồm hạn riêng và `imported_due_at`; nhập tiến độ video như trước. Ghi mới dùng hạn chung từ `learning_paths` và số ngày từ `courses.mandatory_default_due_days`.
-- **Chu kỳ `LEGACY` đã tồn tại** vẫn đọc attempt có `learning_cycle_id = null` qua `currentCycleAttemptFilter`. Người chưa có chu kỳ nhận `NATIVE` bắt đầu từ `now`; **không tự nhập attempt null cũ** vào chu kỳ `NATIVE` mới. Ghi attempt mới luôn gắn chu kỳ.
+- **Nhiệm kỳ `LEGACY` đã tồn tại** vẫn đọc attempt có `learning_cycle_id = null` qua `currentCycleAttemptFilter`. Người chưa có nhiệm kỳ nhận `NATIVE` bắt đầu từ `now`; **không tự nhập attempt null cũ** vào nhiệm kỳ `NATIVE` mới. Ghi attempt mới luôn gắn nhiệm kỳ.
 - Giữ các trường `provenance` của cycle, cycle progress và ledger. Ledger cũ thiếu month/cycle vẫn đọc được; ledger mới gắn month/cycle và `provenance = NATIVE`.
 - Tháng runtime dùng `[00:00 đầu tháng, 00:00 đầu tháng kế tiếp)` UTC+7. Không viết lại bản ghi tháng/snapshot đã có, không backfill hay đổi sao/tiến độ lịch sử.
 - Mùa DNA xét `[reward_boundary_at, dnaSeasonEnd(season.reward_boundary_at))`. Mùa đã kết thúc **không có** `star_ledger` `NATIVE` trong cửa sổ **và không có đúng snapshot** `ranking:DNA:<season.id>` là lịch sử không khả dụng, không dựng snapshot rỗng ngược. Có `NATIVE` nhưng chưa có snapshot thì đủ điều kiện cho scheduler; snapshot đã tồn tại luôn giữ nguyên. Không có mốc cấu hình làm sàn.
@@ -656,7 +656,7 @@ Mỗi mục dưới đây trả lời bốn câu: Admin làm gì, dữ liệu n�
 - Khóa không được cộng thêm thời gian riêng chỉ vì đã có tiến độ; nó vẫn là khóa “mới trong tập nghĩa vụ” nếu trước đó chưa bắt buộc.
 - Nếu người học đã hoàn thành đủ điều kiện trước khi rule có hiệu lực, assignment có thể được đồng bộ thành `COMPLETED` ngay trong lần reconcile.
 
-#### 4.1.3 Người đã hoàn thành khóa trong chu kỳ hiện tại
+#### 4.1.3 Người đã hoàn thành khóa trong nhiệm kỳ hiện tại
 
 Đây là câu hỏi quan trọng nhất và câu trả lời có hai lớp:
 
@@ -673,7 +673,7 @@ Mỗi mục dưới đây trả lời bốn câu: Admin làm gì, dữ liệu n�
 
 Nếu A cũng đã hoàn thành → `due = null`, không còn countdown.
 
-**Nếu khóa được hoàn thành ở chu kỳ trước:** sau chuyển giao, tiến độ chu kỳ mới được reset; khóa **không** được coi là đã hoàn thành trong chu kỳ hiện tại. Người học phải học lại và khóa có đầy đủ nghĩa vụ.
+**Nếu khóa được hoàn thành ở nhiệm kỳ trước:** sau chuyển giao, tiến độ nhiệm kỳ mới được reset; khóa **không** được coi là đã hoàn thành trong nhiệm kỳ hiện tại. Người học phải học lại và khóa có đầy đủ nghĩa vụ.
 
 #### 4.1.4 Khóa đã bắt buộc qua target khác
 
@@ -798,7 +798,7 @@ Nếu A cũng đã hoàn thành → `due = null`, không còn countdown.
 **Dữ liệu đổi:**
 
 - `learning_paths.due_at = max(now, hạn cũ) + N`.
-- Tất cả assignment bắt buộc chưa hoàn thành trong chu kỳ: `due_at = hạn mới`, `status = IN_PROGRESS`.
+- Tất cả assignment bắt buộc chưa hoàn thành trong nhiệm kỳ: `due_at = hạn mới`, `status = IN_PROGRESS`.
 - Tất cả restriction `DEADLINE` đang mở: `lifted_at = now`.
 - Tài khoản có thể được mở nếu không còn lý do khác.
 - Ghi `learning_path_changes` với lý do `ADMIN_MANUAL_EXTENSION`.
@@ -820,7 +820,7 @@ Nếu A cũng đã hoàn thành → `due = null`, không còn countdown.
 **Điểm cần biết:**
 
 - Modal UI ghi “số ngày kể từ hôm nay”, nhưng backend cộng từ hạn tương lai nếu hạn còn ở tương lai. Đây là điểm lệch giữa chữ và hành vi.
-- Nếu người học chưa từng phát sinh chu kỳ/lộ trình, endpoint lỗi; người có dữ liệu legacy nhưng chưa được nhập cũng thuộc trường hợp này.
+- Nếu người học chưa từng phát sinh nhiệm kỳ/lộ trình, endpoint lỗi; người có dữ liệu legacy nhưng chưa được nhập cũng thuộc trường hợp này.
 - Có một luồng khác: đổi trạng thái người dùng sang `ACTIVE` kèm `extensionDays` (`src/app/api/v1/users/[userId]/route.ts:165-176`). Luồng này đặt hạn = `now + days` cho các assignment `OVERDUE`, **không** cập nhật `learning_paths.due_at`, và gỡ **tất cả** restriction. Hành vi không đồng nhất với luồng chuyên dụng; xem Phần 9.
 
 ### 4.7 Đổi thời gian hiệu lực của rule / dùng API rule
@@ -858,8 +858,8 @@ Nếu A cũng đã hoàn thành → `due = null`, không còn countdown.
 - Khóa không còn thuộc tập mới → assignment `ENDED`, tiến độ giữ.
 - Khóa mới thuộc tập → assignment mới/cập nhật.
 - Hạn chung tính lại theo công thức 2 hoặc 3.
-- Nếu chỉ đổi ban trong cùng Chapter: **không** reset chu kỳ, tiến độ bài học được giữ; nghĩa vụ và hạn thay đổi theo tập mới.
-- Nếu chuyển giao Chapter/DNA: reset toàn bộ chu kỳ (mục 4.9).
+- Nếu chỉ đổi ban trong cùng Chapter: **không** reset nhiệm kỳ, tiến độ bài học được giữ; nghĩa vụ và hạn thay đổi theo tập mới.
+- Nếu chuyển giao Chapter/DNA: reset toàn bộ nhiệm kỳ (mục 4.9).
 
 **Ví dụ:** A = 10, B = 40, hạn ngày 50. Ngày 20 đổi vị trí chỉ còn A.
 
@@ -871,7 +871,7 @@ Nếu A cũng đã hoàn thành → `due = null`, không còn countdown.
 - `D_new = max(21, 20 + 11) = 31`.
 - Người học có 11 ngày kể từ lúc đổi cho C.
 
-### 4.9 Chuyển giao nhiệm kỳ / reset chu kỳ
+### 4.9 Chuyển giao nhiệm kỳ / reset nhiệm kỳ
 
 **Khi nào:**
 
@@ -880,8 +880,8 @@ Nếu A cũng đã hoàn thành → `due = null`, không còn countdown.
 
 **Dữ liệu đổi (Chapter):**
 
-- Đóng chu kỳ cũ (`ends_at`).
-- Tạo chu kỳ mới.
+- Đóng nhiệm kỳ cũ (`ends_at`).
+- Tạo nhiệm kỳ mới.
 - Hủy attempt đang làm.
 - Reset `lesson_progress` (bao gồm `completed`, `completed_at`, vị trí xem).
 - Kết thúc tất cả assignment và supplemental requirement đang mở.
@@ -899,9 +899,9 @@ Nguồn: `src/lib/chapter-reorganizations.ts:65-82`.
 **Hạn mới:**
 
 - Lộ trình mới được tạo khi reconcile; `D_start` là thời điểm reconcile.
-- Hạn = `D_start + T_new` cho tập nghĩa vụ của chu kỳ mới.
+- Hạn = `D_start + T_new` cho tập nghĩa vụ của nhiệm kỳ mới.
 - Không giữ hạn cũ; không cộng dồn thời gian trước chuyển giao.
-- Tiến độ học được reset; khóa đã hoàn thành ở chu kỳ cũ **không** được coi là hoàn thành ở chu kỳ mới.
+- Tiến độ học được reset; khóa đã hoàn thành ở nhiệm kỳ cũ **không** được coi là hoàn thành ở nhiệm kỳ mới.
 
 **Lưu ý:** nếu reconcile bị trễ, `D_start` muộn hơn thời điểm apply, người học có thể được hưởng thêm thời gian ngoài dự kiến. Xem Phần 9.
 
@@ -960,7 +960,7 @@ Hệ quả thực tế:
 | Hoàn thành một khóa       | Không      | Không                       | **Có**            | Completion không nằm trong fingerprint.                                               |
 | Tất cả khóa hoàn thành   | Không      | **Có**                      | Không             | `due = null`, không còn hạn.                                                         |
 | Sang tháng mới              | Không      | Không                       | **Có**            | Không reset nghĩa vụ.                                                                |
-| Chuyển giao                  | Có thể    | Có thể                     | Không             | Hạn mới theo chu kỳ mới.                                                            |
+| Chuyển giao                  | Có thể    | Có thể                     | Không             | Hạn mới theo nhiệm kỳ mới.                                                            |
 | Retry cùng tập/ngân sách  | Không      | Không                       | **Có**            | Fingerprint chống cộng lặp.                                                          |
 
 ### 5.2 Các đường giảm quan trọng
@@ -969,7 +969,7 @@ Hệ quả thực tế:
 2. **Bỏ khóa / thu hẹp vai trò:** không có sàn; hạn có thể về đúng `now`.
 3. **Bất kỳ lần tính lại nào sau khi đã gia hạn tay:** công thức 2/3 dùng `D_start` và `now`, không dùng hạn hiện tại, nên có thể ghi đè mốc gia hạn.
 4. **Tất cả khóa hoàn thành:** hạn bị bỏ (`null`), không còn countdown.
-5. **Chuyển giao sang tập nhỏ hơn:** hạn mới có thể ngắn hơn hạn cũ, nhưng đây là chu kỳ mới nên không so trực tiếp.
+5. **Chuyển giao sang tập nhỏ hơn:** hạn mới có thể ngắn hơn hạn cũ, nhưng đây là nhiệm kỳ mới nên không so trực tiếp.
 
 ### 5.3 Cảnh báo
 
@@ -991,7 +991,7 @@ Quy ước: ngày 0 là `D_start`; các mốc là timestamp chính xác; “hạ
 
 | Mốc    | Việc xảy ra                     | Hạn     |
 | --------- | ----------------------------------- | ---------- |
-| Ngày 0 | Chu kỳ mới, tập A = 10, B = 10 | Ngày 20 |
+| Ngày 0 | Nhiệm kỳ mới, tập A = 10, B = 10 | Ngày 20 |
 
 Kết quả: cả A và B có assignment, cùng hạn ngày 20.
 
@@ -1140,7 +1140,7 @@ Nếu Admin chỉ thêm khóa mới ngày 25 mà không gia hạn → tài kho�
 | Thêm bài                | Assignment completed không mở lại           | Cộng `k × T_extra` vào hạn hiện tại (mã)                  | Không tự mở                    | Có `LearningNotice`         |
 | Gia hạn tay              | Chưa xong → `IN_PROGRESS`                    | `max(now, hạn) + N`                                             | Mở nếu không còn lý do khác | Audit, không notice         |
 | Đổi đơn vị/chức vụ | Kết thúc/tạo theo tập mới                 | Tính lại                                                       | Không tự mở                    | Không có notice            |
-| Chuyển giao              | Kết thúc toàn bộ, tạo chu kỳ mới        | Hạn mới từ chu kỳ mới                                       | Tùy trạng thái tài khoản     | Snapshot, outbox             |
+| Chuyển giao              | Kết thúc toàn bộ, tạo nhiệm kỳ mới        | Hạn mới từ nhiệm kỳ mới                                       | Tùy trạng thái tài khoản     | Snapshot, outbox             |
 | Unpublish                 | Không đổi                                   | Không đổi                                                     | Không tự mở                    | Không có notice            |
 
 ### 6.3 Bảng quyết định theo trạng thái người học
@@ -1148,7 +1148,7 @@ Nếu Admin chỉ thêm khóa mới ngày 25 mà không gia hạn → tài kho�
 
 | Trạng thái người học        | Thêm khóa                            | Bỏ khóa                              | Giảm ngày                | Gia hạn tay                                    |
 | ---------------------------------- | ---------------------------------------- | ---------------------------------------- | ---------------------------- | ------------------------------------------------- |
-| Chưa có assignment, chưa học | Tạo assignment; nhận ngân sách     | Không áp dụng                       | Không áp dụng           | Có thể lỗi nếu chưa có chu kỳ/lộ trình |
+| Chưa có assignment, chưa học | Tạo assignment; nhận ngân sách     | Không áp dụng                       | Không áp dụng           | Có thể lỗi nếu chưa có nhiệm kỳ/lộ trình |
 | Đang học dở                   | Giữ tiến độ; tính lại hạn       | Kết thúc nghĩa vụ; tiến độ giữ | Có sàn 3 ngày           | Cập nhật mọi assignment chưa xong           |
 | Đã hoàn thành khóa          | `COMPLETED`; không bắt học lại     | Giữ `COMPLETED`                       | Không mở lại nghĩa vụ | Không cập nhật assignment đã xong          |
 | Đã hoàn thành tất cả       | Có thể làm hạn dịch xa do `T_new` | `due = null`                           | Không áp dụng           | Có thể tạo hạn mới dù không còn việc   |
@@ -1159,10 +1159,10 @@ Nếu Admin chỉ thêm khóa mới ngày 25 mà không gia hạn → tài kho�
 
 **“Nếu khóa học bắt buộc đã học xong mà Admin thêm vào thì sao?”**
 
-- Trong cùng chu kỳ: assignment `COMPLETED`, không phải học lại, không bị countdown cho khóa đó.
+- Trong cùng nhiệm kỳ: assignment `COMPLETED`, không phải học lại, không bị countdown cho khóa đó.
 - Nếu còn khóa khác chưa xong: hạn chung có thể vẫn dịch do khóa đã xong nằm trong `T_new`.
 - Nếu tất cả đều xong: không còn hạn.
-- Nếu hoàn thành ở chu kỳ trước: sau chuyển giao, phải học lại.
+- Nếu hoàn thành ở nhiệm kỳ trước: sau chuyển giao, phải học lại.
 
 **“Nếu chưa học tới mà thêm vào thì sao?”**
 
@@ -1175,7 +1175,7 @@ Nếu Admin chỉ thêm khóa mới ngày 25 mà không gia hạn → tài kho�
 
 - Thêm khóa mới: thường có, theo công thức 2.
 - Tăng số ngày: có thể có, nhưng tính lại toàn bộ.
-- Gia hạn tay: chắc chắn có, trừ khi không có chu kỳ/lộ trình.
+- Gia hạn tay: chắc chắn có, trừ khi không có nhiệm kỳ/lộ trình.
 - Giảm số ngày: có thể vẫn tăng nếu sàn 3 ngày lớn hơn hạn cũ, nhưng thường là giảm.
 - Bỏ khóa: có thể giảm mạnh.
 
@@ -1239,7 +1239,7 @@ Nếu Admin chỉ thêm khóa mới ngày 25 mà không gia hạn → tài kho�
 ### 7.6 Sang tháng mới và chuyển giao khác nhau
 
 - **Sang tháng:** tạo cửa sổ thưởng mới, giữ tiến độ học, **không** reset nghĩa vụ bắt buộc và **không** đổi hạn. Xem `docs/business-rules.md:42-53`.
-- **Chuyển giao Chapter/DNA:** reset chu kỳ học, tiến độ, assignment; hạn mới. Xem 4.9.
+- **Chuyển giao Chapter/DNA:** reset nhiệm kỳ học, tiến độ, assignment; hạn mới. Xem 4.9.
 - Vì vậy, đừng dùng “đầu tháng” để suy đoán hạn mới. Chỉ chuyển giao hoặc thay đổi cấu hình mới làm hạn đổi.
 
 ---
@@ -1280,15 +1280,15 @@ Nếu Admin chỉ thêm khóa mới ngày 25 mà không gia hạn → tài kho�
 
 ### 8.3 Quy trình thêm khóa đã hoàn thành hoặc đang học dở
 
-1. Xác định khóa đã được học trong **chu kỳ hiện tại** hay chỉ ở chu kỳ cũ.
-2. Nếu đã hoàn thành trong chu kỳ hiện tại:
+1. Xác định khóa đã được học trong **nhiệm kỳ hiện tại** hay chỉ ở nhiệm kỳ cũ.
+2. Nếu đã hoàn thành trong nhiệm kỳ hiện tại:
    - Tick bình thường.
    - Kiểm tra assignment mẫu phải là `COMPLETED`, không có countdown.
    - Kiểm tra hạn chung: nếu còn khóa khác chưa xong, hạn có thể dịch do `T_new`; nếu tất cả xong, `due = null`.
 3. Nếu đang học dở:
    - Tick bình thường; tiến độ được giữ.
    - Nhắc người học rằng khóa dùng chung hạn, không có hạn riêng.
-4. Nếu hoàn thành ở chu kỳ trước:
+4. Nếu hoàn thành ở nhiệm kỳ trước:
    - Sau chuyển giao, coi như chưa hoàn thành; người học phải học lại.
 5. Nếu khóa đã bắt buộc qua target khác:
    - Không cần tick thêm nếu chỉ muốn giữ nguyên thời gian; tick thêm không đổi hạn.
@@ -1451,7 +1451,7 @@ WHERE user_id = :user_id
 | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
 | KHBB-C1 | Hai luồng mở khóa không đồng nhất: endpoint chuyên dụng cập nhật lộ trình; luồng đổi trạng thái `ACTIVE` chỉ cập nhật assignment `OVERDUE`, không cập nhật path, và gỡ tất cả restriction. | Hạn có thể lệch giữa path và assignment; restriction khác có thể bị gỡ ngoài ý muốn. | [MÃ], `src/app/api/v1/users/[userId]/route.ts:165-176`.                     |
 | KHBB-C2 | UI gia hạn ghi “từ hôm nay”, backend cộng từ `max(now, hạn)`.                                                                                                                                                  | Admin có thể hiểu sai hạn mới khi hạn còn ở tương lai.                                   | [MÃ] + UI.                                                                  |
-| KHBB-C3 | Endpoint gia hạn lỗi nếu user không có chu kỳ/lộ trình.                                                                                                                                                        | Không dùng được cho người chưa từng phát sinh chu kỳ/lộ trình.                        | [MÃ], `src/app/api/v1/admin/users/[userId]/extend-deadline/route.ts:32-45`. |
+| KHBB-C3 | Endpoint gia hạn lỗi nếu user không có nhiệm kỳ/lộ trình.                                                                                                                                                        | Không dùng được cho người chưa từng phát sinh nhiệm kỳ/lộ trình.                        | [MÃ], `src/app/api/v1/admin/users/[userId]/extend-deadline/route.ts:32-45`. |
 | KHBB-C4 | Việc bắt đầu học không tự đổi assignment sang `IN_PROGRESS`.                                                                                                                                                  | Báo cáo trạng thái có thể trông “chưa bắt đầu” dù đã học.                         | [MÃ].                                                                       |
 
 ### 9.4 Nhóm D — Dữ liệu và thời điểm
@@ -1459,7 +1459,7 @@ WHERE user_id = :user_id
 
 | ID      | Nội dung                                                                                                    | Ảnh hưởng                                                                                    | Trạng thái                           |
 | --------- | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | ---------------------------------------- |
-| KHBB-D1 | `D_start` của lộ trình là lúc reconcile tạo path, không nhất thiết là lúc chu kỳ bắt đầu.     | Sau chuyển giao, nếu reconcile trễ, người học có thêm thời gian ngoài dự kiến.      | [MÃ] + [CHƯA XÁC NHẬN].            |
+| KHBB-D1 | `D_start` của lộ trình là lúc reconcile tạo path, không nhất thiết là lúc nhiệm kỳ bắt đầu.     | Sau chuyển giao, nếu reconcile trễ, người học có thêm thời gian ngoài dự kiến.      | [MÃ] + [CHƯA XÁC NHẬN].            |
 | KHBB-D2 | Assignment có `due_at = null` không bị quá hạn và không có countdown.                                | Legacy/rule thiếu số ngày có thể không bao giờ bị khóa.                                | [MÃ], cần kiểm tra dữ liệu.       |
 | KHBB-D3 | `learning_paths.due_at` có thể còn hạn cũ khi tất cả đã hoàn thành (do fingerprint không đổi). | Đọc path đơn lẻ dễ kết luận sai còn nghĩa vụ; nên đọc assignment.                 | [MÃ].                                 |
 | KHBB-D4 | `enforce` chạy theo lịch Vercel 07:00 VN hoặc mỗi phút nếu dùng scheduler.                            | Thời điểm khóa thực tế phụ thuộc cách triển khai; có thể trễ tới gần một ngày. | [MÃ] + [CHƯA XÁC NHẬN] production. |
@@ -1472,7 +1472,7 @@ WHERE user_id = :user_id
 - Không khẳng định dữ liệu chức vụ thực tế dùng `DEPARTMENT_LEAD` hay `DEPARTMENT_LEADER`.
 - Không khẳng định có worker ngoài repo xử lý `learning_outbox`.
 - Không khẳng định cron production là Vercel hằng ngày hay scheduler mỗi phút.
-- Không khẳng định mọi người dùng đã có chu kỳ/lộ trình; người có dữ liệu cũ có thể chưa có.
+- Không khẳng định mọi người dùng đã có nhiệm kỳ/lộ trình; người có dữ liệu cũ có thể chưa có.
 - Muốn kết luận production, cần đối chiếu read-only rule, assignment, path, outbox và audit.
 
 ---
@@ -1484,7 +1484,7 @@ WHERE user_id = :user_id
 
 | Mã | Tình huống          | Công thức                                                              | Nguồn                                                               |
 | ----- | ----------------------- | -------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| F1  | Khởi tạo chu kỳ    | `D = D_start + T_new`                                                    | `src/lib/learning-cycle-rules.ts:52-53`                              |
+| F1  | Khởi tạo nhiệm kỳ    | `D = D_start + T_new`                                                    | `src/lib/learning-cycle-rules.ts:52-53`                              |
 | F2  | Đổi tập nghĩa vụ | `D = max(D_start+T_new, D_change+T_added)`                               | `src/lib/learning-cycle-rules.ts:85-91`                              |
 | F3  | Giảm ngân sách     | `D = max(D_start+T_new, max(D_assigned+T_new_course), D_adminChange+3d)` | `src/lib/learning-cycle-rules.ts:67-83`                              |
 | F4  | Gia hạn tay          | `D = max(now, D_current) + N`                                            | `src/app/api/v1/admin/users/[userId]/extend-deadline/route.ts:47-51` |

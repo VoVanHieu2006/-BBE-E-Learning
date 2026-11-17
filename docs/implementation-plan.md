@@ -164,12 +164,12 @@ Trong `POST` route, **trước** mọi kiểm tra:
 | **Phần 1 — Chuyển giao vào ngày nào** | 2 mốc 1/4 & 1/10; quy về mốc gần nhất; 2 giai đoạn `1/1–30/6` / `1/7–31/12`; ví dụ bảng ngày→mốc | §1.1, §1.2 |
 | **Phần 2 — Ai được chuyển giao, bao nhiêu lần** | 1 lần mỗi giai đoạn, tối đa 2 lần/năm; nhiệm kỳ = mốc + 6 tháng (nên 1 nhiệm kỳ có thể có 2 lần chuyển giao — **hợp lệ**); chapter mới không phải chờ | §1.4, §1.5, §2.1 |
 | **Phần 3 — Sao bị ngừng khi nào** | quy tắc gốc; chapter chưa từng chuyển giao thì không bao giờ ngừng; ngừng từ mốc, liên tục tới khi xong; không cộng bù; bảng 7 tình huống | §1.3, §2.2, §2.3, §4.1–4.4 |
-| **Phần 4 — Khi chuyển giao xảy ra** | chốt sổ cũ, reset chu kỳ học, viết lại Ban/chức vụ; người học giữ sao & lịch sử nhưng tiến độ bài về 0; ví dụ số | §3.2–3.5 |
+| **Phần 4 — Khi chuyển giao xảy ra** | chốt sổ cũ, reset nhiệm kỳ học, viết lại Ban/chức vụ; người học giữ sao & lịch sử nhưng tiến độ bài về 0; ví dụ số | §3.2–3.5 |
 | **Phần 5 — Lên lịch chuyển giao trên hệ thống** | các bước bấm nút; chọn ngày giờ; áp dụng ngay vs hẹn giờ; hệ thống tự kiểm tra gì; **bảng 6 câu báo lỗi có thể gặp + cách xử lý**; chỉ 1 lịch chờ mỗi chapter | §1.9.4–1.9.6 + A2 |
 | **Phần 6 — Điểm bảng xếp hạng trong kỳ chuyển giao** | công thức `A₁/N₁ + A₂/N₂`; bình quân gia quyền; 70% core của cái gì; 3 điều kiện dự xếp hạng; ai vào bảng nào; ví dụ số đầy đủ | §5.1–5.9 |
 | **Phần 7 — Vai trò và Ban** | 3 cấp ADMIN/LEAD/MEMBER; 7 Ban; 3 vị trí DNA; ai nhận sao, ai lên bảng xếp hạng; **cách xác định một người giữ vai trò gì** (đọc vị trí đang giữ, không đọc "role") | §0.1, §0.2, §5.6 |
 | **Phần 8 — Những hiểu nhầm thường gặp** | 8–10 dòng "tưởng X / thực tế Y" | gom từ các ghi chú rải rác |
-| **Phụ lục — Bảng thuật ngữ** | chỉ những từ người dùng cần: mốc, giai đoạn, nhiệm kỳ, mùa, chu kỳ học | §0 từ điển, rút gọn |
+| **Phụ lục — Bảng thuật ngữ** | chỉ những từ người dùng cần: mốc, giai đoạn, nhiệm kỳ, mùa, nhiệm kỳ học | §0 từ điển, rút gọn |
 
 ### B3. Nội dung bị xoá khỏi `CKNK.md` (danh sách kiểm)
 

@@ -14,7 +14,7 @@
 | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
 | Chuyển giao vào ngày nào?   | Mốc chuẩn hóa **00:00 ngày 1/4** và **00:00 ngày 1/10** giờ Việt Nam (UTC+7); quy về **mốc gần nhất**: `1/1–30/6` → `1/4`, `1/7–31/12` → `1/10`                                                                                                                                        | [Phần 1](#phần-1--chuyển-giao-vào-ngày-tháng-nào)                  |
 | Chapter mới thì sao?          | **Không phải chờ** — thành lập hôm nay vẫn lên lịch chuyển giao được ngay; nhưng chapter **chưa từng** chuyển giao thì **không bao giờ bị ngừng cộng sao**, kể cả khi đã qua mốc                                                                                                  | [Phần 2](#phần-2--chapter-mới-nhiệm-kỳ-đầu)                        |
-| Chuyển giao thì sao?          | Trong 1 giao dịch: chốt sổ cũ, **reset chu kỳ học của toàn bộ thành viên**, viết lại Ban/chức vụ theo sheet                                                                                                                                                                                                 | [Phần 3](#phần-3--khi-chuyển-giao-xảy-ra-apply)                       |
+| Chuyển giao thì sao?          | Trong 1 giao dịch: chốt sổ cũ, **reset nhiệm kỳ học của toàn bộ thành viên**, viết lại Ban/chức vụ theo sheet                                                                                                                                                                                                 | [Phần 3](#phần-3--khi-chuyển-giao-xảy-ra-apply)                       |
 | Không chuyển giao thì sao?   | Chapter **đã từng** chuyển giao: **ngừng cộng sao từ mốc** (`1/4` hoặc `1/10`) và **ngừng liên tục cho tới khi chuyển giao xong** — kể cả khi đã sang cửa sổ sau hay sang năm sau; vẫn học, **không cộng bù**. Chapter **chưa từng** chuyển giao: không ngừng | [Phần 4](#phần-4--khi-không-chuyển-giao)                              |
 | Điểm BXH tháng chuyển giao? | Tháng bị **chia stage theo giờ chuyển giao**, điểm = `A₁/N₁ + A₂/N₂ + …`, số người và tỷ lệ 70% bình quân **gia quyền theo thời lượng**                                                                                                                                                     | [Phần 5](#phần-5--điểm-bảng-xếp-hạng-trong-thời-kỳ-chuyển-giao) |
 | Được chuyển giao mấy lần? | **1 lần mỗi cửa sổ** (`1/1–30/6` và `1/7–31/12`) → tối đa **2 lần/năm**; cửa sổ sau **không** bị chặn bởi cửa sổ trước                                                                                                                                                               | [Phần 1.4](#14-chặn-trùng-một-lần-mỗi-cửa-sổ)                     |
@@ -32,7 +32,7 @@
 | **Mốc thưởng** (`reward_boundary_at`) | Khoá **duy nhất** (unique) của mùa, chính là **mốc chuẩn hóa** 1/4 hoặc 1/10 00:00 giờ VN. Hàm `chapterRewardBoundary(at)` thì trả **mốc đã qua** gần nhất, không phải mốc gần nhất dùng khi đặt lịch (`src/lib/transfer-season-lookup.ts`, `src/lib/transfer-windows.ts`) |
 | **Nhiệm kỳ** (Term)                      | Khung thi đua 6 tháng tính **từ mốc**: `1/4 → 1/10` và `1/10 → 1/4` năm sau, lưu ở `chapter_competition_terms`. **Khác cửa sổ chuyển giao** (xem [Phần 1.5](#15-nhiệm-kỳ-khác-cửa-sổ)) |
 | **Nhiệm kỳ thực tế** (Actual term)     | Khoảng từ lúc thành lập/chuyển giao gần nhất tới lần chuyển giao kế tiếp. **Chỉ để thống kê, không xếp hạng chính thức**                                                                        |
-| **Chu kỳ học** (Learning cycle)          | Đơn vị reset tiến độ học của từng người. Mỗi lần chuyển giao đóng chu kỳ cũ, mở chu kỳ mới                                                                                                              |
+| **Nhiệm kỳ học** (Learning cycle)          | Đơn vị reset tiến độ học của từng người. Mỗi lần chuyển giao đóng nhiệm kỳ cũ, mở nhiệm kỳ mới                                                                                                              |
 | `SCHEDULED` / `APPLIED` / `CANCELLED`      | Trạng thái một đợt chuyển giao (`prisma/schema.prisma:167`, `:899-920`)                                                                                                                                            |
 
 ### 0.1 Ba cấp vai trò
@@ -141,7 +141,7 @@ paused(t) = chapter ĐÃ TỪNG chuyển giao
             T_thực ∈ [S(t), t], hoặc effective_at thuộc cửa sổ, hoặc applied_at ∈ [S(t), t]
 ```
 
-> `applied_at` vẫn là **giờ database thật**, không backdate. `T_thực` chỉ dùng cho nghiệp vụ, hiển thị và xếp hạng; việc reset chu kỳ học vẫn xảy ra tại `applied_at`.
+> `applied_at` vẫn là **giờ database thật**, không backdate. `T_thực` chỉ dùng cho nghiệp vụ, hiển thị và xếp hạng; việc reset nhiệm kỳ học vẫn xảy ra tại `applied_at`.
 
 > **Vì sao cần cả `effective_at`?** Đợt chuyển giao được quy vào cửa sổ theo `effective_at` (dùng cho chặn trùng). Nếu đợt đó được áp dụng **sớm trước khi cửa sổ bắt đầu**, chỉ xét `T_thực` sẽ không thấy bằng chứng trong cửa sổ, trong khi chặn trùng vẫn nói "đã chuyển giao". Xét thêm `effective_at` giữ hai quy tắc nhất quán và tránh chapter bị ngừng thưởng vô hạn.
 
@@ -287,7 +287,7 @@ Worker gọi **3 đường dẫn nội bộ**, song song, mỗi đường bảo 
 Riêng đường dẫn đầu tiên chạy **8 việc theo thứ tự cố định**:
 
 1. **Áp dụng các đợt chuyển giao đã tới giờ** ← phần chính của mục này
-2. Áp dụng reset chu kỳ DNA đã tới mốc
+2. Áp dụng reset nhiệm kỳ DNA đã tới mốc
 3. Đẩy các sự kiện đồng bộ lộ trình đang chờ (outbox)
 4. Nghỉ hưu các tài khoản không còn hoạt động
 5. Đóng các tháng thi đua đã hết
@@ -365,7 +365,7 @@ T_thực = min(effective_at, applied_at)
 Hệ quả cần nhớ:
 
 - Nếu worker chạy **trễ 2 ngày**, `applied_at` là **ngày chạy thật**, nhưng `T_thực` vẫn là **giờ đã hẹn**. Lịch sử, thống kê và mốc mở lại thưởng dùng `T_thực`.
-- Việc reset chu kỳ học, đóng nhiệm kỳ và tạo tiến độ mới vẫn xảy ra tại **`applied_at`** — không backdate dữ liệu.
+- Việc reset nhiệm kỳ học, đóng nhiệm kỳ và tạo tiến độ mới vẫn xảy ra tại **`applied_at`** — không backdate dữ liệu.
 - Nếu đợt được áp dụng **sớm hơn giờ hẹn**, `T_thực` là **giờ áp dụng thật**; không có chuyện ghi nhận một thời điểm ở tương lai.
 - Đợt đã gắn sẵn một mùa (kể cả mùa 6 tháng cũ) **giữ nguyên liên kết** khi worker áp dụng, để dữ liệu lịch sử vẫn đọc được. Đợt mới không có liên kết sẽ được tra theo **cửa sổ của `effective_at`**.
 - Không còn lỗi `TransferOutsideSeasonWindow` chỉ vì worker chạy sau `ends_at`. Lỗi bất kỳ → giữ `SCHEDULED` + `last_error` (cắt 2000 ký tự) + tăng `apply_attempts`; **không có đợt nào bị "mất" im lặng.**
@@ -384,7 +384,7 @@ Trả lời thẳng, gồm cả điểm chưa tối ưu:
 | Truy vấn quét       | Có index `@@index([chapter_id, status, effective_at])` — nhưng lượt quét **không lọc theo chapter**, nên mỗi phút vẫn là một truy vấn theo `status + effective_at` trên toàn bộ bảng                                |
 | Chống chồng lấn    | Có cờ `busy` phía worker + `FOR UPDATE` phía DB                                                                                                                                                                                          |
 | Giới hạn thời gian | Có timeout 55 giây phía worker; transaction apply có `timeout: 30_000`                                                                                                                                                                     |
-| Chi phí mỗi đợt   | Mỗi đợt mở **một transaction `Serializable`** khoá chapter + toàn bộ roster, rồi reset chu kỳ học **từng thành viên** — nặng, nhưng số đợt đến hạn mỗi phút rất nhỏ (thực tế gần như luôn bằng 0) |
+| Chi phí mỗi đợt   | Mỗi đợt mở **một transaction `Serializable`** khoá chapter + toàn bộ roster, rồi reset nhiệm kỳ học **từng thành viên** — nặng, nhưng số đợt đến hạn mỗi phút rất nhỏ (thực tế gần như luôn bằng 0) |
 | Kết luận            | **Chấp nhận được** ở quy mô hiện tại. Nếu số chapter tăng mạnh, chỗ cần tối ưu đầu tiên là **lượt quét** (lọc thêm theo khoảng thời gian), không phải phần apply                                      |
 
 ✅ `prisma/schema.prisma:899-920`, `scripts/learning-scheduler.mjs:8-20`, `src/lib/chapter-reorganizations.ts:119`
@@ -586,7 +586,7 @@ Nếu batch đã `APPLIED`, API trả thành công ngay (idempotent). Nếu batc
 | 9      | Batch → `APPLIED`, gán `applied_at`, `transfer_season_id`, xoá `last_error`, tăng `apply_attempts`                                                                                                                                                        | `:63`      |
 | 10     | Chốt thống kê nhiệm kỳ thực tế (`captureChapterActualTerm`)                                                                                                                                                                                                    | `:64`      |
 | 11     | Đóng nhiệm kỳ thi đua đang mở (`ends_at = appliedAt`), mở nhiệm kỳ mới bắt đầu `appliedAt` (`ends_at` để trống) 🔧 xem [1.5](#15-nhiệm-kỳ-khác-cửa-sổ)                                                                                       | `:65-66`   |
-| 12     | **Với từng thành viên**: đóng chu kỳ học cũ → mở chu kỳ mới (khoá `transfer:{batchId}:{userId}`) → hủy attempt `IN_PROGRESS` (`LEARNING_CYCLE_RESET`) → xoá tiến độ bài học hiển thị → kết thúc assignment + yêu cầu bổ trợ | `:67-76`   |
+| 12     | **Với từng thành viên**: đóng nhiệm kỳ học cũ → mở nhiệm kỳ mới (khoá `transfer:{batchId}:{userId}`) → hủy attempt `IN_PROGRESS` (`LEARNING_CYCLE_RESET`) → xoá tiến độ bài học hiển thị → kết thúc assignment + yêu cầu bổ trợ | `:67-76`   |
 | 13     | Đẩy sự kiện đồng bộ lộ trình qua outbox cho từng người                                                                                                                                                                                                      | `:77`      |
 | 14     | Lấy `now = appliedAt` để **không backdate** phần còn lại                                                                                                                                                                                                 | `:78-79`   |
 | 15     | Cập nhật `current_term_number` của chapter theo `term_number` của batch                                                                                                                                                                                         | `:80-85`   |
@@ -602,10 +602,10 @@ Nếu batch đã `APPLIED`, API trả thành công ngay (idempotent). Nếu batc
 | Điều gì                      | Kết quả                                                                                        |
 | ------------------------------- | ------------------------------------------------------------------------------------------------ |
 | Sao đã nhận                  | **Giữ nguyên** — không xoá sổ                                                        |
-| Lịch sử học / tiến độ cũ | **Giữ nguyên** (chu kỳ cũ chỉ bị đóng `ends_at`, không xoá)                    |
+| Lịch sử học / tiến độ cũ | **Giữ nguyên** (nhiệm kỳ cũ chỉ bị đóng `ends_at`, không xoá)                    |
 | Tiến độ bài học hiển thị | **Về 0** — `lesson_progress` là bản chiếu tương thích, bị xoá cờ hoàn thành |
 | Bài kiểm tra đang làm       | **Bị hủy** với lý do `LEARNING_CYCLE_RESET`                                          |
-| Video đã xem                  | Phải **xem lại từ đầu** trong chu kỳ mới mới nhận sao tháng mới                 |
+| Video đã xem                  | Phải **xem lại từ đầu** trong nhiệm kỳ mới mới nhận sao tháng mới                 |
 | Cộng bù (backpay)             | **Không có**                                                                             |
 
 ✅ `src/lib/chapter-reorganizations.ts:65-76`, 📄 `docs/business-rules.md` (dòng 101-102)
@@ -689,7 +689,7 @@ Readiness cơ sở release1 là `READY` cùng `asOf`, không có `policy` hay c�
 | `CHAPTER_TRANSFER_OVERDUE` | "Chapter chưa hoàn tất chuyển giao nên thưởng đang tạm dừng." |
 | `TERM_NOT_CONFIGURED` | "Chưa khởi tạo nhiệm kỳ Chapter phù hợp." |
 | `SEASON_NOT_CONFIGURED` | "Chưa khởi tạo mùa chuyển giao phù hợp." |
-| `CYCLE_NOT_STARTED` | "Chưa có chu kỳ học; tiến độ lịch sử được giữ riêng." |
+| `CYCLE_NOT_STARTED` | "Chưa có nhiệm kỳ học; tiến độ lịch sử được giữ riêng." |
 | `MONTH_NOT_CONFIGURED` | "Chưa khởi tạo tháng thi đua phù hợp." |
 | `HISTORICAL_SEASON_UNAVAILABLE` | "Mùa lịch sử chưa có dữ liệu học theo mô hình hiện hành hoặc snapshot đã lưu." |
 
@@ -1108,7 +1108,7 @@ Hệ quả: người giữ `CHAPTER_MANAGER` **không** được coi là learnin
 | Bảng quyết định trạng thái chuyển giao                                   | `src/lib/chapter-term-rules.ts:114-235`                                                                                                                                                                                                                           |
 | Nhiệm kỳ đầu không ngừng thưởng khi quá hạn                           | `src/lib/chapter-term-rules.ts:210-234`                                                                                                                                                                                                                           |
 | Quy trình apply nguyên tử                                                    | `src/lib/chapter-reorganizations.ts:7-126`                                                                                                                                                                                                                        |
-| Reset chu kỳ học từng thành viên                                           | `src/lib/chapter-reorganizations.ts:54-63`                                                                                                                                                                                                                        |
+| Reset nhiệm kỳ học từng thành viên                                           | `src/lib/chapter-reorganizations.ts:54-63`                                                                                                                                                                                                                        |
 | Ràng buộc mùa khi apply                                                      | ✅ `src/lib/chapter-reorganizations.ts` — tra theo cửa sổ của `effective_at`, giữ liên kết mùa cũ nếu đã có                                                                                                                    |
 | Ghi lỗi + tăng `apply_attempts`                                             | `src/lib/chapter-reorganizations.ts:121-123`                                                                                                                                                                                                                      |
 | Công thức điểm chapter (1 stage / nhiều stage)                             | `src/lib/competition-ranking-rules.ts:31-141`                                                                                                                                                                                                                     |
@@ -1132,7 +1132,7 @@ Hệ quả: người giữ `CHAPTER_MANAGER` **không** được coi là learnin
 | Seed mùa (đã dùng cửa sổ chuẩn)                                           | ✅ `scripts/db/seed-rich-demo.ts`                                                                                                                                                                                                                                |
 | Test 6 tháng / nhiệm kỳ đầu (đã viết lại)                                | ✅ `src/test/chapter-six-month-transfer.test.ts`, `src/test/chapter-initial-rewards.test.ts`, `src/test/transfer-windows.test.ts`                                                                                                                          |
 | Test apply nguyên tử                                                          | `scripts/test/test-chapter-transfer-integration.cjs`                                                                                                                                                                                                              |
-| Test chu kỳ học                                                               | `scripts/test/test-learning-cycles-integration.cjs`                                                                                                                                                                                                               |
+| Test nhiệm kỳ học                                                               | `scripts/test/test-learning-cycles-integration.cjs`                                                                                                                                                                                                               |
 | Test ngừng thưởng                                                            | `scripts/test/test-reward-pause-integration.cjs`                                                                                                                                                                                                                  |
 | Lỗi đã ghi nhận                                                             | `docs/known-issues.md:11-13`, `:21`                                                                                                                                                                                                                             |
 

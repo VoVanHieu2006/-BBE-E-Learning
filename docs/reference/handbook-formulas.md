@@ -91,7 +91,7 @@ $$
 
 - **Mẫu số:** Tổng bài học đã xuất bản thuộc **ba chương trình lõi (chương trình I, II, III)**: Thành viên, LT, DNA; không gồm chương trình mở rộng/khuyến khích.
 
-- **Tử số:** Số bài trong mẫu số mà người học đã hoàn thành trong chu kỳ đào tạo hiện hành.
+- **Tử số:** Số bài trong mẫu số mà người học đã hoàn thành trong nhiệm kỳ đào tạo hiện hành.
 
 - Một bài đạt khi đã xem đủ video và đạt quiz $\geq 85\%$ nếu bài có quiz; nếu không có quiz thì chỉ cần hoàn thành video.
 
@@ -130,7 +130,7 @@ Mỗi bảng phải thống nhất logic backend và UI giữa các vai trò đ�
 
 ### 8. Hai người bằng sao nhiệm kỳ: ai được ưu tiên? — ĐÃ CHỐT
 
-Nếu tổng sao nhiệm kỳ bằng nhau, ưu tiên **người đạt mức sao đó nhanh hơn tính từ lúc bắt đầu chu kỳ đào tạo của họ**:
+Nếu tổng sao nhiệm kỳ bằng nhau, ưu tiên **người đạt mức sao đó nhanh hơn tính từ lúc bắt đầu nhiệm kỳ đào tạo của họ**:
 
 $$
 \Delta t_{u} = t_{reach,u} - t_{start,u}
@@ -140,7 +140,7 @@ Người có $\Delta t_{u}$ **nhỏ hơn** xếp trên.
 
 **Ví dụ:** A bắt đầu 01/10, đạt 100 sao ngày 21/10 (20 ngày). B bắt đầu 10/10, đạt 100 sao ngày 25/10 (15 ngày). B xếp trên A dù bắt đầu muộn hơn.
 
-**Lưu ý:** Đối với Chapter, mốc bắt đầu là timestamp chuyển giao thực tế; đối với DNA là chu kỳ cố định 01/04 hoặc 01/10.
+**Lưu ý:** Đối với Chapter, mốc bắt đầu là timestamp chuyển giao thực tế; đối với DNA là nhiệm kỳ cố định 01/04 hoặc 01/10.
 
 Khi hai người bằng tổng sao, so sánh thời gian thực tế từ đầu kỳ đến thời điểm đạt mức sao hiện tại, chính xác đến giây. Người có thời gian ngắn hơn được xếp trên.
 
@@ -162,7 +162,7 @@ Không xóa lịch sử và không tạo giao dịch sao giả để chuyển đ
 
 ## III. HỌC LẠI VÀ SAO THƯỞNG
 
-### 10. Video: thưởng một lần cho mỗi tháng và chu kỳ — ĐÃ CHỐT
+### 10. Video: thưởng một lần cho mỗi tháng và nhiệm kỳ — ĐÃ CHỐT
 
 Một cửa sổ thưởng video được định danh bởi:
 
@@ -172,10 +172,10 @@ $$
 
 | **Tình huống**                                              | **Có sao video mới?** |
 |-------------------------------------------------------------|-----------------------|
-| Xem đủ lần đầu trong tháng và chu kỳ                        | Có                    |
-| Xem lại lần thứ hai cùng tháng, cùng chu kỳ                 | Không                 |
+| Xem đủ lần đầu trong tháng và nhiệm kỳ                        | Có                    |
+| Xem lại lần thứ hai cùng tháng, cùng nhiệm kỳ                 | Không                 |
 | Sang tháng mới, xem đủ lại                                  | Có                    |
-| Chuyển giao Chapter giữa tháng, sang chu kỳ mới rồi xem lại | Có                    |
+| Chuyển giao Chapter giữa tháng, sang nhiệm kỳ mới rồi xem lại | Có                    |
 
 **Phân biệt hai thứ:** Hoàn thành bài học là tiến độ đào tạo; video được thưởng lại hay chưa là trạng thái thưởng. **Sang tháng chỉ reset cửa sổ thưởng, không xóa tiến độ học hoặc khóa lại bài đã mở.**
 
@@ -197,7 +197,7 @@ $$
 \end{cases}
 $$
 
-$C_{new}$ là số câu đúng lần này; $C_{best}$ là mốc **số câu đúng đã được thưởng** trong cùng cửa sổ tháng và chu kỳ.
+$C_{new}$ là số câu đúng lần này; $C_{best}$ là mốc **số câu đúng đã được thưởng** trong cùng cửa sổ tháng và nhiệm kỳ.
 
 | **Lần thi (quiz 100 câu)** | **Câu đúng** | **Sao thêm** | **Tổng sao quiz trong cửa sổ** |
 |----------------------------|--------------|--------------|--------------------------------|
@@ -208,14 +208,14 @@ $C_{new}$ là số câu đúng lần này; $C_{best}$ là mốc **số câu đú
 | 5                          | 100          | +9           | 100                            |
 | 6                          | 100          | +0           | 100                            |
 
-**Các ca biên:** Dưới 85% không được thưởng; bằng hoặc thấp hơn mốc đã thưởng thì không cộng; đạt cao hơn thì chỉ cộng chênh lệch. Sang tháng hoặc sang chu kỳ đào tạo mới, mốc thưởng khởi tạo lại. Quiz cuối khóa cũng cần áp dụng đúng chính sách làm lại và nhận thưởng.
+**Các ca biên:** Dưới 85% không được thưởng; bằng hoặc thấp hơn mốc đã thưởng thì không cộng; đạt cao hơn thì chỉ cộng chênh lệch. Sang tháng hoặc sang nhiệm kỳ đào tạo mới, mốc thưởng khởi tạo lại. Quiz cuối khóa cũng cần áp dụng đúng chính sách làm lại và nhận thưởng.
 
 ### 12. Hai dạng reset khác nhau — ĐÃ CHỐT
 
 | **Sự kiện**                                | **Tiến độ bài học hiện hành**                  | **Cửa sổ nhận sao**    |
 |--------------------------------------------|------------------------------------------------|------------------------|
 | Sang tháng                                 | Giữ nguyên                                     | Mới                    |
-| Chuyển giao nhiệm kỳ đào tạo               | Bắt đầu chu kỳ mới, học lại từ đầu             | Mới                    |
+| Chuyển giao nhiệm kỳ đào tạo               | Bắt đầu nhiệm kỳ mới, học lại từ đầu             | Mới                    |
 | Xem lại bài đã hoàn thành trong cùng tháng | Vẫn hoàn thành                                 | Không lặp thưởng video |
 | Admin thêm bài mới                         | Đánh giá lại hoàn thành khóa, không xóa bài cũ | Theo quy tắc hiện hành |
 
@@ -225,13 +225,13 @@ Sau khi đã xem đủ video trong tháng, người học được tua tự do v
 
 Quy định này chỉ đặt lại quyền tua và làm quiz theo tháng, không làm khóa lại những bài học đã mở hợp lệ.
 
-**Điểm mấu chốt:** Lịch sử tiến độ cũ phải được bảo lưu; trạng thái *đang hoàn thành hay chưa* phải được xét trong đúng chu kỳ đào tạo hiện hành
+**Điểm mấu chốt:** Lịch sử tiến độ cũ phải được bảo lưu; trạng thái *đang hoàn thành hay chưa* phải được xét trong đúng nhiệm kỳ đào tạo hiện hành
 
 ## IV. NHIỆM KỲ VÀ CHUYỂN GIAO
 
-### 13. Tách nhiệm kỳ thi đua khỏi chu kỳ đào tạo — ĐÃ CHỐT
+### 13. Tách nhiệm kỳ thi đua khỏi nhiệm kỳ đào tạo — ĐÃ CHỐT
 
-| **Tiêu chí**      | **Nhiệm kỳ thi đua Chapter** | **Chu kỳ đào tạo Chapter**    |
+| **Tiêu chí**      | **Nhiệm kỳ thi đua Chapter** | **Nhiệm kỳ đào tạo Chapter**    |
 |-------------------|------------------------------|-------------------------------|
 | Thời điểm bắt đầu | 01/04 hoặc 01/10             | Timestamp chuyển giao thực tế |
 | Kết thúc          | 01/10 hoặc 01/04 năm sau     | Chuyển giao tiếp theo         |
@@ -241,11 +241,11 @@ Quy định này chỉ đặt lại quyền tua và làm quiz theo tháng, khôn
 
 - **Nhiệm kỳ thi đua vừa kết thúc** là `01/04 → 01/10` năm đó. Toàn bộ điểm Chapter tháng 9, **kể cả sao phát sinh sau 15/9**, vẫn thuộc nhiệm kỳ này vì nhiệm kỳ chỉ đóng ở mốc `01/10` — như vậy nhiệm kỳ mới có đủ dữ liệu để xếp hạng.
 - **Nhiệm kỳ thi đua mới** là `01/10` năm đó → `01/04` năm sau.
-- **Chu kỳ đào tạo** thì tách riêng: người học có chu kỳ học mới ngay từ **15/9** (timestamp chuyển giao thực tế), không chờ tới `01/10`.
+- **Nhiệm kỳ đào tạo** thì tách riêng: người học có nhiệm kỳ học mới ngay từ **15/9** (timestamp chuyển giao thực tế), không chờ tới `01/10`.
 
 > ⚠️ **Đã sửa ngày 29/10/2026.** Bản trước của mục này ghi nhiệm kỳ kết thúc **30/9**, mâu thuẫn với chính bảng ở trên (`01/04 → 30/09`) và với mốc chuẩn hóa `01/10`. Khung `30/9` / `31/3` bị bỏ; chuẩn là `01/04 → 01/10` và `01/10 → 01/04`. Xem [CKNK mục 1.5](../CKNK.md#15-nhiệm-kỳ-khác-cửa-sổ).
 
-DNA có chu kỳ riêng, tự chuyển sang kỳ mới đúng 01/04 và 01/10 (theo giờ Việt Nam), không cần thao tác chuyển giao Chapter.
+DNA có nhiệm kỳ riêng, tự chuyển sang kỳ mới đúng 01/04 và 01/10 (theo giờ Việt Nam), không cần thao tác chuyển giao Chapter.
 
 ### 14. Chuyển giao trễ: tạm dừng nhận sao — ĐÃ CHỐT
 
@@ -259,7 +259,7 @@ Nếu Chapter đến mốc mà **chưa hoàn thành chuyển giao hợp lệ cho
 |---------------------------------|-------------|----------------------|
 | Đến trước 01/10 00:00           | Có          | Có                   |
 | 01/10 00:00 – trước 10/10 14:30 | Có          | Không                |
-| Từ 10/10 14:30                  | Có          | Có, trong chu kỳ mới |
+| Từ 10/10 14:30                  | Có          | Có, trong nhiệm kỳ mới |
 
 **Edge cases:** Sao bị bỏ lỡ trong thời gian tạm dừng **không được cộng bù (mất luốn)**. Chapter đã chuyển giao hợp lệ sớm thì không bị tạm dừng. DNA không bị ảnh hưởng bởi việc Chapter chuyển giao trễ.
 
@@ -267,13 +267,13 @@ Nếu Chapter đến mốc mà **chưa hoàn thành chuyển giao hợp lệ cho
 
 Khi chuyển giao Chapter có hiệu lực:
 
-1.  Đóng chu kỳ đào tạo cũ và giữ bản ghi lịch sử.
+1.  Đóng nhiệm kỳ đào tạo cũ và giữ bản ghi lịch sử.
 
-2.  Mở chu kỳ đào tạo mới, đưa trạng thái học hiện hành của **mọi khóa học** (kể cả mở rộng) về chưa hoàn thành theo chu kỳ mới.
+2.  Mở nhiệm kỳ đào tạo mới, đưa trạng thái học hiện hành của **mọi khóa học** (kể cả mở rộng) về chưa hoàn thành theo nhiệm kỳ mới.
 
 3.  Cho phép học lại bài và nhận sao theo cửa sổ thưởng mới.
 
-4.  Thiết lập lại danh sách nghĩa vụ và deadline bắt buộc cho chu kỳ mới.
+4.  Thiết lập lại danh sách nghĩa vụ và deadline bắt buộc cho nhiệm kỳ mới.
 
 5.  Ghi audit, giữ lịch sử, video và quiz;
 
@@ -337,7 +337,7 @@ $d$ là đơn vị ngày; $D_{assigned}$ là thời điểm giao khóa bắt bu�
 
 **Ví dụ:** Giao khóa 30 ngày; đã qua 20 ngày, Admin giảm còn 10 ngày. Không thể đột ngột coi học viên đã trễ hạn từ ngày thứ 10; hạn mới phải **ít nhất 3 ngày sau thời điểm Admin đổi**.
 
-Công thức này áp dụng cho **Admin giảm hạn (tăng hạn không áp dụng)**, không thay thế quy tắc khi người học đổi chức vụ hoặc bắt đầu chu kỳ mới.
+Công thức này áp dụng cho **Admin giảm hạn (tăng hạn không áp dụng)**, không thay thế quy tắc khi người học đổi chức vụ hoặc bắt đầu nhiệm kỳ mới.
 
 Lưu ý: Nếu người học đã bị khóa tài khoản vì quá hạn lộ trình bắt buộc, việc thêm khóa học mới không được tự động mở tài khoản. Chỉ Admin có quyền mở lại.
 
