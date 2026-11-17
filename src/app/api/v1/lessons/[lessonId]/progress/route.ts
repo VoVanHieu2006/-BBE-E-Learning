@@ -198,10 +198,14 @@ export async function GET(request: NextRequest, { params }: { params: { lessonId
   const videoId = video?.id || null
   const historyData = await getLessonVideoHistory(userId, videoId, replay)
   let rewardReason = !cycle ? 'CYCLE_NOT_STARTED' : !month ? 'MONTH_NOT_CONFIGURED' : replay?.suppressed ? 'SUPPRESSED' : replay?.reviewAvailable ? 'REVIEW_NOT_STARTED' : !replay?.lastHeartbeatAt ? 'REPLAY_NOT_STARTED' : 'REPLAY_INCOMPLETE'
+  const gate = cycle && month ? await chapterRewardState(prisma, userId, asOf) : null
   if (cycle && month && replay?.completed && !replay.suppressed && video) {
     const entry = await prisma.starLedger.findUnique({ where: { reward_key: `video:${userId}:${video.id}:${month.id}:${cycle.id}` }, select: { id: true } })
-    const gate = await chapterRewardState(prisma, userId, asOf)
-    rewardReason = entry ? 'ALREADY_AWARDED' : gate.paused ? gate.reason || 'REWARD_NOT_ELIGIBLE' : 'REWARD_NOT_ELIGIBLE'
+    rewardReason = entry ? 'ALREADY_AWARDED' : gate?.paused ? gate.reason || 'REWARD_NOT_ELIGIBLE' : 'REWARD_NOT_ELIGIBLE'
+  } else if (gate?.paused) {
+    // Say why up front (e.g. Chapter transfer overdue) instead of a generic
+    // "suppressed" after the learner has already watched the whole video.
+    rewardReason = gate.reason || 'REWARD_NOT_ELIGIBLE'
   }
 
   return NextResponse.json({

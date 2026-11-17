@@ -13,6 +13,9 @@ import LessonComments from '@/components/lesson/LessonComments';
 import StarRewardCelebration from '@/components/StarRewardCelebration';
 import { apiFetch, ApiResponse, clearApiCache } from '@/lib/api/client';
 
+/** Reasons where watching/quiz still count for the term but no Star is paid this month. */
+const REWARD_BLOCKED_REASONS = new Set(['SUPPRESSED', 'CHAPTER_TRANSFER_OVERDUE', 'TRANSFER_SEASON_NOT_CONFIGURED', 'REWARD_NOT_ELIGIBLE'])
+
 export default function LearningVideoPage({ params }: { params: { lessonId: string } }) {
   const [currentLessonId, setCurrentLessonId] = useState(params.lessonId);
   const [user, setUser] = useState<any>(null);
@@ -331,7 +334,10 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
           progressContext: data.progressContext,
           lifetime: data.lifetime,
           cycleProgress: data.cycleProgress,
-          rewardStatus: data.rewardStatus,
+          // Heartbeats only say "replay incomplete"; keep a known reward pause visible while watching.
+          rewardStatus: REWARD_BLOCKED_REASONS.has(prev?.rewardStatus?.reasonCode) && data.rewardStatus?.reasonCode === 'REPLAY_INCOMPLETE'
+            ? prev.rewardStatus
+            : data.rewardStatus,
           lessonCompleted: Boolean(data.completed),
           progressPercentage: data.progressPercentage,
           watchedUntil: data.furthestWatchedPositionSeconds ?? event.furthest,
@@ -727,6 +733,12 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                   </div>
                 </div>
               </div>
+
+              {!isAdmin && REWARD_BLOCKED_REASONS.has(progress?.rewardStatus?.reasonCode) && (
+                <p role="status" className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-semibold text-amber-900">
+                  ⏸ {progress.rewardStatus.message}
+                </p>
+              )}
 
               {historyRows.length > 0 && (
                 <div className="pt-3 mt-3 border-t border-dashed border-[#eff4ff]">
