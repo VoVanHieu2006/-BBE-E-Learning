@@ -246,12 +246,16 @@ describe('monthly star reset', () => {
   it('quiz start gate does not skip the replay check when the month row is missing', () => {
     const source = read('src/app/api/v1/assessments/[assessmentId]/attempts/route.ts')
     assert.match(source, /const monthBounds = competitionMonthBounds\(now\)/)
-    assert.match(source, /priorAttempt\.submitted_at < monthBounds\.startsAt/)
+    assert.match(source, /monthStartsAt: monthBounds\.startsAt/)
     assert.match(source, /competitionMonth\.findUnique\(\{ where: \{ key: monthBounds\.key \}/)
     assert.doesNotMatch(source, /competitionMonth\.findFirst/)
+    assert.match(source, /monthId: currentMonth\?\.id \?\? null/)
+    const loader = read('src/lib/monthly-review.ts')
+    assert.match(loader, /priorAttempt\.submitted_at < input\.monthStartsAt/)
+    assert.match(loader, /input\.monthId \? db\.monthlyVideoReplay\.findUnique/)
     // Without a month row there is no replay, so the learner is asked to replay.
-    assert.match(source, /const replay = currentMonth && await prisma\.monthlyVideoReplay\.findUnique/)
-    assert.match(source, /if \(!replay \|\| !replay\.completed_at\)/)
+    const { monthlyQuizBlock } = require('../lib/monthly-review-state')
+    assert.equal(monthlyQuizBlock({ priorAttempt: true, priorAttemptBeforeMonth: true, replayExists: false, replayCompleted: false, videoDoneInEarlierMonth: false }), 'REVIEW_NOT_STARTED')
   })
 
   it('an attempt started last month needs a replay this month before earning stars', () => {

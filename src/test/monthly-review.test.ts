@@ -4,7 +4,10 @@ import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { cycleVideoAlreadyComplete, isFreeReviewLesson, planMonthlyReview, startMonthlyReview, lessonsWithMonthlyQuizPassed } from '../lib/monthly-review'
 import { readinessForReason } from '../lib/learning-readiness-rules'
-import { getMonthlyReviewState, monthlyReplayPercent, previousReplayHistory, monthlyPlayerStart, needsMonthlyQuiz, MonthlyReviewRefreshGate } from '../lib/monthly-review-state'
+import {
+  getMonthlyReviewState, monthlyReplayPercent, previousReplayHistory, monthlyPlayerStart, needsMonthlyQuiz, MonthlyReviewRefreshGate,
+  lessonAwardedThisMonth, monthlyQuizBlock, monthlyQuizLocked, quizRewardReason, quizRewardMessages, monthHistoryLabel, thisMonthQuizLabel,
+} from '../lib/monthly-review-state'
 import { VideoPlaybackGuard } from '../lib/video-playback-guard'
 import { isServerVideoCompleted } from '../lib/video-progress-rules'
 import { getVideoReplayState } from '../lib/video-heartbeat'
@@ -27,7 +30,10 @@ describe('monthly review v2 presentation state', () => {
         assert.equal(where.user_id_video_id_competition_month_id_learning_cycle_id.competition_month_id, monthId)
         return replay
       } },
-      starLedger: { findUnique: async ({ where }: any) => { keys.push(where.reward_key); return awarded ? { id: 'reward' } : null } },
+      starLedger: { findMany: async ({ where }: any) => {
+        keys.push(`${where.competition_month_id}:${where.learning_cycle_id}:${where.OR.map((s: any) => `${s.source_type}=${s.source_id}`).join(',')}`)
+        return awarded ? [{ source_type: 'VIDEO', amount: 5 }] : []
+      } },
     }
     const started = await getVideoReplayState('user', 'A')
     assert.equal(started?.reviewState, 'STARTED')
@@ -39,7 +45,7 @@ describe('monthly review v2 presentation state', () => {
     const nextMonth = await getVideoReplayState('user', 'A')
     assert.equal(nextMonth?.reviewState, 'AVAILABLE')
     assert.equal(nextMonth?.watchedSeconds, 0)
-    assert.deepEqual(keys, ['video:user:vA:nov:cycle', 'video:user:vA:nov:cycle', 'video:user:vA:dec:cycle'])
+    assert.deepEqual(keys, ['nov:cycle:VIDEO=vA', 'nov:cycle:VIDEO=vA', 'dec:cycle:VIDEO=vA'])
   })
   it('drops a same-lesson response started before reset even when it arrives last', async () => {
     const gate = new MonthlyReviewRefreshGate()
@@ -136,8 +142,8 @@ const CYCLE = { id: 'cycle-1', provenance: 'NATIVE' }
 
 // Bài A, B, C đã xem xong video (A và B hoàn thành trọn bài, C chỉ đủ video); D đang học dở.
 const lessons = [
-  { id: 'A', video: { id: 'vA', duration_seconds: 600 } },
-  { id: 'B', video: { id: 'vB', duration_seconds: 600 } },
+  { id: 'A', video: { id: 'vA', duration_seconds: 600 }, assessment: { id: 'qA' } },
+  { id: 'B', video: { id: 'vB', duration_seconds: 600 }, assessment: { id: 'qB' } },
   { id: 'C', video: { id: 'vC', duration_seconds: 600 } },
   { id: 'D', video: { id: 'vD', duration_seconds: 600 } },
   { id: 'E', video: null },
@@ -149,7 +155,7 @@ const progress = [
   { lesson_id: 'D', completed_at: null, furthest_seconds: 100 },
 ]
 
-function stubPrisma(t: TestContext, replays: any[] = []) {
+function stubPrisma(t: TestContext, replays: any[] = [], stars: { source_type: string; source_id: string; amount: number }[] = []) {
   const calls = { replayCreates: 0, forbidden: [] as string[], lessonWheres: [] as any[] }
   const forbidden = (name: string) => () => { calls.forbidden.push(name); throw new Error(`${name} must not be touched`) }
   const tx: any = {
@@ -166,7 +172,14 @@ function stubPrisma(t: TestContext, replays: any[] = []) {
       },
       update: forbidden('monthlyVideoReplay.update'),
     },
-    starLedger: new Proxy({}, { get: (_, name) => forbidden(`starLedger.${String(name)}`) }),
+    // Reading this month's stars is allowed; opening a review must never write Star.
+    starLedger: new Proxy({}, { get: (_, name) => name === 'findMany'
+      ? async ({ where }: any) => {
+          assert.equal(where.competition_month_id, MONTH.id)
+          assert.equal(where.learning_cycle_id, CYCLE.id)
+          return stars.filter((s) => where.OR.some((o: any) => o.source_type === s.source_type && o.source_id === s.source_id))
+        }
+      : forbidden(`starLedger.${String(name)}`) }),
   }
   const module = require('../lib/prisma')
   const original = module.prisma
@@ -309,6 +322,143 @@ describe('startMonthlyReview', () => {
     stubPrisma(t)
     assert.deepEqual(await startMonthlyReview(USER, 'ZZZ'), { error: 'NotFound' })
   })
+
+  it('phương án A: tháng này đã nhận sao quiz của bài (vd "Tầm nhìn") thì từ chối mở, không tạo dòng', async (t) => {
+    const { replays } = stubPrisma(t, [], [{ source_type: 'ASSESSMENT', source_id: 'qA', amount: 10 }])
+    const result: any = await startMonthlyReview(USER, 'A')
+    assert.equal(result.status, 'AWARDED_THIS_MONTH')
+    assert.match(result.message, /Tháng sau mới xem lại được/)
+    assert.equal(replays.length, 0)
+  })
+
+  it('phương án A: tháng này đã nhận sao video thì cũng từ chối mở', async (t) => {
+    const { replays } = stubPrisma(t, [], [{ source_type: 'VIDEO', source_id: 'vA', amount: 5 }])
+    assert.equal(((await startMonthlyReview(USER, 'A')) as any).status, 'AWARDED_THIS_MONTH')
+    assert.equal(replays.length, 0)
+  })
+
+  it('sao của bài khác không chặn bài này', async (t) => {
+    const { replays } = stubPrisma(t, [], [{ source_type: 'ASSESSMENT', source_id: 'qB', amount: 10 }])
+    assert.equal(((await startMonthlyReview(USER, 'A')) as any).status, 'STARTED')
+    assert.equal(replays.length, 1)
+  })
+})
+
+describe('phương án A: mỗi bài mỗi tháng nhận sao video và sao quiz tối đa 1 lần', () => {
+  it('có bất kỳ sao nào của bài trong tháng (video hoặc quiz) thì nút xám', () => {
+    assert.equal(lessonAwardedThisMonth({ video: 0, quiz: 0 }), false)
+    assert.equal(lessonAwardedThisMonth({ video: 5, quiz: 0 }), true)
+    assert.equal(lessonAwardedThisMonth({ video: 0, quiz: 10 }), true)
+    assert.equal(lessonAwardedThisMonth(null), false)
+    // "Tầm nhìn": sao video tháng 10, quiz làm trong tháng 11 → tháng 11 xám
+    assert.equal(getMonthlyReviewState(true, true, lessonAwardedThisMonth({ video: 0, quiz: 10 })), 'AWARDED')
+  })
+
+  it('planMonthlyReview bỏ qua bài đã có sao tháng này', () => {
+    const candidates = [{ lessonId: 'A', videoId: 'vA', durationSeconds: 600, videoComplete: true }]
+    assert.equal(planMonthlyReview(candidates, new Set(), new Set(['A'])).status, 'AWARDED_THIS_MONTH')
+    assert.equal(planMonthlyReview(candidates, new Set(), new Set(['A'])).toStart.length, 0)
+    assert.equal(planMonthlyReview(candidates, new Set(), new Set()).status, 'STARTED')
+  })
+
+  it('getVideoReplayState xét cả sao quiz của bài trong tháng và nhiệm kỳ', async (t) => {
+    const prismaModule = require('../lib/prisma')
+    const original = prismaModule.prisma
+    t.after(() => { prismaModule.prisma = original })
+    let rows: any[] = []
+    prismaModule.prisma = {
+      learningCycle: { findFirst: async () => ({ id: 'cycle' }) },
+      competitionMonth: { findUnique: async () => ({ id: 'nov', key: '2026-11' }) },
+      video: { findUnique: async () => ({ id: 'vA', duration_seconds: 600, lesson: { assessment: { id: 'qA' } } }) },
+      cycleLessonProgress: { findUnique: async () => ({ furthest_seconds: 600 }) },
+      monthlyVideoReplay: { findUnique: async () => null },
+      starLedger: { findMany: async ({ where }: any) => {
+        assert.deepEqual(where.OR, [{ source_type: 'VIDEO', source_id: 'vA' }, { source_type: 'ASSESSMENT', source_id: 'qA' }])
+        return rows
+      } },
+    }
+    assert.equal((await getVideoReplayState('user', 'A'))?.reviewState, 'AVAILABLE')
+    rows = [{ source_type: 'ASSESSMENT', amount: 10 }]
+    const state = await getVideoReplayState('user', 'A')
+    assert.equal(state?.reviewState, 'AWARDED')
+    assert.deepEqual(state?.monthStars, { video: 0, quiz: 10 })
+  })
+})
+
+describe('thứ tự video → quiz', () => {
+  const base = { priorAttempt: false, priorAttemptBeforeMonth: false, replayExists: false, replayCompleted: false, videoDoneInEarlierMonth: false }
+  it('học lần đầu trong nhiệm kỳ không bị chặn (kể cả xem video vắt qua 2 tháng)', () => {
+    assert.equal(monthlyQuizBlock(base), null)
+    assert.equal(monthlyQuizBlock({ ...base, replayExists: true }), null)
+  })
+  it('quiz làm ở tháng trước, tháng này chưa bấm Xem lại → hướng sang Xem lại tháng này', () => {
+    assert.equal(monthlyQuizBlock({ ...base, priorAttempt: true, priorAttemptBeforeMonth: true }), 'REVIEW_NOT_STARTED')
+  })
+  it('đã bấm Xem lại mà video tháng chưa xong → chặn; xem xong → mở', () => {
+    const reset = { ...base, priorAttempt: true, priorAttemptBeforeMonth: true, replayExists: true }
+    assert.equal(monthlyQuizBlock(reset), 'MONTHLY_VIDEO_INCOMPLETE')
+    assert.equal(monthlyQuizBlock({ ...reset, replayCompleted: true }), null)
+  })
+  it('xem video tháng trước mà chưa làm quiz, tháng này bấm Xem lại → vẫn phải xem hết video trước', () => {
+    const reset = { ...base, replayExists: true, videoDoneInEarlierMonth: true }
+    assert.equal(monthlyQuizBlock(reset), 'MONTHLY_VIDEO_INCOMPLETE')
+    assert.equal(monthlyQuizBlock({ ...reset, replayCompleted: true }), null)
+  })
+  it('giao diện mở khóa ngay khi heartbeat báo video tháng xong', () => {
+    assert.equal(monthlyQuizLocked({ reason: 'MONTHLY_VIDEO_INCOMPLETE' }, true), null)
+    assert.equal(monthlyQuizLocked({ reason: 'MONTHLY_VIDEO_INCOMPLETE' }, false), 'MONTHLY_VIDEO_INCOMPLETE')
+    assert.equal(monthlyQuizLocked({ reason: 'REVIEW_NOT_STARTED' }, true), 'REVIEW_NOT_STARTED')
+    assert.equal(monthlyQuizLocked(null, false), null)
+  })
+  it('server cổng bắt đầu bài và trang bài học dùng chung luật', () => {
+    const route = read('src/app/api/v1/assessments/[assessmentId]/attempts/route.ts')
+    assert.match(route, /loadMonthlyQuizBlock\(prisma/)
+    assert.match(read('src/lib/quiz-submission.ts'), /loadMonthlyQuizBlock\(tx[\s\S]*excludeAttemptId: attempt\.id/)
+    const page = read('src/app/student/learning/[lessonId]/page.tsx')
+    assert.match(page, /Xem hết video trước/)
+    assert.match(read('src/app/student/learning/[lessonId]/quiz/page.tsx'), /Bấm "Xem lại tháng này" để làm lại/)
+  })
+})
+
+describe('quiz đạt mà 0 sao phải nói lý do', () => {
+  const ok = { passed: true, amount: 0, hasCourse: true, videoDone: true, monthlyReplayDone: true, eligible: true, paused: false }
+  it('mỗi trường hợp có mã lý do và lời nhắn', () => {
+    assert.equal(quizRewardReason({ ...ok, amount: 10 }), 'AWARDED')
+    assert.equal(quizRewardReason({ ...ok, passed: false }), 'NOT_PASSED')
+    assert.equal(quizRewardReason(ok), 'ALREADY_AWARDED')
+    assert.equal(quizRewardReason({ ...ok, monthlyReplayDone: false }), 'MONTHLY_VIDEO_INCOMPLETE')
+    assert.equal(quizRewardReason({ ...ok, eligible: false, paused: true }), 'CHAPTER_PAUSED')
+    assert.equal(quizRewardReason({ ...ok, eligible: false }), 'REWARD_NOT_ELIGIBLE')
+    for (const code of ['ALREADY_AWARDED', 'MONTHLY_VIDEO_INCOMPLETE', 'CHAPTER_PAUSED', 'REWARD_NOT_ELIGIBLE'] as const) {
+      assert.ok(quizRewardMessages[code].length > 10)
+    }
+  })
+  it('API nộp bài trả mã lý do để trang quiz hiển thị', () => {
+    assert.match(read('src/app/api/v1/attempts/[attemptId]/submit/route.ts'), /reasonCode, message: reasonCode \? quizRewardMessages\[reasonCode\]/)
+  })
+})
+
+describe('lịch sử theo tháng có cả video và quiz', () => {
+  it('nhãn chip tháng trước', () => {
+    assert.equal(monthHistoryLabel({ awardedStars: 5, completed: true, watchedSeconds: 19, quiz: { attempted: 1, passed: true, stars: 10 } }), 'video +5 ⭐ · quiz đạt +10 ⭐')
+    assert.equal(monthHistoryLabel({ awardedStars: 5, completed: true, watchedSeconds: 19, quiz: { attempted: 0, passed: false, stars: 0 } }), 'video +5 ⭐ · chưa làm quiz')
+    assert.equal(monthHistoryLabel({ awardedStars: 0, completed: false, watchedSeconds: 0, quiz: { attempted: 2, passed: false, stars: 0 } }), 'chưa xem video · quiz chưa đạt')
+    assert.equal(monthHistoryLabel({ awardedStars: 0, completed: true, watchedSeconds: 19, quiz: { attempted: 1, passed: true, stars: 0 } }), 'video ✓ đã xem · quiz đạt, 0 ⭐')
+    assert.equal(monthHistoryLabel({ awardedStars: 0, completed: false, watchedSeconds: 7, quiz: null }), 'video 7s')
+  })
+  it('ô tháng này', () => {
+    const quiz = { attempted: 0, passed: false, stars: 0 }
+    assert.equal(thisMonthQuizLabel({ quiz, locked: 'MONTHLY_VIDEO_INCOMPLETE', monthlyPending: false, reviewStarted: true, monthlyPassed: false }), 'quiz: xem hết video trước')
+    assert.equal(thisMonthQuizLabel({ quiz: { attempted: 1, passed: true, stars: 10 }, locked: null, monthlyPending: false, reviewStarted: true, monthlyPassed: true }), 'quiz đạt +10 ⭐')
+    assert.equal(thisMonthQuizLabel({ quiz, locked: null, monthlyPending: true, reviewStarted: true, monthlyPassed: false }), 'quiz chưa làm lại')
+    assert.equal(thisMonthQuizLabel({ quiz, locked: null, monthlyPending: false, reviewStarted: false, monthlyPassed: false }), 'chưa làm quiz')
+  })
+  it('API tiến độ trả quiz theo tháng', () => {
+    const route = read('src/app/api/v1/lessons/[lessonId]/progress/route.ts')
+    assert.match(route, /source_type: 'ASSESSMENT', source_id: assessmentId/)
+    assert.match(route, /quizThisMonth: historyData\.quizThisMonth/)
+    assert.match(route, /monthlyQuizBlock:/)
+  })
 })
 
 describe('API monthly-review', () => {
@@ -356,7 +506,9 @@ describe('Xem lại tháng này reset cả video và bài kiểm tra', () => {
 
   it('quiz chặn làm lại khi lượt tháng đã mở mà video chưa xem xong, kể cả trong cùng tháng', () => {
     const source = readFileSync(path.join(__dirname, '../app/api/v1/assessments/[assessmentId]/attempts/route.ts'), 'utf8')
-    assert.match(source, /const reviewOpen = Boolean\(replay && !replay\.completed_at\)/)
-    assert.match(source, /if \(priorAttempt && \(earlierMonth \|\| reviewOpen\)\)/)
+    assert.match(source, /const block = await loadMonthlyQuizBlock\(prisma/)
+    assert.match(source, /if \(block\)/)
+    // Quiz đã làm trong cùng tháng, rồi bấm Xem lại: lượt tháng mở mà video chưa xong thì chặn.
+    assert.equal(monthlyQuizBlock({ priorAttempt: true, priorAttemptBeforeMonth: false, replayExists: true, replayCompleted: false, videoDoneInEarlierMonth: false }), 'MONTHLY_VIDEO_INCOMPLETE')
   })
 })

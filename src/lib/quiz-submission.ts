@@ -7,6 +7,8 @@ import { syncCourseAssignmentCompletion } from './learning-assignments'
 import { persistLearningUnlocks } from './learning-unlocks'
 import { chapterRewardState } from './chapter-reward-gate'
 import { hasWatchedFullVideo, endedCompletionToleranceSeconds } from './video-progress-rules'
+import { loadMonthlyQuizBlock } from './monthly-review'
+import { quizRewardReason } from './monthly-review-state'
 
 /** Both submission entry points use this transaction, including completion and rewards. */
 export async function submitQuiz(input: { attemptId: string; userId?: string; auto?: boolean; answers?: Record<string, unknown> }) {
@@ -80,6 +82,7 @@ export async function submitQuiz(input: { attemptId: string; userId?: string; au
     const courseId = assessment.course_id || assessment.lesson?.session.course_id
     let amount = 0
     let rewardKey: string | null = null
+    let rewardFacts = { videoDone: true, monthlyReplayDone: true, eligible: false, paused: false }
     if (grading.passed && courseId) {
       let isLessonFullyComplete = true
       if (assessment.lesson_id) {
@@ -116,10 +119,19 @@ export async function submitQuiz(input: { attemptId: string; userId?: string; au
       // Stars of the new month still need a completed replay in this month (business rule).
       const lessonVideoId = assessment.lesson_id ? assessment.lesson?.video?.id : undefined
       const needsMonthlyReplay = Boolean(lessonVideoId && attempt.started_at < context.month.starts_at)
-      const monthlyReplayDone = !needsMonthlyReplay || Boolean((await tx.monthlyVideoReplay.findUnique({
+      let monthlyReplayDone = !needsMonthlyReplay || Boolean((await tx.monthlyVideoReplay.findUnique({
         where: { user_id_video_id_competition_month_id_learning_cycle_id: { user_id: userId, video_id: lessonVideoId!, competition_month_id: context.month.id, learning_cycle_id: context.cycle.id } },
         select: { completed_at: true },
       }))?.completed_at)
+      // Same video → quiz order as the start gate: an attempt resumed across "Xem lại tháng này"
+      // earns this month's quiz star only after this month's video is finished.
+      if (monthlyReplayDone && lessonVideoId) {
+        monthlyReplayDone = !(await loadMonthlyQuizBlock(tx, {
+          userId, cycleId: context.cycle.id, videoId: lessonVideoId, assessmentId: assessment.id,
+          monthId: context.month.id, monthStartsAt: context.month.starts_at, excludeAttemptId: attempt.id,
+        }))
+      }
+      rewardFacts = { videoDone: isLessonFullyComplete, monthlyReplayDone, eligible, paused }
       if (monthlyReplayDone && (eligible || paused)) {
         const correctCount = grading.results.filter((row) => row.isCorrect).length
         const reason = assessment.type === 'COURSE_FINAL' ? 'COURSE_FINAL_PASS' as const : 'MODULE_QUIZ_PASS' as const
@@ -154,6 +166,7 @@ export async function submitQuiz(input: { attemptId: string; userId?: string; au
       await enqueueAssignmentSync(tx, userId, `submit:${attempt.id}`)
     }
     const balance = await tx.starLedger.aggregate({ where: { user_id: userId }, _sum: { amount: true } })
-    return { grading, amount, rewardKey, balance: balance._sum.amount || 0, repeated: false }
+    const reasonCode = quizRewardReason({ passed: grading.passed, amount, hasCourse: Boolean(courseId), ...rewardFacts })
+    return { grading, amount, rewardKey, balance: balance._sum.amount || 0, repeated: false, reasonCode }
   }, { timeout: 30_000 })
 }

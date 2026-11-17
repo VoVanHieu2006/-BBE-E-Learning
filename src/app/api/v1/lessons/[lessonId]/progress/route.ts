@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { ensureCompetitionMonth } from '@/lib/learning-periods'
-import { lessonsWithMonthlyQuizPassed } from '@/lib/monthly-review'
+import { lessonsWithMonthlyQuizPassed, loadMonthlyQuizBlock } from '@/lib/monthly-review'
+import { competitionMonthBounds } from '@/lib/learning-cycle-rules'
 import { authenticate } from '@/lib/auth'
 import { recordVideoHeartbeat, getVideoReplayState } from '@/lib/video-heartbeat'
 import { prisma } from '@/lib/prisma'
@@ -11,7 +12,7 @@ import { capVideoProgress, displayVideoProgressPercent, hasWatchedFullVideo, end
 import { isLearningManager } from '@/lib/manager-learning-access'
 import { readinessForReason } from '@/lib/learning-readiness-rules'
 import { chapterRewardState } from '@/lib/chapter-reward-gate'
-import { monthlyReplayPercent, previousReplayHistory } from '@/lib/monthly-review-state'
+import { monthlyQuizBlockMessages, monthlyReplayPercent, previousReplayHistory } from '@/lib/monthly-review-state'
 
 /**
  * PATCH / POST /api/v1/lessons/[lessonId]/progress
@@ -66,7 +67,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { lesson
 
   // Attach live video replay history and monthly stars so frontend syncs immediately
   if (result && ('starReward' in result || 'videoCompleted' in result || event === 'ENDED')) {
-    const historyData = await getLessonVideoHistory(userId, (result as any).videoId || null, (result as any).replay)
+    const historyData = await getLessonVideoHistory(userId, params.lessonId, (result as any).videoId || null, (result as any).replay)
     Object.assign(result, historyData)
   }
 
@@ -77,7 +78,8 @@ export async function POST(request: NextRequest, context: { params: { lessonId: 
   return PATCH(request, context)
 }
 
-async function getLessonVideoHistory(userId: string, videoId: string | null, replay: any) {
+/** Per-month history of one lesson: the monthly video replay and its stars, plus the quiz of that month. */
+async function getLessonVideoHistory(userId: string, lessonId: string, videoId: string | null, replay: any) {
   if (!videoId) {
     return {
       videoStarsThisMonth: {
@@ -86,9 +88,11 @@ async function getLessonVideoHistory(userId: string, videoId: string | null, rep
         awardedStars: 0,
         suppressed: Boolean(replay?.suppressed),
       },
+      quizThisMonth: null,
       replayHistory: [],
     }
   }
+  const assessmentId = (await prisma.assessment.findUnique({ where: { lesson_id: lessonId }, select: { id: true } }))?.id || null
 
   const now = new Date()
   const recentMonths = await prisma.competitionMonth.findMany({
@@ -99,6 +103,31 @@ async function getLessonVideoHistory(userId: string, videoId: string | null, rep
   })
   const monthIds = recentMonths.map((row) => row.id)
   const currentMonth = recentMonths.find((row) => row.starts_at.getTime() <= now.getTime() && row.ends_at.getTime() > now.getTime())
+  const oldestStart = recentMonths.length ? recentMonths[recentMonths.length - 1].starts_at : now
+  const [quizAttempts, quizStarRows] = assessmentId && monthIds.length ? await Promise.all([
+    prisma.attempt.findMany({
+      where: { user_id: userId, assessment_id: assessmentId, status: { in: ['SUBMITTED', 'AUTO_SUBMITTED'] }, submitted_at: { gte: oldestStart } },
+      select: { submitted_at: true, passed: true, score: true },
+    }),
+    prisma.starLedger.findMany({
+      where: { user_id: userId, source_type: 'ASSESSMENT', source_id: assessmentId, competition_month_id: { in: monthIds } },
+      select: { competition_month_id: true, amount: true },
+    }),
+  ]) : [[], []]
+  const quizByMonth = new Map<string, { attempted: number; passed: boolean; bestScorePercent: number; stars: number }>()
+  const quizFor = (monthId: string) => {
+    if (!quizByMonth.has(monthId)) quizByMonth.set(monthId, { attempted: 0, passed: false, bestScorePercent: 0, stars: 0 })
+    return quizByMonth.get(monthId)!
+  }
+  for (const attempt of quizAttempts) {
+    const month = recentMonths.find((row) => attempt.submitted_at && row.starts_at <= attempt.submitted_at && row.ends_at > attempt.submitted_at)
+    if (!month) continue
+    const entry = quizFor(month.id)
+    entry.attempted += 1
+    entry.passed = entry.passed || Boolean(attempt.passed)
+    entry.bestScorePercent = Math.max(entry.bestScorePercent, Math.round(Number(attempt.score || 0) * 100))
+  }
+  for (const star of quizStarRows) if (star.competition_month_id) quizFor(star.competition_month_id).stars += star.amount
   const [replayRows, videoStarRows] = monthIds.length ? await Promise.all([
     prisma.monthlyVideoReplay.findMany({
       where: { user_id: userId, video_id: videoId, competition_month_id: { in: monthIds } },
@@ -126,8 +155,9 @@ async function getLessonVideoHistory(userId: string, videoId: string | null, rep
       completedAt: replayRecord?.completed_at || null,
       lastHeartbeatAt: replayRecord?.last_heartbeat_at || null,
       awardedStars: starsByMonth.get(month.id) || 0,
+      quiz: assessmentId ? (quizByMonth.get(month.id) || { attempted: 0, passed: false, bestScorePercent: 0, stars: 0 }) : null,
     }
-  }).filter((row) => row.watchedSeconds > 0 || row.awardedStars > 0)
+  }).filter((row) => row.watchedSeconds > 0 || row.awardedStars > 0 || (row.quiz && (row.quiz.attempted > 0 || row.quiz.stars > 0)))
   const thisMonthReplay = currentMonth ? replayHistory.find((row) => row.competitionMonthId === currentMonth.id) || null : null
 
   return {
@@ -137,6 +167,7 @@ async function getLessonVideoHistory(userId: string, videoId: string | null, rep
       awardedStars: thisMonthReplay?.awardedStars ?? 0,
       suppressed: Boolean(replay?.suppressed),
     },
+    quizThisMonth: assessmentId && currentMonth ? (quizByMonth.get(currentMonth.id) || { attempted: 0, passed: false, bestScorePercent: 0, stars: 0 }) : null,
     replayHistory: previousReplayHistory(replayHistory, currentMonth?.id || null),
   }
 }
@@ -196,7 +227,15 @@ export async function GET(request: NextRequest, { params }: { params: { lessonId
 
   // ---- Per-video learning history (LearningCycle + MonthlyVideoReplay + StarLedger) ----
   const videoId = video?.id || null
-  const historyData = await getLessonVideoHistory(userId, videoId, replay)
+  const historyData = await getLessonVideoHistory(userId, params.lessonId, videoId, replay)
+  const assessmentId = (await prisma.assessment.findUnique({ where: { lesson_id: params.lessonId }, select: { id: true } }))?.id || null
+  // Video → quiz order for a monthly retake, so the lesson and quiz pages lock the same way the server does.
+  const monthlyQuizBlockReason = cycle && video && assessmentId
+    ? await loadMonthlyQuizBlock(prisma, {
+        userId, cycleId: cycle.id, videoId: video.id, assessmentId,
+        monthId: month?.id ?? null, monthStartsAt: month?.starts_at ?? competitionMonthBounds(asOf).startsAt,
+      })
+    : null
   let rewardReason = !cycle ? 'CYCLE_NOT_STARTED' : !month ? 'MONTH_NOT_CONFIGURED' : replay?.suppressed ? 'SUPPRESSED' : replay?.reviewAvailable ? 'REVIEW_NOT_STARTED' : !replay?.lastHeartbeatAt ? 'REPLAY_NOT_STARTED' : 'REPLAY_INCOMPLETE'
   const gate = cycle && month ? await chapterRewardState(prisma, userId, asOf) : null
   if (cycle && month && replay?.completed && !replay.suppressed && video) {
@@ -221,6 +260,9 @@ export async function GET(request: NextRequest, { params }: { params: { lessonId
     monthlyQuizPassed: cycle && month ? (await lessonsWithMonthlyQuizPassed(userId, cycle.id, month.id, [{ lessonId: params.lessonId, videoId: video?.id || null }])).has(params.lessonId) : false,
     monthPercent: monthlyReplayPercent(replay?.watchedSeconds || 0, duration),
     videoStarsThisMonth: historyData.videoStarsThisMonth,
+    quizThisMonth: historyData.quizThisMonth,
+    monthStars: replay?.monthStars ?? null,
+    monthlyQuizBlock: monthlyQuizBlockReason ? { reason: monthlyQuizBlockReason, message: monthlyQuizBlockMessages[monthlyQuizBlockReason] } : null,
     replayHistory: historyData.replayHistory,
     id: params.lessonId,
     completed: isLessonCompleted,

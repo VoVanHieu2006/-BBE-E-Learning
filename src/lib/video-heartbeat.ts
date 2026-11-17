@@ -15,8 +15,8 @@ import { persistLearningUnlocks } from './learning-unlocks'
 import { checkLessonProgression } from './progression'
 import { chapterRewardState } from './chapter-reward-gate'
 import { readinessForReason } from './learning-readiness-rules'
-import { isFreeReviewLesson, cycleVideoAlreadyComplete } from './monthly-review'
-import { getMonthlyReviewState, monthlyReplayPercent } from './monthly-review-state'
+import { isFreeReviewLesson, cycleVideoAlreadyComplete, lessonStarsThisMonth } from './monthly-review'
+import { getMonthlyReviewState, lessonAwardedThisMonth, monthlyReplayPercent } from './monthly-review-state'
 
 export type VideoHeartbeatEvent = 'PLAY' | 'HEARTBEAT' | 'PAUSE' | 'ENDED'
 
@@ -287,11 +287,8 @@ export async function recordVideoHeartbeat(
     }
     const effectiveVideoCompleted = cycleVideoComplete
     const progressPercentage = displayVideoProgressPercent(finalCycleFurthest, safeDuration, effectiveVideoCompleted)
-    const monthlyAward = await tx.starLedger.findUnique({
-      where: { reward_key: `video:${userId}:${lesson.video.id}:${context.month.id}:${context.cycle.id}` },
-      select: { id: true },
-    })
-    const reviewState = getMonthlyReviewState(effectiveVideoCompleted, freeReview, Boolean(monthlyAward))
+    const monthStars = await lessonStarsThisMonth(tx, userId, context.cycle.id, context.month.id, { videoId: lesson.video.id, assessmentId: lesson.assessment?.id })
+    const reviewState = getMonthlyReviewState(effectiveVideoCompleted, freeReview, lessonAwardedThisMonth(monthStars))
     const monthPercent = monthlyReplayPercent(Math.floor(rewardComplete && safeDuration > 0 ? safeDuration : replayFurthest), safeDuration)
 
     return {
@@ -356,10 +353,10 @@ export async function getVideoReplayState(userId: string, lessonId: string, at =
   const [cycle, month, video] = await Promise.all([
     prisma.learningCycle.findFirst({ where: { user_id: userId, starts_at: { lte: at }, ends_at: null } }),
     ensureCompetitionMonth(prisma, at),
-    prisma.video.findUnique({ where: { lesson_id: lessonId }, select: { id: true, duration_seconds: true } }),
+    prisma.video.findUnique({ where: { lesson_id: lessonId }, select: { id: true, duration_seconds: true, lesson: { select: { assessment: { select: { id: true } } } } } }),
   ])
   if (!cycle || !month || !video) return null
-  const [replay, cycleProgress, monthlyAward] = await Promise.all([
+  const [replay, cycleProgress, monthStars] = await Promise.all([
     prisma.monthlyVideoReplay.findUnique({
       where: {
         user_id_video_id_competition_month_id_learning_cycle_id: {
@@ -374,16 +371,14 @@ export async function getVideoReplayState(userId: string, lessonId: string, at =
       where: { user_id_lesson_id_learning_cycle_id: { user_id: userId, lesson_id: lessonId, learning_cycle_id: cycle.id } },
       select: { completed_at: true, furthest_seconds: true },
     }),
-    prisma.starLedger.findUnique({
-      where: { reward_key: `video:${userId}:${video.id}:${month.id}:${cycle.id}` },
-      select: { id: true },
-    }),
+    lessonStarsThisMonth(prisma, userId, cycle.id, month.id, { videoId: video.id, assessmentId: video.lesson?.assessment?.id }),
   ])
   const reviewAvailable = isFreeReviewLesson(cycleVideoAlreadyComplete(cycleProgress, Number(video.duration_seconds) || 0), Boolean(replay))
   return {
     started: !reviewAvailable,
     reviewAvailable,
-    reviewState: getMonthlyReviewState(cycleVideoAlreadyComplete(cycleProgress, Number(video.duration_seconds) || 0), reviewAvailable, Boolean(monthlyAward)),
+    reviewState: getMonthlyReviewState(cycleVideoAlreadyComplete(cycleProgress, Number(video.duration_seconds) || 0), reviewAvailable, lessonAwardedThisMonth(monthStars)),
+    monthStars,
     competitionMonth: month.key,
     competitionMonthId: month.id,
     learningCycleId: cycle.id,

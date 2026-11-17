@@ -9,7 +9,8 @@ import Modal from '@/components/ui/Modal';
 import Toast, { ToastMessage } from '@/components/ui/Toast';
 import LessonQuiz from '@/components/lesson/LessonQuiz';
 import StarRewardCelebration from '@/components/StarRewardCelebration';
-import { needsMonthlyQuiz } from '@/lib/monthly-review-state';
+import MonthlyReviewButton from '@/components/learning/MonthlyReviewButton';
+import { needsMonthlyQuiz, monthlyQuizLocked, thisMonthQuizLabel, monthHistoryLabel } from '@/lib/monthly-review-state';
 import { apiFetch, clearApiCache } from '@/lib/api/client';
 import { QUIZ_COOLDOWN_MS, QUIZ_COOLDOWN_MINUTES } from '@/lib/config/quiz';
 import { getNextLearningTarget, NextLearningTarget } from '@/lib/lesson-navigation';
@@ -41,6 +42,8 @@ export default function LessonQuizPage({ params }: { params: { lessonId: string 
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const [cooldownRemainingMs, setCooldownRemainingMs] = useState<number>(0);
   const [starReward, setStarReward] = useState<number | null>(null);
+  // Result of the last submit this visit: stars earned, or why a pass earned none.
+  const [rewardNote, setRewardNote] = useState<{ passed: boolean; amount: number; message: string } | null>(null);
   const seenRewardKeysRef = useRef<Set<string>>(new Set());
   const [nextTarget, setNextTarget] = useState<NextLearningTarget | null>(null);
 
@@ -191,6 +194,13 @@ export default function LessonQuizPage({ params }: { params: { lessonId: string 
   const monthlyVideoDone = progress?.replay?.completed === true;
   const monthKey = String(progress?.replay?.competitionMonth || '');
   const monthLabel = /^\d{4}-\d{2}$/.test(monthKey) ? `Tháng ${Number(monthKey.slice(5))}/${monthKey.slice(0, 4)}` : 'Tháng này';
+  const formatMonthKey = (key: string) => /^\d{4}-\d{2}$/.test(key) ? `${Number(key.slice(5))}/${key.slice(0, 4)}` : key;
+  // Video → quiz: mirrors the server gate on starting an attempt (admins are never gated).
+  const quizLock = role === 'ADMIN' ? null : monthlyQuizLocked(progress?.monthlyQuizBlock, monthlyVideoDone);
+  const monthPercentNow = Math.floor(Number(progress?.monthPercent ?? 0));
+  const monthVideoStars = Number(progress?.videoStarsThisMonth?.awardedStars || 0);
+  const quizThisMonth = progress?.quizThisMonth || null;
+  const monthHistory: any[] = (progress?.replayHistory || []).filter((row: any) => row.quiz);
 
   const formatCooldown = (ms: number) => {
     const totalSecs = Math.floor(ms / 1000);
@@ -319,6 +329,16 @@ export default function LessonQuizPage({ params }: { params: { lessonId: string 
       <div className={`${started ? 'max-w-5xl' : 'max-w-3xl'} mx-auto p-4 md:p-8`}>
         {started ? (
           <div className="space-y-4">
+            {rewardNote?.passed && (
+              <div
+                role="status"
+                className={`p-3 rounded-2xl border text-xs font-semibold leading-relaxed ${
+                  rewardNote.amount > 0 ? 'border-amber-200 bg-amber-50 text-amber-900' : 'border-slate-200 bg-slate-50 text-slate-700'
+                }`}
+              >
+                {rewardNote.amount > 0 ? rewardNote.message : `Đạt yêu cầu, nhưng không cộng Star: ${rewardNote.message}`}
+              </div>
+            )}
             <LessonQuiz
               key={`attempt-${attemptKey}`}
               lessonId={params.lessonId}
@@ -336,6 +356,14 @@ export default function LessonQuizPage({ params }: { params: { lessonId: string 
               onSubmitted={(resultData) => {
                 if (resultData?.passed) {
                   setQuizCompleted(true);
+                }
+                if (resultData?.starReward?.reasonCode) {
+                  const amount = Number(resultData.starReward.amount || 0);
+                  setRewardNote({
+                    passed: Boolean(resultData.passed),
+                    amount,
+                    message: amount > 0 ? `+${amount} ⭐ Star bài kiểm tra của ${monthLabel.toLowerCase()}.` : String(resultData.starReward.message || ''),
+                  });
                 }
                 if (resultData?.starReward?.awarded && Number(resultData.starReward.amount) > 0) {
                   const key = resultData.starReward.rewardKey || `quiz:${resultData.attemptId}:${resultData.starReward.amount}`;
@@ -428,50 +456,103 @@ export default function LessonQuizPage({ params }: { params: { lessonId: string 
               </div>
             )}
 
+            {quizLock === 'REVIEW_NOT_STARTED' && (
+              <div role="status" className="p-4 rounded-2xl border border-blue-200 bg-blue-50 text-xs text-[#172554] leading-relaxed space-y-3">
+                <p>
+                  <span className="font-bold">Bạn đã làm bài kiểm tra này ở tháng trước.</span>{' '}
+                  Muốn làm lại để nhận Star {monthLabel.toLowerCase()}, hãy bấm &quot;Xem lại tháng này&quot;: video về 0% và bài kiểm tra về &quot;chưa làm&quot;.
+                  Xem hết video rồi mới làm lại bài kiểm tra.
+                </p>
+                {progress?.reviewState && (
+                  <MonthlyReviewButton
+                    key={`${params.lessonId}:${monthKey}`}
+                    state={progress.reviewState}
+                    scope={{ lessonId: params.lessonId }}
+                    monthLabel={monthKey ? formatMonthKey(monthKey) : undefined}
+                    label="Xem lại tháng này"
+                    onDone={() => router.push(`/student/learning/${params.lessonId}`)}
+                  />
+                )}
+              </div>
+            )}
+
+            {/* Kết quả theo tháng: tháng này + những tháng trước (video và bài kiểm tra) */}
             {attemptsAvailable && (
-              <div className="p-4 bg-[#f8f9ff] border border-[#eff4ff] rounded-2xl space-y-2.5">
-                <h3 className="text-xs font-bold text-[#172554] uppercase tracking-wide">Kết quả của bạn</h3>
-
-                {submittedCount === 0 ? (
-                  <p className="text-xs text-[#737686]">Bạn chưa hoàn thành lượt nộp bài nào.</p>
-                ) : (
-                  <div className="space-y-2">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                      {latestSubmitted && (
-                        <div
-                          className={`p-3 rounded-xl border ${
-                            latestSubmitted.passed
-                              ? 'bg-emerald-50 border-emerald-200 text-emerald-950'
-                              : 'bg-orange-50 border-orange-200 text-orange-950'
-                          }`}
-                        >
-                          <p className="text-[11px] font-semibold text-[#737686]">Điểm lần gần nhất:</p>
-                          <p className="text-base font-extrabold mt-0.5">
-                            {Math.round(latestSubmitted.score || 0)}% —{' '}
-                            <span className="text-xs font-bold">
-                              {latestSubmitted.passed ? '✓ Đạt' : '✗ Chưa đạt'}
-                            </span>
-                          </p>
-                          <p className="text-[10px] text-[#737686] mt-1">{formatDate(latestSubmitted.submittedAt)}</p>
-                        </div>
-                      )}
-
-                      {highestScore !== null && (
-                        <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-950">
-                          <p className="text-[11px] font-semibold text-blue-700">Điểm cao nhất đạt được:</p>
-                          <p className="text-base font-extrabold text-[#2563EB] mt-0.5">{highestScore}%</p>
-                          <p className="text-[10px] text-[#737686] mt-1">Tổng cộng đã nộp: {submittedCount} lượt</p>
-                        </div>
+              <div className="p-4 bg-[#f8f9ff] border border-[#eff4ff] rounded-2xl space-y-3">
+                <div className="space-y-1.5">
+                  <h3 className="text-xs font-bold text-[#172554] uppercase tracking-wide">{monthLabel}</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                    <div className="p-3 rounded-xl border border-blue-200 bg-blue-50 text-blue-950">
+                      <p className="text-[11px] font-semibold text-blue-700">Video tháng này</p>
+                      <p className="text-sm font-extrabold mt-0.5">
+                        {monthlyVideoDone ? '✓ Hoàn thành' : progress?.replay?.reviewAvailable ? 'Chưa bấm xem lại' : `${monthPercentNow}%`}
+                        {monthVideoStars > 0 && <span className="ml-1.5 text-amber-700">+{monthVideoStars} ⭐</span>}
+                      </p>
+                    </div>
+                    <div
+                      className={`p-3 rounded-xl border ${
+                        (quizThisMonth?.stars || 0) > 0 || (progress?.replay?.started && progress?.monthlyQuizPassed)
+                          ? 'bg-emerald-50 border-emerald-200 text-emerald-950'
+                          : 'bg-white border-[#e5eeff] text-[#172554]'
+                      }`}
+                    >
+                      <p className="text-[11px] font-semibold text-[#737686]">Bài kiểm tra tháng này</p>
+                      <p className="text-sm font-extrabold mt-0.5">
+                        {thisMonthQuizLabel({
+                          quiz: quizThisMonth, locked: quizLock, monthlyPending,
+                          reviewStarted: Boolean(progress?.replay?.started), monthlyPassed: progress?.monthlyQuizPassed === true,
+                        })}
+                      </p>
+                      {(quizThisMonth?.attempted || 0) > 0 && (
+                        <p className="text-[10px] text-[#737686] mt-1">
+                          {quizThisMonth.attempted} lượt nộp trong tháng · điểm cao nhất {quizThisMonth.bestScorePercent}%
+                        </p>
                       )}
                     </div>
                   </div>
-                )}
+                  {latestSubmitted && (
+                    <p className="text-[10px] text-[#737686]">
+                      Lần nộp gần nhất: {Math.round(latestSubmitted.score || 0)}% — {latestSubmitted.passed ? 'đạt' : 'chưa đạt'} · {formatDate(latestSubmitted.submittedAt)}
+                    </p>
+                  )}
+                </div>
+
+                <div className="pt-2 border-t border-dashed border-[#e5eeff] space-y-1.5">
+                  <h3 className="text-[10px] font-bold text-[#737686] uppercase tracking-wide">Những tháng trước</h3>
+                  {monthHistory.length === 0 ? (
+                    <p className="text-xs text-[#737686]">Chưa có tháng nào trước đó.</p>
+                  ) : (
+                    <ul className="space-y-1">
+                      {monthHistory.map((row: any) => (
+                        <li key={row.competitionMonthId} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 rounded-xl border border-[#eff4ff] bg-white px-3 py-2 text-xs">
+                          <span className="font-bold text-[#172554]">{formatMonthKey(row.competitionMonth)}</span>
+                          <span className="text-[#434655]">{monthHistoryLabel(row)}</span>
+                          {row.quiz?.attempted > 0 && (
+                            <span className="w-full text-[10px] text-[#737686]">{row.quiz.attempted} lượt nộp · điểm cao nhất {row.quiz.bestScorePercent}%</span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
               </div>
             )}
 
             {/* Hành động */}
             <div className="flex flex-col sm:flex-row gap-3 pt-2">
-              {isCooldownActive ? (
+              {quizLock ? (
+                // Monthly retake not open yet: no "Làm lại" button that the server would refuse.
+                <Button
+                  variant="primary"
+                  size="lg"
+                  className="flex-1 !bg-slate-200 !text-slate-600 cursor-not-allowed font-bold"
+                  disabled
+                >
+                  {quizLock === 'MONTHLY_VIDEO_INCOMPLETE'
+                    ? `🔒 Xem hết video tháng này trước (${monthPercentNow}%)`
+                    : '🔒 Bấm "Xem lại tháng này" để làm lại'}
+                </Button>
+              ) : isCooldownActive ? (
                 <Button
                   variant="primary"
                   size="lg"
@@ -553,6 +634,7 @@ export default function LessonQuizPage({ params }: { params: { lessonId: string 
                 setShowConfirmStartModal(false);
                 setIsNewAttempt(true);
                 setAttemptKey((prev) => prev + 1);
+                setRewardNote(null);
                 setStarted(true);
               }}
             >

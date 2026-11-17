@@ -4,7 +4,7 @@ import Link from 'next/link';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import NewContentChip from '@/components/learning/NewContentChip';
-import { monthlyPlayerStart, needsMonthlyQuiz, MonthlyReviewRefreshGate } from '@/lib/monthly-review-state';
+import { monthlyPlayerStart, needsMonthlyQuiz, MonthlyReviewRefreshGate, monthHistoryLabel, monthlyQuizLocked, thisMonthQuizLabel } from '@/lib/monthly-review-state';
 import MonthlyReviewButton from '@/components/learning/MonthlyReviewButton';
 import Toast, { ToastMessage } from '@/components/ui/Toast';
 import YouTubePlayer from '@/components/YouTubePlayer';
@@ -344,6 +344,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
           lastPosition: data.lastPositionSeconds ?? prev?.lastPosition,
           ...(data.videoStarsThisMonth ? { videoStarsThisMonth: data.videoStarsThisMonth } : {}),
           ...(data.replayHistory ? { replayHistory: data.replayHistory } : {}),
+          ...(data.quizThisMonth !== undefined ? { quizThisMonth: data.quizThisMonth } : {}),
         };
       });
 
@@ -495,6 +496,12 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
   const monthPercent = Math.floor(Number(progress?.monthPercent ?? 0));
   const monthTitle = progress?.replay?.competitionMonth ? `Tháng ${formatWatchMonth(progress.replay.competitionMonth)}` : 'Tháng này';
   const monthlyQuiz = !isAdmin && needsMonthlyQuiz(progress?.replay, cycleVideoFull, progress?.assessmentPassed === true, progress?.monthlyQuizPassed === true);
+  // Video → quiz: same lock as the server gate on starting an attempt.
+  const quizLock = isAdmin ? null : monthlyQuizLocked(progress?.monthlyQuizBlock, progress?.replay?.completed === true);
+  const monthQuizStatus = thisMonthQuizLabel({
+    quiz: progress?.quizThisMonth, locked: quizLock, monthlyPending: monthlyQuiz,
+    reviewStarted: Boolean(progress?.replay?.started), monthlyPassed: progress?.monthlyQuizPassed === true,
+  });
   const playerStart = progress?.lessonId === currentLessonId
     ? monthlyPlayerStart(Boolean(progress?.progressContext?.monthlyReview), progress?.replay?.watchedSeconds,
         progress?.lastPosition, progress?.watchedUntil ?? progress?.furthestWatchedPositionSeconds ?? 0,
@@ -727,9 +734,8 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                   </div>
                   <p className="mt-1 text-[11px]">
                     {monthPercent}% · {progress?.replay?.completed ? 'Hoàn thành' : monthPercent > 0 ? 'Đang xem' : progress?.replay?.reviewAvailable ? 'Chưa xem lại' : 'Chưa xem'}
-                    {(progress?.videoStarsThisMonth?.awardedStars || 0) > 0 && ` · +${progress.videoStarsThisMonth.awardedStars} ⭐`}
-                    {hasQuiz && monthlyQuiz && ' · Quiz chưa đạt'}
-                    {hasQuiz && !monthlyQuiz && progress?.monthlyQuizPassed && progress?.replay?.started && ' · Quiz ✓'}
+                    {(progress?.videoStarsThisMonth?.awardedStars || 0) > 0 && ` · video +${progress.videoStarsThisMonth.awardedStars} ⭐`}
+                    {hasQuiz && ` · ${monthQuizStatus}`}
                   </p>
                   <div className="mt-2 h-1 rounded-full bg-blue-50" role="progressbar" aria-label="Video tháng này" aria-valuenow={monthPercent} aria-valuemin={0} aria-valuemax={100}>
                     <div className="h-full rounded-full bg-[#2563EB]" style={{ width: `${monthPercent}%` }} />
@@ -751,15 +757,15 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                       <span
                         key={row.competitionMonthId}
                         className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-bold ${
-                          row.awardedStars > 0
+                          row.awardedStars > 0 || (row.quiz?.stars || 0) > 0
                             ? 'border-amber-200 bg-amber-50 text-amber-800'
                             : row.completed
                               ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
                               : 'border-[#cbdbf5] bg-white text-slate-600'
                         }`}
-                        title={`Đã xem ${row.watchedSeconds}s`}
+                        title={`Đã xem ${row.watchedSeconds}s${row.quiz ? ` · quiz: ${row.quiz.attempted} lượt nộp, điểm cao nhất ${row.quiz.bestScorePercent}%` : ''}`}
                       >
-                        {formatWatchMonth(row.competitionMonth)}: {row.awardedStars > 0 ? `+${row.awardedStars} ⭐` : row.completed ? '✓ đã xem lại' : `${row.watchedSeconds}s`}
+                        {formatWatchMonth(row.competitionMonth)}: {monthHistoryLabel(row)}
                       </span>
                     ))}
                   </div>
@@ -988,7 +994,11 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                       📝 {lesson.assessment.title || 'Bài kiểm tra bài học'} <NewContentChip show={progress?.quizIsNew} />
                     </h3>
                     <p className="text-xs text-[#737686] leading-relaxed max-w-xl">
-                      {monthlyQuiz
+                      {quizLock === 'MONTHLY_VIDEO_INCOMPLETE'
+                        ? `Bạn đã bấm "Xem lại tháng này": xem hết video ${monthTitle.toLowerCase()} (đang ${monthPercent}%) rồi mới làm bài kiểm tra.`
+                        : quizLock === 'REVIEW_NOT_STARTED'
+                        ? 'Bạn đã làm bài kiểm tra này ở tháng trước. Muốn làm lại để nhận Star tháng này, hãy bấm "Xem lại tháng này" ở phía trên rồi xem hết video trước.'
+                        : monthlyQuiz
                         ? progress?.replay?.completed
                           ? `Bạn đã xem lại video ${monthTitle.toLowerCase()}. Làm lại bài kiểm tra để được ghi nhận đạt của tháng này (kết quả nhiệm kỳ vẫn giữ).`
                           : 'Bạn đã bấm "Xem lại tháng này": video và bài kiểm tra được làm lại cùng nhau. Xem hết video tháng này trước, rồi làm lại bài kiểm tra.'
@@ -997,10 +1007,17 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                         : 'Hoàn thành bài kiểm tra (đạt từ 85%) để vượt qua bài học. Trang làm bài sẽ tách riêng để bạn tập trung.'}
                     </p>
                   </div>
-                  {isAdmin || progress?.canAssess === true ? (
+                  {quizLock === 'MONTHLY_VIDEO_INCOMPLETE' ? (
+                    <div className="shrink-0 flex flex-col sm:items-end gap-1">
+                      <Button variant="secondary" disabled className="!bg-slate-100 !text-slate-500 !border-slate-200 cursor-not-allowed font-bold">
+                        🔒 Xem hết video trước ({monthPercent}%)
+                      </Button>
+                      <span className="text-[10px] text-amber-700 font-medium">Bài kiểm tra tháng này mở khi video tháng này đạt 100%.</span>
+                    </div>
+                  ) : isAdmin || progress?.canAssess === true ? (
                     <Link href={`/student/learning/${currentLessonId}/quiz`} className="shrink-0">
                       <Button variant="primary">
-                        {monthlyQuiz ? 'Làm lại bài kiểm tra →' : progress?.assessmentPassed ? 'Xem bài kiểm tra →' : 'Vào làm bài kiểm tra →'}
+                        {monthlyQuiz && !quizLock ? 'Làm lại bài kiểm tra →' : progress?.assessmentPassed ? 'Xem bài kiểm tra →' : 'Vào làm bài kiểm tra →'}
                       </Button>
                     </Link>
                   ) : (
