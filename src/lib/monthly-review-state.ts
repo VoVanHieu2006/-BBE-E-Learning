@@ -18,8 +18,18 @@ export function monthlyPlayerStart(monthlyReview: boolean, watchedSeconds: numbe
   return { initialFurthest: furthest, initialPosition: completed && position >= duration - 5 ? 0 : position }
 }
 
-export function needsMonthlyQuiz(replay: { started?: boolean; completed?: boolean } | null | undefined, cycleVideoComplete: boolean): boolean {
-  return Boolean(cycleVideoComplete && replay?.started && !replay.completed)
+/**
+ * A lesson re-opened with "Xem lại tháng này" needs its quiz passed again in this month
+ * (the quiz star is per month). Stays pending after the monthly video is done and until a
+ * passing attempt is submitted this month. A first watch in the term is a normal quiz.
+ */
+export function needsMonthlyQuiz(
+  replay: { started?: boolean; completed?: boolean } | null | undefined,
+  cycleVideoComplete: boolean,
+  termQuizPassed = true,
+  monthlyQuizPassed = false,
+): boolean {
+  return Boolean(cycleVideoComplete && replay?.started && termQuizPassed && !monthlyQuizPassed)
 }
 
 export function getMonthlyReviewState(

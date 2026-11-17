@@ -487,7 +487,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
   const remainingVideoSeconds = lessonDuration > 0 ? Math.max(0, Math.ceil(lessonDuration - cycleFurthest)) : 0;
 
   const monthPercent = Math.floor(Number(progress?.monthPercent ?? 0));
-  const monthlyQuiz = !isAdmin && needsMonthlyQuiz(progress?.replay, cycleVideoFull);
+  const monthlyQuiz = !isAdmin && needsMonthlyQuiz(progress?.replay, cycleVideoFull, progress?.assessmentPassed === true, progress?.monthlyQuizPassed === true);
   const playerStart = progress?.lessonId === currentLessonId
     ? monthlyPlayerStart(Boolean(progress?.progressContext?.monthlyReview), progress?.replay?.watchedSeconds,
         progress?.lastPosition, progress?.watchedUntil ?? progress?.furthestWatchedPositionSeconds ?? 0,
@@ -719,7 +719,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                     )}
                   </div>
                   <p className="mt-1 text-[11px]">
-                    {monthPercent}% · {progress?.replay?.completed ? 'Hoàn thành' : progress?.replay?.started ? 'Đang xem' : 'Chưa xem lại'}
+                    {monthPercent}% · {progress?.replay?.completed ? 'Hoàn thành' : monthPercent > 0 ? 'Đang xem' : progress?.replay?.reviewAvailable ? 'Chưa xem lại' : 'Chưa xem'}
                     {(progress?.videoStarsThisMonth?.awardedStars || 0) > 0 && ` · +${progress.videoStarsThisMonth.awardedStars} ⭐`}
                   </p>
                   <div className="mt-2 h-1 rounded-full bg-blue-50" role="progressbar" aria-label="Video tháng này" aria-valuenow={monthPercent} aria-valuemin={0} aria-valuemax={100}>
@@ -1061,7 +1061,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                           const isCurrent = lId === currentLessonId;
                           const learningState = courseProgress?.sessions?.find((ps: any) => ps.sessionId === sId)?.lessons?.find((pl: any) => pl.lessonId === lId);
                           const displayState = isCurrent && !loadingLesson && progress?.lessonId === lId ? progress : learningState;
-                          const monthlyQuizPending = !isLeaderOrAdmin && needsMonthlyQuiz(displayState?.replay, Boolean(displayState?.videoCompleted));
+                          const monthlyQuizPending = !isLeaderOrAdmin && needsMonthlyQuiz(displayState?.replay, Boolean(displayState?.videoCompleted), displayState?.assessmentPassed === true, displayState?.monthlyQuizPassed === true);
                           const isQuizPassed = isLeaderOrAdmin || displayState?.assessmentPassed === true;
                           const isLocked = !isLeaderOrAdmin && Boolean(token) && learningState?.canView === false;
                           const isLessonDone =

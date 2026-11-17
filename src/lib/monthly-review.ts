@@ -47,6 +47,20 @@ export const monthlyReviewMessages: Record<MonthlyReviewStatus, string> = {
   NOTHING_TO_REVIEW: 'Chưa có bài nào đã xem xong video để xem lại trong phạm vi này.',
 }
 
+/** Lessons (of `lessonIds`) whose quiz was passed in this term since `monthStartsAt`. */
+export async function lessonsWithQuizPassedSince(userId: string, cycleId: string, monthStartsAt: Date, lessonIds: string[]): Promise<Set<string>> {
+  if (!lessonIds.length) return new Set()
+  const rows = await prisma.attempt.findMany({
+    where: {
+      user_id: userId, learning_cycle_id: cycleId, passed: true,
+      status: { in: ['SUBMITTED', 'AUTO_SUBMITTED'] }, submitted_at: { gte: monthStartsAt },
+      assessment: { lesson_id: { in: lessonIds } },
+    },
+    select: { assessment: { select: { lesson_id: true } } },
+  })
+  return new Set(rows.flatMap((row) => row.assessment.lesson_id ? [row.assessment.lesson_id] : []))
+}
+
 /** Idempotent: chỉ tạo dòng còn thiếu, không đụng dòng đã có và không bao giờ cộng Star. */
 export async function startMonthlyReview(userId: string, lessonId: string) {
   return prisma.$transaction(async (tx: LearningTx) => {

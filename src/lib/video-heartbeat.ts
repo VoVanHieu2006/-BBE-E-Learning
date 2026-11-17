@@ -8,7 +8,7 @@ import {
   endedReachAllowanceSeconds,
 } from './video-progress-rules'
 import { heartbeatElapsed } from './learning-cycle-rules'
-import { learningContext, lockLearningUser, rewardEligibility, enqueueAssignmentSync } from './learning-periods'
+import { learningContext, lockLearningUser, rewardEligibility, enqueueAssignmentSync, ensureCompetitionMonth } from './learning-periods'
 import { starsForVideoDuration } from './reward-rules'
 import { syncCourseAssignmentCompletion } from './learning-assignments'
 import { persistLearningUnlocks } from './learning-unlocks'
@@ -355,7 +355,7 @@ export async function recordVideoHeartbeat(
 export async function getVideoReplayState(userId: string, lessonId: string, at = new Date()) {
   const [cycle, month, video] = await Promise.all([
     prisma.learningCycle.findFirst({ where: { user_id: userId, starts_at: { lte: at }, ends_at: null } }),
-    prisma.competitionMonth.findFirst({ where: { starts_at: { lte: at }, ends_at: { gt: at } } }),
+    ensureCompetitionMonth(prisma, at),
     prisma.video.findUnique({ where: { lesson_id: lessonId }, select: { id: true, duration_seconds: true } }),
   ])
   if (!cycle || !month || !video) return null

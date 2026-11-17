@@ -27,7 +27,9 @@ export default function StarRewardCelebration({ amount, message, balance, onClos
   useEffect(() => {
     const media = window.matchMedia('(prefers-reduced-motion: reduce)')
     setReducedMotion(media.matches)
-    setCount(media.matches ? amount : 0)
+    // Never show "+0" for a real reward: the count-up starts at 1.
+    const floor = Math.min(1, amount)
+    setCount(media.matches ? amount : floor)
     soundEffects.playStarChime()
     const fire = canvasRef.current ? confetti.create(canvasRef.current, { resize: true, disableForReducedMotion: true }) : null
     let frame = 0
@@ -35,7 +37,7 @@ export default function StarRewardCelebration({ amount, message, balance, onClos
     const tick = (now: number) => {
       if (media.matches) { setCount(amount); return }
       const fraction = Math.min(1, Math.max(0, (now - start - 1200) / 1100))
-      setCount(Math.round(amount * (1 - Math.pow(1 - fraction, 3))))
+      setCount(Math.max(floor, Math.round(amount * (1 - Math.pow(1 - fraction, 3)))))
       if (fraction < 1) frame = requestAnimationFrame(tick)
     }
     if (!media.matches) frame = requestAnimationFrame(tick)

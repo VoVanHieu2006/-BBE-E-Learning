@@ -20,7 +20,7 @@ describe('monthly review v2 presentation state', () => {
     const keys: string[] = []
     prismaModule.prisma = {
       learningCycle: { findFirst: async () => ({ id: 'cycle' }) },
-      competitionMonth: { findFirst: async () => ({ id: monthId, key: `2026-${monthId === 'nov' ? '11' : '12'}` }) },
+      competitionMonth: { findUnique: async () => ({ id: monthId, key: `2026-${monthId === 'nov' ? '11' : '12'}` }) },
       video: { findUnique: async () => ({ id: 'vA', duration_seconds: 600 }) },
       cycleLessonProgress: { findUnique: async () => ({ furthest_seconds: 600 }) },
       monthlyVideoReplay: { findUnique: async ({ where }: any) => {
@@ -90,10 +90,15 @@ describe('monthly review v2 presentation state', () => {
 
   it('labels an opened, unfinished monthly replay quiz even if the term quiz passed', () => {
     assert.equal(needsMonthlyQuiz({ started: true, completed: false }, true), true)
-    assert.equal(needsMonthlyQuiz({ started: true, completed: true }, true), false)
+    assert.equal(needsMonthlyQuiz({ started: true, completed: true }, true, true, true), false)
     assert.equal(needsMonthlyQuiz({ started: false, completed: false }, true), false)
     assert.equal(needsMonthlyQuiz(undefined, true), false)
     assert.equal(needsMonthlyQuiz({ started: true, completed: false }, false), false)
+    // stays pending after the monthly video is done, until the quiz is passed this month
+    assert.equal(needsMonthlyQuiz({ started: true, completed: true }, true, true, false), true)
+    assert.equal(needsMonthlyQuiz({ started: true, completed: true }, true, true, true), false)
+    // a first watch in the term (quiz never passed) is a normal quiz, not a monthly retake
+    assert.equal(needsMonthlyQuiz({ started: true, completed: true }, true, false, false), false)
   })
   it('keeps completed lessons visible after starting and after receiving a reward', () => {
     assert.equal(getMonthlyReviewState(false, false, false), null)

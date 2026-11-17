@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { ensureCompetitionMonth } from '@/lib/learning-periods'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { readLessonLearningStates } from '@/lib/lesson-learning-state'
@@ -17,7 +18,7 @@ export async function GET(request: NextRequest) {
   const rewardState = await chapterRewardState(prisma, userId, now)
   const [cycle, month, allStars, user] = await Promise.all([
     prisma.learningCycle.findFirst({ where: { user_id: userId, ends_at: null } }),
-    prisma.competitionMonth.findFirst({ where: { starts_at: { lte: now }, ends_at: { gt: now } } }),
+    ensureCompetitionMonth(prisma, now),
     prisma.starLedger.aggregate({ where: { user_id: userId }, _sum: { amount: true } }),
     prisma.user.findUnique({ where: { id: userId }, select: { role: true, status: true } }),
   ])
