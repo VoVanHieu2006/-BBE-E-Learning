@@ -10,7 +10,8 @@ import Toast, { ToastMessage } from '@/components/ui/Toast';
 import LessonQuiz from '@/components/lesson/LessonQuiz';
 import StarRewardCelebration from '@/components/StarRewardCelebration';
 import MonthlyReviewButton from '@/components/learning/MonthlyReviewButton';
-import { needsMonthlyQuiz, monthlyQuizLocked, thisMonthQuizLabel, monthHistoryLabel } from '@/lib/monthly-review-state';
+import MonthStarParts, { MonthPartLabel } from '@/components/learning/MonthStarParts';
+import { needsMonthlyQuiz, monthlyQuizLocked, thisMonthQuizLabel, monthHistoryLabel, monthHistoryParts } from '@/lib/monthly-review-state';
 import { apiFetch, clearApiCache } from '@/lib/api/client';
 import { QUIZ_COOLDOWN_MS, QUIZ_COOLDOWN_MINUTES } from '@/lib/config/quiz';
 import { getNextLearningTarget, NextLearningTarget } from '@/lib/lesson-navigation';
@@ -483,7 +484,7 @@ export default function LessonQuizPage({ params }: { params: { lessonId: string 
                   <h3 className="text-xs font-bold text-[#172554] uppercase tracking-wide">{monthLabel}</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                     <div className="p-3 rounded-xl border border-blue-200 bg-blue-50 text-blue-950">
-                      <p className="text-[11px] font-semibold text-blue-700">Video tháng này</p>
+                      <p className="text-[11px] text-blue-700"><MonthPartLabel kind="video" /> tháng này</p>
                       <p className="text-sm font-extrabold mt-0.5">
                         {monthlyVideoDone ? '✓ Hoàn thành' : progress?.replay?.reviewAvailable ? 'Chưa bấm xem lại' : `${monthPercentNow}%`}
                         {monthVideoStars > 0 && <span className="ml-1.5 text-amber-700">+{monthVideoStars} ⭐</span>}
@@ -496,7 +497,7 @@ export default function LessonQuizPage({ params }: { params: { lessonId: string 
                           : 'bg-white border-[#e5eeff] text-[#172554]'
                       }`}
                     >
-                      <p className="text-[11px] font-semibold text-[#737686]">Bài kiểm tra tháng này</p>
+                      <p className="text-[11px] text-[#737686]"><MonthPartLabel kind="quiz" /> tháng này</p>
                       <p className="text-sm font-extrabold mt-0.5">
                         {thisMonthQuizLabel({
                           quiz: quizThisMonth, locked: quizLock, monthlyPending,
@@ -526,7 +527,7 @@ export default function LessonQuizPage({ params }: { params: { lessonId: string 
                       {monthHistory.map((row: any) => (
                         <li key={row.competitionMonthId} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 rounded-xl border border-[#eff4ff] bg-white px-3 py-2 text-xs">
                           <span className="font-bold text-[#172554]">{formatMonthKey(row.competitionMonth)}</span>
-                          <span className="text-[#434655]">{monthHistoryLabel(row)}</span>
+                          <span className="text-[#434655]" title={monthHistoryLabel(row)}><MonthStarParts {...monthHistoryParts(row)} /></span>
                           {row.quiz?.attempted > 0 && (
                             <span className="w-full text-[10px] text-[#737686]">{row.quiz.attempted} lượt nộp · điểm cao nhất {row.quiz.bestScorePercent}%</span>
                           )}

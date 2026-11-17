@@ -4,7 +4,8 @@ import Link from 'next/link';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import NewContentChip from '@/components/learning/NewContentChip';
-import { monthlyPlayerStart, needsMonthlyQuiz, MonthlyReviewRefreshGate, monthHistoryLabel, monthlyQuizLocked, thisMonthQuizLabel } from '@/lib/monthly-review-state';
+import { monthlyPlayerStart, needsMonthlyQuiz, MonthlyReviewRefreshGate, monthHistoryLabel, monthHistoryParts, monthlyQuizLocked, thisMonthQuizLabel } from '@/lib/monthly-review-state';
+import MonthStarParts from '@/components/learning/MonthStarParts';
 import MonthlyReviewButton from '@/components/learning/MonthlyReviewButton';
 import Toast, { ToastMessage } from '@/components/ui/Toast';
 import YouTubePlayer from '@/components/YouTubePlayer';
@@ -42,7 +43,32 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
   const [activeTab, setActiveTab] = useState<'desc' | 'docs' | 'comments' | 'quiz'>('desc');
   const [openSessions, setOpenSessions] = useState<Record<string, boolean>>({});
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  // Below `lg` the lesson list is an overlay over the lesson, not a block at the bottom of the page.
+  const [compactViewport, setCompactViewport] = useState(false);
   const [toast, setToast] = useState<ToastMessage | null>(null);
+
+  useEffect(() => {
+    const query = window.matchMedia('(max-width: 1023px)');
+    const update = () => setCompactViewport(query.matches);
+    update();
+    // On a phone the list starts closed so the video is the first thing on screen.
+    if (query.matches) setSidebarOpen(false);
+    query.addEventListener('change', update);
+    return () => query.removeEventListener('change', update);
+  }, []);
+
+  const lessonListOverlay = compactViewport && sidebarOpen;
+  useEffect(() => {
+    if (!lessonListOverlay) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setSidebarOpen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [lessonListOverlay]);
   const currentLessonIdRef = useRef(currentLessonId);
   currentLessonIdRef.current = currentLessonId;
   const pendingLessonIdRef = useRef<string | null>(null);
@@ -594,9 +620,14 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
             onClick={() => setSidebarOpen(!sidebarOpen)}
             className="px-3 py-1.5 bg-white hover:bg-[#eff4ff] border border-[#cbdbf5] text-[#172554] hover:text-[#2563EB] rounded-xl text-xs font-bold flex items-center gap-1.5 transition shadow-xs"
             title="Đóng / Mở danh sách bài học"
+            aria-label="Danh sách bài học"
+            aria-expanded={sidebarOpen}
+            aria-controls="lesson-list"
           >
-            <span>📑</span>
-            <span className="hidden md:inline">{sidebarOpen ? 'Ẩn danh sách' : 'Hiện danh sách'}</span>
+            <span aria-hidden="true">📑</span>
+            {/* Phones keep the icon only so the course title in the header stays readable. */}
+            <span className="hidden sm:inline lg:hidden">Bài học</span>
+            <span className="hidden lg:inline">{sidebarOpen ? 'Ẩn danh sách' : 'Hiện danh sách'}</span>
           </button>
         </div>
       </header>
@@ -733,9 +764,11 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                     )}
                   </div>
                   <p className="mt-1 text-[11px]">
-                    {monthPercent}% · {progress?.replay?.completed ? 'Hoàn thành' : monthPercent > 0 ? 'Đang xem' : progress?.replay?.reviewAvailable ? 'Chưa xem lại' : 'Chưa xem'}
-                    {(progress?.videoStarsThisMonth?.awardedStars || 0) > 0 && ` · video +${progress.videoStarsThisMonth.awardedStars} ⭐`}
-                    {hasQuiz && ` · ${monthQuizStatus}`}
+                    <MonthStarParts
+                      video={`${monthPercent}% · ${progress?.replay?.completed ? 'Hoàn thành' : monthPercent > 0 ? 'Đang xem' : progress?.replay?.reviewAvailable ? 'Chưa xem lại' : 'Chưa xem'}${
+                        (progress?.videoStarsThisMonth?.awardedStars || 0) > 0 ? ` +${progress.videoStarsThisMonth.awardedStars} ⭐` : ''}`}
+                      quiz={hasQuiz ? monthQuizStatus : null}
+                    />
                   </p>
                   <div className="mt-2 h-1 rounded-full bg-blue-50" role="progressbar" aria-label="Video tháng này" aria-valuenow={monthPercent} aria-valuemin={0} aria-valuemax={100}>
                     <div className="h-full rounded-full bg-[#2563EB]" style={{ width: `${monthPercent}%` }} />
@@ -763,9 +796,10 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                               ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
                               : 'border-[#cbdbf5] bg-white text-slate-600'
                         }`}
-                        title={`Đã xem ${row.watchedSeconds}s${row.quiz ? ` · quiz: ${row.quiz.attempted} lượt nộp, điểm cao nhất ${row.quiz.bestScorePercent}%` : ''}`}
+                        title={`${monthHistoryLabel(row)} · đã xem ${row.watchedSeconds}s${row.quiz ? ` · quiz: ${row.quiz.attempted} lượt nộp, điểm cao nhất ${row.quiz.bestScorePercent}%` : ''}`}
                       >
-                        {formatWatchMonth(row.competitionMonth)}: {monthHistoryLabel(row)}
+                        <span>{formatWatchMonth(row.competitionMonth)}:</span>
+                        <MonthStarParts {...monthHistoryParts(row)} />
                       </span>
                     ))}
                   </div>
@@ -1046,23 +1080,32 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
 
         {/* Right Side: Udemy-style Collapsible Playlist Sidebar */}
         {sidebarOpen && (
-          <aside className="w-full lg:w-96 bg-white border-l border-[#e5eeff] flex flex-col shrink-0 overflow-y-auto max-h-[85vh] lg:max-h-none z-20 shadow-sm">
+          // Phone/tablet: full-height overlay above the lesson (tap outside or "Quay lại" closes it).
+          // Desktop (lg+): the usual column on the right.
+          <div
+            className="fixed inset-0 z-50 flex justify-end bg-slate-950/40 lg:static lg:inset-auto lg:z-auto lg:flex lg:shrink-0 lg:bg-transparent"
+            onClick={(event) => { if (event.target === event.currentTarget) setSidebarOpen(false); }}
+          >
+          <aside
+            id="lesson-list"
+            aria-label="Nội dung khóa học"
+            className="h-full w-full max-w-md lg:max-w-none lg:w-96 bg-white border-l border-[#e5eeff] flex flex-col shrink-0 overflow-y-auto overscroll-contain z-20 shadow-xl lg:shadow-sm"
+          >
             {/* Sidebar Header */}
-            <div className="p-4 border-b border-[#eff4ff] sticky top-0 bg-white z-10 flex items-center justify-between shadow-2xs">
-              <div>
-                <h3 className="font-bold text-sm text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
-                  Nội dung khóa học
-                </h3>
-                <p className="text-[11px] text-[#737686] mt-0.5 font-medium">
-                  {courseData?.sessions?.length || 0} buổi • {allCourseLessons.length} bài giảng
-                </p>
-              </div>
+            <div className="p-4 border-b border-[#eff4ff] sticky top-0 bg-white z-10 shadow-2xs">
               <button
+                type="button"
                 onClick={() => setSidebarOpen(false)}
-                className="text-[#737686] hover:text-[#172554] p-1 rounded-lg hover:bg-[#eff4ff] lg:hidden"
+                className="lg:hidden mb-3 inline-flex items-center gap-1.5 rounded-xl border border-[#cbdbf5] bg-[#eff4ff] px-3 py-2 text-xs font-bold text-[#172554] hover:bg-[#cbdbf5]"
               >
-                ✕
+                ← Quay lại bài học
               </button>
+              <h3 className="font-bold text-sm text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
+                Nội dung khóa học
+              </h3>
+              <p className="text-[11px] text-[#737686] mt-0.5 font-medium">
+                {courseData?.sessions?.length || 0} buổi • {allCourseLessons.length} bài giảng
+              </p>
             </div>
 
             {/* Sessions & Lessons Accordion List */}
@@ -1115,7 +1158,11 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                               type="button"
                               disabled={isLocked}
                               title={isLocked ? (learningState?.lockReason === 'PreviousLessonIncomplete' ? 'Cần hoàn thành bài học trước đó để mở khóa' : 'Bài học đang bị khóa') : undefined}
-                              onClick={() => switchLesson(lId)}
+                              onClick={() => {
+                                // On a phone, picking a lesson returns to it right away.
+                                if (compactViewport) setSidebarOpen(false);
+                                switchLesson(lId);
+                              }}
                               className={`w-full text-left px-4 py-3.5 flex items-start gap-3 text-xs transition ${
                                 isCurrent
                                   ? 'bg-[#eff4ff] text-[#172554] border-l-4 border-[#2563EB] font-bold'
@@ -1165,6 +1212,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
               })}
             </div>
           </aside>
+          </div>
         )}
       </div>
     </div>

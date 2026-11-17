@@ -6,7 +6,7 @@ import { cycleVideoAlreadyComplete, isFreeReviewLesson, planMonthlyReview, start
 import { readinessForReason } from '../lib/learning-readiness-rules'
 import {
   getMonthlyReviewState, monthlyReplayPercent, previousReplayHistory, monthlyPlayerStart, needsMonthlyQuiz, MonthlyReviewRefreshGate,
-  lessonAwardedThisMonth, monthlyQuizBlock, monthlyQuizLocked, quizRewardReason, quizRewardMessages, monthHistoryLabel, thisMonthQuizLabel,
+  lessonAwardedThisMonth, monthlyQuizBlock, monthlyQuizLocked, quizRewardReason, quizRewardMessages, monthHistoryLabel, monthHistoryParts, thisMonthQuizLabel,
 } from '../lib/monthly-review-state'
 import { VideoPlaybackGuard } from '../lib/video-playback-guard'
 import { isServerVideoCompleted } from '../lib/video-progress-rules'
@@ -441,23 +441,59 @@ describe('quiz đạt mà 0 sao phải nói lý do', () => {
 describe('lịch sử theo tháng có cả video và quiz', () => {
   it('nhãn chip tháng trước', () => {
     assert.equal(monthHistoryLabel({ awardedStars: 5, completed: true, watchedSeconds: 19, quiz: { attempted: 1, passed: true, stars: 10 } }), 'video +5 ⭐ · quiz đạt +10 ⭐')
-    assert.equal(monthHistoryLabel({ awardedStars: 5, completed: true, watchedSeconds: 19, quiz: { attempted: 0, passed: false, stars: 0 } }), 'video +5 ⭐ · chưa làm quiz')
-    assert.equal(monthHistoryLabel({ awardedStars: 0, completed: false, watchedSeconds: 0, quiz: { attempted: 2, passed: false, stars: 0 } }), 'chưa xem video · quiz chưa đạt')
+    assert.equal(monthHistoryLabel({ awardedStars: 5, completed: true, watchedSeconds: 19, quiz: { attempted: 0, passed: false, stars: 0 } }), 'video +5 ⭐ · quiz chưa làm')
+    assert.equal(monthHistoryLabel({ awardedStars: 0, completed: false, watchedSeconds: 0, quiz: { attempted: 2, passed: false, stars: 0 } }), 'video chưa xem · quiz chưa đạt')
     assert.equal(monthHistoryLabel({ awardedStars: 0, completed: true, watchedSeconds: 19, quiz: { attempted: 1, passed: true, stars: 0 } }), 'video ✓ đã xem · quiz đạt, 0 ⭐')
     assert.equal(monthHistoryLabel({ awardedStars: 0, completed: false, watchedSeconds: 7, quiz: null }), 'video 7s')
   })
+  it('tách phần VIDEO và QUIZ để hiển thị nhãn in đậm, khác màu', () => {
+    assert.deepEqual(monthHistoryParts({ awardedStars: 1, completed: true, watchedSeconds: 19, quiz: { attempted: 1, passed: true, stars: 1 } }), { video: '+1 ⭐', quiz: 'đạt +1 ⭐' })
+    assert.deepEqual(monthHistoryParts({ awardedStars: 0, completed: false, watchedSeconds: 7, quiz: null }), { video: '7s', quiz: null })
+    const component = read('src/components/learning/MonthStarParts.tsx')
+    assert.match(component, /font-extrabold uppercase/)
+    assert.match(component, /text-\[#2563EB\]' : 'text-violet-700'/)
+    assert.match(read('src/app/student/learning/[lessonId]/page.tsx'), /<MonthStarParts \{\.\.\.monthHistoryParts\(row\)\} \/>/)
+    assert.match(read('src/app/student/learning/[lessonId]/quiz/page.tsx'), /<MonthStarParts \{\.\.\.monthHistoryParts\(row\)\} \/>/)
+  })
   it('ô tháng này', () => {
     const quiz = { attempted: 0, passed: false, stars: 0 }
-    assert.equal(thisMonthQuizLabel({ quiz, locked: 'MONTHLY_VIDEO_INCOMPLETE', monthlyPending: false, reviewStarted: true, monthlyPassed: false }), 'quiz: xem hết video trước')
-    assert.equal(thisMonthQuizLabel({ quiz: { attempted: 1, passed: true, stars: 10 }, locked: null, monthlyPending: false, reviewStarted: true, monthlyPassed: true }), 'quiz đạt +10 ⭐')
-    assert.equal(thisMonthQuizLabel({ quiz, locked: null, monthlyPending: true, reviewStarted: true, monthlyPassed: false }), 'quiz chưa làm lại')
-    assert.equal(thisMonthQuizLabel({ quiz, locked: null, monthlyPending: false, reviewStarted: false, monthlyPassed: false }), 'chưa làm quiz')
+    assert.equal(thisMonthQuizLabel({ quiz, locked: 'MONTHLY_VIDEO_INCOMPLETE', monthlyPending: false, reviewStarted: true, monthlyPassed: false }), 'xem hết video trước')
+    assert.equal(thisMonthQuizLabel({ quiz: { attempted: 1, passed: true, stars: 10 }, locked: null, monthlyPending: false, reviewStarted: true, monthlyPassed: true }), 'đạt +10 ⭐')
+    assert.equal(thisMonthQuizLabel({ quiz, locked: null, monthlyPending: true, reviewStarted: true, monthlyPassed: false }), 'chưa làm lại')
+    assert.equal(thisMonthQuizLabel({ quiz, locked: null, monthlyPending: false, reviewStarted: false, monthlyPassed: false }), 'chưa làm')
   })
   it('API tiến độ trả quiz theo tháng', () => {
     const route = read('src/app/api/v1/lessons/[lessonId]/progress/route.ts')
     assert.match(route, /source_type: 'ASSESSMENT', source_id: assessmentId/)
     assert.match(route, /quizThisMonth: historyData\.quizThisMonth/)
     assert.match(route, /monthlyQuizBlock:/)
+  })
+})
+
+describe('danh sách bài học trên điện thoại', () => {
+  const page = () => read('src/app/student/learning/[lessonId]/page.tsx')
+  it('dưới lg hiện dạng lớp phủ toàn màn hình, từ lg giữ cột bên phải', () => {
+    assert.match(page(), /fixed inset-0 z-50 flex justify-end bg-slate-950\/40 lg:static/)
+    assert.match(page(), /matchMedia\('\(max-width: 1023px\)'\)/)
+  })
+  it('có nút quay lại, chọn bài thì tự đóng, Esc cũng đóng', () => {
+    assert.match(page(), /← Quay lại bài học/)
+    assert.match(page(), /if \(compactViewport\) setSidebarOpen\(false\);\s*switchLesson\(lId\)/)
+    assert.match(page(), /event\.key === 'Escape'\) setSidebarOpen\(false\)/)
+  })
+})
+
+describe('bài thi cuối khóa: 1 ⭐ mỗi câu đúng', () => {
+  it('nhãn theo số câu hỏi, không còn cố định 5 ⭐', () => {
+    const page = read('src/app/student/courses/[courseId]/quiz/page.tsx')
+    assert.doesNotMatch(page, /tối đa 5 ⭐/)
+    assert.match(page, /Tối đa \{assessment\.questionCount \|\| 0\} ⭐ \(1 ⭐ mỗi câu đúng\)/)
+  })
+  it('server cộng 1 ⭐ mỗi câu đúng, trần là số câu của lượt đầu trong tháng (dùng chung với quiz bài học)', () => {
+    const source = read('src/lib/quiz-submission.ts')
+    assert.match(source, /reward_question_count: grading\.results\.length/)
+    assert.match(source, /Math\.floor\(correctCount \/ grading\.results\.length \* mark\.reward_question_count/)
+    assert.match(source, /assessment\.type === 'COURSE_FINAL' \? 'COURSE_FINAL_PASS'/)
   })
 })
 

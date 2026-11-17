@@ -115,21 +115,28 @@ export const quizRewardMessages: Record<QuizRewardReason, string> = {
 
 export interface MonthQuizSummary { attempted: number; passed: boolean; stars: number }
 
-/** Quiz part of one month's history, e.g. "quiz đạt +10 ⭐". */
+/** Quiz value of one month, shown after a "QUIZ" label, e.g. "đạt +10 ⭐". */
 export function monthQuizLabel(quiz: MonthQuizSummary | null | undefined): string {
   if (!quiz) return ''
-  if (quiz.stars > 0) return `quiz đạt +${quiz.stars} ⭐`
-  if (quiz.passed) return 'quiz đạt, 0 ⭐'
-  return quiz.attempted > 0 ? 'quiz chưa đạt' : 'chưa làm quiz'
+  if (quiz.stars > 0) return `đạt +${quiz.stars} ⭐`
+  if (quiz.passed) return 'đạt, 0 ⭐'
+  return quiz.attempted > 0 ? 'chưa đạt' : 'chưa làm'
 }
 
-/** One "Những tháng trước" chip: video and quiz of that month, e.g. "video +5 ⭐ · quiz đạt +10 ⭐". */
-export function monthHistoryLabel(row: { awardedStars: number; completed: boolean; watchedSeconds: number; quiz?: MonthQuizSummary | null }): string {
-  const video = row.awardedStars > 0 ? `video +${row.awardedStars} ⭐`
-    : row.completed ? 'video ✓ đã xem'
-    : row.watchedSeconds > 0 ? `video ${row.watchedSeconds}s` : 'chưa xem video'
-  const quiz = monthQuizLabel(row.quiz)
-  return quiz ? `${video} · ${quiz}` : video
+type MonthHistoryRow = { awardedStars: number; completed: boolean; watchedSeconds: number; quiz?: MonthQuizSummary | null }
+
+/** Video and quiz values of one month, each shown after its own label (VIDEO / QUIZ). */
+export function monthHistoryParts(row: MonthHistoryRow): { video: string; quiz: string | null } {
+  const video = row.awardedStars > 0 ? `+${row.awardedStars} ⭐`
+    : row.completed ? '✓ đã xem'
+    : row.watchedSeconds > 0 ? `${row.watchedSeconds}s` : 'chưa xem'
+  return { video, quiz: row.quiz ? monthQuizLabel(row.quiz) : null }
+}
+
+/** Plain text of one month, e.g. "video +5 ⭐ · quiz đạt +10 ⭐" (tooltips, screen readers). */
+export function monthHistoryLabel(row: MonthHistoryRow): string {
+  const parts = monthHistoryParts(row)
+  return parts.quiz ? `video ${parts.video} · quiz ${parts.quiz}` : `video ${parts.video}`
 }
 
 /**
@@ -142,7 +149,7 @@ export function monthlyQuizLocked(block: { reason?: MonthlyQuizBlock | null } | 
   return reason
 }
 
-/** Quiz part of the "Tháng này" box. */
+/** Quiz value of the "Tháng này" box, shown after a "QUIZ" label. */
 export function thisMonthQuizLabel(input: {
   quiz: MonthQuizSummary | null | undefined
   locked: MonthlyQuizBlock | null
@@ -150,10 +157,10 @@ export function thisMonthQuizLabel(input: {
   reviewStarted: boolean
   monthlyPassed: boolean
 }): string {
-  if (input.locked === 'MONTHLY_VIDEO_INCOMPLETE') return 'quiz: xem hết video trước'
+  if (input.locked === 'MONTHLY_VIDEO_INCOMPLETE') return 'xem hết video trước'
   if ((input.quiz?.stars || 0) > 0) return monthQuizLabel(input.quiz)
-  if (input.monthlyPending) return 'quiz chưa làm lại'
-  if (input.reviewStarted && input.monthlyPassed) return 'quiz đạt, 0 ⭐'
+  if (input.monthlyPending) return 'chưa làm lại'
+  if (input.reviewStarted && input.monthlyPassed) return 'đạt, 0 ⭐'
   return monthQuizLabel(input.quiz || { attempted: 0, passed: false, stars: 0 })
 }
 
