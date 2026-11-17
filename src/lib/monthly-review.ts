@@ -47,18 +47,38 @@ export const monthlyReviewMessages: Record<MonthlyReviewStatus, string> = {
   NOTHING_TO_REVIEW: 'Chưa có bài nào đã xem xong video để xem lại trong phạm vi này.',
 }
 
-/** Lessons (of `lessonIds`) whose quiz was passed in this term since `monthStartsAt`. */
-export async function lessonsWithQuizPassedSince(userId: string, cycleId: string, monthStartsAt: Date, lessonIds: string[]): Promise<Set<string>> {
-  if (!lessonIds.length) return new Set()
-  const rows = await prisma.attempt.findMany({
+/**
+ * Lessons whose quiz counts as passed for this month. "Xem lại tháng này" resets the video
+ * and the quiz together, so only a passing attempt submitted after this month's video replay
+ * was completed counts; attempts from before the reset (or earlier months) do not.
+ */
+export async function lessonsWithMonthlyQuizPassed(
+  userId: string, cycleId: string, monthId: string,
+  lessons: { lessonId: string; videoId: string | null }[],
+): Promise<Set<string>> {
+  const withVideo = lessons.filter((l): l is { lessonId: string; videoId: string } => Boolean(l.videoId))
+  if (!withVideo.length) return new Set()
+  const replays = await prisma.monthlyVideoReplay.findMany({
+    where: { user_id: userId, learning_cycle_id: cycleId, competition_month_id: monthId, video_id: { in: withVideo.map((l) => l.videoId) }, completed_at: { not: null } },
+    select: { video_id: true, completed_at: true },
+  })
+  const doneAt = new Map(replays.map((r) => [r.video_id, r.completed_at!]))
+  const candidates = withVideo.filter((l) => doneAt.has(l.videoId))
+  if (!candidates.length) return new Set()
+  const attempts = await prisma.attempt.findMany({
     where: {
       user_id: userId, learning_cycle_id: cycleId, passed: true,
-      status: { in: ['SUBMITTED', 'AUTO_SUBMITTED'] }, submitted_at: { gte: monthStartsAt },
-      assessment: { lesson_id: { in: lessonIds } },
+      status: { in: ['SUBMITTED', 'AUTO_SUBMITTED'] },
+      assessment: { lesson_id: { in: candidates.map((l) => l.lessonId) } },
     },
-    select: { assessment: { select: { lesson_id: true } } },
+    select: { submitted_at: true, assessment: { select: { lesson_id: true } } },
   })
-  return new Set(rows.flatMap((row) => row.assessment.lesson_id ? [row.assessment.lesson_id] : []))
+  const passed = new Set<string>()
+  for (const l of candidates) {
+    const since = doneAt.get(l.videoId)!
+    if (attempts.some((a) => a.assessment.lesson_id === l.lessonId && a.submitted_at && a.submitted_at >= since)) passed.add(l.lessonId)
+  }
+  return passed
 }
 
 /** Idempotent: chỉ tạo dòng còn thiếu, không đụng dòng đã có và không bao giờ cộng Star. */

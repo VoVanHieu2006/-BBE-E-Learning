@@ -3,7 +3,7 @@ import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { readCourseLearningStates } from '@/lib/lesson-learning-state'
 import { currentCycleAttemptFilter, ensureCompetitionMonth } from '@/lib/learning-periods'
-import { lessonsWithQuizPassedSince } from '@/lib/monthly-review'
+import { lessonsWithMonthlyQuizPassed } from '@/lib/monthly-review'
 
 export async function GET(request: NextRequest, { params }: { params: { courseId: string } }) {
   const auth = await authenticate(request)
@@ -81,7 +81,7 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
   }) : []
   const replayByLesson = new Map(replays.map(row => [row.video_id, { started: true, completed: Boolean(row.completed_at) }]))
   const quizPassedThisMonth = cycle && month
-    ? await lessonsWithQuizPassedSince(userId, cycle.id, month.starts_at, course.sessions.flatMap(s => s.lessons.map(l => l.id)))
+    ? await lessonsWithMonthlyQuizPassed(userId, cycle.id, month.id, course.sessions.flatMap(s => s.lessons.map(l => ({ lessonId: l.id, videoId: l.video?.id || null }))))
     : new Set<string>()
 
   let totalLessons = 0
