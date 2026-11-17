@@ -2,7 +2,7 @@ import { describe, it, TestContext } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
-import { cycleVideoAlreadyComplete, isFreeReviewLesson, planMonthlyReview, startMonthlyReview } from '../lib/monthly-review'
+import { cycleVideoAlreadyComplete, isFreeReviewLesson, planMonthlyReview, startMonthlyReview, lessonsWithMonthlyQuizPassed } from '../lib/monthly-review'
 import { readinessForReason } from '../lib/learning-readiness-rules'
 import { getMonthlyReviewState, monthlyReplayPercent, previousReplayHistory, monthlyPlayerStart, needsMonthlyQuiz, MonthlyReviewRefreshGate } from '../lib/monthly-review-state'
 import { VideoPlaybackGuard } from '../lib/video-playback-guard'
@@ -327,5 +327,36 @@ describe('API monthly-review', () => {
     assert.doesNotMatch(lib, /courseId|MonthlyReviewScope/)
     assert.doesNotMatch(read('src/components/learning/MonthlyReviewButton.tsx'), /courseId/)
     assert.doesNotMatch(read('src/app/student/courses/[courseId]/page.tsx'), /MonthlyReviewButton/)
+  })
+})
+
+describe('Xem lại tháng này reset cả video và bài kiểm tra', () => {
+  it('chỉ tính quiz đạt tháng này khi nộp sau lúc xem xong video của lượt tháng', async (t) => {
+    const prismaModule = require('../lib/prisma')
+    const original = prismaModule.prisma
+    t.after(() => { prismaModule.prisma = original })
+    const videoDone = new Date('2026-11-20T10:00:00Z')
+    let replays: any[] = []
+    let attempts: any[] = []
+    prismaModule.prisma = {
+      monthlyVideoReplay: { findMany: async () => replays },
+      attempt: { findMany: async () => attempts },
+    }
+    const lessons = [{ lessonId: 'L1', videoId: 'V1' }, { lessonId: 'L2', videoId: 'V2' }]
+    // Reset clicked, video not finished yet: the quiz passed earlier this month no longer counts.
+    attempts = [{ submitted_at: new Date('2026-11-05T00:00:00Z'), assessment: { lesson_id: 'L1' } }]
+    assert.deepEqual(Array.from(await lessonsWithMonthlyQuizPassed('u', 'c', 'm', lessons)), [])
+    // Video finished, old pass is from before: still not passed this month.
+    replays = [{ video_id: 'V1', completed_at: videoDone }]
+    assert.deepEqual(Array.from(await lessonsWithMonthlyQuizPassed('u', 'c', 'm', lessons)), [])
+    // Retaken after the video: passed this month.
+    attempts.push({ submitted_at: new Date('2026-11-20T10:05:00Z'), assessment: { lesson_id: 'L1' } })
+    assert.deepEqual(Array.from(await lessonsWithMonthlyQuizPassed('u', 'c', 'm', lessons)), ['L1'])
+  })
+
+  it('quiz chặn làm lại khi lượt tháng đã mở mà video chưa xem xong, kể cả trong cùng tháng', () => {
+    const source = readFileSync(path.join(__dirname, '../app/api/v1/assessments/[assessmentId]/attempts/route.ts'), 'utf8')
+    assert.match(source, /const reviewOpen = Boolean\(replay && !replay\.completed_at\)/)
+    assert.match(source, /if \(priorAttempt && \(earlierMonth \|\| reviewOpen\)\)/)
   })
 })

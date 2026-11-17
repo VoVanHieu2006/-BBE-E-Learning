@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { ensureCompetitionMonth } from '@/lib/learning-periods'
-import { lessonsWithQuizPassedSince } from '@/lib/monthly-review'
+import { lessonsWithMonthlyQuizPassed } from '@/lib/monthly-review'
 import { authenticate } from '@/lib/auth'
 import { recordVideoHeartbeat, getVideoReplayState } from '@/lib/video-heartbeat'
 import { prisma } from '@/lib/prisma'
@@ -218,7 +218,7 @@ export async function GET(request: NextRequest, { params }: { params: { lessonId
     rewardStatus: readinessForReason(rewardReason),
     replay,
     reviewState: replay?.reviewState ?? null,
-    monthlyQuizPassed: cycle && month ? (await lessonsWithQuizPassedSince(userId, cycle.id, month.starts_at, [params.lessonId])).has(params.lessonId) : false,
+    monthlyQuizPassed: cycle && month ? (await lessonsWithMonthlyQuizPassed(userId, cycle.id, month.id, [{ lessonId: params.lessonId, videoId: video?.id || null }])).has(params.lessonId) : false,
     monthPercent: monthlyReplayPercent(replay?.watchedSeconds || 0, duration),
     videoStarsThisMonth: historyData.videoStarsThisMonth,
     replayHistory: historyData.replayHistory,

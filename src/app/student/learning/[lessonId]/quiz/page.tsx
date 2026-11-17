@@ -9,6 +9,7 @@ import Modal from '@/components/ui/Modal';
 import Toast, { ToastMessage } from '@/components/ui/Toast';
 import LessonQuiz from '@/components/lesson/LessonQuiz';
 import StarRewardCelebration from '@/components/StarRewardCelebration';
+import { needsMonthlyQuiz } from '@/lib/monthly-review-state';
 import { apiFetch, clearApiCache } from '@/lib/api/client';
 import { QUIZ_COOLDOWN_MS, QUIZ_COOLDOWN_MINUTES } from '@/lib/config/quiz';
 import { getNextLearningTarget, NextLearningTarget } from '@/lib/lesson-navigation';
@@ -180,6 +181,16 @@ export default function LessonQuizPage({ params }: { params: { lessonId: string 
   }, [lastAttemptWithCooldown]);
 
   const isCooldownActive = cooldownRemainingMs > 0;
+  // "Xem lại tháng này" resets the video and the quiz together; the month needs a new pass.
+  const monthlyPending = needsMonthlyQuiz(
+    progress?.replay,
+    Boolean(progress?.cycleProgress?.videoCompleted ?? progress?.videoCompleted),
+    progress?.assessmentPassed === true,
+    progress?.monthlyQuizPassed === true,
+  );
+  const monthlyVideoDone = progress?.replay?.completed === true;
+  const monthKey = String(progress?.replay?.competitionMonth || '');
+  const monthLabel = /^\d{4}-\d{2}$/.test(monthKey) ? `Tháng ${Number(monthKey.slice(5))}/${monthKey.slice(0, 4)}` : 'Tháng này';
 
   const formatCooldown = (ms: number) => {
     const totalSecs = Math.floor(ms / 1000);
@@ -401,6 +412,22 @@ export default function LessonQuizPage({ params }: { params: { lessonId: string 
             )}
 
             {/* Lịch sử làm bài: CHỈ hiển thị bài đã nộp thành công */}
+            {monthlyPending && (
+              <div role="status" className="p-3 rounded-2xl border border-amber-200 bg-amber-50 text-xs text-amber-900 leading-relaxed">
+                <p className="font-bold">{monthLabel}: bài kiểm tra chưa đạt</p>
+                <p className="mt-0.5">
+                  {monthlyVideoDone
+                    ? 'Bạn đã xem lại video tháng này. Làm lại bài kiểm tra để được ghi nhận đạt của tháng (kết quả nhiệm kỳ vẫn giữ).'
+                    : 'Bạn đã bấm "Xem lại tháng này": video và bài kiểm tra được làm lại cùng nhau. Hãy xem hết video tháng này trước.'}
+                </p>
+              </div>
+            )}
+            {!monthlyPending && progress?.monthlyQuizPassed && progress?.replay?.started && (
+              <div role="status" className="p-3 rounded-2xl border border-emerald-200 bg-emerald-50 text-xs font-bold text-emerald-900">
+                {monthLabel}: ✓ đã đạt bài kiểm tra
+              </div>
+            )}
+
             {attemptsAvailable && (
               <div className="p-4 bg-[#f8f9ff] border border-[#eff4ff] rounded-2xl space-y-2.5">
                 <h3 className="text-xs font-bold text-[#172554] uppercase tracking-wide">Kết quả của bạn</h3>
@@ -458,9 +485,12 @@ export default function LessonQuizPage({ params }: { params: { lessonId: string 
                   variant="primary"
                   size="lg"
                   className="flex-1 font-bold shadow-md"
+                  disabled={monthlyPending && !monthlyVideoDone}
                   onClick={() => setShowConfirmStartModal(true)}
                 >
-                  {quizCompleted ? '🔄 Làm lại bài kiểm tra' : '▶ Bắt đầu làm bài'}
+                  {monthlyPending
+                    ? monthlyVideoDone ? '🔄 Làm lại bài kiểm tra tháng này' : 'Xem hết video tháng này trước'
+                    : quizCompleted ? '🔄 Làm lại bài kiểm tra' : '▶ Bắt đầu làm bài'}
                 </Button>
               )}
 

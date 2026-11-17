@@ -80,35 +80,40 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
     const monthBounds = competitionMonthBounds(now)
 
     if (cycle && assessment.lesson.video) {
-      const priorAttemptInEarlierMonth = await prisma.attempt.findFirst({
+      const priorAttempt = await prisma.attempt.findFirst({
         where: {
           assessment_id: assessmentId,
           user_id: userId,
           learning_cycle_id: cycle.id,
           status: { in: ['SUBMITTED', 'AUTO_SUBMITTED'] },
-          submitted_at: { lt: monthBounds.startsAt },
         },
-        select: { id: true },
+        orderBy: { submitted_at: 'asc' },
+        select: { submitted_at: true },
       })
-
-      if (priorAttemptInEarlierMonth) {
-        const currentMonth = await prisma.competitionMonth.findUnique({ where: { key: monthBounds.key }, select: { id: true } })
-        const replay = currentMonth && await prisma.monthlyVideoReplay.findUnique({
-          where: {
-            user_id_video_id_competition_month_id_learning_cycle_id: {
-              user_id: userId,
-              video_id: assessment.lesson.video.id,
-              competition_month_id: currentMonth.id,
-              learning_cycle_id: cycle.id,
-            },
+      const currentMonth = priorAttempt ? await prisma.competitionMonth.findUnique({ where: { key: monthBounds.key }, select: { id: true } }) : null
+      const replay = currentMonth && await prisma.monthlyVideoReplay.findUnique({
+        where: {
+          user_id_video_id_competition_month_id_learning_cycle_id: {
+            user_id: userId,
+            video_id: assessment.lesson.video.id,
+            competition_month_id: currentMonth.id,
+            learning_cycle_id: cycle.id,
           },
-        })
-
+        },
+      })
+      // Retake for this month: the quiz was done before (an earlier month, or before
+      // "Xem lại tháng này" reset the video and the quiz together). It reopens only after
+      // this month's video replay is finished.
+      const earlierMonth = Boolean(priorAttempt?.submitted_at && priorAttempt.submitted_at < monthBounds.startsAt)
+      const reviewOpen = Boolean(replay && !replay.completed_at)
+      if (priorAttempt && (earlierMonth || reviewOpen)) {
         if (!replay || !replay.completed_at) {
           return NextResponse.json({
             error: {
               code: 'MonthlyVideoReplayRequired',
-              message: 'Muốn làm lại bài kiểm tra để nhận Star tháng này, hãy bấm "Xem lại tháng này" ở bài học rồi xem hết video trước.',
+              message: reviewOpen
+                ? 'Bạn đã bấm "Xem lại tháng này": video và bài kiểm tra được làm lại cùng nhau. Hãy xem hết video tháng này rồi làm lại bài kiểm tra.'
+                : 'Muốn làm lại bài kiểm tra để nhận Star tháng này, hãy bấm "Xem lại tháng này" ở bài học rồi xem hết video trước.',
             },
           }, { status: 403 })
         }
