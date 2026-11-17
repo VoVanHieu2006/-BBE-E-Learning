@@ -133,7 +133,10 @@ export default function StudentCourseFinalExamPage({ params }: { params: { cours
               <span className="rounded-xl bg-blue-50 px-3 py-2 text-blue-700">{assessment.questionCount || 0} câu hỏi</span>
               <span className="rounded-xl bg-blue-50 px-3 py-2 text-blue-700">{assessment.durationMinutes || 0} phút</span>
               <span className="rounded-xl bg-blue-50 px-3 py-2 text-blue-700">Đạt từ 85%</span>
-              <span className="rounded-xl bg-amber-50 px-3 py-2 text-amber-800">Thưởng tối đa 5 ⭐, một lần</span>
+              {/* Same reward as a lesson quiz (quiz-submission.ts): 1 Star per correct answer, capped by the question count. */}
+              <span className="rounded-xl bg-amber-50 px-3 py-2 text-amber-800">
+                Tối đa {assessment.questionCount || 0} ⭐ (1 ⭐ mỗi câu đúng)
+              </span>
             </div>
 
             {data.alreadyPassed ? (

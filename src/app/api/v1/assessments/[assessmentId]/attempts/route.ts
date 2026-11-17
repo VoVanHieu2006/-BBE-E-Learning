@@ -10,6 +10,8 @@ import { selectBalancedFinalExamQuestions } from '@/lib/final-exam-selection'
 import { lockCourseExamBank } from '@/lib/final-exam-bank'
 import { learningContext, lockLearningUser } from '@/lib/learning-periods'
 import { competitionMonthBounds } from '@/lib/learning-cycle-rules'
+import { loadMonthlyQuizBlock } from '@/lib/monthly-review'
+import { monthlyQuizBlockMessages } from '@/lib/monthly-review-state'
 
 function shuffleSecurely<T>(items: readonly T[]): T[] {
   const shuffled = [...items]
@@ -80,43 +82,17 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
     const monthBounds = competitionMonthBounds(now)
 
     if (cycle && assessment.lesson.video) {
-      const priorAttempt = await prisma.attempt.findFirst({
-        where: {
-          assessment_id: assessmentId,
-          user_id: userId,
-          learning_cycle_id: cycle.id,
-          status: { in: ['SUBMITTED', 'AUTO_SUBMITTED'] },
-        },
-        orderBy: { submitted_at: 'asc' },
-        select: { submitted_at: true },
+      // Video → quiz: a monthly retake (quiz done in an earlier month, or "Xem lại tháng này"
+      // opened on a lesson finished before) reopens only after this month's video is finished.
+      const currentMonth = await prisma.competitionMonth.findUnique({ where: { key: monthBounds.key }, select: { id: true } })
+      const block = await loadMonthlyQuizBlock(prisma, {
+        userId, cycleId: cycle.id, videoId: assessment.lesson.video.id, assessmentId,
+        monthId: currentMonth?.id ?? null, monthStartsAt: monthBounds.startsAt,
       })
-      const currentMonth = priorAttempt ? await prisma.competitionMonth.findUnique({ where: { key: monthBounds.key }, select: { id: true } }) : null
-      const replay = currentMonth && await prisma.monthlyVideoReplay.findUnique({
-        where: {
-          user_id_video_id_competition_month_id_learning_cycle_id: {
-            user_id: userId,
-            video_id: assessment.lesson.video.id,
-            competition_month_id: currentMonth.id,
-            learning_cycle_id: cycle.id,
-          },
-        },
-      })
-      // Retake for this month: the quiz was done before (an earlier month, or before
-      // "Xem lại tháng này" reset the video and the quiz together). It reopens only after
-      // this month's video replay is finished.
-      const earlierMonth = Boolean(priorAttempt?.submitted_at && priorAttempt.submitted_at < monthBounds.startsAt)
-      const reviewOpen = Boolean(replay && !replay.completed_at)
-      if (priorAttempt && (earlierMonth || reviewOpen)) {
-        if (!replay || !replay.completed_at) {
-          return NextResponse.json({
-            error: {
-              code: 'MonthlyVideoReplayRequired',
-              message: reviewOpen
-                ? 'Bạn đã bấm "Xem lại tháng này": video và bài kiểm tra được làm lại cùng nhau. Hãy xem hết video tháng này rồi làm lại bài kiểm tra.'
-                : 'Muốn làm lại bài kiểm tra để nhận Star tháng này, hãy bấm "Xem lại tháng này" ở bài học rồi xem hết video trước.',
-            },
-          }, { status: 403 })
-        }
+      if (block) {
+        return NextResponse.json({
+          error: { code: 'MonthlyVideoReplayRequired', reason: block, message: monthlyQuizBlockMessages[block] },
+        }, { status: 403 })
       }
     }
 

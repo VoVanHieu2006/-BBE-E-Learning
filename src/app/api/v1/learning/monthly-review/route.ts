@@ -33,5 +33,8 @@ export async function POST(request: NextRequest) {
   if (result.status === 'NOTHING_TO_REVIEW') {
     return NextResponse.json({ error: { code: 'NothingToReview', message: monthlyReviewMessages.NOTHING_TO_REVIEW }, ...result }, { status: 409 })
   }
+  if (result.status === 'AWARDED_THIS_MONTH') {
+    return NextResponse.json({ error: { code: 'MonthlyStarsAlreadyAwarded', message: monthlyReviewMessages.AWARDED_THIS_MONTH }, ...result }, { status: 409 })
+  }
   return NextResponse.json(result, { headers: { 'Cache-Control': 'no-store' } })
 }
