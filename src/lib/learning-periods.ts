@@ -11,6 +11,21 @@ export async function lockLearningUser(tx: LearningTx, userId: string) {
   return clock.now
 }
 
+/**
+ * The competition month containing `at`. Month rows are created lazily, so on the first
+ * day of a month no row may exist until someone writes progress; readers create it the
+ * same way learningContext does instead of reporting "no month" (and hiding monthly UI).
+ */
+export async function ensureCompetitionMonth(db: { competitionMonth: LearningTx['competitionMonth'] }, at: Date): Promise<CompetitionMonth> {
+  const bounds = competitionMonthBounds(at)
+  const existing = await db.competitionMonth.findUnique({ where: { key: bounds.key } })
+  if (existing) return existing
+  // ON CONFLICT DO NOTHING: parallel first-of-month readers must not fail on the unique key
+  // (an upsert races and throws P2002).
+  await db.competitionMonth.createMany({ data: [{ key: bounds.key, starts_at: bounds.startsAt, ends_at: bounds.endsAt }], skipDuplicates: true })
+  return db.competitionMonth.findUniqueOrThrow({ where: { key: bounds.key } })
+}
+
 /** Lock a competition period before sampling the business timestamp. */
 export async function lockCompetitionScope(tx: LearningTx, now: Date): Promise<{ month: CompetitionMonth; now: Date }> {
   const [initialClock] = await tx.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`

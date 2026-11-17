@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { readCourseLearningStates } from '@/lib/lesson-learning-state'
-import { currentCycleAttemptFilter } from '@/lib/learning-periods'
+import { currentCycleAttemptFilter, ensureCompetitionMonth } from '@/lib/learning-periods'
+import { lessonsWithQuizPassedSince } from '@/lib/monthly-review'
 
 export async function GET(request: NextRequest, { params }: { params: { courseId: string } }) {
   const auth = await authenticate(request)
@@ -47,6 +48,7 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
             select: {
               id: true,
               title: true,
+              video: { select: { id: true } },
               progress: {
                 where: { user_id: userId },
                 select: {
@@ -71,6 +73,16 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
   }
 
   const learningStates = await readCourseLearningStates(prisma, userId, courseId)
+  const now = new Date()
+  const month = await ensureCompetitionMonth(prisma, now)
+  const replays = cycle && month ? await prisma.monthlyVideoReplay.findMany({
+    where: { user_id: userId, learning_cycle_id: cycle.id, competition_month_id: month.id, video_id: { in: course.sessions.flatMap(s => s.lessons.flatMap(l => l.video ? [l.video.id] : [])) } },
+    select: { video_id: true, completed_at: true },
+  }) : []
+  const replayByLesson = new Map(replays.map(row => [row.video_id, { started: true, completed: Boolean(row.completed_at) }]))
+  const quizPassedThisMonth = cycle && month
+    ? await lessonsWithQuizPassedSince(userId, cycle.id, month.starts_at, course.sessions.flatMap(s => s.lessons.map(l => l.id)))
+    : new Set<string>()
 
   let totalLessons = 0
   let completedLessons = 0
@@ -91,6 +103,8 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
           id: l.id,
           title: l.title,
           ...state,
+          replay: l.video ? replayByLesson.get(l.video.id) || null : null,
+          monthlyQuizPassed: quizPassedThisMonth.has(l.id),
           completed: isCycleCompleted,
           furthestWatchedPositionSeconds: state.furthestWatchedPositionSeconds,
           lastPositionSeconds: prog?.last_position_seconds || null,

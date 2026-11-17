@@ -519,7 +519,11 @@ Hạn mức email của ngày lịch UTC hiện tại (mặc định `limit = 90
 |---|---|---|---|---|
 | [POST](../src/app/api/v1/learning/monthly-review/route.ts) | `authenticate`, không phải tài khoản quản lý | `body.lessonId` (UUID, bắt buộc) | `status` (`STARTED` / `ALREADY_STARTED`), `message`, `competitionMonth`, `started`, `alreadyStarted`, `lessonIds` | 400 `InvalidReviewScope` (thiếu `lessonId`, sai UUID hoặc gửi `courseId`), 403 `ManagementOnlyAccount`, 404 `ReviewScopeNotFound`, 409 `NothingToReview` |
 
-"Xem lại tháng này": mở lượt xem thưởng của tháng hiện tại cho đúng một bài đã xem xong video. Idempotent; không cộng sao; không đổi tiến độ chu kỳ.
+"Xem lại tháng này": mở lượt xem thưởng của tháng hiện tại cho đúng một bài đã xem xong video. Idempotent; không cộng sao; không đổi tiến độ nhiệm kỳ.
+
+Trang học hỏi xác nhận trước khi gọi API. Thành công thì tải lại tiến độ và khởi tạo lại player: lượt tháng mới bắt đầu ở 0:00, giới hạn tua theo số giây đã xem trong tháng; tiến độ nhiệm kỳ vẫn giữ nguyên.
+
+GET và heartbeat `/api/v1/lessons/[lessonId]/progress` trả `reviewState` (cả ở cấp ngoài và trong `replay`): `AVAILABLE` khi video nhiệm kỳ đã xong và chưa có lượt tháng, `STARTED` khi đã mở lượt tháng, `AWARDED` khi có sao video tháng/nhiệm kỳ hiện tại; `null` khi video nhiệm kỳ chưa xong. `reviewAvailable` được giữ để tương thích. `monthPercent` là tỷ lệ số giây replay trên thời lượng video (0–100); `replayHistory` chỉ chứa những tháng trước, còn sao tháng hiện tại nằm trong `videoStarsThisMonth`. Endpoint `courses/[courseId]/my-progress` bổ sung `replay` (`started`, `completed`) cho nhãn quiz của sidebar, không thay kết quả hoàn thành nhiệm kỳ.
 
 ### `/api/v1/learning/periods`
 

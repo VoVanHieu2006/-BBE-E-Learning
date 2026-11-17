@@ -4,6 +4,7 @@ import Link from 'next/link';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import NewContentChip from '@/components/learning/NewContentChip';
+import { monthlyPlayerStart, needsMonthlyQuiz, MonthlyReviewRefreshGate } from '@/lib/monthly-review-state';
 import MonthlyReviewButton from '@/components/learning/MonthlyReviewButton';
 import Toast, { ToastMessage } from '@/components/ui/Toast';
 import YouTubePlayer from '@/components/YouTubePlayer';
@@ -12,12 +13,18 @@ import LessonComments from '@/components/lesson/LessonComments';
 import StarRewardCelebration from '@/components/StarRewardCelebration';
 import { apiFetch, ApiResponse, clearApiCache } from '@/lib/api/client';
 
+/** Reasons where watching/quiz still count for the term but no Star is paid this month. */
+const REWARD_BLOCKED_REASONS = new Set(['SUPPRESSED', 'CHAPTER_TRANSFER_OVERDUE', 'TRANSFER_SEASON_NOT_CONFIGURED', 'REWARD_NOT_ELIGIBLE'])
+
 export default function LearningVideoPage({ params }: { params: { lessonId: string } }) {
   const [currentLessonId, setCurrentLessonId] = useState(params.lessonId);
   const [user, setUser] = useState<any>(null);
   const [lesson, setLesson] = useState<any>(null);
   const [lessonError, setLessonError] = useState<{ code: string; message: string; status: number } | null>(null);
   const [progress, setProgress] = useState<any>(null);
+  const [reviewNonce, setReviewNonce] = useState(0);
+  const reviewRefreshGateRef = useRef(new MonthlyReviewRefreshGate());
+  const reviewRefreshingRef = useRef(false);
   const seenRewardKeysRef = useRef<Set<string>>(new Set());
   const durationMismatchRef = useRef(false);
   useEffect(() => {
@@ -75,6 +82,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
 
   // Initial load: Fetch lesson details + full course outline + course progress
   async function loadInitialData(lessonId: string, authToken?: string) {
+    const refreshEpoch = reviewRefreshGateRef.current.begin(false);
     setLoadingLesson(true);
     setLoadingCourse(true);
     setLessonError(null);
@@ -97,7 +105,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
         if (activeToken) {
           void apiFetch(`/api/v1/courses/${courseId}/my-progress`, { noCache: true })
             .then((progListRes) => {
-              if (progListRes.ok && progListRes.data) setCourseProgress(progListRes.data);
+              if (reviewRefreshGateRef.current.accepts(refreshEpoch) && progListRes.ok && progListRes.data) setCourseProgress(progListRes.data);
             })
             .catch(() => {});
           void apiFetch(`/api/v1/stars/me?balanceOnly=1`, { noCache: true })
@@ -144,30 +152,41 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
   }
 
   // Silent progress revalidation triggered on focus, tab visibility or quiz completion
-  const revalidateProgress = useCallback(async () => {
+  const revalidateProgress = useCallback(async (resetPlayer = false) => {
     const activeToken = token || (typeof window !== 'undefined' ? localStorage.getItem('accessToken') : '') || '';
     if (!activeToken) return;
-    const targetLessonId = currentLessonIdRef.current;
-    const cid = lesson?.session?.courseId || courseData?.courseId || courseData?.id;
-    const [progRes, courseProgRes] = await Promise.all([
-      apiFetch(`/api/v1/lessons/${targetLessonId}/progress`, { noCache: true, token: activeToken }),
-      cid ? apiFetch(`/api/v1/courses/${cid}/my-progress`, { noCache: true, token: activeToken }) : Promise.resolve<any>(null),
-    ]);
-    // Stale guard: if user switched to another lesson, drop this result
-    if (targetLessonId !== currentLessonIdRef.current) return;
-    if (progRes.ok && progRes.data) {
-      if (progRes.data.lessonId && progRes.data.lessonId !== targetLessonId) return;
-      setProgress((prev: any) => {
-        if (prev?.lessonId && prev.lessonId !== targetLessonId) return prev;
-        return {
-          ...prev,
-          ...progRes.data,
-          lessonId: targetLessonId,
-        };
-      });
-    }
-    if (courseProgRes && courseProgRes.ok && courseProgRes.data) {
-      setCourseProgress(courseProgRes.data);
+    if (!resetPlayer && reviewRefreshingRef.current) return;
+    const refreshEpoch = reviewRefreshGateRef.current.begin(resetPlayer);
+    if (resetPlayer) reviewRefreshingRef.current = true;
+    try {
+      const targetLessonId = currentLessonIdRef.current;
+      const cid = lesson?.session?.courseId || courseData?.courseId || courseData?.id;
+      const [progRes, courseProgRes] = await Promise.all([
+        apiFetch(`/api/v1/lessons/${targetLessonId}/progress`, { noCache: true, token: activeToken }),
+        cid ? apiFetch(`/api/v1/courses/${cid}/my-progress`, { noCache: true, token: activeToken }) : Promise.resolve<any>(null),
+      ]);
+      // Stale guard: if user switched to another lesson, drop this result
+      if (targetLessonId !== currentLessonIdRef.current || !reviewRefreshGateRef.current.accepts(refreshEpoch)) return;
+      if (progRes.ok && progRes.data) {
+        if (progRes.data.lessonId && progRes.data.lessonId !== targetLessonId) return;
+        setProgress((prev: any) => {
+          if (!reviewRefreshGateRef.current.accepts(refreshEpoch) || (prev?.lessonId && prev.lessonId !== targetLessonId)) return prev;
+          return {
+            ...prev,
+            ...progRes.data,
+            lessonId: targetLessonId,
+          };
+        });
+      }
+      if (resetPlayer) {
+        if (!progRes.ok || !progRes.data) throw new Error("Không tải được tiến độ tháng. Vui lòng thử lại.");
+        setReviewNonce((value) => value + 1);
+      }
+      if (courseProgRes && courseProgRes.ok && courseProgRes.data) {
+        setCourseProgress(courseProgRes.data);
+      }
+    } finally {
+      if (resetPlayer) reviewRefreshingRef.current = false;
     }
   }, [lesson?.session?.courseId, courseData, token]);
 
@@ -297,7 +316,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
   }
 
   function handleProgressApplied(data: any, event: VideoProgressPayload) {
-    if (!token || pendingLessonIdRef.current) return;
+    if (!token || pendingLessonIdRef.current || reviewRefreshingRef.current) return;
     const targetLessonId = event.lessonId;
 
     // Strict isolation: Only update local active state if response is for the currently viewed lesson
@@ -310,10 +329,15 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
           videoCompleted: Boolean(data.videoCompleted),
           completed: Boolean(data.completed),
           replay: data.replay,
+          reviewState: data.reviewState,
+          monthPercent: data.monthPercent,
           progressContext: data.progressContext,
           lifetime: data.lifetime,
           cycleProgress: data.cycleProgress,
-          rewardStatus: data.rewardStatus,
+          // Heartbeats only say "replay incomplete"; keep a known reward pause visible while watching.
+          rewardStatus: REWARD_BLOCKED_REASONS.has(prev?.rewardStatus?.reasonCode) && data.rewardStatus?.reasonCode === 'REPLAY_INCOMPLETE'
+            ? prev.rewardStatus
+            : data.rewardStatus,
           lessonCompleted: Boolean(data.completed),
           progressPercentage: data.progressPercentage,
           watchedUntil: data.furthestWatchedPositionSeconds ?? event.furthest,
@@ -457,9 +481,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
 
   const formatWatchMonth = (monthKey: string) => {
     const [year, month] = String(monthKey || '').split('-');
-    const names = ['T1', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'T8', 'T9', 'T10', 'T11', 'T12'];
-    const idx = Number(month) - 1;
-    return idx >= 0 && idx < names.length ? `${names[idx]}/${year}` : monthKey;
+    return Number(month) >= 1 && Number(month) <= 12 ? `${Number(month)}/${year}` : monthKey;
   };
   const historyRows: any[] = progress?.replayHistory || [];
   const hasCycle = Boolean(progress?.progressContext?.learningCycleId);
@@ -469,6 +491,14 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
   const cycleFurthest = Number(progress?.cycleProgress?.furthestWatchedPositionSeconds ?? progress?.furthestWatchedPositionSeconds ?? 0);
   const lessonDuration = Number(progress?.durationSeconds ?? lesson?.video?.durationSeconds ?? 0);
   const remainingVideoSeconds = lessonDuration > 0 ? Math.max(0, Math.ceil(lessonDuration - cycleFurthest)) : 0;
+
+  const monthPercent = Math.floor(Number(progress?.monthPercent ?? 0));
+  const monthlyQuiz = !isAdmin && needsMonthlyQuiz(progress?.replay, cycleVideoFull, progress?.assessmentPassed === true, progress?.monthlyQuizPassed === true);
+  const playerStart = progress?.lessonId === currentLessonId
+    ? monthlyPlayerStart(Boolean(progress?.progressContext?.monthlyReview), progress?.replay?.watchedSeconds,
+        progress?.lastPosition, progress?.watchedUntil ?? progress?.furthestWatchedPositionSeconds ?? 0,
+        Boolean(progress?.completed), lesson?.video?.durationSeconds || 0)
+    : { initialPosition: 0, initialFurthest: 0 };
 
   const totalLessonsCount = allCourseLessons.length || 1;
   const completedLessonsCount = courseProgress?.completedLessons ?? (progress?.completed ? 1 : 0);
@@ -624,23 +654,15 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
               </div>
             ) : lesson.video ? (
               <YouTubePlayer
-                key={`${currentLessonId}:${lesson.video.youtubeVideoId}`}
+                key={`${currentLessonId}:${lesson.video.youtubeVideoId}:${reviewNonce}`}
                 lessonId={currentLessonId}
                 videoId={lesson.video.videoId || lesson.video.id}
                 youtubeVideoId={lesson.video.youtubeVideoId}
                 accessToken={token}
                 allowFreeSeek={allowFreeSeek}
-                initialPosition={
-                  progress?.lessonId === currentLessonId &&
-                  progress?.completed && (progress?.lastPosition || 0) >= (lesson.video.durationSeconds || 0) - 5
-                    ? 0
-                    : (progress?.lessonId === currentLessonId ? (progress?.lastPosition || 0) : 0)
-                }
-                initialFurthest={
-                  progress?.lessonId === currentLessonId
-                    ? (progress?.watchedUntil ?? progress?.furthestWatchedPositionSeconds ?? 0)
-                    : 0
-                }
+                initialPosition={playerStart.initialPosition}
+                initialFurthest={playerStart.initialFurthest}
+                monthPercent={!isGuest && !isAdmin && progress?.replay ? monthPercent : undefined}
                 durationSeconds={lesson.video.durationSeconds || 0}
                 onProgressApplied={handleProgressApplied}
                 onComplete={handleLessonComplete}
@@ -668,49 +690,55 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                   <span>🗓️</span> Lịch sử học video này
                 </h3>
                 <span className="text-[10px] text-[#737686]">
-                  "Hoàn thành đào tạo" (chu kỳ học) khác "lượt xem thưởng" (theo tháng) — hai mốc độc lập.
+                  "Hoàn thành đào tạo" (nhiệm kỳ học) khác "lượt xem thưởng" (theo tháng) — hai mốc độc lập.
                 </span>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3">
-                <div className={`rounded-xl border px-3 py-2 text-xs ${cycleVideoFull ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-[#cbdbf5] bg-[#f8f9ff] text-[#172554]'}`}>
-                  <p className="font-bold">{!hasCycle ? 'Chưa có chu kỳ học' : cycleVideoFull ? '✓ Đã xem đủ video (chu kỳ này)' : `Đang xem: ${cycleVideoPercent}% video`}</p>
-                  <p className="text-[10px] opacity-80 mt-0.5">
-                    Tiến độ lịch sử: {Math.round(progress?.lifetime?.furthestWatchedPositionSeconds ?? progress?.furthestWatchedPositionSeconds ?? 0)}/{lesson?.video?.durationSeconds || 0}s
-                  </p>
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 pt-3">
+                <div className="min-w-0 rounded-xl border border-[#eff4ff] px-3 py-2 text-xs text-[#172554]">
+                  <div className="flex min-h-9 items-center font-bold">Nhiệm kỳ · video</div>
+                  <p className="mt-1 text-[11px]">{!hasCycle ? 'Chưa có nhiệm kỳ học' : cycleVideoFull ? '✓ Hoàn thành' : `${cycleVideoPercent}%`}</p>
+                  <div className="mt-2 h-1 rounded-full bg-blue-50" role="progressbar" aria-label="Video nhiệm kỳ" aria-valuenow={cycleVideoFull ? 100 : cycleVideoPercent} aria-valuemin={0} aria-valuemax={100}>
+                    <div className="h-full rounded-full bg-[#2563EB]" style={{ width: `${cycleVideoFull ? 100 : cycleVideoPercent}%` }} />
+                  </div>
                 </div>
-                <div className={`rounded-xl border px-3 py-2 text-xs ${cycleLessonFull ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-[#cbdbf5] bg-[#f8f9ff] text-[#172554]'}`}>
-                  <p className="font-bold">{!hasCycle ? 'Chưa ghi nhận hoàn thành chu kỳ' : cycleLessonFull ? '✓ Bài học hoàn thành' : hasQuiz ? 'Bài học: còn cần quiz đạt' : 'Bài học: chưa hoàn thành'}</p>
-                  <p className="text-[10px] opacity-80 mt-0.5">
-                    {hasQuiz ? 'Video + quiz đều đạt mới tính xong bài của chu kỳ.' : 'Chu kỳ này chưa có bài kiểm tra đi kèm.'}
-                  </p>
+                <div className="min-w-0 rounded-xl border border-[#eff4ff] px-3 py-2 text-xs text-[#172554]">
+                  <div className="flex min-h-9 items-center font-bold">Nhiệm kỳ · bài học</div>
+                  <p className="mt-1 text-[11px]">{cycleLessonFull ? '✓ Hoàn thành' : !hasCycle ? 'Chưa có nhiệm kỳ học' : hasQuiz && cycleVideoFull ? 'Còn cần quiz đạt' : 'Chưa hoàn thành'}</p>
+                  <div className="mt-2 h-1 rounded-full bg-blue-50" role="progressbar" aria-label="Bài học nhiệm kỳ" aria-valuenow={cycleLessonFull ? 100 : 0} aria-valuemin={0} aria-valuemax={100}>
+                    <div className="h-full rounded-full bg-[#2563EB]" style={{ width: `${cycleLessonFull ? 100 : 0}%` }} />
+                  </div>
                 </div>
-                <div className={`rounded-xl border px-3 py-2 text-xs ${(progress?.videoStarsThisMonth?.awardedStars || 0) > 0 ? 'border-amber-200 bg-amber-50 text-amber-900' : 'border-[#cbdbf5] bg-[#f8f9ff] text-[#172554]'}`}>
-                  <p className="font-bold">
-                    {(progress?.videoStarsThisMonth?.awardedStars || 0) > 0
-                      ? `Tháng này đã nhận: +${progress.videoStarsThisMonth.awardedStars} ⭐`
-                      : 'Tháng này chưa nhận sao video'}
-                  </p>
-                  <p className="text-[10px] opacity-80 mt-0.5">
-                    {progress?.rewardStatus?.message || ((progress?.videoStarsThisMonth?.awardedStars || 0) > 0 || progress?.videoStarsThisMonth?.completed
-                      ? 'Đủ lượt xem nhận thưởng trong tháng hiện tại.'
-                      : progress?.replay?.reviewAvailable
-                        ? 'Bài đã xong vẫn xem tự do. Bấm "Xem lại tháng này" nếu muốn xem lại để nhận sao của tháng.'
-                        : 'Xem lại toàn bộ video trong tháng để nhận sao.')}
-                  </p>
-                  {progress?.replay?.reviewAvailable && !isAdmin && (
-                    <div className="mt-2">
+                <div className="min-w-0 rounded-xl border border-[#eff4ff] px-3 py-2 text-xs text-[#172554]">
+                  <div className="flex min-h-9 items-center justify-between gap-2">
+                    <p className="font-bold">{progress?.replay?.competitionMonth ? `Tháng ${formatWatchMonth(progress.replay.competitionMonth)}` : 'Tháng này'}</p>
+                    {cycleVideoFull && progress?.replay?.reviewState && !isAdmin && (
                       <MonthlyReviewButton
+                        key={`${currentLessonId}:${progress.replay.competitionMonth}`}
                         compact
+                        state={progress.replay.reviewState}
                         scope={{ lessonId: currentLessonId }}
                         monthLabel={progress?.replay?.competitionMonth ? formatWatchMonth(progress.replay.competitionMonth) : undefined}
                         label="Xem lại tháng này"
-                        onDone={() => { void revalidateProgress(); }}
+                        onDone={() => revalidateProgress(true)}
                       />
-                    </div>
-                  )}
+                    )}
+                  </div>
+                  <p className="mt-1 text-[11px]">
+                    {monthPercent}% · {progress?.replay?.completed ? 'Hoàn thành' : monthPercent > 0 ? 'Đang xem' : progress?.replay?.reviewAvailable ? 'Chưa xem lại' : 'Chưa xem'}
+                    {(progress?.videoStarsThisMonth?.awardedStars || 0) > 0 && ` · +${progress.videoStarsThisMonth.awardedStars} ⭐`}
+                  </p>
+                  <div className="mt-2 h-1 rounded-full bg-blue-50" role="progressbar" aria-label="Video tháng này" aria-valuenow={monthPercent} aria-valuemin={0} aria-valuemax={100}>
+                    <div className="h-full rounded-full bg-[#2563EB]" style={{ width: `${monthPercent}%` }} />
+                  </div>
                 </div>
               </div>
+
+              {!isAdmin && REWARD_BLOCKED_REASONS.has(progress?.rewardStatus?.reasonCode) && (
+                <p role="status" className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-semibold text-amber-900">
+                  ⏸ {progress.rewardStatus.message}
+                </p>
+              )}
 
               {historyRows.length > 0 && (
                 <div className="pt-3 mt-3 border-t border-dashed border-[#eff4ff]">
@@ -870,7 +898,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                       : 'border-transparent text-[#737686] hover:text-[#172554]'
                   }`}
                 >
-                  <span>📝 Bài kiểm tra</span> <NewContentChip show={progress?.quizIsNew} />
+                  <span>📝 {monthlyQuiz ? 'Làm lại tháng này' : 'Bài kiểm tra'}</span> <NewContentChip show={progress?.quizIsNew} />
                   <span
                     className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                       progress?.assessmentPassed
@@ -954,7 +982,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div className="space-y-1">
                     <h3 className="text-base font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
-                      📝 {lesson.assessment.title || 'Bài kiểm tra bài học'} <NewContentChip show={progress?.quizIsNew} />
+                      📝 {monthlyQuiz ? 'Làm lại tháng này' : lesson.assessment.title || 'Bài kiểm tra bài học'} <NewContentChip show={progress?.quizIsNew} />
                     </h3>
                     <p className="text-xs text-[#737686] leading-relaxed max-w-xl">
                       {progress?.assessmentPassed
@@ -1045,6 +1073,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                           const isCurrent = lId === currentLessonId;
                           const learningState = courseProgress?.sessions?.find((ps: any) => ps.sessionId === sId)?.lessons?.find((pl: any) => pl.lessonId === lId);
                           const displayState = isCurrent && !loadingLesson && progress?.lessonId === lId ? progress : learningState;
+                          const monthlyQuizPending = !isLeaderOrAdmin && needsMonthlyQuiz(displayState?.replay, Boolean(displayState?.videoCompleted), displayState?.assessmentPassed === true, displayState?.monthlyQuizPassed === true);
                           const isQuizPassed = isLeaderOrAdmin || displayState?.assessmentPassed === true;
                           const isLocked = !isLeaderOrAdmin && Boolean(token) && learningState?.canView === false;
                           const isLessonDone =
@@ -1092,11 +1121,11 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                                   <span>📹 {l.video?.durationSeconds ? `${Math.floor(l.video.durationSeconds / 60)}:${(l.video.durationSeconds % 60).toString().padStart(2, '0')}` : 'Video'}</span>
                                   {l.assessment && (
                                     <span className={`font-semibold px-1.5 py-0.5 rounded text-[9px] ${
-                                      isQuizPassed
+                                      isQuizPassed && !monthlyQuizPending
                                         ? 'bg-emerald-100 text-emerald-700'
                                         : 'bg-amber-100 text-amber-700'
                                     }`}>
-                                      {isQuizPassed ? '✓ Quiz đạt' : '📝 Quiz'} <NewContentChip show={displayState?.quizIsNew} />
+                                      {monthlyQuizPending ? 'Làm lại tháng này' : isQuizPassed ? '✓ Quiz đạt' : '📝 Quiz'} <NewContentChip show={displayState?.quizIsNew} />
                                     </span>
                                   )}
                                   {l.documents?.length > 0 && <span>• 📎 {l.documents.length} tài liệu</span>}

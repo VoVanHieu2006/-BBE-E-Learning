@@ -351,7 +351,7 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
     return a
     }, { timeout: 60_000 })
   } catch (error) {
-    if (error instanceof Error && error.message === 'ProgressionChanged') return NextResponse.json({ error: { code: 'ProgressionChanged', message: 'Chu kỳ hoặc quyền mở bài đã thay đổi. Hãy tải lại.' } }, { status: 409 })
+    if (error instanceof Error && error.message === 'ProgressionChanged') return NextResponse.json({ error: { code: 'ProgressionChanged', message: 'Nhiệm kỳ hoặc quyền mở bài đã thay đổi. Hãy tải lại.' } }, { status: 409 })
     if (error instanceof Error && error.message === 'FinalExamVersionChanged') {
       return NextResponse.json({ error: { code: 'FinalExamVersionChanged', message: 'Đề thi vừa được cập nhật. Hãy tải lại trang để bắt đầu phiên bản mới.' } }, { status: 409 })
     }

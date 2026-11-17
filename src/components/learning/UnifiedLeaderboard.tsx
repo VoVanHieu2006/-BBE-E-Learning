@@ -940,7 +940,7 @@ export default function UnifiedLeaderboard({
               <h4 className="font-bold text-sm text-emerald-800">2. Xếp Hạng Khối DNA</h4>
               <ul className="list-disc pl-4 space-y-1">
                 <li>Chỉ tính thành viên <strong>SGDC</strong> và <strong>LDC</strong> hợp lệ. Thành viên nhóm <strong>TT</strong> và tài khoản <strong>Lead DNA / Admin</strong> không tham gia thi đua.</li>
-                <li><strong>Chu kỳ nhiệm kỳ DNA:</strong> Cố định kết thúc vào 31/03 và 30/09; ranh giới xử lý lúc 00:00 ngày 01/04 và 01/10 theo giờ Việt Nam.</li>
+                <li><strong>Nhiệm kỳ DNA:</strong> Cố định kết thúc vào 31/03 và 30/09; ranh giới xử lý lúc 00:00 ngày 01/04 và 01/10 theo giờ Việt Nam.</li>
               </ul>
             </div>
 

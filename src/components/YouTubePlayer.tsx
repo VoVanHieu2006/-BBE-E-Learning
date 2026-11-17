@@ -5,7 +5,7 @@ import { VideoPlaybackGuard } from '@/lib/video-playback-guard';
 import { VideoControls } from '@/lib/video-controls';
 import { VideoFullscreen, type FullscreenMode } from '@/lib/video-fullscreen';
 import { VideoProgressSession, type PlaybackEvent, type VideoProgressPayload } from '@/lib/video-progress-session';
-import { isServerVideoCompleted } from '@/lib/video-progress-rules';
+import { isServerVideoCompleted, serverVideoFurthest } from '@/lib/video-progress-rules';
 import { isStandaloneMode } from '@/lib/pwa';
 
 declare global {
@@ -40,6 +40,7 @@ interface Props {
   allowFreeSeek?: boolean;
   initialPosition?: number;
   initialFurthest?: number;
+  monthPercent?: number;
   durationSeconds?: number;
   onProgressApplied?: (data: any, p: VideoProgressPayload) => void;
   onComplete?: (result?: any) => void;
@@ -82,6 +83,7 @@ export default function YouTubePlayer({
   allowFreeSeek = false,
   initialPosition = 0,
   initialFurthest = 0,
+  monthPercent,
   durationSeconds = 0,
   onProgressApplied,
   onComplete,
@@ -553,7 +555,7 @@ export default function YouTubePlayer({
     if (result.videoId && result.videoId !== videoId) return;
     if (result.viewSessionId && result.viewSessionId !== guardRef.current.viewSessionId) return;
 
-    const serverFurthest = Number(result.furthestWatchedPositionSeconds);
+    const serverFurthest = serverVideoFurthest(result);
     if (Number.isFinite(serverFurthest) && serverFurthest >= 0) {
       guardRef.current.updateServerFurthestFromProps(serverFurthest);
       serverConfirmedFurthestRef.current = guardRef.current.serverConfirmedFurthest;
@@ -1017,9 +1019,10 @@ export default function YouTubePlayer({
       )}
 
       {/* Completion Banner (only for logged-in accounts) */}
-      {!isGuest && isCompleted && (
-        <div className="absolute left-4 top-4 z-20 flex items-center gap-1.5 rounded-xl border border-green-500/40 bg-green-900/90 px-3 py-1.5 text-xs font-bold text-white shadow-lg backdrop-blur-sm animate-fade-in">
-          <span>✓</span> Đã xem hết video (100%)
+      {!isGuest && (isCompleted || monthPercent !== undefined) && (
+        <div className="absolute left-4 right-4 top-4 z-20 flex flex-wrap items-center gap-2 pointer-events-none text-xs font-bold text-white">
+          {isCompleted && <span className="rounded-xl bg-green-900/90 px-3 py-1.5">✓ Đã xem hết video (100%)</span>}
+          {monthPercent !== undefined && <span className="rounded-xl bg-blue-950/90 px-3 py-1.5">Tháng này: {Math.floor(monthPercent)}%</span>}
         </div>
       )}
 

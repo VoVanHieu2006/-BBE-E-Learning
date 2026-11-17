@@ -26,10 +26,34 @@ export function displayVideoProgressPercent(
   return Math.min(99, Math.max(0, Math.floor((furthest / durationSeconds) * 100)))
 }
 
+type ServerVideoProgress = {
+  videoCompleted?: unknown
+  completed?: unknown
+  furthestWatchedPositionSeconds?: unknown
+  progressContext?: { monthlyReplayRequired?: boolean; monthlyReview?: boolean; learningCycleId?: string | null; competitionMonthId?: string | null }
+  replay?: { learningCycleId?: string | null; competitionMonthId?: string | null; watchedSeconds?: unknown; completed?: boolean } | null
+}
+
+function matchingMonthlyReplay(response: ServerVideoProgress) {
+  const context = response.progressContext
+  const replay = response.replay
+  return Boolean(context?.learningCycleId && context?.competitionMonthId
+    && replay?.learningCycleId === context.learningCycleId && replay?.competitionMonthId === context.competitionMonthId)
+}
+
+export function serverVideoFurthest(response: ServerVideoProgress): number {
+  const training = Number(response.furthestWatchedPositionSeconds)
+  const confirmed = Number.isFinite(training) ? Math.max(0, training) : 0
+  if (!response.progressContext?.monthlyReview) return confirmed
+  const watched = Number(response.replay?.watchedSeconds)
+  return matchingMonthlyReplay(response) && Number.isFinite(watched) ? Math.min(confirmed, Math.max(0, watched)) : 0
+}
+
 /** Completion must come from an explicit server flag, never a rounded percent. */
 export function isServerVideoCompleted(
-  response: { videoCompleted?: unknown; completed?: unknown } | null | undefined,
+  response: ServerVideoProgress | null | undefined,
 ): boolean {
+  if (response?.progressContext?.monthlyReview) return matchingMonthlyReplay(response) && response.replay?.completed === true
   return response?.videoCompleted === true || response?.completed === true
 }
 

@@ -4,6 +4,127 @@ import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { cycleVideoAlreadyComplete, isFreeReviewLesson, planMonthlyReview, startMonthlyReview } from '../lib/monthly-review'
 import { readinessForReason } from '../lib/learning-readiness-rules'
+import { getMonthlyReviewState, monthlyReplayPercent, previousReplayHistory, monthlyPlayerStart, needsMonthlyQuiz, MonthlyReviewRefreshGate } from '../lib/monthly-review-state'
+import { VideoPlaybackGuard } from '../lib/video-playback-guard'
+import { isServerVideoCompleted } from '../lib/video-progress-rules'
+import { getVideoReplayState } from '../lib/video-heartbeat'
+
+describe('monthly review v2 presentation state', () => {
+  it('reads only the current month and term when deciding the review button state', async (t) => {
+    const prismaModule = require('../lib/prisma')
+    const original = prismaModule.prisma
+    t.after(() => { prismaModule.prisma = original })
+    let replay: any = { furthest_seconds: 9 }
+    let awarded = false
+    let monthId = 'nov'
+    const keys: string[] = []
+    prismaModule.prisma = {
+      learningCycle: { findFirst: async () => ({ id: 'cycle' }) },
+      competitionMonth: { findUnique: async () => ({ id: monthId, key: `2026-${monthId === 'nov' ? '11' : '12'}` }) },
+      video: { findUnique: async () => ({ id: 'vA', duration_seconds: 600 }) },
+      cycleLessonProgress: { findUnique: async () => ({ furthest_seconds: 600 }) },
+      monthlyVideoReplay: { findUnique: async ({ where }: any) => {
+        assert.equal(where.user_id_video_id_competition_month_id_learning_cycle_id.competition_month_id, monthId)
+        return replay
+      } },
+      starLedger: { findUnique: async ({ where }: any) => { keys.push(where.reward_key); return awarded ? { id: 'reward' } : null } },
+    }
+    const started = await getVideoReplayState('user', 'A')
+    assert.equal(started?.reviewState, 'STARTED')
+    assert.equal(started?.reviewAvailable, false)
+    assert.equal(started?.watchedSeconds, 9)
+    awarded = true
+    assert.equal((await getVideoReplayState('user', 'A'))?.reviewState, 'AWARDED')
+    monthId = 'dec'; replay = null; awarded = false
+    const nextMonth = await getVideoReplayState('user', 'A')
+    assert.equal(nextMonth?.reviewState, 'AVAILABLE')
+    assert.equal(nextMonth?.watchedSeconds, 0)
+    assert.deepEqual(keys, ['video:user:vA:nov:cycle', 'video:user:vA:nov:cycle', 'video:user:vA:dec:cycle'])
+  })
+  it('drops a same-lesson response started before reset even when it arrives last', async () => {
+    const gate = new MonthlyReviewRefreshGate()
+    let progress = { monthlyReplayRequired: false, watchedSeconds: 600 }
+    let resolveOld!: (value: typeof progress) => void
+    const oldRequest = new Promise<typeof progress>(resolve => { resolveOld = resolve })
+    const oldEpoch = gate.begin(false)
+    const pending = oldRequest.then(data => { if (gate.accepts(oldEpoch)) progress = data })
+    const resetEpoch = gate.begin(true)
+    if (gate.accepts(resetEpoch)) progress = { monthlyReplayRequired: true, watchedSeconds: 0 }
+    resolveOld({ monthlyReplayRequired: false, watchedSeconds: 600 })
+    await pending
+    assert.deepEqual(progress, { monthlyReplayRequired: true, watchedSeconds: 0 })
+  })
+  it('does not unlock seeking when a monthly heartbeat still reports a completed term', () => {
+    const guard = new VideoPlaybackGuard({ lessonId: 'A', videoId: 'vA', duration: 600, initialFurthest: 0 })
+    const response = {
+      lessonId: 'A', videoId: 'vA', furthestWatchedPositionSeconds: 600, videoCompleted: true, completed: true,
+      progressContext: { learningCycleId: 'cycle', competitionMonthId: 'nov', monthlyReplayRequired: true, monthlyReview: true },
+      replay: { learningCycleId: 'cycle', competitionMonthId: 'nov', watchedSeconds: 9, completed: false },
+    }
+    guard.onServerProgressResponse(1, response)
+    assert.equal(guard.serverConfirmedFurthest, 9)
+    assert.equal(guard.canSeekFreely(), false)
+    assert.equal(isServerVideoCompleted(response), false)
+    guard.onServerProgressResponse(2, { ...response, replay: { ...response.replay, watchedSeconds: 600, completed: true } })
+    assert.equal(guard.canSeekFreely(), true)
+  })
+  it('keeps term progress for a first watch that crosses into a new month', () => {
+    const guard = new VideoPlaybackGuard({ lessonId: 'A', videoId: 'vA', duration: 600, initialFurthest: 0 })
+    const response = {
+      lessonId: 'A', videoId: 'vA', furthestWatchedPositionSeconds: 300, videoCompleted: false, completed: false,
+      progressContext: { learningCycleId: 'cycle', competitionMonthId: 'dec', monthlyReplayRequired: true, monthlyReview: false },
+      replay: { learningCycleId: 'cycle', competitionMonthId: 'dec', watchedSeconds: 0, completed: false },
+    }
+    guard.onServerProgressResponse(1, response)
+    assert.equal(guard.serverConfirmedFurthest, 300)
+    assert.equal(isServerVideoCompleted({ ...response, furthestWatchedPositionSeconds: 600, videoCompleted: true }), true)
+  })
+  it('resets monthly playback and limits resume/seek to the current month', () => {
+    assert.deepEqual(monthlyPlayerStart(true, 0, 399, 600, true, 600), { initialFurthest: 0, initialPosition: 0 })
+    assert.deepEqual(monthlyPlayerStart(true, 9, 399, 600, true, 600), { initialFurthest: 9, initialPosition: 9 })
+    assert.deepEqual(monthlyPlayerStart(true, 90, 12, 600, true, 600), { initialFurthest: 90, initialPosition: 12 })
+    assert.deepEqual(monthlyPlayerStart(false, 0, 399, 600, true, 600), { initialFurthest: 600, initialPosition: 399 })
+    assert.deepEqual(monthlyPlayerStart(false, 0, 600, 600, true, 600), { initialFurthest: 600, initialPosition: 0 })
+    assert.deepEqual(monthlyPlayerStart(true, undefined, undefined, 600, true, 600), { initialFurthest: 0, initialPosition: 0 })
+  })
+
+  it('labels an opened, unfinished monthly replay quiz even if the term quiz passed', () => {
+    assert.equal(needsMonthlyQuiz({ started: true, completed: false }, true), true)
+    assert.equal(needsMonthlyQuiz({ started: true, completed: true }, true, true, true), false)
+    assert.equal(needsMonthlyQuiz({ started: false, completed: false }, true), false)
+    assert.equal(needsMonthlyQuiz(undefined, true), false)
+    assert.equal(needsMonthlyQuiz({ started: true, completed: false }, false), false)
+    // stays pending after the monthly video is done, until the quiz is passed this month
+    assert.equal(needsMonthlyQuiz({ started: true, completed: true }, true, true, false), true)
+    assert.equal(needsMonthlyQuiz({ started: true, completed: true }, true, true, true), false)
+    // a first watch in the term (quiz never passed) is a normal quiz, not a monthly retake
+    assert.equal(needsMonthlyQuiz({ started: true, completed: true }, true, false, false), false)
+  })
+  it('keeps completed lessons visible after starting and after receiving a reward', () => {
+    assert.equal(getMonthlyReviewState(false, false, false), null)
+    assert.equal(getMonthlyReviewState(true, true, false), 'AVAILABLE')
+    assert.equal(getMonthlyReviewState(true, false, false), 'STARTED')
+    assert.equal(getMonthlyReviewState(true, false, true), 'AWARDED')
+    assert.equal(getMonthlyReviewState(true, true, true), 'AWARDED')
+    // A new month has neither the previous replay nor its ledger entry.
+    assert.equal(getMonthlyReviewState(true, true, false), 'AVAILABLE')
+  })
+
+  it('excludes the current month without changing its star totals or earlier rows', () => {
+    const rows = [{ competitionMonthId: 'nov', awardedStars: 11 }, { competitionMonthId: 'oct', awardedStars: 7 }]
+    assert.deepEqual(previousReplayHistory(rows, 'nov'), [rows[1]])
+    assert.equal(rows[0].awardedStars, 11)
+    assert.deepEqual(previousReplayHistory(rows, null), rows)
+  })
+
+  it('reports independent monthly progress, including an old nine-second replay', () => {
+    assert.equal(monthlyReplayPercent(9, 600), 1.5)
+    assert.equal(monthlyReplayPercent(0, 600), 0)
+    assert.equal(monthlyReplayPercent(600, 600), 100)
+    assert.equal(monthlyReplayPercent(650, 600), 100)
+    assert.equal(monthlyReplayPercent(9, 0), 0)
+  })
+})
 
 const root = path.resolve(__dirname, '../..')
 const read = (file: string) => readFileSync(path.join(root, file), 'utf8')
