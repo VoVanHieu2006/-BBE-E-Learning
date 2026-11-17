@@ -9,6 +9,7 @@ import { capVideoProgress, displayVideoProgressPercent, hasWatchedFullVideo, end
 import { isLearningManager } from '@/lib/manager-learning-access'
 import { readinessForReason } from '@/lib/learning-readiness-rules'
 import { chapterRewardState } from '@/lib/chapter-reward-gate'
+import { monthlyReplayPercent, previousReplayHistory } from '@/lib/monthly-review-state'
 
 /**
  * PATCH / POST /api/v1/lessons/[lessonId]/progress
@@ -92,10 +93,10 @@ async function getLessonVideoHistory(userId: string, videoId: string | null, rep
     where: { starts_at: { lte: now } },
     orderBy: { starts_at: 'desc' },
     take: 6,
-    select: { id: true, key: true, starts_at: true },
+    select: { id: true, key: true, starts_at: true, ends_at: true },
   })
   const monthIds = recentMonths.map((row) => row.id)
-  const currentMonth = recentMonths.find((row) => row.starts_at.getTime() <= now.getTime())
+  const currentMonth = recentMonths.find((row) => row.starts_at.getTime() <= now.getTime() && row.ends_at.getTime() > now.getTime())
   const [replayRows, videoStarRows] = monthIds.length ? await Promise.all([
     prisma.monthlyVideoReplay.findMany({
       where: { user_id: userId, video_id: videoId, competition_month_id: { in: monthIds } },
@@ -134,7 +135,7 @@ async function getLessonVideoHistory(userId: string, videoId: string | null, rep
       awardedStars: thisMonthReplay?.awardedStars ?? 0,
       suppressed: Boolean(replay?.suppressed),
     },
-    replayHistory,
+    replayHistory: previousReplayHistory(replayHistory, currentMonth?.id || null),
   }
 }
 
@@ -205,11 +206,13 @@ export async function GET(request: NextRequest, { params }: { params: { lessonId
     ...learningState,
     learningCycleId: cycle?.id || null,
     lessonId: params.lessonId,
-    progressContext: { learningCycleId: cycle?.id || null, competitionMonthId: month?.id || null, monthlyReplayRequired: Boolean(cycle && month && !replay?.reviewAvailable) },
+    progressContext: { learningCycleId: cycle?.id || null, competitionMonthId: month?.id || null, monthlyReplayRequired: Boolean(cycle && month && !replay?.reviewAvailable), monthlyReview: Boolean(cycle && month && replay && !replay.reviewAvailable && videoCompleted) },
     lifetime: { completed: Boolean(progress?.completed), completedAt: progress?.completed_at || null, furthestWatchedPositionSeconds: progress?.furthest_watched_position_seconds || 0 },
     cycleProgress: cycle ? { learningCycleId: cycle.id, completed: isLessonCompleted, videoCompleted, completedAt, furthestWatchedPositionSeconds: furthest } : null,
     rewardStatus: readinessForReason(rewardReason),
     replay,
+    reviewState: replay?.reviewState ?? null,
+    monthPercent: monthlyReplayPercent(replay?.watchedSeconds || 0, duration),
     videoStarsThisMonth: historyData.videoStarsThisMonth,
     replayHistory: historyData.replayHistory,
     id: params.lessonId,

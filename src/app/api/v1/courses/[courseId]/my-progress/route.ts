@@ -47,6 +47,7 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
             select: {
               id: true,
               title: true,
+              video: { select: { id: true } },
               progress: {
                 where: { user_id: userId },
                 select: {
@@ -71,6 +72,13 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
   }
 
   const learningStates = await readCourseLearningStates(prisma, userId, courseId)
+  const now = new Date()
+  const month = await prisma.competitionMonth.findFirst({ where: { starts_at: { lte: now }, ends_at: { gt: now } }, select: { id: true } })
+  const replays = cycle && month ? await prisma.monthlyVideoReplay.findMany({
+    where: { user_id: userId, learning_cycle_id: cycle.id, competition_month_id: month.id, video_id: { in: course.sessions.flatMap(s => s.lessons.flatMap(l => l.video ? [l.video.id] : [])) } },
+    select: { video_id: true, completed_at: true },
+  }) : []
+  const replayByLesson = new Map(replays.map(row => [row.video_id, { started: true, completed: Boolean(row.completed_at) }]))
 
   let totalLessons = 0
   let completedLessons = 0
@@ -91,6 +99,7 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
           id: l.id,
           title: l.title,
           ...state,
+          replay: l.video ? replayByLesson.get(l.video.id) || null : null,
           completed: isCycleCompleted,
           furthestWatchedPositionSeconds: state.furthestWatchedPositionSeconds,
           lastPositionSeconds: prog?.last_position_seconds || null,
