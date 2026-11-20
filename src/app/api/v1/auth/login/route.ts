@@ -14,6 +14,20 @@ const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || ''
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
+const INVALID_CREDENTIALS_MESSAGE =
+  `Tài khoản hoặc mật khẩu không đúng. Nếu nhập sai ${MAX_LOGIN_ATTEMPTS} lần, tài khoản sẽ bị khóa – hãy dùng "Quên mật khẩu" để đặt lại mật khẩu.`
+
+function invalidCredentials() {
+  return NextResponse.json({ error: { code: 'InvalidCredentials', message: INVALID_CREDENTIALS_MESSAGE } }, { status: 401 })
+}
+
+// Hash giả cùng cost với mật khẩu thật (12), tạo một lần cho mỗi instance.
+let dummyHash: Promise<string> | null = null
+function getDummyHash() {
+  dummyHash ??= bcrypt.hash(crypto.randomBytes(16).toString('hex'), 12)
+  return dummyHash
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}))
@@ -37,12 +51,38 @@ export async function POST(request: NextRequest) {
       include: { chapter_members: { take: 1, include: { chapter: { select: { id: true, name: true } } } } },
     })
 
-    // Check if account exists
+    // Chống dò email: email không tồn tại và email đúng + mật khẩu sai trả cùng một body, và đều chạy bcrypt
+    // (hash giả khi không có user) để thời gian phản hồi tương đương. Trạng thái tài khoản chỉ lộ khi mật khẩu đúng.
     if (!user) {
-      return NextResponse.json({ error: { code: 'InvalidCredentials', message: 'Tài khoản hoặc mật khẩu không đúng' } }, { status: 401 })
+      await bcrypt.compare(password, await getDummyHash())
+      return invalidCredentials()
     }
 
-    // Check account status
+    const valid = await bcrypt.compare(password, user.password_hash)
+
+    if (!valid) {
+      // Chỉ đếm tài khoản đang ACTIVE và còn tư cách (như trước: tài khoản INACTIVE/LOCKED/hết tư cách không bị đếm).
+      if (user.status === 'ACTIVE' && await hasActiveAffiliation(user.id, user.role)) {
+        // Cộng nguyên tử để hai lần thử đồng thời không bị tính thành một.
+        const { failed_login_count: newCount } = await prisma.user.update({
+          where: { id: user.id },
+          data: { failed_login_count: { increment: 1 } },
+          select: { failed_login_count: true },
+        })
+
+        if (failedLoginState(newCount).locked) {
+          // Khóa mật khẩu không tự mở theo thời gian (không đặt locked_until).
+          await prisma.user.updateMany({
+            where: { id: user.id, status: 'ACTIVE' },
+            data: { status: 'LOCKED', lock_reason: 'PASSWORD_LOCK', auth_version: { increment: 1 } },
+          })
+          invalidateUserAuthCache(user.id)
+        }
+      }
+      return invalidCredentials()
+    }
+
+    // Mật khẩu đúng: lúc này mới báo trạng thái tài khoản.
     if (user.status === 'INACTIVE') {
       return NextResponse.json({ error: { code: 'AccountInactive', message: 'Tài khoản đã bị vô hiệu hóa' } }, { status: 403 })
     }
@@ -61,44 +101,6 @@ export async function POST(request: NextRequest) {
 
     if (!await hasActiveAffiliation(user.id, user.role)) {
       return NextResponse.json({ error: { code: 'NoActiveAffiliation', message: 'Tài khoản không còn tư cách Chapter hoặc DNA đang hoạt động.' } }, { status: 403 })
-    }
-
-    // Verify password
-    const valid = await bcrypt.compare(password, user.password_hash)
-
-    if (!valid) {
-      // Cộng nguyên tử để hai lần thử đồng thời không bị tính thành một.
-      const { failed_login_count: newCount } = await prisma.user.update({
-        where: { id: user.id },
-        data: { failed_login_count: { increment: 1 } },
-        select: { failed_login_count: true },
-      })
-      const attempt = failedLoginState(newCount)
-
-      if (attempt.locked) {
-        // Khóa mật khẩu không tự mở theo thời gian (không đặt locked_until).
-        await prisma.user.updateMany({
-          where: { id: user.id, status: 'ACTIVE' },
-          data: { status: 'LOCKED', lock_reason: 'PASSWORD_LOCK', auth_version: { increment: 1 } },
-        })
-        invalidateUserAuthCache(user.id)
-        return NextResponse.json({
-          error: {
-            code: 'AccountLocked',
-            lockReason: 'PASSWORD_LOCK',
-            remainingAttempts: 0,
-            message: `Bạn đã nhập sai mật khẩu ${MAX_LOGIN_ATTEMPTS} lần nên tài khoản bị khóa. Hãy dùng "Quên mật khẩu" để đặt lại mật khẩu.`,
-          },
-        }, { status: 403 })
-      }
-
-      return NextResponse.json({
-        error: {
-          code: 'InvalidCredentials',
-          message: 'Tài khoản hoặc mật khẩu không đúng',
-          remainingAttempts: attempt.remainingAttempts,
-        },
-      }, { status: 401 })
     }
 
     // Generate JWT tokens concurrently
