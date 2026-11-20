@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
   if (!user || (user.status !== 'ACTIVE' && !isPasswordLocked(user))) {
     // Return same message
     console.log('[PASSWORD_RESET] Email not found or not active, returning generic message.')
-    return NextResponse.json({ message, sent: false }, { status: 200 })
+    return NextResponse.json({ message }, { status: 200 })
   }
 
   // Throttle per account (counter lives in the DB so it holds across serverless instances):
@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
     (recentTokens[0] && now - recentTokens[0].created_at.getTime() < RESET_COOLDOWN_MS)
   ) {
     console.warn('[PASSWORD_RESET] Throttled reset request for an account.')
-    return NextResponse.json({ message, sent: true }, { status: 200 })
+    return NextResponse.json({ message }, { status: 200 })
   }
 
   // Invalidate any existing reset tokens
@@ -78,5 +78,5 @@ export async function POST(request: NextRequest) {
     expiresAt,
   })
 
-  return NextResponse.json({ message, sent: true }, { status: 200 })
+  return NextResponse.json({ message }, { status: 200 })
 }

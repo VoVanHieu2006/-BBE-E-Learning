@@ -24,10 +24,7 @@ export default function ForgotPasswordPage() {
         setError(data.error?.message || 'Không thể gửi yêu cầu. Vui lòng thử lại.');
         return;
       }
-      if (data.sent === false) {
-        setError(`Không tìm thấy email ${email} trong hệ thống. Vui lòng kiểm tra lại.`);
-        return;
-      }
+      // Luôn hiện thông báo chung: không cho biết email có tồn tại hay không.
       setSubmitted(true);
       setEmailSent(true);
     } catch {

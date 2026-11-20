@@ -11,7 +11,6 @@ export default function LoginPage() {
   const [form, setForm] = useState({ email: '', password: '' });
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
-  const [remainingAttempts, setRemainingAttempts] = useState<number | null>(null);
   const [passwordLocked, setPasswordLocked] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -34,7 +33,6 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     setError('');
-    setRemainingAttempts(null);
     setPasswordLocked(false);
 
     try {
@@ -47,11 +45,12 @@ export default function LoginPage() {
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        // KHBB 7.2: sai 5 lần thì khóa; mỗi lần sai báo số lần còn lại, khóa mật khẩu chỉ mở bằng mail đặt lại.
-        if (data.error?.code === 'AccountLocked' && data.error?.lockReason === 'PASSWORD_LOCK') setPasswordLocked(true);
-        if (data.error?.code === 'InvalidCredentials' && Number.isInteger(data.error?.remainingAttempts)) {
-          setRemainingAttempts(data.error.remainingAttempts);
-        }
+        // KHBB 7.2: sai 5 lần thì khóa, khóa mật khẩu chỉ mở bằng mail đặt lại.
+        // Không báo số lần còn lại (lộ email nào tồn tại); mọi lần sai đều kèm link đặt lại mật khẩu.
+        if (
+          data.error?.code === 'InvalidCredentials' ||
+          (data.error?.code === 'AccountLocked' && data.error?.lockReason === 'PASSWORD_LOCK')
+        ) setPasswordLocked(true);
         setError(
           res.status === 423
             ? 'Tài khoản bị khóa do đăng nhập sai quá nhiều lần. Vui lòng dùng tính năng quên mật khẩu để đặt lại mật khẩu.'
@@ -139,9 +138,6 @@ export default function LoginPage() {
               <span className="shrink-0 mt-0.5">⚠️</span>
               <div>
                 <span>{error}</span>
-                {remainingAttempts !== null && (
-                  <div className="mt-1 font-semibold">Bạn còn {remainingAttempts} lần thử.</div>
-                )}
                 {passwordLocked && (
                   <div className="mt-1">
                     <Link href="/forgot-password" className="font-semibold underline">Đặt lại mật khẩu</Link>

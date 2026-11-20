@@ -31,7 +31,8 @@ Một người chỉ có một tư cách Chapter/DNA đang hoạt động. Chapt
 - ACTIVE vẫn cần affiliation hợp lệ. Backend đọc trạng thái/quyền hiện tại, không tin role/Chapter cũ trong JWT để bỏ qua thu hồi.
 - Quản lý chỉ vô hiệu hóa tài khoản trong scope; chỉ Admin kích hoạt lại theo quy tắc hiện tại. Deadline có thể tạo restriction/khóa, không tự mở khi thêm khóa hoặc tăng hạn.
 - Inactive quá thời gian giữ sẽ retirement thành tombstone, bảo toàn ledger/kết quả/snapshot, không khôi phục như tài khoản bình thường.
-- Khóa mật khẩu theo KHBB 7.2: sai **5** lần thì `LOCKED` với `lock_reason = PASSWORD_LOCK`; mỗi lần sai trả `remainingAttempts`; không đặt `locked_until` (không tự mở theo thời gian). Chỉ mail đặt lại mật khẩu mới mở khóa này (và không bao giờ mở khóa quá hạn). Đăng nhập đúng chỉ đếm lại số lần sai, không đổi `status`.
+- Khóa mật khẩu theo KHBB 7.2: sai **5** lần thì `LOCKED` với `lock_reason = PASSWORD_LOCK`; không đặt `locked_until` (không tự mở theo thời gian). Chỉ mail đặt lại mật khẩu mới mở khóa này (và không bao giờ mở khóa quá hạn). Đăng nhập đúng chỉ đếm lại số lần sai, không đổi `status`.
+- Chống dò email (20/11/2026): mật khẩu sai (kể cả lần thứ 5 vừa khóa) và email không tồn tại trả cùng một body 401 `InvalidCredentials`, không có `remainingAttempts`; email không tồn tại vẫn chạy bcrypt giả. `AccountInactive`, `AccountLocked`, `NoActiveAffiliation` chỉ trả khi mật khẩu đúng. Chỉ đếm sai cho tài khoản ACTIVE còn tư cách. Quên mật khẩu luôn trả `{ message }` chung (không có `sent`).
 
 ## Nội dung và video
 

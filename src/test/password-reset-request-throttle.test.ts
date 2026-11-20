@@ -71,6 +71,17 @@ describe('password reset request throttle', () => {
     assert.equal(mails, 1)
   })
 
+  it('answers an unknown email, a sent email and a throttled request with the same body (no `sent` flag)', async () => {
+    const unknown = await request({ email: 'nobody@example.com' })
+    const sent = await request({ email: user.email })
+    const throttled = await request({ email: user.email })
+    assert.equal(mails, 1)
+    for (const res of [unknown, sent, throttled]) assert.equal(res.status, 200)
+    assert.deepEqual(sent.body, unknown.body)
+    assert.deepEqual(throttled.body, unknown.body)
+    assert.deepEqual(Object.keys(unknown.body), ['message'])
+  })
+
   it('rejects a malformed body with 400 instead of crashing', async () => {
     assert.equal((await request('not json')).status, 400)
     assert.equal((await request({ email: 123 })).status, 400)

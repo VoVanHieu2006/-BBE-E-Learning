@@ -45,7 +45,12 @@ Mỗi phiên chạy riêng, có kiểm tra riêng, commit riêng. Phiên đánh 
 - Thêm test: `?month=` cũ không tạo tháng mới (`scripts/test/test-p05-routes.cjs`); giới hạn email đặt lại mật khẩu (`src/test/password-reset-request-throttle.test.ts`).
 - Đã thu hẹp sửa `leaderboard/chapters`: chỉ tạo tháng khi `?month=` đúng tháng hiện tại, giữ nguyên hành vi cũ khi không có `?month=`.
 
-### Phiên 2 — Chống spam đăng nhập và lộ email (Claude, ~1 giờ)
+### Phiên 2 — Chống spam đăng nhập và lộ email — XONG (20/11)
+- Lần sai thứ 5 cũng trả câu chung (vẫn khóa trong DB); câu chung kèm gợi ý "Quên mật khẩu" và link Đặt lại mật khẩu cho mọi lần sai.
+- Test: `login-lock.test.ts` (9 ca, gồm so sánh body email không tồn tại / email đúng + mật khẩu sai), `password-reset-request-throttle.test.ts` (body giống hệt, không có `sent`).
+- Còn lại: chủ dự án thêm rule Rate Limit trên Vercel Firewall (bước 5).
+
+Kế hoạch gốc:
 Quyết định của chủ dự án (20/11):
 - Giữ khóa vĩnh viễn sau 5 lần sai (không đổi luật).
 - **Bỏ dòng "Bạn còn N lần thử"**: hiện tại email sai chỉ báo "Tài khoản hoặc mật khẩu không đúng", email đúng thì thêm "Bạn còn N lần" → lộ email nào tồn tại.

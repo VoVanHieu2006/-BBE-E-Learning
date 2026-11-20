@@ -231,7 +231,8 @@ describe('POST /users/[userId]/password-reset/link (link route)', () => {
 describe('source checks', () => {
   it('public forgot-password route is unchanged: never returns a token or link', () => {
     const source = read('src/app/api/v1/auth/password-reset/request/route.ts')
-    assert.match(source, /return NextResponse\.json\(\{ message, sent: true \}/)
+    assert.match(source, /return NextResponse\.json\(\{ message \}/)
+    assert.doesNotMatch(source, /sent:/, 'never tells whether the email exists')
     assert.doesNotMatch(source, /password-reset-link|buildPasswordResetUrl|emailSent/)
   })
 
