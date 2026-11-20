@@ -35,6 +35,7 @@ export function useCourseEditor(params: { courseId: string }) {
   const [hasDraftChanges, setHasDraftChanges] = useState(false);
   const [draftConflict, setDraftConflict] = useState(false);
   const [draftError, setDraftError] = useState<string | null>(null);
+  const [draftSaveFailed, setDraftSaveFailed] = useState(false);
   const [quizPoolIds, setQuizPoolIds] = useState<string[]>([]);
   const tempId = () => `temp-${crypto.randomUUID()}`;
 
@@ -50,7 +51,7 @@ export function useCourseEditor(params: { courseId: string }) {
       change(content);
       const res = await apiFetch(`/api/v1/courses/${params.courseId}/draft`, { method: 'PUT', body: JSON.stringify({ content, expectedDraftId: draftIdRef.current, expectedDraftVersion: draftVersionRef.current, baseContentVersion: baseVersionRef.current }) });
       if (!res.ok) {
-        if (res.status === 409) { draftConflictRef.current = true; setDraftConflict(true); }
+        if (res.status === 409) { draftConflictRef.current = true; setDraftConflict(true); } else setDraftSaveFailed(true);
         showToast('error', res.error?.message || 'Không lưu được bản nháp.');
         return false;
       }
@@ -58,9 +59,11 @@ export function useCourseEditor(params: { courseId: string }) {
       draftVersionRef.current = res.data.draft.draftVersion;
       draftIdRef.current = res.data.draft.id;
       setHasDraftChanges(true);
+      setDraftSaveFailed(false);
       setCourse((prev: any) => draftToEditorCourse(res.data.draft.content, prev));
       return true;
     } catch (e) {
+      setDraftSaveFailed(true);
       showToast('error', e instanceof Error ? e.message : 'Không lưu được bản nháp.');
       return false;
     } finally { draftBusyRef.current = false; setDraftSaving(false); }
@@ -72,7 +75,10 @@ export function useCourseEditor(params: { courseId: string }) {
     try {
       const res = await apiFetch(`/api/v1/courses/${params.courseId}/draft`, { method: 'DELETE', body: JSON.stringify({ expectedDraftId: draftIdRef.current, expectedDraftVersion: draftVersionRef.current, baseContentVersion: baseVersionRef.current }) });
       if (res.ok) { await loadCourse(true); showToast('success', 'Đã bỏ thay đổi chưa cập nhật.'); }
-      else { if (res.status === 409) { draftConflictRef.current = true; setDraftConflict(true); } showToast('error', res.error?.message || 'Không bỏ được bản nháp.'); }
+      else { if (res.status === 409) { draftConflictRef.current = true; setDraftConflict(true); } else setDraftSaveFailed(true); showToast('error', res.error?.message || 'Không bỏ được bản nháp.'); }
+    } catch (e) {
+      setDraftSaveFailed(true);
+      showToast('error', e instanceof Error ? e.message : 'Không bỏ được bản nháp.');
     } finally { draftBusyRef.current = false; setDraftSaving(false); }
   }
   const [assessment, setAssessment] = useState<any>(null);
@@ -213,7 +219,7 @@ export function useCourseEditor(params: { courseId: string }) {
         setHasDraftChanges(Boolean(result.data.draft));
         c = draftToEditorCourse(draftRef.current!, c);
       } else { draftRef.current = null; setHasDraftChanges(false); setDraftError(null); }
-      draftConflictRef.current = false; setDraftConflict(false);
+      draftConflictRef.current = false; setDraftConflict(false); setDraftSaveFailed(false);
       setCourse(c);
       setForm({ title: c.title, description: c.description || '', visibility: c.visibility, status: c.status });
     }
@@ -1658,6 +1664,7 @@ export function useCourseEditor(params: { courseId: string }) {
     return {
     editorLocked: draftSaving || draftConflict || publishLoading || Boolean(draftError),
     draftError,
+    draftSaveFailed,
     draftSaving,
     draftConflict,
     hasDraftChanges,
