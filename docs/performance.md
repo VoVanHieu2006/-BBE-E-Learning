@@ -52,7 +52,7 @@ SELECT 1 trên connection mở có RTT 170,10–171,93ms. Hai lookup EXPLAIN ch�
 
 ## Mô hình giả định
 
-Mix được dùng để ngoại suy: 25% dashboard/khóa học (6 GET/45s), 40% video (heartbeat 10s), 20% quiz (mở+nộp/180s), 15% BXH (45s/lượt). Không tính login/refresh/khởi tạo/media/burst. Nhóm quiz giả định phiên thay thế liên tục, khác closed cohort sau submit. k6 không sử dụng cache client giống UI nên phải đo lại cache hit/prefetch.
+Mix được dùng để ngoại suy: 25% dashboard/khóa học (6 GET/45s), 40% video (heartbeat 10s tại lúc đo; nay 20s, xem mục số đo Vercel), 20% quiz (mở+nộp/180s), 15% BXH (45s/lượt). Không tính login/refresh/khởi tạo/media/burst. Nhóm quiz giả định phiên thay thế liên tục, khác closed cohort sau submit. k6 không sử dụng cache client giống UI nên phải đo lại cache hit/prefetch.
 
 | Số người **giả định** | API RPS | Request/15 phút | CPU tương đương local core | SQL/s ngoại suy | HTTP pending nếu wall giữ nguyên |
 |---|---:|---:|---:|---:|---:|
@@ -65,6 +65,21 @@ Mix được dùng để ngoại suy: 25% dashboard/khóa học (6 GET/45s), 40%
 Trung bình 284 API request/giờ-người, 18,88 giây CPU local/giờ-người. CPU demand = tổng RPS × CPU seconds/request; HTTP pending = tổng RPS × wall seconds nếu throughput duy trì được. Pending HTTP **không phải DB connections**. Đây là nhu cầu theo model, không phải kết quả chạy các mức VU đó, không chứng minh autoscale/latency/RAM/cloud capacity.
 
 Hệ số CPU cloud 0,5×–2× chỉ là độ nhạy chưa hiệu chuẩn, không confidence interval. Không đổi working set cả Node thành memory/VU. Function instance và tổng deployment có ranh giới khác nhau; không dùng số CPU local để chia ra số người cloud được bảo đảm. Quota/giá/chính sách nhà cung cấp thay đổi theo thời điểm: kiểm tra dashboard/tài liệu chính thức trước quyết định vận hành, không giữ số quota cũ thành cam kết hiện hành.
+
+## Số đo Vercel thật: heartbeat video (20/11/2026)
+
+Nguồn: dashboard Vercel (Hobby, quota 4 giờ CPU/tháng = 14.400 giây). Route `POST /api/v1/lessons/[lessonId]/progress`: 59 lần gọi, tổng 2,13 giây CPU, tức **khoảng 36 ms CPU mỗi heartbeat**. Đây là CPU function thật trên cloud, khác bảng CPU local ở trên (81,69 ms/heartbeat có profiler).
+
+Model mix ở mục "Mô hình giả định" được đo khi heartbeat còn 10 giây/lần. Từ 20/11/2026, video ≥ 30 giây gửi heartbeat 20 giây/lần; video < 30 giây giữ 3 giây/lần; PLAY, PAUSE, ẩn/hiện tab, đổi tốc độ, tua và ENDED vẫn gửi ngay (`videoHeartbeatIntervalMs` trong `src/lib/video-progress-rules.ts`).
+
+| Nhịp heartbeat | Request/giờ xem | CPU/giờ xem | Giờ xem cả hệ thống/tháng (chỉ tính heartbeat) | Giờ/người/tháng, 250 người | 300 người |
+|---|---:|---:|---:|---:|---:|
+| 10 giây (cũ) | 360 | khoảng 13 giây | khoảng 1.108 | 4,4 | 3,7 |
+| 20 giây (mới) | 180 | khoảng 6,5 giây | khoảng 2.215 | 8,9 | 7,4 |
+
+Cách tính: CPU/giờ = request/giờ × 36 ms; giờ xem/tháng = 14.400 giây ÷ CPU/giờ. Đây là trần chỉ riêng heartbeat; PLAY/PAUSE, trang học, quiz, BXH và đăng nhập cũng dùng chung quota nên con số thực tế thấp hơn (ước lượng khoảng 7 giờ/người/tháng với 250 người). Đo lại trên dashboard Vercel sau khi triển khai để xác nhận.
+
+Đổi nhịp không đổi điều kiện hoàn thành: server cộng thời gian thực từ lần ghi trước (tối đa `MAX_HEARTBEAT_GAP_SECONDS` = 300 giây), nên khoảng ≤ 20 giây cuối trước ENDED vẫn được tính. Kiểm chứng trong `src/test/video-heartbeat-interval.test.ts` (heartbeat cuối cách điểm kết thúc 19 giây, video 15/25/35 giây, 1 giờ, 2x, tạm dừng, ẩn tab).
 
 ## Việc đo tiếp
 

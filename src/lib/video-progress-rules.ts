@@ -57,6 +57,25 @@ export function isServerVideoCompleted(
   return response?.videoCompleted === true || response?.completed === true
 }
 
+/** Videos shorter than this keep the fast 3 s heartbeat. */
+export const SHORT_VIDEO_HEARTBEAT_THRESHOLD_SECONDS = 30
+export const SHORT_VIDEO_HEARTBEAT_INTERVAL_MS = 3000
+/**
+ * Scheduled heartbeat for longer videos. PLAY, PAUSE, tab visibility, speed
+ * changes, seeks and ENDED are sent immediately and do not wait for it.
+ * Completion does not depend on this cadence: ENDED is checked against the
+ * wall-clock time since the previous committed request (capped at
+ * MAX_HEARTBEAT_GAP_SECONDS = 300), so the last 19 s before the end are
+ * covered by elapsed time, not by an extra heartbeat.
+ */
+export const LONG_VIDEO_HEARTBEAT_INTERVAL_MS = 20000
+
+export function videoHeartbeatIntervalMs(durationSeconds: number): number {
+  return Number.isFinite(durationSeconds) && durationSeconds > 0 && durationSeconds < SHORT_VIDEO_HEARTBEAT_THRESHOLD_SECONDS
+    ? SHORT_VIDEO_HEARTBEAT_INTERVAL_MS
+    : LONG_VIDEO_HEARTBEAT_INTERVAL_MS
+}
+
 /** The client may report a rate, but progress is always capped at the supported maximum. */
 export function normalizePlaybackRate(value: unknown): number {
   const rate = typeof value === 'number' ? value : Number(value)
