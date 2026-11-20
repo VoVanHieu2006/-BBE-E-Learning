@@ -717,7 +717,9 @@ test('resumes from the saved position on first play although YouTube dropped the
   await page.locator('[data-resume-position]').fill('12');
   await page.clock.runFor(100);
   await expect(bar(page)).toContainText('0:12');
-  expect(await page.evaluate(() => (window as any).__playerMock.droppedSeeks)).toBeGreaterThan(0);
+  // No seek before the click: on real YouTube that would start playback by itself.
+  expect(await page.evaluate(() => (window as any).__playerMock.droppedSeeks || 0)).toBe(0);
+  expect(await page.evaluate(() => (window as any).__playerMock.current.state)).toBe(-1);
   await start(page);
   await page.clock.runFor(100);
   await expect.poll(() => page.evaluate(() => (window as any).__playerMock.current.time)).toBe(12);

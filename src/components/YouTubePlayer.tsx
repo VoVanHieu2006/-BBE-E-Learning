@@ -299,13 +299,10 @@ export default function YouTubePlayer({
 
     // Only seek to initialPosition if player hasn't started playing yet to avoid rewinding active playback
     if (initialPosition > 0 && currentTime === 0 && !isPlayingRef.current) {
+      // Only remember the point; seeking an unstarted YouTube video would
+      // start playback on its own. togglePlay / first PLAYING apply it.
       if (!firstPlayHandledRef.current) resumeTargetRef.current = initialPosition;
       setCurrentTime(initialPosition);
-      if (playerRef.current?.seekTo) {
-        try {
-          playerRef.current.seekTo(initialPosition, true);
-        } catch {}
-      }
     }
   }, [initialPosition, initialFurthest, durationSeconds, allowFreeSeek, accessToken]);
 
@@ -442,17 +439,13 @@ export default function YouTubePlayer({
                 setDuration(d);
                 durationRef.current = d;
               }
-              // Use the ref: this callback's props are from player creation,
-              // usually before the saved progress arrived.
-              const startAt = resumeTarget();
-              if (startAt > 0 && !firstPlayHandledRef.current) {
-                try {
-                  e.target.seekTo(startAt, true);
-                } catch {}
-              }
+              // No seek here: on an unstarted video YouTube's seekTo() starts
+              // playback by itself. The resume point is applied on play.
               if (pendingPlayRef.current) {
                 pendingPlayRef.current = false;
                 try {
+                  const startAt = firstPlayHandledRef.current ? 0 : resumeTarget();
+                  if (startAt > 0) e.target.seekTo(startAt, true);
                   e.target.playVideo();
                 } catch {}
               }
