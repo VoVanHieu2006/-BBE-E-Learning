@@ -41,6 +41,14 @@ describe('course draft safety', () => {
     assert.throws(() => validateDraftContent(draft), /thời lượng/i)
     assert.throws(() => validateDraftContent({ title: 'partial' }), /bản nháp/i)
   })
+  it('accepts HTTPS and bundled /images/ covers, rejects unsafe cover URLs', () => {
+    for (const coverUrl of ['https://res.cloudinary.com/x/cover.png', '/images/course-covers/organization-culture.png', null]) {
+      assert.equal(validateDraftContent({ ...content(), coverUrl }).coverUrl, coverUrl)
+    }
+    for (const coverUrl of ['javascript:alert(1)', '//evil.com/x.png', '/images/../secret', 'http://example.com/x.png', '']) {
+      assert.throws(() => validateDraftContent({ ...content(), coverUrl }), (e: any) => e.code === 'ValidationError' && /ảnh bìa/i.test(e.message))
+    }
+  })
   it('validates quiz pools and bank capacity', () => {
     const draft = content()
     draft.sessions[0].lessons[0].assessment.questionCount = 2

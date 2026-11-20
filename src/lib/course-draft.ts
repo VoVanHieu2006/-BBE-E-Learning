@@ -1,4 +1,5 @@
 import { normalizeDurationSeconds } from './validation/duration'
+import { isAllowedCoverUrl } from './validation/cover-url'
 
 export const DRAFT_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 export class CourseDraftError extends Error {
@@ -47,7 +48,7 @@ export function validateDraftContent(value: unknown, before?: CourseDraftContent
     if (row.description !== undefined && row.description !== null && typeof row.description !== 'string') invalid('Mô tả bản nháp không hợp lệ.')
   }
   description(c)
-  if (c.coverUrl !== undefined && c.coverUrl !== null && (!text(c.coverUrl, 1, 1000) || !c.coverUrl.startsWith('https://'))) invalid('Đường dẫn ảnh bìa không hợp lệ.')
+  if (c.coverUrl !== undefined && c.coverUrl !== null && !isAllowedCoverUrl(c.coverUrl)) invalid('Đường dẫn ảnh bìa không hợp lệ.')
   if (c.coverPublicId !== undefined && c.coverPublicId !== null && !text(c.coverPublicId, 1, 500)) invalid('Mã ảnh bìa không hợp lệ.')
   const config = (a: DraftFinal) => {
     id(a)
