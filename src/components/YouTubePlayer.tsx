@@ -129,7 +129,37 @@ export default function YouTubePlayer({
   const accessTokenRef = useRef(accessToken);
   const playerStateRef = useRef(-1);
   const finishPlaybackRef = useRef<() => Promise<void>>(async () => {});
+  // Resume point for the first play of this lesson. The progress fetch usually
+  // resolves after the player was created, and YouTube ignores seekTo() on a
+  // video that has not started yet, so the position is re-applied on first play.
+  const resumeTargetRef = useRef(initialPosition || 0);
+  const firstPlayHandledRef = useRef(false);
   accessTokenRef.current = accessToken;
+
+  // Seek target for the first play, kept inside the anti-skip ceiling.
+  const resumeTarget = () => {
+    const target = resumeTargetRef.current;
+    if (!(target > 0)) return 0;
+    const ceiling = guardRef.current.computeAllowedManualSeekUntil();
+    return Math.max(0, Math.min(target, ceiling));
+  };
+
+  // Called on the first PLAYING state: if YouTube started away from the resume
+  // point (it dropped the earlier seek), jump back to it once.
+  const applyResumeOnFirstPlay = (player: any, ct: number): number => {
+    if (firstPlayHandledRef.current) return ct;
+    firstPlayHandledRef.current = true;
+    const target = resumeTarget();
+    if (!(target > 0) || Math.abs(ct - target) <= 1.5) return ct;
+    try {
+      player?.seekTo?.(target, true);
+      guardRef.current.recordSeek('resume', ct, target);
+      setCurrentTime(target);
+      return target;
+    } catch {
+      return ct;
+    }
+  };
 
   useEffect(() => {
     setIsStandaloneApp(isStandaloneMode());
@@ -231,6 +261,8 @@ export default function YouTubePlayer({
     setIsCompleted(alreadyFinished);
     setVerificationState(alreadyFinished ? 'COMPLETED' : 'IDLE');
     completedFiredRef.current = false;
+    resumeTargetRef.current = initialPosition || 0;
+    firstPlayHandledRef.current = false;
     setCurrentTime(initialPosition || 0);
     setServerConfirmedFurthest(initialFurthest || 0);
     serverConfirmedFurthestRef.current = initialFurthest || 0;
@@ -267,6 +299,7 @@ export default function YouTubePlayer({
 
     // Only seek to initialPosition if player hasn't started playing yet to avoid rewinding active playback
     if (initialPosition > 0 && currentTime === 0 && !isPlayingRef.current) {
+      if (!firstPlayHandledRef.current) resumeTargetRef.current = initialPosition;
       setCurrentTime(initialPosition);
       if (playerRef.current?.seekTo) {
         try {
@@ -409,8 +442,13 @@ export default function YouTubePlayer({
                 setDuration(d);
                 durationRef.current = d;
               }
-              if (initialPosition > 0) {
-                e.target.seekTo(initialPosition, true);
+              // Use the ref: this callback's props are from player creation,
+              // usually before the saved progress arrived.
+              const startAt = resumeTarget();
+              if (startAt > 0 && !firstPlayHandledRef.current) {
+                try {
+                  e.target.seekTo(startAt, true);
+                } catch {}
               }
               if (pendingPlayRef.current) {
                 pendingPlayRef.current = false;
@@ -440,9 +478,10 @@ export default function YouTubePlayer({
                 try {
                   e.target.unloadModule?.('captions');
                 } catch {}
+                const ct = applyResumeOnFirstPlay(playerRef.current, playerRef.current?.getCurrentTime?.() || 0);
+                if (ct !== ctNow) guardRef.current.onStateChange(e.data, ct);
                 startUiTimer();
                 startHeartbeat();
-                const ct = playerRef.current?.getCurrentTime?.() || 0;
                 if (previousState !== YT_PLAYING && controls.seekingPointerId === null) void sendProgressRef.current(ct, serverConfirmedFurthestRef.current, 'PLAY');
               } else if (e.data === YT_PAUSED) {
                 perfMark('pause_applied');
@@ -731,6 +770,10 @@ export default function YouTubePlayer({
     try {
       if (wantPlay) {
         perfMark('click_play');
+        const startAt = firstPlayHandledRef.current ? 0 : resumeTarget();
+        if (startAt > 0 && Math.abs((playerRef.current.getCurrentTime?.() || 0) - startAt) > 1.5) {
+          try { playerRef.current.seekTo(startAt, true); } catch {}
+        }
         playerRef.current.playVideo();
       } else {
         perfMark('click_pause');
@@ -753,6 +796,8 @@ export default function YouTubePlayer({
       if (source === 'timeline') dragCheckpointedRef.current = true;
     }
     const { clampedTime } = guardRef.current.clampManualSeek(targetTime);
+    // A deliberate seek before the first play replaces the resume point.
+    if (!firstPlayHandledRef.current) resumeTargetRef.current = clampedTime;
     guardRef.current.recordSeek(source, position, clampedTime);
     player.seekTo(clampedTime, true);
     setCurrentTime(clampedTime);

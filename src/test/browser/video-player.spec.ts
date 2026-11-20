@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { capVideoProgress } from '../../lib/video-progress-rules';
 
 // Test the actual React component and CSS; only the external YouTube API is mocked.
-async function setup(page: Page, options: { theater?: boolean; noPopover?: boolean; reject?: boolean; url?: string; duration?: number } = {}) {
+async function setup(page: Page, options: { theater?: boolean; noPopover?: boolean; reject?: boolean; url?: string; duration?: number; youtubeStart?: boolean } = {}) {
   await page.addInitScript(options => {
     const win = window as any;
     if (options.theater) {
@@ -13,12 +13,15 @@ async function setup(page: Page, options: { theater?: boolean; noPopover?: boole
       HTMLElement.prototype.requestFullscreen = () => Promise.reject(new Error('Test: permission denied'));
     }
     if (options.noPopover) (HTMLElement.prototype as any).showPopover = undefined;
+    // Class field initializers below cannot see `options` (the constructor parameter shadows it).
+    const youtubeStart = Boolean(options.youtubeStart);
     win.__playerMock = { creates: 0, destroys: 0, frameLoads: 0, seeks: [], rates: [], current: null };
     win.YT = {
       Player: class {
         time = 120;
         rate = 1;
-        state = 2;
+        state = youtubeStart ? -1 : 2;
+        started = !youtubeStart;
         frame: HTMLIFrameElement;
         constructor(element: HTMLElement, private options: any) {
           win.__playerMock.creates++;
@@ -32,10 +35,15 @@ async function setup(page: Page, options: { theater?: boolean; noPopover?: boole
           setTimeout(() => options.events.onReady({ target: this }), 0);
         }
         emit(state: number) { this.state = state; this.options.events.onStateChange({ data: state, target: this }); }
-        playVideo() { this.emit(1); }
+        // youtubeStart: like YouTube, an unstarted video begins at 0:00 and drops earlier seeks.
+        playVideo() {
+          if (!this.started) { this.started = true; this.time = 0; }
+          this.emit(1);
+        }
         pauseVideo() { this.emit(2); }
         stopVideo() { this.state = 2; }
         seekTo(time: number) {
+          if (!this.started) { win.__playerMock.droppedSeeks = (win.__playerMock.droppedSeeks || 0) + 1; return; }
           this.time = time;
           win.__playerMock.seeks.push(time);
           if (this.state === 1 || this.state === 3) {
@@ -694,4 +702,41 @@ test('Admin organization history distinguishes ended Chapter and current DNA', a
   await expect(page.getByText('DNA SGDC', { exact: true })).toBeVisible();
   await expect(page.getByText('Đang hoạt động', { exact: true })).toBeVisible();
   await page.screenshot({ path: 'scratch/organization-history-ui.png', fullPage: true });
+});
+
+test('resumes from the saved position on first play although YouTube dropped the early seek', async ({ page }) => {
+  const events: any[] = [];
+  await page.route('**/api/v1/lessons/player-ui-regression/progress', async route => {
+    const data = route.request().postDataJSON();
+    events.push(data);
+    await route.fulfill({ json: { lessonId: 'player-ui-regression', viewSessionId: data.viewSessionId, furthestWatchedPositionSeconds: Math.max(12, data.positionSeconds) } });
+  });
+  await setup(page, { youtubeStart: true });
+  await page.locator('input').first().fill('synthetic-ui-token');
+  // Saved progress arrives after the player is ready, as on the learning page.
+  await page.locator('[data-resume-position]').fill('12');
+  await page.clock.runFor(100);
+  await expect(bar(page)).toContainText('0:12');
+  expect(await page.evaluate(() => (window as any).__playerMock.droppedSeeks)).toBeGreaterThan(0);
+  await start(page);
+  await page.clock.runFor(100);
+  await expect.poll(() => page.evaluate(() => (window as any).__playerMock.current.time)).toBe(12);
+  await expect.poll(() => page.evaluate(() => (window as any).__playerMock.current.state)).toBe(1);
+  // Playback continues from 12 s, the guard does not pull it back.
+  for (let i = 0; i < 6; i++) {
+    await page.evaluate(() => { (window as any).__playerMock.current.time += .5; });
+    await page.clock.runFor(500);
+  }
+  expect(await page.evaluate(() => (window as any).__playerMock.current.time)).toBe(15);
+  await expect(bar(page)).toContainText('0:15');
+  expect(events.some(e => e.event === 'PLAY' && e.positionSeconds === 12)).toBe(true);
+  expect(events.every(e => e.positionSeconds >= 12)).toBe(true);
+});
+
+test('first play without saved progress still starts at 0:00', async ({ page }) => {
+  await setup(page, { youtubeStart: true });
+  await start(page);
+  await page.clock.runFor(100);
+  expect(await page.evaluate(() => (window as any).__playerMock.current.time)).toBe(0);
+  expect(await page.evaluate(() => (window as any).__playerMock.seeks)).toEqual([]);
 });
