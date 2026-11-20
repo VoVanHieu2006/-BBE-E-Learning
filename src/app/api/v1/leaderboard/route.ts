@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getPublishedSystemData, calculateBatchUsersProgress } from '@/lib/progress/calculator'
 import { getActiveMetricChapterIds } from '@/lib/active-chapters'
@@ -17,11 +16,12 @@ import { publicDisplayName } from '@/lib/fun-display-name'
  */
 export async function GET(request: NextRequest) {
   if (request.nextUrl.searchParams.has('group')) return periodLeaderboard(request)
-  await authenticate(request).catch(() => null)
+  // The member board is public (/leaderboard works logged out) and identical for every
+  // caller, so no per-request auth lookup (3-4 DB queries wasted on anonymous spam).
 
   const url = new URL(request.url)
-  const limit = Math.min(Math.max(parseInt(url.searchParams.get('limit') || '50', 10), 1), 100)
-  const page = Math.max(parseInt(url.searchParams.get('page') || '1', 10), 1)
+  const limit = Math.min(Math.max(parseInt(url.searchParams.get('limit') || '50', 10) || 50, 1), 100)
+  const page = Math.min(Math.max(parseInt(url.searchParams.get('page') || '1', 10) || 1, 1), 1000)
   const skip = (page - 1) * limit
 
   let allResults: any[] = []
@@ -107,7 +107,9 @@ export async function GET(request: NextRequest) {
     { items, page, limit, totalCount },
     {
       headers: {
-        'Cache-Control': 'no-store',
+        // Same 30s freshness as the in-memory cache, but served by Vercel's CDN so
+        // repeated or spammed hits never start a function.
+        'Cache-Control': 'public, max-age=0, s-maxage=30, stale-while-revalidate=60',
       },
     }
   )

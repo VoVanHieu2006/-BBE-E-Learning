@@ -147,6 +147,26 @@ test('legacy Chapter board retains available months even if current period is un
   } finally { db.competitionMonth.findFirst = findFirst }
 })
 
+test('legacy Chapter board never creates arbitrary months from ?month= (anonymous spam guard)', async () => {
+  const { findUnique } = db.competitionMonth
+  let creates = 0
+  db.competitionMonth.findUnique = async () => null
+  db.competitionMonth.create = async () => { creates++; return month }
+  db.competitionMonth.createMany = async () => { creates++; return { count: 1 } }
+  try {
+    for (const key of ['1970-01', '1999-12', '9999-12']) {
+      const response = await legacyRoute.GET(new NextRequest(`http://localhost/api/v1/leaderboard/chapters?month=${key}`))
+      const data = await response.json()
+      assert.equal(data.state, 'PERIOD_UNAVAILABLE')
+    }
+    assert.equal(creates, 0)
+  } finally {
+    db.competitionMonth.findUnique = findUnique
+    delete db.competitionMonth.create
+    delete db.competitionMonth.createMany
+  }
+})
+
 test('cached live Chapter board still returns fresh available months', async () => {
   const findFirst = db.competitionMonth.findFirst
   const { setCachedChapterLeaderboard, invalidateChapterLeaderboardCache } = require('../../src/lib/chapter-leaderboard-cache')

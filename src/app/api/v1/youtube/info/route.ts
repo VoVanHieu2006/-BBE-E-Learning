@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { formatDuration, lookupYouTube, parseYouTubeVideoId } from '@/lib/youtube/duration'
+import { authenticate } from '@/lib/auth'
 
 /**
  * GET /api/v1/youtube/info?videoId=...
@@ -8,6 +9,14 @@ import { formatDuration, lookupYouTube, parseYouTubeVideoId } from '@/lib/youtub
  * và durationSeconds = 0 — KHÔNG bịa số mặc định. Admin phải nhập tay trước khi lưu.
  */
 export async function GET(request: NextRequest) {
+  // Only the admin course editor uses this. Each lookup makes several outbound calls and
+  // spends the YouTube API quota, so it must not be callable anonymously.
+  const auth = await authenticate(request)
+  if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: 401 })
+  if (auth.context!.role !== 'ADMIN') {
+    return NextResponse.json({ error: { code: 'Forbidden', message: 'Chỉ Admin được tra cứu video.' } }, { status: 403 })
+  }
+
   const url = new URL(request.url)
   const rawId = url.searchParams.get('videoId') || ''
   const videoId = parseYouTubeVideoId(rawId)

@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => ({}))
     const { email, password } = body
 
-    if (!email || !password) {
+    if (typeof email !== 'string' || typeof password !== 'string' || !email || !password || email.length > 254 || password.length > 200) {
       return NextResponse.json({ error: { code: 'ValidationError', message: 'email và password bắt buộc' } }, { status: 400 })
     }
 
@@ -194,8 +194,8 @@ export async function POST(request: NextRequest) {
       {
         error: {
           code: 'ServerError',
-          message: err?.message || 'Lỗi xử lý đăng nhập tại máy chủ',
-          detail: String(err),
+          // Never echo internal (Prisma/stack) error text to anonymous callers.
+          message: 'Lỗi xử lý đăng nhập tại máy chủ',
         },
       },
       { status: 500 }

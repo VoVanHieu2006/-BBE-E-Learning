@@ -4,6 +4,8 @@ import { prisma } from '@/lib/prisma'
 import { parseChapterKpiMonthStart } from '@/lib/chapter-leaderboard-rules'
 import { getCachedChapterLeaderboard, setCachedChapterLeaderboard } from '@/lib/chapter-leaderboard-cache'
 import { historicalChapterMonthRows } from '@/lib/competition-snapshots'
+import { ensureCompetitionMonth } from '@/lib/learning-periods'
+import { competitionMonthBounds } from '@/lib/learning-cycle-rules'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,14 +21,11 @@ export async function GET(request: NextRequest) {
     ? await prisma.competitionMonth.findUnique({ where: { key: requestedKey } })
     : await prisma.competitionMonth.findFirst({ where: { starts_at: { lte: now }, ends_at: { gt: now } } })
 
-  if (!compMonth && requestedMonth) {
-    compMonth = await prisma.competitionMonth.create({
-      data: {
-        key: requestedKey!,
-        starts_at: requestedMonth,
-        ends_at: new Date(Date.UTC(requestedMonth.getUTCFullYear(), requestedMonth.getUTCMonth() + 1, 1)),
-      },
-    })
+  // A GET must never create arbitrary months: anonymous ?month=1970-01..9999-12 used to
+  // insert OPEN rows that the daily close cron then had to process. Only the current
+  // month may be created lazily, with the same bounds every learning writer uses.
+  if (!compMonth && requestedKey && requestedKey === competitionMonthBounds(now).key) {
+    compMonth = await ensureCompetitionMonth(prisma, now)
   }
   const availableMonthRows = await prisma.competitionMonth.findMany({ distinct: ['key'], orderBy: { starts_at: 'desc' }, select: { key: true }, take: 24 })
   const availableMonths = availableMonthRows.map(item => item.key)
