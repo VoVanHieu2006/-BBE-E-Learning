@@ -10,12 +10,12 @@ const initial = () => ({ title: 'Khóa kiểm thử cập nhật', description: 
 const course = () => ({ ...initial(), id: courseId, courseId, status: 'PUBLISHED' })
 
 async function auth(page: Page, context: BrowserContext, role: 'ADMIN' | 'MEMBER') {
-  const token = await new SignJWT({ role }).setProtectedHeader({ alg: 'HS256' }).setSubject('00000000-0000-4000-8000-000000000099').setExpirationTime('10m').sign(new TextEncoder().encode('p02b-browser-fixture-secret-only-32'))
+  const token = await new SignJWT({ role, authVersion: 0 }).setProtectedHeader({ alg: 'HS256' }).setSubject('00000000-0000-4000-8000-000000000099').setExpirationTime('10m').sign(new TextEncoder().encode('p02b-browser-fixture-secret-only-32'))
   await context.addCookies([{ name: 'accessToken', value: token, url: 'http://127.0.0.1:3120', httpOnly: true }])
   await page.addInitScript(({ token, role }) => { localStorage.setItem('accessToken', token); localStorage.setItem('user', JSON.stringify({ id: 'user', role, status: 'ACTIVE', displayName: 'Kiểm thử' })); }, { token, role })
 }
 
-async function editor(page: Page, conflict = false) {
+async function editor(page: Page, conflict = false, failPut = false) {
   const calls: { method: string; path: string; body: any }[] = []
   let draft: any = null
   let content = initial()
@@ -26,6 +26,7 @@ async function editor(page: Page, conflict = false) {
     if (path === base) return route.fulfill({ json: { ...course(), ...content } })
     if (path === `${base}/draft` && method === 'GET') return route.fulfill({ json: { course: { contentVersion: 1 }, draft, initialContent: content } })
     if (path === `${base}/draft` && method === 'PUT') {
+      if (failPut) return route.fulfill({ status: 500, json: { error: { code: 'InternalError', message: 'Máy chủ lỗi.' } } })
       if (conflict) return route.fulfill({ status: 409, json: { error: { code: 'ConcurrencyConflict', message: 'Admin khác đã thay đổi bản nháp.' } } })
       draft = { id: 'draft-ui', draftVersion: (draft?.draftVersion || 0) + 1, content: body.content }
       return route.fulfill({ json: { draft } })
@@ -44,8 +45,8 @@ test('published course saves metadata to draft, publishes once and retains quest
   await auth(page, context, 'ADMIN')
   const calls = await editor(page)
   await page.locator('input[type="text"]').first().fill('Tiêu đề bản nháp')
-  await page.getByRole('button', { name: 'Lưu thay đổi •' }).click()
-  await expect(page.getByRole('status').filter({ hasText: 'Có thay đổi chưa cập nhật' })).toBeVisible()
+  await page.getByRole('button', { name: 'Lưu thông tin •' }).click()
+  await expect(page.getByTestId('course-editor-status')).toHaveText('Có thay đổi chưa cập nhật')
   const put = calls.find(c => c.method === 'PUT')!
   expect(put.path).toBe(`${base}/draft`)
   expect(put.body.expectedDraftVersion).toBe(0)
@@ -74,11 +75,42 @@ test('session changes and discard stay in the published draft', async ({ page, c
   expect(calls.every(c => c.path === `${base}/draft`)).toBe(true)
 })
 
+async function addSession(page: Page, title: string) {
+  await page.getByRole('button', { name: /Thêm buổi học/ }).click()
+  const modal = page.locator('[role="dialog"]')
+  await modal.locator('input').first().fill(title)
+  await modal.getByRole('button', { name: /Lưu|Thêm buổi/ }).last().click()
+}
+
+test('status badge replaces "Đã lưu": pending after an outline change, updated after publish', async ({ page, context }) => {
+  await auth(page, context, 'ADMIN')
+  await editor(page)
+  const status = page.getByTestId('course-editor-status')
+  await expect(status).toHaveText('Đã cập nhật')
+  await expect(page.getByRole('button', { name: 'Đã lưu' })).toHaveCount(0)
+  await addSession(page, 'Buổi mới')
+  await expect(page.getByText('Buổi mới', { exact: true })).toBeVisible()
+  await expect(status).toHaveText('Có thay đổi chưa cập nhật')
+  await expect(status).toHaveAttribute('data-status', 'pending')
+  await page.getByRole('button', { name: 'Cập nhật khóa học', exact: true }).click()
+  await expect(status).toHaveText('Đã cập nhật')
+})
+
+test('failed draft save shows a persistent error badge instead of a saved state', async ({ page, context }) => {
+  await auth(page, context, 'ADMIN')
+  await editor(page, false, true)
+  await addSession(page, 'Buổi lỗi')
+  const status = page.getByTestId('course-editor-status')
+  await expect(status).toHaveText('Lỗi lưu nháp, thử lại')
+  await expect(status).toHaveAttribute('data-status', 'save-failed')
+  await expect(page.getByText('Buổi lỗi', { exact: true })).toHaveCount(0)
+})
+
 test('concurrent admin conflict blocks further writes until reload', async ({ page, context }) => {
   await auth(page, context, 'ADMIN')
   await editor(page, true)
   await page.locator('input[type="text"]').first().fill('Thay đổi xung đột')
-  await page.getByRole('button', { name: 'Lưu thay đổi •' }).click()
+  await page.getByRole('button', { name: 'Lưu thông tin •' }).click()
   await expect(page.getByRole('alert').filter({ hasText: 'Admin khác' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Cập nhật khóa học', exact: true })).toBeDisabled()
   await page.getByRole('button', { name: 'Tải lại bản nháp' }).click()

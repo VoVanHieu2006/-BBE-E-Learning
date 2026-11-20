@@ -13,6 +13,14 @@ import CourseSessionModal from './CourseSessionModal';
 import CourseLessonModal from './CourseLessonModal';
 import CourseBulkLessonModal from './CourseBulkLessonModal';
 import CourseAssessmentEditor from './CourseAssessmentEditor';
+import { getCourseEditorStatus, CourseEditorStatusTone } from '@/lib/course-editor-status';
+
+const STATUS_TONE_CLASS: Record<CourseEditorStatusTone, string> = {
+  danger: 'bg-red-100 text-red-700',
+  neutral: 'bg-slate-100 text-slate-700',
+  warning: 'bg-orange-100 text-orange-700',
+  success: 'bg-green-100 text-green-700',
+};
 
 export default function AdminEditCoursePage({ params }: { params: { courseId: string } }) {
   const editor = useCourseEditor(params);
@@ -31,6 +39,15 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
     handleUnpublish,
     loading
   } = editor;
+  const editorStatus = getCourseEditorStatus({
+    isPublished,
+    draftSaving: savingInfo || editor.draftSaving,
+    draftConflict: editor.draftConflict,
+    draftError: Boolean(editor.draftError),
+    draftSaveFailed: editor.draftSaveFailed,
+    hasDraftChanges: editor.hasDraftChanges,
+    hasUnsavedCourseInfo,
+  });
 
   return (
     <>
@@ -44,7 +61,12 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
             ← Quay lại danh sách khóa học
           </Link>
           {course && <div className="flex flex-wrap items-center gap-3">
-            <Button variant="secondary" disabled={editor.editorLocked} loading={savingInfo || editor.draftSaving} onClick={() => void handleSaveInfo()}>{hasUnsavedCourseInfo ? 'Lưu thay đổi •' : 'Đã lưu'}</Button>
+            {hasUnsavedCourseInfo && <Button variant="secondary" disabled={editor.editorLocked} loading={savingInfo || editor.draftSaving} onClick={() => void handleSaveInfo()}>Lưu thông tin •</Button>}
+            {editorStatus && (
+              <span role="status" data-testid="course-editor-status" data-status={editorStatus.kind} className={`whitespace-nowrap inline-flex items-center text-xs font-bold px-3 py-1 rounded-full ${STATUS_TONE_CLASS[editorStatus.tone]}`}>
+                {editorStatus.label}
+              </span>
+            )}
             <span
               className={`whitespace-nowrap inline-flex items-center text-xs font-bold px-3 py-1 rounded-full ${
                 isPublished ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
@@ -64,7 +86,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
         </div>
 
         {isPublished && <div className="mb-6 space-y-3">
-          <p role="status" className="text-sm text-[#434655]">{editor.draftSaving ? 'Đang lưu bản nháp…' : editor.hasDraftChanges ? 'Có thay đổi chưa cập nhật. Học viên vẫn học bản đang xuất bản.' : 'Chỉnh sửa được lưu vào bản nháp thay đổi.'}</p>
+          <p className="text-sm text-[#434655]">{editor.hasDraftChanges ? 'Học viên vẫn học bản đang xuất bản cho đến khi bấm "Cập nhật khóa học".' : 'Chỉnh sửa được lưu vào bản nháp thay đổi.'}</p>
           {editor.draftConflict && <div role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">Bản nháp hoặc bản xuất bản đã thay đổi bởi Admin khác. Hãy tải lại để xem phiên bản mới trước khi tiếp tục. <Button variant="secondary" onClick={editor.reloadDraft}>Tải lại bản nháp</Button></div>}
           {editor.draftError && <p role="alert" className="text-sm text-red-700">Bản nháp cũ không hợp lệ: {editor.draftError} Đang hiển thị bản xuất bản. Hãy bỏ thay đổi để bắt đầu bản nháp mới.</p>}
           <button type="button" disabled={editor.editorLocked || editor.hasDraftChanges || hasUnsavedCourseInfo} onClick={() => setShowUnpublishConfirm(true)} className="text-sm font-semibold text-red-700 underline underline-offset-4 disabled:opacity-50">Hủy xuất bản khẩn cấp</button>
