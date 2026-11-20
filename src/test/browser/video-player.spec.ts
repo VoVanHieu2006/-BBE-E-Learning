@@ -135,7 +135,7 @@ for (const rate of [1, 1.5, 2]) {
     await page.locator('[data-video-timeline]').click({ position: { x: box.width * (108 / 596), y: 5 } });
     await page.clock.runFor(50);
     const before = events.length;
-    await advance(108 + 30 * rate);
+    await advance(108 + 65 * rate); // 20 s heartbeat: at least three fresh beats
     const freshHeartbeats = () => events.slice(before).filter(e => e.event === 'HEARTBEAT' && e.positionSeconds > 108.01);
     await expect.poll(() => freshHeartbeats().length).toBeGreaterThanOrEqual(3);
     const fresh = freshHeartbeats();
@@ -160,7 +160,7 @@ test('P0: duplicate PLAYING events do not enqueue requests or postpone heartbeat
   await start(page);
   await expect.poll(() => events.length).toBeGreaterThan(0);
   const playsBefore = events.filter(e => e.event === 'PLAY').length;
-  for (let i = 0; i < 24; i++) {
+  for (let i = 0; i < 44; i++) { // 22 s > one 20 s heartbeat
     await page.evaluate(() => (window as any).__playerMock.current.emit(1));
     await page.clock.runFor(500);
   }
@@ -644,20 +644,22 @@ for (const native of [false, true]) {
     await expect(bar(page)).toBeVisible();
     await page.evaluate(() => { (window as any).__createsBeforeFullscreen = (window as any).__playerMock.creates; });
     await start(page);
-    await page.clock.fastForward(11000);
+    await page.clock.fastForward(21000);
     await expect.poll(() => events.filter(event => event.event === 'HEARTBEAT').length).toBeGreaterThan(0);
     const before = events.filter(event => event.event === 'HEARTBEAT').length;
     await reveal(page);
     await fullscreen(page).click();
     await expect(wrapper(page)).toHaveAttribute('data-fullscreen-mode', native ? 'NATIVE' : 'THEATER');
-    await page.clock.fastForward(11000);
+    await page.clock.fastForward(21000);
     await expect.poll(() => events.filter(event => event.event === 'HEARTBEAT').length).toBeGreaterThan(before);
     await reveal(page);
     if (isMobile) await bar(page).locator('button[title^="Đổi tốc độ"]').click();
     else await bar(page).getByRole('button', { name: '1.5x', exact: true }).click();
+    // The speed checkpoint carries the old rate; the next 20 s heartbeat carries 1.5x.
+    await page.clock.fastForward(21000);
     await expect.poll(() => events.some(event => event.playbackRate > 1)).toBe(true);
     await wrapper(page).locator(':scope > button').click();
-    await page.clock.fastForward(11000);
+    await page.clock.fastForward(21000);
     expect(new Set(events.map(event => event.viewSessionId)).size).toBe(1);
     expect(events.every(event => event.viewSessionId && event.event && event.positionSeconds >= 0)).toBe(true);
     expect(await page.evaluate(() => (window as any).__playerMock.creates === (window as any).__createsBeforeFullscreen)).toBe(true);

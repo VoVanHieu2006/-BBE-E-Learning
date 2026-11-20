@@ -5,7 +5,7 @@ import { VideoPlaybackGuard } from '@/lib/video-playback-guard';
 import { VideoControls } from '@/lib/video-controls';
 import { VideoFullscreen, type FullscreenMode } from '@/lib/video-fullscreen';
 import { VideoProgressSession, type PlaybackEvent, type VideoProgressPayload } from '@/lib/video-progress-session';
-import { isServerVideoCompleted, serverVideoFurthest } from '@/lib/video-progress-rules';
+import { isServerVideoCompleted, serverVideoFurthest, videoHeartbeatIntervalMs } from '@/lib/video-progress-rules';
 import { isStandaloneMode } from '@/lib/pwa';
 
 declare global {
@@ -688,7 +688,7 @@ export default function YouTubePlayer({
   const startHeartbeat = () => {
     if (!accessTokenRef.current || heartbeatRef.current) return;
     const d = durationRef.current || duration;
-    const intervalMs = d > 0 && d < 30 ? 3000 : 10000;
+    const intervalMs = videoHeartbeatIntervalMs(d);
 
     heartbeatRef.current = setInterval(() => {
       try {
