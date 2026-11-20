@@ -24,7 +24,7 @@ Quy đổi:
 
 Không bắn tải thật vào Vercel: chính sách Vercel không cho load test gói Hobby và sẽ đốt đúng quota này. Muốn đo sâu hơn thì chạy bộ k6 có sẵn trong `load-tests/` trên máy local (phiên 7).
 
-## 2. Đã sửa trong phiên này (chưa commit)
+## 2. Đã sửa ở phiên 1 (commit f454634)
 
 | File | Sửa gì |
 |---|---|
@@ -34,24 +34,30 @@ Không bắn tải thật vào Vercel: chính sách Vercel không cho load test 
 | `src/app/api/v1/leaderboard/route.ts` | BXH công khai: bỏ truy vấn xác thực vô ích, cho CDN Vercel cache 30 s (spam không chạy function), chặn `page`/`limit` bất thường. |
 | `src/app/api/v1/youtube/info/route.ts` | Chỉ Admin được gọi (trước đây ai cũng gọi được, tốn quota YouTube). |
 
-Typecheck: đạt (chỉ lỗi cũ trong `scratch/`). Chưa chạy unit test, chưa commit.
+Typecheck đạt; 70 suite unit đạt.
 
 ## 3. Các phiên tiếp theo
 
 Mỗi phiên chạy riêng, có kiểm tra riêng, commit riêng. Phiên đánh dấu **Codex** có thể giao cho `codex exec` model gpt-6.2-astra; Claude review diff, chạy tsc + test trước khi merge.
 
-### Phiên 1 — Kiểm tra và commit phần đã sửa (Claude, ~15 phút)
-1. Chạy `npm test` (unit) và các test liên quan: `src/test/login-lock.test.ts`, test leaderboard, test password reset nếu có.
-2. Thêm test nhỏ: GET `leaderboard/chapters?month=1990-01` không tạo dòng mới; reset mật khẩu lần 2 trong 1 phút không gửi mail.
-3. Commit trên nhánh mới `fix/security-audit-batch-1`.
+### Phiên 1 — Kiểm tra và commit phần đã sửa — XONG (20/11)
+- Nhánh `fix/security-audit-batch-1`, commit `f454634`. 70 suite unit đạt.
+- Thêm test: `?month=` cũ không tạo tháng mới (`scripts/test/test-p05-routes.cjs`); giới hạn email đặt lại mật khẩu (`src/test/password-reset-request-throttle.test.ts`).
+- Đã thu hẹp sửa `leaderboard/chapters`: chỉ tạo tháng khi `?month=` đúng tháng hiện tại, giữ nguyên hành vi cũ khi không có `?month=`.
 
-### Phiên 2 — Chống spam đăng nhập (Claude, ~1 giờ) — cần bạn quyết định trước
-1. **Bạn tự làm trên dashboard Vercel (5 phút, miễn phí):** Firewall → Rules → thêm 1 rule Rate Limit: path `/api/v1/auth/login` và `/api/v1/auth/password-reset/request`, 10 request/60 s mỗi IP, hành động Deny 429. Bị chặn ở đây thì không tốn CPU.
-2. Code: kiểm tra trạng thái khóa trước khi chạy bcrypt; chạy bcrypt giả khi email không tồn tại (không lộ email qua thời gian phản hồi).
-3. **Quyết định:** hiện sai 5 lần là khóa vĩnh viễn, chỉ mở bằng email. Kẻ xấu có thể cố ý khóa tài khoản người khác. Đề xuất: khóa tạm 15 phút, tăng dần nếu tiếp tục sai.
-4. **Quyết định:** trang Quên mật khẩu đang báo "không tìm thấy email" → lộ email nào có trong hệ thống. Giữ (tiện cho học viên) hay đổi thành thông báo chung?
-5. Tùy chọn: Cloudflare Turnstile (ô "tôi không phải robot", miễn phí) hiện sau 3 lần sai.
-6. Test: `login-lock.test.ts` + test mới cho khóa tạm.
+### Phiên 2 — Chống spam đăng nhập và lộ email (Claude, ~1 giờ)
+Quyết định của chủ dự án (20/11):
+- Giữ khóa vĩnh viễn sau 5 lần sai (không đổi luật).
+- **Bỏ dòng "Bạn còn N lần thử"**: hiện tại email sai chỉ báo "Tài khoản hoặc mật khẩu không đúng", email đúng thì thêm "Bạn còn N lần" → lộ email nào tồn tại.
+- Trang Quên mật khẩu đổi sang **thông báo chung** (bỏ "Không tìm thấy email").
+
+Các bước:
+1. `src/app/api/v1/auth/login/route.ts`: bỏ `remainingAttempts` khỏi response; chạy bcrypt giả khi email không tồn tại để thời gian phản hồi giống nhau. Kiểm tra khóa trước bcrypt như hiện tại.
+2. `src/app/login/page.tsx`: bỏ hiển thị "Bạn còn N lần thử".
+3. `password-reset/request/route.ts`: bỏ trường `sent`; `src/app/forgot-password/page.tsx`: luôn hiện "Nếu email tồn tại, link đã được gửi".
+4. Xem lại các mã lỗi riêng (`AccountInactive`, `NoActiveAffiliation`, `AccountLocked`): chỉ trả khi mật khẩu đúng, để email + mật khẩu sai không lộ trạng thái tài khoản. Không đổi luật khóa.
+5. Chủ dự án tự thêm 1 rule Rate Limit trên Vercel Firewall (hướng dẫn ở báo cáo cuối phiên).
+6. Test: `src/test/login-lock.test.ts` cập nhật; thêm test: email không tồn tại và email đúng/mật khẩu sai trả body giống hệt nhau.
 
 ### Phiên 3 — XSS và Content-Security-Policy (Codex gpt-6.2-astra, Claude review)
 1. `sourceUrl` chuyển đội (`chapters/[chapterId]/reorganizations/route.ts:243`, hiển thị ở `TransferHistory.tsx:135`): chỉ nhận link `https://docs.google.com/...` khi lưu, chỉ render khi bắt đầu bằng `https:`. Đây là lỗi nặng nhất của audit phân quyền: Chapter Lead cài link `javascript:` → Admin bấm vào là bị chiếm phiên.
@@ -78,13 +84,27 @@ Mỗi phiên chạy riêng, có kiểm tra riêng, commit riêng. Phiên đánh 
 3. Thiếu `JWT_*_SECRET` thì báo lỗi rõ ràng thay vì dùng chuỗi rỗng.
 4. Khóa API Google trong `src/lib/youtube/duration.ts:49` chuyển sang biến môi trường.
 
-### Phiên 7 — Giảm tốn quota video và đo tải local (Claude) — cần bạn quyết định
-1. **Quyết định:** đổi nhịp gửi tiến độ từ 10 s lên 20–30 s → giảm 2–3 lần CPU video (≈ 7–11 giờ học/người/tháng). Server vẫn chặn tua nhanh vì tính theo thời gian thực; cần kiểm tra lại quy tắc `MAX_HEARTBEAT_GAP_SECONDS = 300` và test video.
-2. `playbackRate` thiếu đang mặc định 2 → đổi thành 1.
-3. Tùy chọn: chạy bộ k6 `load-tests/` trên bản build local + DB local để vẽ đường cong tải (0 quota Vercel).
-4. Cập nhật `docs/performance.md` bằng số đo Vercel thật ở mục 1.
+### Phiên 7 — Giảm tốn quota video: heartbeat 20 giây (Claude) — đã duyệt
+Yêu cầu bắt buộc của chủ dự án: **không được làm hỏng đánh dấu hoàn thành**. Xem hết video phải ghi nhận đúng 100%, không được kẹt ở 98% như lỗi cũ; video dưới 20 giây phải đúng.
+1. Đọc kỹ luồng hiện tại trước khi sửa: `src/components/YouTubePlayer.tsx` (heartbeat dòng 688–700, sự kiện `ENDED` dòng ~600, PLAY/PAUSE/ẩn tab), `src/lib/video-heartbeat.ts`, `src/lib/video-progress-rules.ts`, `heartbeatElapsed`/`MAX_HEARTBEAT_GAP_SECONDS = 300` trong `src/lib/learning-cycle-rules.ts`.
+2. Chỉ đổi nhịp: video ≥ 30 giây gửi 20 s/lần; video < 30 giây giữ 3 s/lần như cũ. PLAY, PAUSE, ẩn tab, đổi tốc độ, `ENDED` vẫn gửi ngay như hiện tại.
+3. Chứng minh `ENDED` tự đủ: server cộng thời gian thực từ heartbeat cuối (≤ 20 s, nhỏ hơn giới hạn 300 s) nên lần gửi cuối vẫn đẩy tiến độ lên 100%. Viết test cho đúng tình huống: heartbeat cuối cách điểm kết thúc 19 s → `ENDED` phải hoàn thành bài.
+4. Test hiện có: `test:video-progress-session`, `test:video-guard`, `video-continuity-security`, `test:video-player-browser` (Playwright) — tất cả phải đạt.
+5. Thêm test: video 15 s, video 25 s, video dài xem liền đến hết, tạm dừng gần cuối rồi xem tiếp, tốc độ 2x.
+6. `playbackRate` thiếu ở `lessons/[lessonId]/progress/route.ts:40` mặc định 2 → đổi thành 1 (chỉ ảnh hưởng client cũ không gửi tốc độ).
+7. Cập nhật `docs/performance.md` bằng số đo Vercel thật (36 ms/heartbeat). Dự kiến: 1 giờ xem ≈ 6–7 s CPU thay vì 13 s → ~7 giờ học/người/tháng với 250 người.
 
-## 4. Những gì đã kiểm tra và ổn
+### Phiên 8 — Nút "Đã lưu" trong trình sửa khóa học (Claude) — việc mới
+Hiện tượng (ảnh chụp 20/11): admin thêm bài học, nút trên cùng vẫn hiện "Đã lưu" dù chưa lưu thật; phải bấm "Cập nhật khóa học" mới lưu.
+1. Đọc `src/app/admin/courses/[courseId]/edit/useCourseEditor.ts` và component thanh trên cùng: tìm trạng thái "Đã lưu" lấy từ đâu (bản nháp tự lưu `courses/[courseId]/draft` hay bản chính).
+2. Xác định nguyên nhân: có thể "Đã lưu" nghĩa là đã lưu **bản nháp** chứ không phải đã cập nhật khóa học cho học viên.
+3. Đề xuất (chờ duyệt sau khi đọc code): bỏ nút "Đã lưu"; thay bằng nhãn trạng thái rõ ràng: "Có thay đổi chưa cập nhật" (màu cam) khi khác bản đang xuất bản, "Đã cập nhật" khi trùng.
+4. Test: unit test cho hàm tính trạng thái; Playwright: thêm bài → nhãn "chưa cập nhật" → bấm Cập nhật → nhãn đổi.
+
+## 4. Hỏi đáp
+**Nhãn "Mới" ở danh sách bài tồn tại bao lâu?** Không tính theo thời gian. Bài được gắn "Mới" với một học viên khi bài đó được tạo **sau** lần đầu học viên bắt đầu khóa, và nhãn mất khi học viên **hoàn thành bài đó** (`isNewForLearner`, `src/lib/lesson-learning-state.ts:48`). Học viên chưa từng học khóa thì không thấy nhãn.
+
+## 5. Những gì đã kiểm tra và ổn
 - SQL injection: chỉ dùng truy vấn tham số hóa.
 - Chấm điểm quiz làm ở server, chống nộp lặp; tiến độ video không tua vượt được.
 - Mật khẩu bcrypt cost 12; cookie httpOnly + secure; `.env` không bị commit.
