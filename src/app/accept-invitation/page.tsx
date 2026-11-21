@@ -7,7 +7,6 @@ import Button from '@/components/ui/Button';
 import { apiFetch } from '@/lib/api/client';
 
 interface InviteInfo {
-  email: string;
   role: string;
   chapterName: string;
   expiresAt: string;
@@ -22,7 +21,7 @@ function AcceptInvitationContent() {
   const [invalidReason, setInvalidReason] = useState('');
   const [inviteInfo, setInviteInfo] = useState<InviteInfo | null>(null);
 
-  const [form, setForm] = useState({ password: '', confirmPassword: '' });
+  const [form, setForm] = useState({ email: '', password: '', confirmPassword: '' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -60,6 +59,11 @@ function AcceptInvitationContent() {
       return;
     }
 
+    if (!form.email.trim()) {
+      setError('Vui lòng nhập email của bạn.');
+      return;
+    }
+
     if (form.password.length < 8) {
       setError('Mật khẩu phải từ 8 ký tự trở lên.');
       return;
@@ -77,6 +81,7 @@ function AcceptInvitationContent() {
       method: 'POST',
       body: JSON.stringify({
         token,
+        email: form.email.trim(),
         password: form.password,
         confirmPassword: form.confirmPassword,
       }),
@@ -87,6 +92,9 @@ function AcceptInvitationContent() {
       setTimeout(() => {
         router.push('/login');
       }, 1500);
+    } else if (res.error?.code === 'EmailMismatch' || res.error?.code === 'RateLimited') {
+      // Link vẫn còn hiệu lực: giữ form để người nhận gõ lại đúng email của mình.
+      setError(res.error.message);
     } else {
       setError(res.error?.message || 'Không thể kích hoạt tài khoản. Lời mời có thể đã hết hạn.');
       setInvalidReason(res.error?.message || 'Liên kết lời mời không hợp lệ.');
@@ -136,7 +144,7 @@ function AcceptInvitationContent() {
 
       {inviteInfo && (
         <div className="bg-[#eff4ff] border border-[#cbdbf5] text-[#172554] px-4 py-3 rounded-xl text-sm mb-5">
-          Lời mời cho <strong>{inviteInfo.email}</strong>
+          Lời mời
           {isLeadRole(inviteInfo.role) ? ' với vai trò Ban Định Hướng' : ' với vai trò Thành viên học tập'}
           {' — Chapter '}
           <strong>{inviteInfo.chapterName}</strong>
@@ -149,6 +157,22 @@ function AcceptInvitationContent() {
             {error}
           </div>
         )}
+
+        <div>
+          <label htmlFor="invite-email" className="block text-sm font-semibold text-[#172554] mb-1.5">
+            Email của bạn (đúng email được mời) *
+          </label>
+          <input
+            id="invite-email"
+            type="email"
+            required
+            autoComplete="email"
+            value={form.email}
+            onChange={(e) => setForm({ ...form, email: e.target.value })}
+            className="w-full px-4 py-3 border border-[#cbdbf5] rounded-xl text-[#0b1c30] focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+            placeholder="ban@gmail.com"
+          />
+        </div>
 
         <div>
           <label className="block text-sm font-semibold text-[#172554] mb-1.5">

@@ -214,7 +214,7 @@ describe('accepting an invitation: claim by token, status and expiry before anyt
   it('happy path: creates the account and marks the invitation ACCEPTED with accepted_at', async () => {
     reset()
     db.invitations.push(pending())
-    const result = await acceptInvitation(token, 'Mat-khau-1')
+    const result = await acceptInvitation(token, 'Mat-khau-1', 'new@bbe.vn')
     assert.equal(result.ok, true)
     assert.equal(db.users.length, 1)
     assert.equal(db.users[0].email, 'new@bbe.vn')
@@ -226,7 +226,7 @@ describe('accepting an invitation: claim by token, status and expiry before anyt
     reset()
     db.invitations.push(pending())
     db.beforeTransaction = () => { db.invitations[0].token_hash = hashToken('b'.repeat(64)) }
-    const result = await acceptInvitation(token, 'Mat-khau-1')
+    const result = await acceptInvitation(token, 'Mat-khau-1', 'new@bbe.vn')
     assert.deepEqual([result.ok, result.code, result.message], [false, 'TokenAlreadyUsed', 'Link không còn hiệu lực, vui lòng xin link mới'])
     assert.equal(db.users.length, 0)
     assert.equal(db.memberships.length, 0)
@@ -238,7 +238,7 @@ describe('accepting an invitation: claim by token, status and expiry before anyt
       reset()
       db.invitations.push(pending())
       db.beforeTransaction = () => { Object.assign(db.invitations[0], patch) }
-      const result = await acceptInvitation(token, 'Mat-khau-1')
+      const result = await acceptInvitation(token, 'Mat-khau-1', 'new@bbe.vn')
       assert.deepEqual([result.ok, result.code], [false, 'TokenAlreadyUsed'], JSON.stringify(patch))
       assert.equal(db.users.length, 0, JSON.stringify(patch))
       assert.equal(db.invitations[0].status, 'status' in patch ? patch.status : 'PENDING')
@@ -251,7 +251,7 @@ describe('accepting an invitation: claim by token, status and expiry before anyt
     const originalCreate = prisma.organizationMembership.create
     prisma.organizationMembership.create = async () => { throw new Error('db down') }
     try {
-      await assert.rejects(() => acceptInvitation(token, 'Mat-khau-1'), /db down/)
+      await assert.rejects(() => acceptInvitation(token, 'Mat-khau-1', 'new@bbe.vn'), /db down/)
     } finally {
       prisma.organizationMembership.create = originalCreate
     }
@@ -267,6 +267,37 @@ describe('accepting an invitation: claim by token, status and expiry before anyt
     assert.ok(tx.indexOf('invitation.updateMany') < tx.indexOf('user.create'), 'claim runs before the user is created')
     assert.match(tx, /updateMany\(\{\s*where: \{ id: invitation\.id, token_hash: tokenHash, status: 'PENDING', expires_at: \{ gt: claimedAt \} \}/)
     assert.doesNotMatch(tx, /invitation\.update\(\{\s*where: \{ id: invitation\.id \},\s*data: \{ status: 'ACCEPTED'/)
+  })
+
+  it('link sent to the wrong person: another email is refused, nothing is created and the link stays usable for the owner', async () => {
+    reset()
+    db.invitations.push(pending())
+    const wrong = await acceptInvitation(token, 'Mat-khau-1', 'someone-else@gmail.com')
+    assert.deepEqual([wrong.ok, wrong.code], [false, 'EmailMismatch'])
+    assert.equal(db.users.length, 0)
+    assert.equal(db.invitations[0].status, 'PENDING')
+    assert.equal(db.audit.length, 1)
+    assert.equal(db.audit[0].action, 'INVITATION_EMAIL_MISMATCH')
+    assert.doesNotMatch(JSON.stringify(db.audit[0]), /someone-else/, 'the typed email is not logged')
+
+    const owner = await acceptInvitation(token, 'Mat-khau-1', '  NEW@bbe.VN ')
+    assert.equal(owner.ok, true, 'owner email matches regardless of case and surrounding spaces')
+    assert.equal(db.users[0].email, 'new@bbe.vn')
+  })
+
+  it('too many wrong emails in the window locks the link temporarily, even for the right email', async () => {
+    reset()
+    db.invitations.push(pending())
+    db.auditCounts.invitation = 5
+    const result = await acceptInvitation(token, 'Mat-khau-1', 'new@bbe.vn')
+    assert.deepEqual([result.ok, result.code], [false, 'RateLimited'])
+    assert.equal(db.users.length, 0)
+    assert.equal(db.invitations[0].status, 'PENDING')
+  })
+
+  it('validate endpoint does not reveal the invited email to whoever holds the link', () => {
+    const source = require('fs').readFileSync(require.resolve('../app/api/v1/invitations/validate/route.ts'), 'utf8') as string
+    assert.doesNotMatch(source, /email:\s*result\.email/)
   })
 })
 
