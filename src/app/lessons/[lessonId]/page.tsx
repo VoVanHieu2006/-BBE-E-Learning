@@ -7,6 +7,8 @@ export default function PlayerPage({ params }: { params: { lessonId: string } })
   const [completionMsg, setCompletionMsg] = useState<string | null>(null)
   const [accessToken, setAccessToken] = useState<string | null>(null)
   const [youtubeVideoId, setYoutubeVideoId] = useState('dQw4w9WgXcQ')
+  // Simulates saved progress that arrives after the player was created.
+  const [savedPosition, setSavedPosition] = useState(0)
 
   return (
     <main className="min-h-screen bg-[#f8f9ff] p-6 md:p-10">
@@ -31,6 +33,14 @@ export default function PlayerPage({ params }: { params: { lessonId: string } })
             className="w-full px-4 py-2.5 border border-[#cbdbf5] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
             onChange={(e) => setYoutubeVideoId(e.target.value)}
           />
+          <label className="block text-sm font-semibold text-[#172554] mb-1 mt-3">Saved position (seconds)</label>
+          <input
+            type="number"
+            min={0}
+            data-resume-position
+            className="w-full px-4 py-2.5 border border-[#cbdbf5] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+            onChange={(e) => setSavedPosition(Math.max(0, Number(e.target.value) || 0))}
+          />
         </div>
 
         <Card className="p-0 overflow-hidden mb-6">
@@ -38,8 +48,8 @@ export default function PlayerPage({ params }: { params: { lessonId: string } })
             youtubeVideoId={youtubeVideoId}
             lessonId={params.lessonId}
             accessToken={accessToken || undefined}
-            initialPosition={0}
-            initialFurthest={0}
+            initialPosition={savedPosition}
+            initialFurthest={savedPosition}
             durationSeconds={596}
             onComplete={() => setCompletionMsg('🎉 Hoàn thành bài học (100%)')}
           />
