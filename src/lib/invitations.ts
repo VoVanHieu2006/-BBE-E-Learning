@@ -439,10 +439,21 @@ function isInvitationNoLongerValidError(error: unknown): boolean {
   return typeof error === 'object' && error !== null && (error as Record<string, unknown>)[INVITATION_NO_LONGER_VALID_FLAG] === true
 }
 
-/** Accept invitation — create user account and activate */
+/** Sai email quá số lần này trong cửa sổ thì tạm khóa link (chặn dò email của chủ lời mời bằng link bị lộ). */
+export const ACCEPT_EMAIL_MISMATCH_LIMIT = 5
+export const ACCEPT_EMAIL_MISMATCH_WINDOW_MS = 15 * 60 * 1000
+export const INVITATION_EMAIL_MISMATCH_MESSAGE = 'Link mời này không dành cho email bạn vừa nhập. Hãy kiểm tra lại email, hoặc liên hệ người mời để xin đúng link của bạn.'
+const normalizeEmail = (email: string) => email.trim().toLowerCase()
+
+/**
+ * Accept invitation — create user account and activate.
+ * Người kích hoạt phải tự gõ đúng email của lời mời: link giao tay (khi hết lượt gửi mail) có thể bị gửi nhầm
+ * người, người nhận nhầm không biết email của chủ lời mời nên không kích hoạt (chiếm tài khoản) được.
+ */
 export async function acceptInvitation(
   token: string,
-  password: string
+  password: string,
+  email: string
 ): Promise<{ ok: true; userId: string; email: string; role: UserRole; status: 'ACTIVE' } | SendInvitationError> {
   const tokenHash = hashToken(token)
 
@@ -458,6 +469,21 @@ export async function acceptInvitation(
 
   if (new Date() > invitation.expires_at) {
     return { ok: false, code: 'TokenExpired', message: 'Token đã hết hạn' }
+  }
+
+  const mismatchSince = new Date(Date.now() - ACCEPT_EMAIL_MISMATCH_WINDOW_MS)
+  const recentMismatches = await prisma.auditLog.count({
+    where: { entity_type: 'INVITATION', entity_id: invitation.id, action: 'INVITATION_EMAIL_MISMATCH', created_at: { gte: mismatchSince } },
+  })
+  if (recentMismatches >= ACCEPT_EMAIL_MISMATCH_LIMIT) {
+    return { ok: false, code: 'RateLimited', message: 'Bạn đã nhập sai email quá nhiều lần. Vui lòng thử lại sau 15 phút hoặc liên hệ người mời.' }
+  }
+  if (normalizeEmail(email) !== normalizeEmail(invitation.email)) {
+    // Không lưu email đã gõ vào log (có thể là email của người khác).
+    await prisma.auditLog.create({
+      data: { actor_user_id: null, action: 'INVITATION_EMAIL_MISMATCH', entity_type: 'INVITATION', entity_id: invitation.id, metadata: { role: invitation.role } },
+    })
+    return { ok: false, code: 'EmailMismatch', message: INVITATION_EMAIL_MISMATCH_MESSAGE }
   }
 
   if (invitation.role === 'MEMBER') {

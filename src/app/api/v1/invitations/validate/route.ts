@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({
     valid: true,
-    email: result.email,
+    // Không trả email: người cầm link phải tự gõ đúng email của mình khi kích hoạt (chống gửi nhầm link).
     role: result.role,
     chapterName: result.chapterName,
     organizationUnitId: result.organizationUnitId || null,

@@ -455,7 +455,7 @@ Hạn mức email của ngày lịch UTC hiện tại (mặc định `limit = 90
 
 | Method | Truy cập / guard | Đầu vào đọc trực tiếp | Response thành công | Mã lỗi thấy trong handler |
 |---|---|---|---|---|
-| [POST](../src/app/api/v1/invitations/accept/route.ts#L9) | `Không có guard trực tiếp; xem handler/service` | `body.confirmPassword`, `body.password`, `body.token` | `userId, email, role, status` | `PasswordMismatch`, `ValidationError`, `WeakPassword` |
+| [POST](../src/app/api/v1/invitations/accept/route.ts#L9) | `Không có guard trực tiếp; xem handler/service` | `body.confirmPassword`, `body.email`, `body.password`, `body.token` | `userId, email, role, status` | `EmailMismatch` (403, email gõ không khớp lời mời), `RateLimited` (429, sai email 5 lần/15 phút), `PasswordMismatch`, `ValidationError`, `WeakPassword` |
 
 ### `/api/v1/invitations/chapter-leader`
 
@@ -485,7 +485,7 @@ Hạn mức email của ngày lịch UTC hiện tại (mặc định `limit = 90
 
 | Method | Truy cập / guard | Đầu vào đọc trực tiếp | Response thành công | Mã lỗi thấy trong handler |
 |---|---|---|---|---|
-| [GET](../src/app/api/v1/invitations/validate/route.ts#L9) | `Không có guard trực tiếp; xem handler/service` | `query.token` | `valid, email, role, chapterName, organizationUnitId, expiresAt` | `ValidationError` |
+| [GET](../src/app/api/v1/invitations/validate/route.ts#L9) | `Không có guard trực tiếp; xem handler/service` | `query.token` | `valid, role, chapterName, organizationUnitId, expiresAt` | `ValidationError` |
 
 ### `/api/v1/leaderboard/chapters/[chapterId]`
 

@@ -8,12 +8,18 @@ import { acceptInvitation } from '@/lib/invitations'
  */
 export async function POST(request: NextRequest) {
   const body = await request.json()
-  const { token, password, confirmPassword } = body
+  const { token, password, confirmPassword, email } = body ?? {}
 
   // Validation
-  if (!token || !password) {
+  if (typeof token !== 'string' || typeof password !== 'string' || !token || !password) {
     return NextResponse.json(
       { error: { code: 'ValidationError', message: 'token và password là bắt buộc' } },
+      { status: 400 }
+    )
+  }
+  if (typeof email !== 'string' || !email.trim() || email.length > 254) {
+    return NextResponse.json(
+      { error: { code: 'ValidationError', message: 'Vui lòng nhập email của bạn' } },
       { status: 400 }
     )
   }
@@ -33,10 +39,12 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  const result = await acceptInvitation(token, password)
+  const result = await acceptInvitation(token, password, email)
 
   if (!result.ok) {
     const statusMap: Record<string, number> = {
+      EmailMismatch: 403,
+      RateLimited: 429,
       InvitationNotFound: 404,
       TokenExpired: 410,
       TokenAlreadyUsed: 409,
