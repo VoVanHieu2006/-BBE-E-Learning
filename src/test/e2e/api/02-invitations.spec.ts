@@ -255,7 +255,7 @@ test.describe('Hạn mức email và mời hàng loạt', () => {
     expect(statuses.at(-1)).toBe(429)
   })
 
-  defect('BUG-INVITE-EN', 'thông báo lỗi khi mời với đơn vị không hợp lệ phải bằng tiếng Việt', async ({ request }) => {
+  test('thông báo lỗi khi mời với đơn vị không hợp lệ phải bằng tiếng Việt', async ({ request }) => {
     const result = await (await as(request, 'chapterLead')).post('/api/v1/invitations/member', { email: uniqueEmail('lang'), organizationUnitId: 'khong-hop-le' })
     expect(result.status).toBe(400)
     expect(result.body.error.message).toMatch(/[àáạảãâăđêôơưèéẹẻẽìíịỉĩòóọỏõùúụủũỳýỵỷỹ]/i)

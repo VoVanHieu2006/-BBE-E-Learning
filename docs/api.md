@@ -183,7 +183,7 @@ PUT giữ nguyên catalog, mapping khóa/chương trình/target, seasons, chuẩ
 
 | Method | Truy cập / guard | Đầu vào đọc trực tiếp | Response thành công | Mã lỗi thấy trong handler |
 |---|---|---|---|---|
-| [POST](../src/app/api/v1/attempts/[attemptId]/submit/route.ts#L5) | `authenticate` | `body.answers` | `attemptId, score, totalPoints, scorePercent, passed, starReward, answers` | `ValidationError` |
+| [POST](../src/app/api/v1/attempts/[attemptId]/submit/route.ts#L5) | `authenticate` | `body.answers` | `attemptId, score, earnedPoints, totalPoints, scorePercent, passed, starReward, answers` | `ValidationError` |
 
 ### `/api/v1/attempts/auto-submit`
 
@@ -682,7 +682,7 @@ Tạo link đặt lại mật khẩu mới (`/reset-password?token=...`) khi ema
 
 | Method | Truy cập / guard | Đầu vào đọc trực tiếp | Response thành công | Mã lỗi thấy trong handler |
 |---|---|---|---|---|
-| [PATCH](../src/app/api/v1/users/[userId]/profile/route.ts#L6) | `authenticate`, `canAccessChapterPermission`, `role ADMIN` | `body.chapterId`, `body.displayName` | `id, email, displayName` | `AccessDenied`, `ValidationError` |
+| [PATCH](../src/app/api/v1/users/[userId]/profile/route.ts#L6) | `authenticate`, `canAccessChapterPermission`, `role ADMIN` | `body.chapterId`, `body.displayName` | `id, email, displayName` | `AccessDenied`, `UserNotFound`, `ValidationError` |
 
 ### `/api/v1/users/[userId]`
 

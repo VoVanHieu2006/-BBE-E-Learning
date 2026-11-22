@@ -18,17 +18,12 @@ hiểu sai hoặc phải làm thừa; **Thấp** = khó chịu nhỏ, chuẩn ac
 | Mã | Hiện tượng (đã tái hiện) | Mong đợi | Test |
 |---|---|---|---|
 | BUG-STALE-AFTER-RELOAD | Danh sách (ví dụ lời mời) được lưu trong `sessionStorage` tới 120 giây (`src/lib/api/client.ts`) và trang không yêu cầu dữ liệu mới khi tải lần đầu. Người được mời đã kích hoạt, Lead bấm F5 vẫn thấy "Đang chờ" và nút Hủy. | F5 luôn hiện dữ liệu mới. | `ui/03-lead-management.spec.ts` |
-| BUG-PROFILE-500 | Admin sửa tên của tài khoản không tồn tại nhận lỗi 500. | 404. | `api/08-permission-matrix.spec.ts` |
-| BUG-MOVE-SESSION-MSG | Thành viên bị chuyển ban: phiên cũ nhận thông báo như tài khoản bị vô hiệu hóa. | Thông báo tiếng Việt yêu cầu đăng nhập lại. | `api/07-organization.spec.ts` |
 | BUG-UI-HYDRATION-TRANSFER | Trang `/admin/transfer-seasons` sinh lỗi React #425 và #422 khi dữ liệu của trang đã được lưu trong tab (mở lại trang, hoặc đôi khi ngay lần đầu sau đăng nhập): `useState(() => readCachedProgress() === null)` đọc `sessionStorage` lúc dựng lần đầu nên nội dung trình duyệt dựng khác nội dung máy chủ dựng. React phải dựng lại cả trang. | Không có lỗi JavaScript. | `ux/01-every-page.spec.ts` |
 
 ## Mức Thấp
 
 | Mã | Hiện tượng (đã tái hiện) | Mong đợi | Test |
 |---|---|---|---|
-| BUG-INVITE-EN | Mời với đơn vị không hợp lệ trả thông báo lỗi tiếng Anh. | Tiếng Việt. | `api/02-invitations.spec.ts` |
-| BUG-QUIZ-SCORE-UNIT | `score` ở kết quả nộp bài là điểm thô (180), ở lịch sử lượt làm là phần trăm (90). | Cùng một đơn vị. | `api/05-quiz.spec.ts` |
-| BUG-YOUTUBE-LIVE-LINK | Link chia sẻ của bản lưu livestream (`youtube.com/live/<id>`) không được nhận diện, dù hệ thống hỗ trợ bản lưu livestream. | Đọc được ID video. | `src/test/youtube-duration.test.ts` |
 
 ## Quan sát chưa xếp thành lỗi
 

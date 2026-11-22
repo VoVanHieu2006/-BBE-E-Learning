@@ -68,7 +68,7 @@ export function parseYouTubeVideoId(raw: string): string {
   if (!text) return ''
 
   const match = text.match(
-    /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=|shorts\/)|youtu\.be\/)([^"&?\/\s]{11})/i
+    /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=|shorts\/|live\/)|youtu\.be\/)([^"&?\/\s]{11})/i
   )
   if (match && match[1]) return match[1]
 

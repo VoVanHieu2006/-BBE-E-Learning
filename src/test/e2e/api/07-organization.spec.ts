@@ -141,7 +141,7 @@ test.describe('Quản lý thành viên', () => {
     expect((await (await as(request, 'member')).post(`/api/v1/chapters/${chapterId}/members/${learner.userId}/department`, { departmentUnitId: target.id })).status).toBe(403)
   })
 
-  defect('BUG-MOVE-SESSION-MSG', 'bị chuyển ban thì phiên cũ phải báo "đăng nhập lại" bằng tiếng Việt, không báo tài khoản bị vô hiệu hóa', async ({ request }) => {
+  test('bị chuyển ban thì phiên cũ phải báo "đăng nhập lại" bằng tiếng Việt, không báo tài khoản bị vô hiệu hóa', async ({ request }) => {
     const lead = await as(request, 'chapterLead')
     const learner = await createLearner(request)
     const target = (await lead.get('/api/v1/organization/managed-units')).body.items.find((unit: any) => unit.name === 'Ban Thư Ký')

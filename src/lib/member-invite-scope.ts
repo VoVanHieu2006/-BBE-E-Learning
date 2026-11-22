@@ -20,7 +20,7 @@ export async function resolveMemberInviteScope(context: AuthContext, body: Recor
   let organizationUnitId: string | undefined
   if (body.organizationUnitId !== undefined) {
     if (role === 'ADMIN' || chapterId || (typeof body.chapterId === 'string' && body.chapterId.trim()) || !isOrganizationId(body.organizationUnitId)) {
-      return { ok: false, status: 400, error: { code: 'ValidationError', message: 'Choose one valid organization unit scope.' } }
+      return { ok: false, status: 400, error: { code: 'ValidationError', message: 'Vui lòng chọn một ban hoặc nhóm DNA hợp lệ.' } }
     }
     const unit = await prisma.organizationUnit.findUnique({ where: { id: body.organizationUnitId as string }, select: { id: true, type: true, status: true } })
     if (!unit || unit.status !== 'ACTIVE' || !['DNA_GROUP', 'DEPARTMENT'].includes(unit.type)) {
