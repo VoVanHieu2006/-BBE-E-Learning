@@ -11,7 +11,6 @@ hiểu sai hoặc phải làm thừa; **Thấp** = khó chịu nhỏ, chuẩn ac
 
 | Mã | Hiện tượng (đã tái hiện) | Mong đợi | Test |
 |---|---|---|---|
-| BUG-INVITE-LEAD-500 | Admin mời Lead cho một Chapter mới luôn nhận lỗi 500 (vi phạm ràng buộc `invitations_exactly_one_scope_check`); trên giao diện không có lời mời nào được tạo. | Lời mời được tạo, người nhận kích hoạt thành LEAD của đúng Chapter. | `api/02-invitations.spec.ts`, `ui/04-admin-management.spec.ts` |
 
 ## Mức Trung bình
 

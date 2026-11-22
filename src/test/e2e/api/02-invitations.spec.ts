@@ -193,8 +193,7 @@ test.describe('Phạm vi quyền mời', () => {
     expect(existingAsLead.status, 'không mời LEAD cho tài khoản đã tồn tại').toBeGreaterThanOrEqual(400)
   })
 
-  // POST /invitations/chapter-leader lưu lời mời chỉ có chapter_name nên vi phạm CHECK invitations_exactly_one_scope_check → 500.
-  defect('BUG-INVITE-LEAD-500', 'Admin mời Lead Chapter mới: tài khoản kích hoạt là LEAD của đúng Chapter', async ({ request }) => {
+  test('Admin mời Lead Chapter mới: tài khoản kích hoạt là LEAD của đúng Chapter', async ({ request }) => {
     const admin = await as(request, 'admin')
     const email = uniqueEmail('newlead')
     const chapterName = `Chi hội E2E ${Date.now().toString(36)}`
