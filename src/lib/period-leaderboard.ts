@@ -3,7 +3,7 @@ import { addCalendarMonthsVietnam } from './chapter-term-rules'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from './prisma'
 import { authenticate } from './auth'
-import { historicalChapterMonthRows, individualPeriodRows, chapterSeasonRows, competitionCohortAt, hasNativeLearningEvidence } from './competition-snapshots'
+import { historicalChapterMonthRows, individualPeriodRows, chapterSeasonRows, competitionCohortAt, hasNativeLearningEvidence, SYSTEM_WIDE_TERM_COUNTS_FROM_CHAPTER_HANDOVER } from './competition-snapshots'
 import { dnaSeasonEnd } from './chapter-reward-gate'
 import { getLearningManagerKind } from './manager-learning-access'
 import { listAccessibleChapterIds, listManagedOrganizationUnits } from './authorization'
@@ -128,9 +128,7 @@ export async function periodLeaderboard(request: NextRequest) {
     ? await prisma.transferSeason.findFirst({
         where: periodId
           ? { id: periodId }
-          : group === 'DNA' || group === 'CHAPTER'
-            ? { reward_boundary_at: { lte: now } }
-            : { starts_at: { lte: now } },
+          : { reward_boundary_at: { lte: now } },
         orderBy: { reward_boundary_at: 'desc' },
       })
     : null
@@ -141,10 +139,14 @@ export async function periodLeaderboard(request: NextRequest) {
         ends_at: dnaSeasonEnd(season.reward_boundary_at),
       }
     : null
+  // System-wide Member/LT boards rank over the same fixed term as DNA, not the transfer window.
+  const individualPeriod = useGlobalIndividualTerm && season?.reward_boundary_at
+    ? { ...season, starts_at: season.reward_boundary_at, ends_at: dnaSeasonEnd(season.reward_boundary_at) }
+    : null
   // A Chapter competition term starts at the reward anchor, not at the start of
   // the transfer window that contains it.
   const chapterPeriod = group === 'CHAPTER' && season?.reward_boundary_at ? { ...season, starts_at: season.reward_boundary_at, ends_at: addCalendarMonthsVietnam(season.reward_boundary_at, 6), transferWindow: { startsAt: season.starts_at, endsAt: season.ends_at }, competitionStartsAt: season.reward_boundary_at } : null
-  const period = month || term || chapterPeriod || (group === 'DNA' ? dnaPeriod : season) || (group === 'CHAPTER' ? season : null)
+  const period = month || term || chapterPeriod || (group === 'DNA' ? dnaPeriod : useGlobalIndividualTerm ? individualPeriod : season) || (group === 'CHAPTER' ? season : null)
   if (!period) {
     const missing = readinessForReason(periodType === 'MONTH' ? 'MONTH_NOT_CONFIGURED' : useSeason || useGlobalIndividualTerm ? 'SEASON_NOT_CONFIGURED' : 'TERM_NOT_CONFIGURED')
     return NextResponse.json({ items: [], state: 'PERIOD_UNAVAILABLE', group, periodType, ...missing, readiness: missing, formula: group === 'CHAPTER' ? CHAPTER_FORMULA : INDIVIDUAL_FORMULA })
@@ -251,7 +253,7 @@ export async function periodLeaderboard(request: NextRequest) {
     group === 'DNA' ? undefined : term?.chapter_id || chapterId || undefined,
     group === 'DNA' ? managedDnaUnitIds : undefined,
     season?.id,
-    { chapterTerms: periodType === 'TERM' },
+    { chapterTerms: periodType === 'TERM' && SYSTEM_WIDE_TERM_COUNTS_FROM_CHAPTER_HANDOVER },
   )
   const individualPayload = await hydrateRanking({
     items,

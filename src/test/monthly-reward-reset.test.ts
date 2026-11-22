@@ -127,11 +127,18 @@ describe('DNA historical season evidence', () => {
         transferSeason: { findMany: async ({ where }: any) => where.reward_boundary_at ? [dnaSeason] : [] },
         $transaction: async (callback: any) => callback(tx),
       })
-      assert.equal(await closeCompetitionTerms(), scenario === 'native' ? 1 : 0)
-      assert.equal(created.length, scenario === 'native' ? 1 : 0)
-      assert.equal(evidenceReads, scenario === 'saved' ? 0 : 1)
-      assert.deepEqual(events, scenario === 'saved' ? ['snapshot'] : scenario === 'native'
-        || scenario === 'saved-while-waiting' ? ['snapshot', 'evidence', 'users', 'lock', 'snapshot'] : ['snapshot', 'evidence'])
+      // The same ended term is frozen for the DNA board and the system-wide Member and LT boards.
+      const boards = 3
+      const perBoard = scenario === 'saved' ? ['snapshot'] : scenario === 'native'
+        || scenario === 'saved-while-waiting' ? ['snapshot', 'evidence', 'users', 'lock', 'snapshot'] : ['snapshot', 'evidence']
+      assert.equal(await closeCompetitionTerms(), scenario === 'native' ? boards : 0)
+      assert.deepEqual(created.map(row => row.key), scenario === 'native'
+        ? ['DNA', 'MEMBER', 'LT'].map(group => `ranking:${group}:${dnaSeason.id}`) : [])
+      // Once the stub reports a saved snapshot (after the first lock), the remaining boards stop at it.
+      const expected = scenario === 'saved-while-waiting'
+        ? [...perBoard, 'snapshot', 'snapshot'] : Array.from({ length: boards }, () => perBoard).flat()
+      assert.equal(evidenceReads, expected.filter(event => event === 'evidence').length)
+      assert.deepEqual(events, expected)
       assert.equal(JSON.stringify(saved), unchanged)
       if (scenario === 'native') {
         assert.equal(created[0].payload.period.starts_at, dnaStart.toISOString())
@@ -162,21 +169,28 @@ describe('DNA historical season evidence', () => {
   }
 })
 
-// Closed system-wide Member/LT season boards (no Chapter filter) must be frozen by the scheduler.
+// Closed system-wide Member/LT term boards (no Chapter filter) must be frozen by the scheduler.
+// The board ranks over the competition term 01/04→01/10, not the transfer window 01/01→01/07.
 const individualSeason = {
   id: '00000000-0000-4000-8000-0000000000e1',
-  code: '2026-H1',
-  starts_at: at('2026-01-01T00:00:00+07:00'),
-  ends_at: at('2026-07-01T00:00:00+07:00'),
-  reward_boundary_at: null,
+  code: '2025-H1',
+  starts_at: at('2025-01-01T00:00:00+07:00'),
+  ends_at: at('2025-07-01T00:00:00+07:00'),
+  reward_boundary_at: at('2025-04-01T00:00:00+07:00'),
 }
+const individualTermEnd = at('2025-10-01T00:00:00+07:00')
 
-describe('system-wide Member/LT season snapshot', () => {
+describe('system-wide Member/LT term snapshot', () => {
   for (const scenario of ['native', 'legacy-only', 'saved'] as const) {
-    it(`scheduler freezes a closed season once: ${scenario}`, async (t) => {
+    it(`scheduler freezes a closed term once: ${scenario}`, async (t) => {
+      const provenance = scenario === 'legacy-only' ? 'LEGACY' : 'NATIVE'
       const ledger = [
-        { user_id: USER, amount: 7, provenance: scenario === 'legacy-only' ? 'LEGACY' : 'NATIVE', awarded_at: at('2026-05-10T05:00:00Z') },
-        { user_id: USER, amount: 5, provenance: 'NATIVE', awarded_at: at('2026-07-02T05:00:00Z') },
+        // Inside the transfer window but before the term starts: never counted.
+        { user_id: USER, amount: 3, provenance: 'NATIVE', awarded_at: at('2025-02-10T05:00:00Z') },
+        { user_id: USER, amount: 7, provenance, awarded_at: at('2025-05-10T05:00:00Z') },
+        // After the transfer window closed but still inside the term: counted.
+        { user_id: USER, amount: 5, provenance, awarded_at: at('2025-08-10T05:00:00Z') },
+        { user_id: USER, amount: 2, provenance: 'NATIVE', awarded_at: at('2025-10-02T05:00:00Z') },
       ]
       const inWindow = (where: any) => ledger.filter(row => row.provenance === where.provenance
         && row.awarded_at >= where.awarded_at.gte && row.awarded_at < where.awarded_at.lt)
@@ -196,28 +210,52 @@ describe('system-wide Member/LT season snapshot', () => {
         chapter: { findMany: async () => [{ id: CHAPTER, name: 'Chapter A' }] },
         positionAssignment: { findMany: async () => [] },
         organizationMembership: { findMany: async () => [] },
-        // A delayed handover applied after the season ended is linked to it but must not zero the frozen board.
-        chapterCompetitionTerm: { findMany: async () => [{ chapter_id: CHAPTER, season_id: individualSeason.id, starts_at: at('2026-07-01T02:00:00+07:00'), ends_at: null }] },
+        // The Chapter handed over mid-term; the whole fixed term still counts for its people.
+        chapterCompetitionTerm: { findMany: async () => [{ chapter_id: CHAPTER, season_id: individualSeason.id, starts_at: at('2025-05-20T00:00:00+07:00'), ends_at: null }] },
       }
       replacePrisma(t, {
         chapterCompetitionTerm: { findMany: async () => [] },
-        transferSeason: { findMany: async ({ where }: any) => where.ends_at ? [individualSeason] : [] },
+        transferSeason: { findMany: async ({ where }: any) => where.reward_boundary_at ? [individualSeason] : [] },
         $transaction: async (callback: any) => callback(tx),
       })
-      assert.equal(await closeCompetitionTerms(), scenario === 'native' ? 2 : 0)
-      assert.deepEqual(created.map(row => row.key), scenario === 'native'
+      await closeCompetitionTerms()
+      const individual = created.filter(row => !row.key.startsWith('ranking:DNA:'))
+      assert.deepEqual(individual.map(row => row.key), scenario === 'native'
         ? [`ranking:MEMBER:${individualSeason.id}`, `ranking:LT:${individualSeason.id}`] : [])
       assert.equal(JSON.stringify(saved), unchanged)
       if (scenario === 'native') {
-        const member = created[0].payload
+        const member = individual[0].payload
         assert.equal(member.state, 'FINALIZED')
         assert.equal(member.periodType, 'TERM')
         assert.equal(member.period.id, individualSeason.id)
-        assert.equal(member.period.ends_at, individualSeason.ends_at.toISOString())
-        assert.deepEqual(member.items.map((row: any) => [row.userId, row.stars]), [[USER, 7]])
+        assert.equal(member.period.starts_at, individualSeason.reward_boundary_at.toISOString())
+        assert.equal(member.period.ends_at, individualTermEnd.toISOString())
+        assert.deepEqual(member.items.map((row: any) => [row.userId, row.stars]), [[USER, 12]])
       }
     })
   }
+
+  it('live board picks the term by its 01/04 or 01/10 boundary and reports the term window', async (t) => {
+    const future = { ...individualSeason, reward_boundary_at: new Date(Date.now() - 86_400_000) }
+    let seasonWhere: any
+    replacePrisma(t, {
+      transferSeason: { findFirst: async ({ where }: any) => { seasonWhere = where; return future } },
+      learningSnapshot: { findUnique: async () => null },
+      accountStateInterval: { findMany: async () => [] },
+      chapterAffiliationInterval: { findMany: async () => [] },
+      chapter: { findMany: async () => [] },
+      positionAssignment: { findMany: async () => [] },
+      organizationMembership: { findMany: async () => [] },
+      chapterCompetitionTerm: { findMany: async () => { throw new Error('per-Chapter handover dates must not be read') } },
+      starLedger: { findMany: async () => [] },
+    })
+    const response = await periodLeaderboard(new NextRequest('http://localhost/api/v1/leaderboard?group=MEMBER&periodType=TERM'))
+    const body = await response.json()
+    assert.equal(response.status, 200)
+    assert.ok(seasonWhere.reward_boundary_at?.lte instanceof Date)
+    assert.equal(body.state, 'OPEN')
+    assert.equal(body.period.starts_at, future.reward_boundary_at.toISOString())
+  })
 
   for (const group of ['MEMBER', 'LT'] as const) for (const scenario of ['legacy-only', 'native', 'saved'] as const) {
     it(`${group} board serves only supported history: ${scenario}`, async (t) => {
