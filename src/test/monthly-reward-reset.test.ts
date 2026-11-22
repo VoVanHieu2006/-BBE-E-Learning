@@ -196,7 +196,8 @@ describe('system-wide Member/LT season snapshot', () => {
         chapter: { findMany: async () => [{ id: CHAPTER, name: 'Chapter A' }] },
         positionAssignment: { findMany: async () => [] },
         organizationMembership: { findMany: async () => [] },
-        chapterCompetitionTerm: { findMany: async () => [] },
+        // A delayed handover applied after the season ended is linked to it but must not zero the frozen board.
+        chapterCompetitionTerm: { findMany: async () => [{ chapter_id: CHAPTER, season_id: individualSeason.id, starts_at: at('2026-07-01T02:00:00+07:00'), ends_at: null }] },
       }
       replacePrisma(t, {
         chapterCompetitionTerm: { findMany: async () => [] },

@@ -164,7 +164,8 @@ export async function individualPeriodRows(
         : { starts_at: { lte: endsAt }, OR: [{ ends_at: null }, { ends_at: { gte: startsAt } }] },
     })
     for (const t of terms) {
-      termByChapter.set(t.chapter_id, t)
+      // A handover applied after the window ended opens a term that cannot score inside it.
+      if (t.starts_at < endsAt) termByChapter.set(t.chapter_id, t)
     }
   }
 
