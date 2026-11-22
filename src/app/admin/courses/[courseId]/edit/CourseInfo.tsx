@@ -67,10 +67,10 @@ export default function CourseInfo({
                         </div>
                       </div>
                     ) : (
-                      <div className="aspect-video w-56 rounded-xl border-2 border-dashed border-[#cbdbf5] bg-[#f8f9ff] flex flex-col items-center justify-center text-xs text-[#737686] gap-1 p-2 text-center shrink-0">
+                      <div className="aspect-video w-56 rounded-xl border-2 border-dashed border-[#cbdbf5] bg-[#f8f9ff] flex flex-col items-center justify-center text-xs text-[#6c6f7f] gap-1 p-2 text-center shrink-0">
                         <span className="text-2xl">🖼️</span>
                         <span className="font-medium">Chưa có ảnh bìa</span>
-                        <span className="text-[10px] text-slate-400">Khuyến nghị 16:9</span>
+                        <span className="text-[11px] text-slate-400">Khuyến nghị 16:9</span>
                       </div>
                     )}
                     <div className="space-y-2 flex-1">

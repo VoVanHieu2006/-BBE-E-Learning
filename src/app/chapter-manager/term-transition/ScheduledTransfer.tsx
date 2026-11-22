@@ -44,7 +44,7 @@ export default function ScheduledTransfer({
                   <h3 className="text-lg font-bold text-[#172554]">
                     Dự kiến hiệu lực lúc: {new Date(scheduledBatch.effectiveAt).toLocaleString('vi-VN')}
                   </h3>
-                  <p className="text-xs text-[#737686] mt-0.5">
+                  <p className="text-xs text-[#6c6f7f] mt-0.5">
                     Tổng cộng <strong>{scheduledBatch.totalItems}</strong> thành viên được xếp vào 7 Ban. Hệ thống sẽ tự động chuyển giao khi đến giờ hẹn.
                   </p>
                   {scheduledBatch.lastError && <p role="alert" className="text-xs text-red-700">Chưa áp dụng thành công: {scheduledBatch.lastError}. Bản nhập vẫn được giữ; có thể thử áp dụng lại hoặc hủy lịch.</p>}
@@ -82,7 +82,7 @@ export default function ScheduledTransfer({
                       <div key={cIdx} className="bg-white border border-blue-200 rounded-xl p-3 text-xs min-w-[230px] shadow-2xs">
                         <div className="font-bold text-[#172554] border-b border-blue-100 pb-2 mb-2 flex justify-between items-center">
                           <span>{col.departmentName}</span>
-                          <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full">
+                          <span className="text-[11px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full">
                             {col.total}
                           </span>
                         </div>
@@ -99,12 +99,12 @@ export default function ScheduledTransfer({
                               }`}
                             >
                               {m.isLead && (
-                                <div className="text-[9px] font-extrabold text-amber-800 uppercase mb-1">
+                                <div className="text-[11px] font-extrabold text-amber-800 uppercase mb-1">
                                   {isPresidentBan ? '⭐ Chủ tịch' : '👑 Trưởng ban'}
                                 </div>
                               )}
                               <div className="truncate text-[#172554] font-semibold">{m.displayName}</div>
-                              <div className="truncate text-[10px] text-[#737686]">{m.email}</div>
+                              <div className="truncate text-[11px] text-[#6c6f7f]">{m.email}</div>
                             </div>
                           ))}
                           {col.members.length === 0 && (
@@ -124,7 +124,7 @@ export default function ScheduledTransfer({
                     <h4 className="text-xs font-extrabold text-amber-900 uppercase tracking-wide flex items-center gap-1.5">
                       <span>⚠️</span> Thành viên Chapter không có tên trong nhiệm kỳ tiếp theo ({scheduledBatch.unmatchedCurrentMembers.length})
                     </h4>
-                    <span className="text-[11px] text-[#737686]">
+                    <span className="text-[11px] text-[#6c6f7f]">
                       (Sau khi chuyển giao, các thành viên này sẽ chuyển về trạng thái Chưa phân Ban)
                     </span>
                   </div>
@@ -150,7 +150,7 @@ export default function ScheduledTransfer({
                                 {m.displayName}
                               </Link>
                             </td>
-                            <td className="py-2 px-4 text-[#737686]">{m.email}</td>
+                            <td className="py-2 px-4 text-[#6c6f7f]">{m.email}</td>
                             <td className="py-2 px-4 font-medium text-slate-700">{m.currentDepartmentName}</td>
                             <td className="py-2 px-4 text-right">
                               <Link

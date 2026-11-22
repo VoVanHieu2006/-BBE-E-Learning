@@ -82,11 +82,11 @@ export default function CourseDetailPage({ params }: { params: { courseId: strin
       </div>
 
       {loading ? (
-        <div className="text-center py-20 text-[#737686]">Đang tải thông tin khóa học...</div>
+        <div className="text-center py-20 text-[#6c6f7f]">Đang tải thông tin khóa học...</div>
       ) : !course ? (
         <Card className="text-center py-16 space-y-4">
           <p className="text-xl font-bold text-[#172554]">Khóa học không tồn tại hoặc đã bị ẩn</p>
-          <p className="text-sm text-[#737686]">Vui lòng kiểm tra lại đường dẫn hoặc đăng nhập tài khoản thành viên.</p>
+          <p className="text-sm text-[#6c6f7f]">Vui lòng kiểm tra lại đường dẫn hoặc đăng nhập tài khoản thành viên.</p>
           <div className="pt-2">
             <Link href="/student/courses">
               <Button variant="secondary">Xem các khóa học khác</Button>
@@ -127,7 +127,7 @@ export default function CourseDetailPage({ params }: { params: { courseId: strin
                 <p className="text-[#434655] leading-relaxed text-sm md:text-base">
                   {course.description || 'Chương trình đào tạo kỹ năng chuyên sâu BBE.'}
                 </p>
-                <div className="flex items-center gap-3 pt-2 text-xs text-[#737686]">
+                <div className="flex items-center gap-3 pt-2 text-xs text-[#6c6f7f]">
                   <span>🏛️ {course.sessions?.length || 0} buổi học</span>
                   <span>• 📚 {totalLessons} bài học</span>
                 </div>
@@ -137,7 +137,7 @@ export default function CourseDetailPage({ params }: { params: { courseId: strin
               {user ? (
                 <div className="bg-[#f8f9ff] p-6 rounded-2xl border border-[#cbdbf5] min-w-[220px] text-center shrink-0">
                   <div className="text-3xl font-bold text-[#2563EB] mb-1">{progressPercentage}%</div>
-                  <div className="text-xs text-[#737686] mb-3">
+                  <div className="text-xs text-[#6c6f7f] mb-3">
                     {isLeaderOrAdmin ? 'Quyền quản trị / Lead Chapter' : 'Tiến độ hoàn thành'}
                   </div>
                   <div className="h-2.5 bg-[#eff4ff] rounded-full overflow-hidden mb-2">
@@ -174,7 +174,7 @@ export default function CourseDetailPage({ params }: { params: { courseId: strin
                       </span>
                       <div>
                         <h3 className="text-lg font-bold text-[#172554]">{session.title}</h3>
-                        {session.description && <p className="text-xs text-[#737686]">{session.description}</p>}
+                        {session.description && <p className="text-xs text-[#6c6f7f]">{session.description}</p>}
                       </div>
                     </div>
 
@@ -232,7 +232,7 @@ export default function CourseDetailPage({ params }: { params: { courseId: strin
                           >
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-3">
-                                <span className="text-xs font-bold text-[#737686] group-hover:text-[#2563EB]">
+                                <span className="text-xs font-bold text-[#6c6f7f] group-hover:text-[#2563EB]">
                                   {sIdx + 1}.{lIdx + 1}
                                 </span>
                                 <div>
@@ -242,7 +242,7 @@ export default function CourseDetailPage({ params }: { params: { courseId: strin
                                   {lesson.description && (
                                     <p className="text-xs text-[#434655] mt-0.5 line-clamp-1">{lesson.description}</p>
                                   )}
-                                  <div className="flex flex-wrap items-center gap-2 text-xs text-[#737686] mt-1">
+                                  <div className="flex flex-wrap items-center gap-2 text-xs text-[#6c6f7f] mt-1">
                                     <span>📹 Video bài giảng</span>
                                     {lesson.assessment && (
                                       <span className="inline-flex items-center gap-1 font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md text-[11px]">

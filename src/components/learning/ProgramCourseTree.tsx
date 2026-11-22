@@ -172,7 +172,7 @@ export default function ProgramCourseTree({ refreshTrigger, onDataLoaded }: Prog
           <h2 className="flex items-center gap-2 text-xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
             <span aria-hidden="true">🗺️</span> Lộ trình đào tạo theo Chương trình
           </h2>
-          <p className="mt-0.5 text-xs text-[#737686]">
+          <p className="mt-0.5 text-xs text-[#6c6f7f]">
             Tất cả bài học đã xuất bản đều hiển thị. Bài chưa đủ điều kiện được đánh dấu khóa và mở tuần tự.
           </p>
         </div>
@@ -245,7 +245,7 @@ export default function ProgramCourseTree({ refreshTrigger, onDataLoaded }: Prog
                           {completedLessonsInProgram}/{totalLessonsInProgram} bài ({percent}%)
                         </span>
                       </div>
-                      {program.is_core !== false && <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Chương trình lõi</p>}
+                      {program.is_core !== false && <p className="mt-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Chương trình lõi</p>}
                     </div>
                   </div>
                   <span className="ml-3 shrink-0 text-xs font-bold text-blue-700" aria-hidden="true">{isOpen ? '▲' : '▼'}</span>
@@ -274,7 +274,7 @@ export default function ProgramCourseTree({ refreshTrigger, onDataLoaded }: Prog
                               <h4 className="truncate text-sm font-bold text-[#172554]">{course.title}</h4>
                               <p className="mt-0.5 text-[11px] font-medium text-slate-500">
                                 {flatLessons.length} bài · Đã hoàn thành {doneInCourse}/{flatLessons.length} ({coursePercent}%)
-                                {course.visibility === 'PUBLIC' && <span className="ml-2 rounded-full bg-sky-100 px-1.5 py-0.5 text-[9px] font-bold text-sky-700">Khách cũng xem được</span>}
+                                {course.visibility === 'PUBLIC' && <span className="ml-2 rounded-full bg-sky-100 px-1.5 py-0.5 text-[11px] font-bold text-sky-700">Khách cũng xem được</span>}
                               </p>
                             </div>
                             <div className="flex shrink-0 items-center gap-2">
@@ -294,7 +294,7 @@ export default function ProgramCourseTree({ refreshTrigger, onDataLoaded }: Prog
                               {course.sessions?.map((session: any, sessionIndex: number) => (
                                 <div key={session.id} className="space-y-1.5 border-l-2 border-blue-200 pl-2">
                                   <div className="flex items-center gap-2 text-xs font-bold text-slate-700">
-                                    <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">Buổi {sessionIndex + 1}</span>
+                                    <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-500">Buổi {sessionIndex + 1}</span>
                                     <span className="truncate">{session.title}</span>
                                   </div>
                                   <div className="space-y-1">
@@ -331,13 +331,13 @@ export default function ProgramCourseTree({ refreshTrigger, onDataLoaded }: Prog
                                           </div>
                                           <div className="shrink-0">
                                             {status === 'done' ? (
-                                              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-100 px-2 py-0.5 text-[10px] font-extrabold text-emerald-800">✓ Hoàn thành</span>
+                                              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-100 px-2 py-0.5 text-[11px] font-extrabold text-emerald-800">✓ Hoàn thành</span>
                                             ) : status === 'locked' ? (
-                                              <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-400">🔒 Khóa</span>
+                                              <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-400">🔒 Khóa</span>
                                             ) : status === 'progress' ? (
-                                              <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-100 px-2 py-0.5 text-[10px] font-extrabold text-blue-800 animate-pulse">⏳ Đang học</span>
+                                              <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-100 px-2 py-0.5 text-[11px] font-extrabold text-blue-800 animate-pulse">⏳ Đang học</span>
                                             ) : (
-                                              <Link href={`/student/learning/${lesson.id}`} className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700 transition hover:bg-blue-100">
+                                              <Link href={`/student/learning/${lesson.id}`} className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-blue-700 transition hover:bg-blue-100">
                                                 ▶ Bắt đầu
                                               </Link>
                                             )}

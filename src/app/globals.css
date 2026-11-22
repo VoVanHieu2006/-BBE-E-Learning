@@ -25,6 +25,12 @@ h1, h2, h3, h4, h5, h6 {
   font-family: 'Be Vietnam Pro', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
+/* WCAG 2.2 target size (2.5.8): no button smaller than 24x24px. */
+button, [role="button"], [role="tab"] {
+  min-width: 24px;
+  min-height: 24px;
+}
+
 /* Page transitions animate ONLY opacity. Keyframes that animate transform or
    filter turn the wrapper into the containing block for every position:fixed
    descendant (modals, toasts, celebration), which made centered dialogs land

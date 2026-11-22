@@ -297,7 +297,7 @@ export default function UnifiedLeaderboard({
           <h1 className="text-2xl sm:text-3xl font-extrabold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
             Bảng Xếp Hạng Thi Đua
           </h1>
-          <p className="text-xs sm:text-sm text-[#737686] mt-1">
+          <p className="text-xs sm:text-sm text-[#6c6f7f] mt-1">
             {group === 'CHAPTER'
               ? 'Xếp hạng chất lượng đào tạo giữa các Chapter theo chuẩn BBE'
               : group === 'DNA'
@@ -532,7 +532,7 @@ export default function UnifiedLeaderboard({
           <p className="text-xs text-slate-500">Tháng đã kết thúc, đang chờ tổng hợp dữ liệu KPI chính thức từ Chapter.</p>
         </Card>
       ) : loading ? (
-        <Card className="p-16 text-center text-[#737686] rounded-3xl">
+        <Card className="p-16 text-center text-[#6c6f7f] rounded-3xl">
           <div className="w-10 h-10 border-4 border-[#2563EB] border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
           <p className="text-xs font-medium">Đang tải bảng xếp hạng…</p>
         </Card>
@@ -550,7 +550,7 @@ export default function UnifiedLeaderboard({
           </div>)}
         </Card>
       ) : items.length === 0 && excludedChapters.length === 0 ? (
-        <Card className="p-16 text-center text-[#737686] space-y-2 rounded-3xl">
+        <Card className="p-16 text-center text-[#6c6f7f] space-y-2 rounded-3xl">
           <div className="text-5xl">⭐</div>
           <h3 className="text-base font-bold text-[#172554]">Chưa có dữ liệu xếp hạng</h3>
           <p className="text-xs max-w-md mx-auto">
@@ -587,12 +587,12 @@ export default function UnifiedLeaderboard({
                       <span>{topThree[1].displayName}</span>
                     )}
                     {isCurrentUserItem(topThree[1]) && (
-                      <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-black bg-[#2563EB] text-white">
+                      <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-black bg-[#2563EB] text-white">
                         Bạn
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-[#737686] truncate mb-3">
+                  <p className="text-xs text-[#6c6f7f] truncate mb-3">
                     {group === 'CHAPTER'
                       ? `${topThree[1].memberCount || 0} học viên • Đạt ≥70%: ${topThree[1].atLeast70Percent !== null && topThree[1].atLeast70Percent !== undefined ? `${topThree[1].atLeast70Percent}%` : '—'}`
                       : `${topThree[1].positionName || 'Thành viên'} • ${topThree[1].departmentName || (group === 'DNA' ? 'Khối DNA' : '—')}${isGlobal && topThree[1].chapterName ? ` • ${topThree[1].chapterName}` : ''}`}
@@ -628,12 +628,12 @@ export default function UnifiedLeaderboard({
                       <span>{topThree[0].displayName}</span>
                     )}
                     {isCurrentUserItem(topThree[0]) && (
-                      <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-black bg-[#2563EB] text-white">
+                      <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-black bg-[#2563EB] text-white">
                         Bạn
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-[#737686] truncate mb-3">
+                  <p className="text-xs text-[#6c6f7f] truncate mb-3">
                     {group === 'CHAPTER'
                       ? `${topThree[0].memberCount || 0} học viên • Đạt ≥70%: ${topThree[0].atLeast70Percent !== null && topThree[0].atLeast70Percent !== undefined ? `${topThree[0].atLeast70Percent}%` : '—'}`
                       : `${topThree[0].positionName || 'Thành viên'} • ${topThree[0].departmentName || (group === 'DNA' ? 'Khối DNA' : '—')}${isGlobal && topThree[0].chapterName ? ` • ${topThree[0].chapterName}` : ''}`}
@@ -667,12 +667,12 @@ export default function UnifiedLeaderboard({
                       <span>{topThree[2].displayName}</span>
                     )}
                     {isCurrentUserItem(topThree[2]) && (
-                      <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-black bg-[#2563EB] text-white">
+                      <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-black bg-[#2563EB] text-white">
                         Bạn
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-[#737686] truncate mb-3">
+                  <p className="text-xs text-[#6c6f7f] truncate mb-3">
                     {group === 'CHAPTER'
                       ? `${topThree[2].memberCount || 0} học viên • Đạt ≥70%: ${topThree[2].atLeast70Percent !== null && topThree[2].atLeast70Percent !== undefined ? `${topThree[2].atLeast70Percent}%` : '—'}`
                       : `${topThree[2].positionName || 'Thành viên'} • ${topThree[2].departmentName || (group === 'DNA' ? 'Khối DNA' : '—')}${isGlobal && topThree[2].chapterName ? ` • ${topThree[2].chapterName}` : ''}`}
@@ -696,7 +696,7 @@ export default function UnifiedLeaderboard({
               <h2 className="text-sm font-bold text-[#172554]">
                 Toàn bộ danh sách ({items.length} {group === 'CHAPTER' ? 'Chapter' : 'thành viên'})
               </h2>
-              <span className="text-xs text-[#737686]">
+              <span className="text-xs text-[#6c6f7f]">
                 Sắp xếp theo {group === 'CHAPTER' ? 'Điểm BXH' : 'Tổng ⭐ Star tích lũy'}
               </span>
             </div>
@@ -704,7 +704,7 @@ export default function UnifiedLeaderboard({
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead>
-                  <tr className="border-b border-[#eff4ff] bg-slate-50/80 text-[11px] font-bold text-[#737686] uppercase tracking-wider">
+                  <tr className="border-b border-[#eff4ff] bg-slate-50/80 text-[11px] font-bold text-[#6c6f7f] uppercase tracking-wider">
                     <th className="py-3.5 px-6 text-center w-20">Hạng</th>
                     <th className="py-3.5 px-6">{group === 'CHAPTER' ? 'Chapter' : 'Họ và tên'}</th>
                     <th className="py-3.5 px-6">{group === 'CHAPTER' ? 'Quy mô' : 'Ban / Đơn vị'}</th>
@@ -765,7 +765,7 @@ export default function UnifiedLeaderboard({
                                   <p className="font-bold text-[#172554] group-hover:text-[#2563EB] transition-colors truncate flex items-center gap-2">
                                     <span>{item.displayName || item.name}</span>
                                     {isYou && (
-                                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black bg-[#2563EB] text-white shadow-2xs">
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-black bg-[#2563EB] text-white shadow-2xs">
                                         Bạn
                                       </span>
                                     )}
@@ -781,7 +781,7 @@ export default function UnifiedLeaderboard({
                                   <p className="font-bold text-[#172554] truncate flex items-center gap-2">
                                     <span>{item.displayName || item.name}</span>
                                     {isYou && (
-                                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black bg-[#2563EB] text-white shadow-2xs">
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-black bg-[#2563EB] text-white shadow-2xs">
                                         Bạn
                                       </span>
                                     )}
@@ -883,7 +883,7 @@ export default function UnifiedLeaderboard({
               <h3 className="font-bold text-[#172554] text-sm">
                 🏛️ Chapter chưa đủ điều kiện tham gia xếp hạng ({excludedChapters.length})
               </h3>
-              <p className="text-xs text-[#737686]">
+              <p className="text-xs text-[#6c6f7f]">
                 Theo thể lệ BBE, Chapter cần <strong>trên 20</strong> thành viên, tỷ lệ đạt ≥70% bài lõi tối thiểu 50% và KPI Vàng hoặc Xanh.
               </p>
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 pt-1">
@@ -913,11 +913,11 @@ export default function UnifiedLeaderboard({
               <h3 className="text-xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
                 ℹ️ Thể Lệ Tính Điểm & Xếp Hạng BBE
               </h3>
-              <p className="text-xs text-[#737686] mt-0.5">Quy chuẩn thi đua và vinh danh học tập chính thức</p>
+              <p className="text-xs text-[#6c6f7f] mt-0.5">Quy chuẩn thi đua và vinh danh học tập chính thức</p>
             </div>
             <button
               onClick={() => setShowRulesModal(false)}
-              className="text-[#737686] hover:text-[#172554] text-xl font-bold p-1 rounded-lg hover:bg-slate-100 transition"
+              className="text-[#6c6f7f] hover:text-[#172554] text-xl font-bold p-1 rounded-lg hover:bg-slate-100 transition"
             >
               ✕
             </button>

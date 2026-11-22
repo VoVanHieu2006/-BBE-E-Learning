@@ -244,7 +244,7 @@ export default function AdminCoursesPage() {
           <h1 className="text-3xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
             Quản lý khóa học
           </h1>
-          <p className="text-[#737686] mt-1 text-sm">
+          <p className="text-[#6c6f7f] mt-1 text-sm">
             Danh sách khóa học được tổ chức theo 4 chương trình đào tạo BBE. Tổng số: <strong>{courses.length}</strong> khóa học.
           </p>
         </div>
@@ -349,7 +349,7 @@ export default function AdminCoursesPage() {
       ) : courses.length === 0 ? (
         <Card className="text-center py-16">
           <p className="text-xl font-bold text-[#172554] mb-2">Chưa có khóa học nào</p>
-          <p className="text-sm text-[#737686] mb-6">Hãy bắt đầu tạo khóa học đầu tiên để cung cấp tài liệu cho học viên.</p>
+          <p className="text-sm text-[#6c6f7f] mb-6">Hãy bắt đầu tạo khóa học đầu tiên để cung cấp tài liệu cho học viên.</p>
           <Link href="/admin/courses/new">
             <Button>＋ Tạo khóa học mới ngay</Button>
           </Link>
@@ -430,7 +430,7 @@ export default function AdminCoursesPage() {
                           {list.length} khóa học
                         </span>
                       </div>
-                      <p className="text-xs text-[#737686] mt-0.5">{program.description}</p>
+                      <p className="text-xs text-[#6c6f7f] mt-0.5">{program.description}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
@@ -524,11 +524,11 @@ function CourseCardRow({
             {course.title}
           </h3>
 
-          <p className="text-xs text-[#737686] line-clamp-2 leading-relaxed">
+          <p className="text-xs text-[#6c6f7f] line-clamp-2 leading-relaxed">
             {course.description || 'Chưa có mô tả chi tiết cho khóa học này.'}
           </p>
 
-          <div className="flex items-center gap-4 text-xs text-[#737686] pt-1">
+          <div className="flex items-center gap-4 text-xs text-[#6c6f7f] pt-1">
             <span>📚 Buổi học: <strong>{course.sessionCount || 0}</strong></span>
             {course.publishedAt && (
               <span suppressHydrationWarning>
@@ -544,7 +544,7 @@ function CourseCardRow({
           <div className="flex flex-col gap-1 min-w-[210px]">
             <label className="text-[11px] font-semibold text-slate-500 flex items-center justify-between">
               <span>Chương trình:</span>
-              {isProgramBusy && <span className="text-[10px] text-blue-600 animate-pulse">Đang lưu...</span>}
+              {isProgramBusy && <span className="text-[11px] text-blue-600 animate-pulse">Đang lưu...</span>}
             </label>
             <select aria-label={`Chương trình của khóa ${course.title}`}
               value={currentProgramCode}

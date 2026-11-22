@@ -36,7 +36,7 @@ function QuizResultContent() {
   }
 
   if (!mounted || loading) {
-    return <div className="text-center py-20 text-[#737686]">Đang tải kết quả bài kiểm tra...</div>;
+    return <div className="text-center py-20 text-[#6c6f7f]">Đang tải kết quả bài kiểm tra...</div>;
   }
 
   if (error || !result) {
@@ -64,7 +64,7 @@ function QuizResultContent() {
           <h1 className="text-3xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
             {passed ? 'Chúc mừng bạn đã vượt qua!' : 'Chưa đạt yêu cầu hoàn thành'}
           </h1>
-          <p className="text-sm text-[#737686] mt-1">
+          <p className="text-sm text-[#6c6f7f] mt-1">
             {passed
               ? 'Bạn đã hoàn thành bài kiểm tra cuối khóa xuất sắc.'
               : 'Bạn cần đạt tối thiểu 85% điểm số để hoàn thành khóa học.'}
@@ -121,7 +121,7 @@ function QuizResultContent() {
                   </span>
                 </div>
                 {passed && a.explanation && (
-                  <p className="text-xs text-[#737686] mt-2 pt-2 border-t border-green-100">
+                  <p className="text-xs text-[#6c6f7f] mt-2 pt-2 border-t border-green-100">
                     💡 {a.explanation}
                   </p>
                 )}
@@ -138,7 +138,7 @@ export default function FinalQuizResultPage() {
   return (
     <main className="min-h-screen bg-[#f8f9ff] flex items-center justify-center p-6">
       <div className="max-w-2xl w-full">
-        <Suspense fallback={<div className="text-center text-[#737686]">Đang tải...</div>}>
+        <Suspense fallback={<div className="text-center text-[#6c6f7f]">Đang tải...</div>}>
           <QuizResultContent />
         </Suspense>
       </div>

@@ -179,7 +179,7 @@ export default function LandingPage() {
             <p className="mt-2 max-w-xl text-sm leading-6 text-slate-500">Những nội dung giúp bạn vững kiến thức và tự tin hơn trong hành trình cùng BBE.</p>
           </div>
           <div className="flex items-center gap-3">
-            <Link href="/student/courses" className="text-sm font-bold text-blue-700 hover:text-blue-900">Tất cả khóa học <span aria-hidden="true">→</span></Link>
+            <Link href="/student/courses" className="inline-flex min-h-6 items-center gap-1 text-sm font-bold text-blue-700 hover:text-blue-900">Tất cả khóa học <span aria-hidden="true">→</span></Link>
             {featuredCourses.length > 1 && (
               <div className="hidden gap-2 sm:flex">
                 <button type="button" onClick={() => scrollCarousel(-1)} aria-label="Khóa học trước" className="grid h-10 w-10 place-items-center rounded-full border border-slate-200 text-lg text-slate-700 transition hover:border-blue-300 hover:bg-blue-50">←</button>

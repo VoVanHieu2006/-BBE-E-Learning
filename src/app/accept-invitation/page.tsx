@@ -130,7 +130,7 @@ function AcceptInvitationContent() {
     return (
       <div className="bg-white rounded-3xl p-8 border border-[#eff4ff] shadow-lg text-center py-10">
         <div className="w-8 h-8 border-[3px] border-[#2563EB] border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-        <p className="text-sm text-[#737686]">Đang xác thực thông tin lời mời...</p>
+        <p className="text-sm text-[#6c6f7f]">Đang xác thực thông tin lời mời...</p>
       </div>
     );
   }
@@ -143,13 +143,13 @@ function AcceptInvitationContent() {
         </div>
         <div>
           <h2 className="text-lg font-bold text-[#172554]">Lời mời không khả dụng</h2>
-          <p className="text-sm text-[#737686] mt-2">{invalidReason || 'Liên kết lời mời không hợp lệ (thiếu token).'}</p>
-          <p className="text-xs text-[#737686] mt-1">
+          <p className="text-sm text-[#6c6f7f] mt-2">{invalidReason || 'Liên kết lời mời không hợp lệ (thiếu token).'}</p>
+          <p className="text-xs text-[#6c6f7f] mt-1">
             Vui lòng liên hệ người gửi để nhận liên kết mời mới.
           </p>
         </div>
         <div className="pt-3">
-          <Link href="/login">
+          <Link href="/login" className="inline-flex">
             <Button variant="outline">Về trang đăng nhập</Button>
           </Link>
         </div>
@@ -254,9 +254,9 @@ export default function AcceptInvitationPage() {
           <h1 className="text-3xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
             Kích hoạt tài khoản
           </h1>
-          <p className="text-[#737686] mt-1">Chào mừng bạn đến với BBE E-Learning</p>
+          <p className="text-[#6c6f7f] mt-1">Chào mừng bạn đến với BBE E-Learning</p>
         </div>
-        <Suspense fallback={<div className="text-center text-[#737686]">Đang tải...</div>}>
+        <Suspense fallback={<div className="text-center text-[#6c6f7f]">Đang tải...</div>}>
           <AcceptInvitationContent />
         </Suspense>
       </div>

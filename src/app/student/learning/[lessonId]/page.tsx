@@ -583,7 +583,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
             <h1 className="text-sm md:text-base font-bold text-[#172554] truncate" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
               {lesson?.session?.courseTitle || courseData?.title || 'Khóa học BBE'}
             </h1>
-            <p className="text-[11px] text-[#737686] truncate">
+            <p className="text-[11px] text-[#6c6f7f] truncate">
               {lesson?.session?.title && `${lesson.session.title} • `}
               <span className="text-[#2563EB] font-bold">
                 {loadingLesson ? 'Đang tải bài giảng...' : (lesson?.title || 'Bài học')} <NewContentChip show={!loadingLesson && progress?.isNew} />
@@ -728,7 +728,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                 <h3 className="text-xs font-bold text-[#172554] uppercase tracking-wide flex items-center gap-1.5">
                   <span>🗓️</span> Lịch sử học video này
                 </h3>
-                <span className="text-[10px] text-[#737686]">
+                <span className="text-[11px] text-[#6c6f7f]">
                   "Hoàn thành đào tạo" (nhiệm kỳ học) khác "lượt xem thưởng" (theo tháng) — hai mốc độc lập.
                 </span>
               </div>
@@ -784,12 +784,12 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
 
               {historyRows.length > 0 && (
                 <div className="pt-3 mt-3 border-t border-dashed border-[#eff4ff]">
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-[#737686] mb-1.5">Những tháng trước</p>
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-[#6c6f7f] mb-1.5">Những tháng trước</p>
                   <div className="flex flex-wrap gap-2">
                     {historyRows.map((row: any) => (
                       <span
                         key={row.competitionMonthId}
-                        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-bold ${
+                        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold ${
                           row.awardedStars > 0 || (row.quiz?.stars || 0) > 0
                             ? 'border-amber-200 bg-amber-50 text-amber-800'
                             : row.completed
@@ -820,7 +820,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                   ← Bài trước
                 </button>
               ) : (
-                <span className="text-xs text-[#737686] px-3 py-2 font-medium">Đang ở bài đầu tiên</span>
+                <span className="text-xs text-[#6c6f7f] px-3 py-2 font-medium">Đang ở bài đầu tiên</span>
               )}
 
               {nextLesson && (
@@ -881,7 +881,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
               )}
             </div>
 
-            <div className="flex items-center gap-3 text-xs text-[#737686]">
+            <div className="flex items-center gap-3 text-xs text-[#6c6f7f]">
               {lesson?.documents?.length > 0 && (
                 <button
                   onClick={() => setActiveTab('docs')}
@@ -902,7 +902,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                 className={`pb-3 text-sm font-bold border-b-2 transition ${
                   activeTab === 'desc'
                     ? 'border-[#2563EB] text-[#2563EB]'
-                    : 'border-transparent text-[#737686] hover:text-[#172554]'
+                    : 'border-transparent text-[#6c6f7f] hover:text-[#172554]'
                 }`}
               >
                 📖 Mô tả bài giảng
@@ -912,7 +912,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                 className={`pb-3 text-sm font-bold border-b-2 transition flex items-center gap-1.5 ${
                   activeTab === 'docs'
                     ? 'border-[#2563EB] text-[#2563EB]'
-                    : 'border-transparent text-[#737686] hover:text-[#172554]'
+                    : 'border-transparent text-[#6c6f7f] hover:text-[#172554]'
                 }`}
               >
                 <span>📎 Tài liệu học tập</span>
@@ -927,7 +927,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                 className={`pb-3 text-sm font-bold border-b-2 transition flex items-center gap-1.5 ${
                   activeTab === 'comments'
                     ? 'border-[#2563EB] text-[#2563EB]'
-                    : 'border-transparent text-[#737686] hover:text-[#172554]'
+                    : 'border-transparent text-[#6c6f7f] hover:text-[#172554]'
                 }`}
               >
                 <span>💬 Hỏi đáp</span>
@@ -938,12 +938,12 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                   className={`pb-3 text-sm font-bold border-b-2 transition flex items-center gap-1.5 ${
                     activeTab === 'quiz'
                       ? 'border-[#2563EB] text-[#2563EB]'
-                      : 'border-transparent text-[#737686] hover:text-[#172554]'
+                      : 'border-transparent text-[#6c6f7f] hover:text-[#172554]'
                   }`}
                 >
                   <span>📝 Bài kiểm tra</span> <NewContentChip show={progress?.quizIsNew} />
                   <span
-                    className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                    className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${
                       progress?.assessmentPassed && !monthlyQuiz
                         ? 'bg-emerald-100 text-emerald-800'
                         : 'bg-orange-100 text-orange-800'
@@ -976,7 +976,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                 </h3>
 
                 {!lesson?.documents || lesson.documents.length === 0 ? (
-                  <p className="text-xs text-[#737686] py-4">Bài học này không có tài liệu đính kèm nào.</p>
+                  <p className="text-xs text-[#6c6f7f] py-4">Bài học này không có tài liệu đính kèm nào.</p>
                 ) : (
                   <div className="space-y-2.5">
                     {lesson.documents.map((doc: any) => (
@@ -989,7 +989,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                           <div className="min-w-0">
                             <p className="text-xs font-bold text-[#172554] truncate">{doc.fileName}</p>
                             {doc.fileSize && (
-                              <p className="text-[10px] text-[#737686]">{(doc.fileSize / 1024 / 1024).toFixed(2)} MB</p>
+                              <p className="text-[11px] text-[#6c6f7f]">{(doc.fileSize / 1024 / 1024).toFixed(2)} MB</p>
                             )}
                           </div>
                         </div>
@@ -1027,7 +1027,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                     <h3 className="text-base font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
                       📝 {lesson.assessment.title || 'Bài kiểm tra bài học'} <NewContentChip show={progress?.quizIsNew} />
                     </h3>
-                    <p className="text-xs text-[#737686] leading-relaxed max-w-xl">
+                    <p className="text-xs text-[#6c6f7f] leading-relaxed max-w-xl">
                       {quizLock === 'MONTHLY_VIDEO_INCOMPLETE'
                         ? `Bạn đã bấm "Xem lại tháng này": xem hết video ${monthTitle.toLowerCase()} (đang ${monthPercent}%) rồi mới làm bài kiểm tra.`
                         : quizLock === 'REVIEW_NOT_STARTED'
@@ -1046,7 +1046,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                       <Button variant="secondary" disabled className="!bg-slate-100 !text-slate-500 !border-slate-200 cursor-not-allowed font-bold">
                         🔒 Xem hết video trước ({monthPercent}%)
                       </Button>
-                      <span className="text-[10px] text-amber-700 font-medium">Bài kiểm tra tháng này mở khi video tháng này đạt 100%.</span>
+                      <span className="text-[11px] text-amber-700 font-medium">Bài kiểm tra tháng này mở khi video tháng này đạt 100%.</span>
                     </div>
                   ) : isAdmin || progress?.canAssess === true ? (
                     <Link href={`/student/learning/${currentLessonId}/quiz`} className="shrink-0">
@@ -1065,7 +1065,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                           ? `🔒 Còn thiếu ${remainingVideoSeconds} giây — hãy để video phát hết`
                           : `🔒 Cần xem video trước (${cycleVideoPercent}%)`}
                       </Button>
-                      <span className="text-[10px] text-amber-700 font-medium">
+                      <span className="text-[11px] text-amber-700 font-medium">
                         {remainingVideoSeconds > 0 && remainingVideoSeconds <= 15
                           ? 'Video sẽ tự xác nhận hoàn thành khi phát đến cuối.'
                           : 'Cần xem hết video để mở khóa bài kiểm tra.'}
@@ -1103,7 +1103,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
               <h3 className="font-bold text-sm text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
                 Nội dung khóa học
               </h3>
-              <p className="text-[11px] text-[#737686] mt-0.5 font-medium">
+              <p className="text-[11px] text-[#6c6f7f] mt-0.5 font-medium">
                 {courseData?.sessions?.length || 0} buổi • {allCourseLessons.length} bài giảng
               </p>
             </div>
@@ -1122,12 +1122,12 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                       className="w-full px-4 py-3.5 bg-[#f8f9ff] hover:bg-[#eff4ff] flex items-center justify-between text-left transition"
                     >
                       <div className="min-w-0 pr-2">
-                        <span className="text-[10px] font-bold text-[#2563EB] uppercase tracking-wider block">
+                        <span className="text-[11px] font-bold text-[#2563EB] uppercase tracking-wider block">
                           Buổi {sIdx + 1}
                         </span>
                         <h4 className="text-xs font-bold text-[#172554] truncate">{session.title}</h4>
                       </div>
-                      <span className="text-[#737686] text-xs font-bold shrink-0 transition-transform duration-200">
+                      <span className="text-[#6c6f7f] text-xs font-bold shrink-0 transition-transform duration-200">
                         {isOpen ? '▲' : '▼'}
                       </span>
                     </button>
@@ -1176,7 +1176,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                                 {isCurrent ? (
                                   <span className={`font-bold ${isLessonDone ? 'text-emerald-600' : 'text-[#2563EB]'}`}>▶</span>
                                 ) : isLessonDone ? (
-                                  <span className="w-4 h-4 rounded-full bg-emerald-500 text-white text-[10px] font-bold flex items-center justify-center">✓</span>
+                                  <span className="w-4 h-4 rounded-full bg-emerald-500 text-white text-[11px] font-bold flex items-center justify-center">✓</span>
                                 ) : isLocked ? (
                                   <span className="text-slate-400 text-xs inline-flex items-center justify-center" title="Bài học đang bị khóa">🔒</span>
                                 ) : (
@@ -1188,10 +1188,10 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                                 <p className={`font-semibold line-clamp-2 ${isCurrent ? 'text-[#2563EB]' : 'text-[#172554]'}`}>
                                   Bài {lIdx + 1}: {l.title} <NewContentChip show={displayState?.isNew} />
                                 </p>
-                              <div className="flex items-center gap-2 text-[10px] text-[#737686] mt-1 font-normal flex-wrap">
+                              <div className="flex items-center gap-2 text-[11px] text-[#6c6f7f] mt-1 font-normal flex-wrap">
                                   <span>📹 {l.video?.durationSeconds ? `${Math.floor(l.video.durationSeconds / 60)}:${(l.video.durationSeconds % 60).toString().padStart(2, '0')}` : 'Video'}</span>
                                   {l.assessment && (
-                                    <span className={`font-semibold px-1.5 py-0.5 rounded text-[9px] ${
+                                    <span className={`font-semibold px-1.5 py-0.5 rounded text-[11px] ${
                                       isQuizPassed && !monthlyQuizPending
                                         ? 'bg-emerald-100 text-emerald-700'
                                         : 'bg-amber-100 text-amber-700'

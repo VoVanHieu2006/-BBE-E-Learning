@@ -264,7 +264,7 @@ export default function ChapterManagerMembersPage() {
             <h1 className="text-3xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
               Thành viên & Tiến trình Chapter
             </h1>
-            <p className="text-[#737686] mt-1 text-sm">
+            <p className="text-[#6c6f7f] mt-1 text-sm">
               Chapter: <span suppressHydrationWarning className="font-semibold text-[#172554]">{mounted && user?.chapterName ? user.chapterName : 'Chapter của bạn'}</span> • Quản lý học viên và theo dõi kết quả học tập
             </p>
           </div>
@@ -285,19 +285,19 @@ export default function ChapterManagerMembersPage() {
         {/* Stats Row */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           <Card shadow="md" className="p-4 border border-[#eff4ff]">
-            <div className="text-xs font-semibold text-[#737686]">Tổng thành viên</div>
+            <div className="text-xs font-semibold text-[#6c6f7f]">Tổng thành viên</div>
             <div className="text-2xl font-bold text-[#172554] mt-1">{summary.totalMembers}</div>
-            <div className="text-[11px] text-[#737686] mt-0.5">Toàn bộ Chapter</div>
+            <div className="text-[11px] text-[#6c6f7f] mt-0.5">Toàn bộ Chapter</div>
           </Card>
           <Card shadow="md" className="p-4 border border-[#eff4ff]">
             <div className="text-xs font-semibold text-green-700">Đang hoạt động (Active)</div>
             <div className="text-2xl font-bold text-green-700 mt-1">{summary.activeMembers}</div>
-            <div className="text-[11px] text-[#737686] mt-0.5">Có quyền đăng nhập học</div>
+            <div className="text-[11px] text-[#6c6f7f] mt-0.5">Có quyền đăng nhập học</div>
           </Card>
           <Card shadow="md" className="p-4 border border-[#eff4ff]">
             <div className="text-xs font-semibold text-blue-700">Tiến độ TB Chapter</div>
             <div className="text-2xl font-bold text-[#2563EB] mt-1">{summary.avgChapterProgress}%</div>
-            <div className="text-[11px] text-[#737686] mt-0.5">Tất cả khóa học</div>
+            <div className="text-[11px] text-[#6c6f7f] mt-0.5">Tất cả khóa học</div>
           </Card>
         </div>
 
@@ -351,7 +351,7 @@ export default function ChapterManagerMembersPage() {
         </Card>
 
         {/* Filter Result Summary & Page Size Controls */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-1 mb-3 text-xs text-[#737686]">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-1 mb-3 text-xs text-[#6c6f7f]">
           <div className="font-medium flex items-center gap-2">
             <span>
               Đang hiển thị <span className="text-[#2563EB] font-bold">{memberRows.length}</span> trên tổng số{' '}
@@ -407,7 +407,7 @@ export default function ChapterManagerMembersPage() {
               ))}
             </div>
           ) : memberRows.length === 0 ? (
-            <div className="text-center py-16 text-[#737686]">
+            <div className="text-center py-16 text-[#6c6f7f]">
               <p className="text-lg font-semibold text-[#172554] mb-1">Chưa có thành viên nào</p>
               <p className="text-sm">{canManageMembers ? 'Hãy gửi lời mời thành viên đầu tiên tham gia Chapter của bạn.' : 'Chapter hiện chưa có thành viên để hiển thị.'}</p>
               {canManageMembers && (
@@ -448,17 +448,17 @@ export default function ChapterManagerMembersPage() {
                             <span className="font-semibold text-[#172554] group-hover:text-[#2563EB] transition-colors block">
                               {m.displayName || 'Chưa cập nhật tên'}
                             </span>
-                            <span className="mt-0.5 text-xs text-[#737686] group-hover:text-[#2563EB] transition-colors block">
+                            <span className="mt-0.5 text-xs text-[#6c6f7f] group-hover:text-[#2563EB] transition-colors block">
                               {m.email}
                             </span>
                           </button>
                           <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
                             {m.department?.name === 'Chủ Tịch' ? (
-                              <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-amber-200/80 text-amber-900 shadow-2xs">
+                              <span className="text-[11px] font-black px-2 py-0.5 rounded-md bg-amber-200/80 text-amber-900 shadow-2xs">
                                 ⭐ Chủ tịch Chapter
                               </span>
                             ) : m.isLead ? (
-                              <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-200">
+                              <span className="text-[11px] font-extrabold px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-200">
                                 👑 Trưởng ban
                               </span>
                             ) : null}
@@ -473,7 +473,7 @@ export default function ChapterManagerMembersPage() {
                         <td className="px-6 py-4 text-center">
                           <div className="flex flex-col items-center justify-center">
                             <span className="font-bold text-[#2563EB]">{m.avgProgress || 0}%</span>
-                            <span className="text-[11px] text-[#737686] mt-0.5">
+                            <span className="text-[11px] text-[#6c6f7f] mt-0.5">
                               Đã học {m.completedLessons || 0} / {m.totalLessons || 0} bài
                             </span>
                           </div>
@@ -490,7 +490,7 @@ export default function ChapterManagerMembersPage() {
                               <span className="whitespace-nowrap inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full bg-rose-100 text-rose-800 border border-rose-300">
                                 <span>🔒</span> Tạm khóa hệ thống
                               </span>
-                              <div className="text-[10px] text-slate-500 mt-0.5">Chỉ Admin mới mở được</div>
+                              <div className="text-[11px] text-slate-500 mt-0.5">Chỉ Admin mới mở được</div>
                             </div>
                           ) : isActive ? (
                             <span className="whitespace-nowrap inline-flex items-center text-xs font-bold px-2.5 py-1 rounded-full bg-green-100 text-green-700">
@@ -502,14 +502,14 @@ export default function ChapterManagerMembersPage() {
                                 <span>⛔</span> Đã vô hiệu hóa
                               </span>
                               {m.cascadeLeadId ? (
-                                <div className="text-[10px] text-red-500 mt-0.5">Theo Lead Chapter</div>
+                                <div className="text-[11px] text-red-500 mt-0.5">Theo Lead Chapter</div>
                               ) : (
-                                <div className="text-[10px] text-slate-500 mt-0.5">Chỉ Admin mở lại</div>
+                                <div className="text-[11px] text-slate-500 mt-0.5">Chỉ Admin mở lại</div>
                               )}
                             </div>
                           )}
                         </td>
-                        <td className="px-6 py-4 text-center text-xs text-[#737686]" suppressHydrationWarning>
+                        <td className="px-6 py-4 text-center text-xs text-[#6c6f7f]" suppressHydrationWarning>
                           {m.joinedAt ? new Date(m.joinedAt).toLocaleDateString('vi-VN') : '—'}
                         </td>
                         <td className="px-6 py-4 text-right">
@@ -552,7 +552,7 @@ export default function ChapterManagerMembersPage() {
           {/* Pagination Controls */}
           {pagination.totalPages > 1 && (
             <div className="p-4 border-t border-[#eff4ff] bg-[#f8f9ff] flex flex-col sm:flex-row items-center justify-between gap-3">
-              <div className="text-xs text-[#737686]">
+              <div className="text-xs text-[#6c6f7f]">
                 Trang <span className="font-bold text-[#172554]">{page}</span> / {pagination.totalPages} (Tổng {pagination.totalItems} thành viên)
               </div>
 
@@ -573,7 +573,7 @@ export default function ChapterManagerMembersPage() {
                     const prevP = arr[idx - 1];
                     return (
                       <span key={p} className="flex items-center">
-                        {prevP && p - prevP > 1 && <span className="px-1 text-[#737686]">...</span>}
+                        {prevP && p - prevP > 1 && <span className="px-1 text-[#6c6f7f]">...</span>}
                         <button
                           disabled={loading || isPageChanging}
                           onClick={() => handlePageChange(p)}
@@ -613,7 +613,7 @@ export default function ChapterManagerMembersPage() {
             <h3 className="text-xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
               Mời thành viên tham gia Chapter
             </h3>
-            <p className="text-xs text-[#737686]">
+            <p className="text-xs text-[#6c6f7f]">
               Gửi lời mời tham gia Chapter <span suppressHydrationWarning>{mounted && user?.chapterName ? user.chapterName : ''}</span> qua email.
             </p>
             <form onSubmit={handleInvite} className="space-y-4">
@@ -663,7 +663,7 @@ export default function ChapterManagerMembersPage() {
             <h3 className="text-xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
               {confirmToggle?.nextStatus === 'INACTIVE' ? 'Vô hiệu hóa tài khoản?' : 'Kích hoạt lại tài khoản?'}
             </h3>
-            <p className="text-sm text-[#737686]">
+            <p className="text-sm text-[#6c6f7f]">
               {confirmToggle?.nextStatus === 'INACTIVE'
                 ? `Thành viên ${confirmToggle?.email} sẽ không thể đăng nhập và ngừng toàn bộ quyền truy cập học tập. Bạn hoặc Quản trị viên (Admin) có thể kích hoạt lại sau này.`
                 : `Thành viên ${confirmToggle?.email} sẽ được kích hoạt lại và có thể tiếp tục học tập bình thường.`}

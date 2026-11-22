@@ -104,7 +104,7 @@ export default function TransferConfirmations({
                     setSelectedDeptId('');
                     setMakeLead(false);
                   }}
-                  className="text-[#737686] hover:text-[#172554] text-base font-bold px-2 py-1"
+                  className="text-[#6c6f7f] hover:text-[#172554] text-base font-bold px-2 py-1"
                 >
                   ✕
                 </button>
@@ -219,7 +219,7 @@ export default function TransferConfirmations({
                   setShowConfirmDeactivate(false);
                   setDeactivateText('');
                 }}
-                className="text-[#737686] hover:text-[#172554] text-base font-bold px-2 py-1"
+                className="text-[#6c6f7f] hover:text-[#172554] text-base font-bold px-2 py-1"
               >
                 ✕
               </button>
@@ -298,7 +298,7 @@ export default function TransferConfirmations({
                   setSingleDeactivateModal(null);
                   setDeactivateText('');
                 }}
-                className="text-[#737686] hover:text-[#172554] text-base font-bold px-2 py-1"
+                className="text-[#6c6f7f] hover:text-[#172554] text-base font-bold px-2 py-1"
               >
                 ✕
               </button>
@@ -383,7 +383,7 @@ export default function TransferConfirmations({
                   setShowBulkUnassignedModal(false);
                   setDeactivateText('');
                 }}
-                className="text-[#737686] hover:text-[#172554] text-base font-bold px-2 py-1"
+                className="text-[#6c6f7f] hover:text-[#172554] text-base font-bold px-2 py-1"
               >
                 ✕
               </button>
@@ -457,7 +457,7 @@ export default function TransferConfirmations({
               <button
                 type="button"
                 onClick={() => setShowApplyBatchModal(false)}
-                className="text-[#737686] hover:text-[#172554] text-base font-bold px-2 py-1"
+                className="text-[#6c6f7f] hover:text-[#172554] text-base font-bold px-2 py-1"
               >
                 ✕
               </button>
@@ -513,7 +513,7 @@ export default function TransferConfirmations({
               <button
                 type="button"
                 onClick={() => setShowCancelBatchModal(false)}
-                className="text-[#737686] hover:text-[#172554] text-base font-bold px-2 py-1"
+                className="text-[#6c6f7f] hover:text-[#172554] text-base font-bold px-2 py-1"
               >
                 ✕
               </button>

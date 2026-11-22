@@ -123,7 +123,7 @@ export default function LoginPage() {
           <h1 className="text-3xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
             Đăng nhập
           </h1>
-          <p className="text-[#737686] mt-1 text-sm">Hệ thống đào tạo trực tuyến BBE E-Learning</p>
+          <p className="text-[#6c6f7f] mt-1 text-sm">Hệ thống đào tạo trực tuyến BBE E-Learning</p>
         </div>
 
         {/* Card */}
@@ -151,7 +151,7 @@ export default function LoginPage() {
                 autoComplete="email"
                 value={form.email}
                 onChange={(e) => setForm({ ...form, email: e.target.value })}
-                className="w-full px-4 py-3 bg-white border border-[#cbdbf5] rounded-xl text-[#0b1c30] placeholder-[#737686] focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:border-transparent transition text-sm"
+                className="w-full px-4 py-3 bg-white border border-[#cbdbf5] rounded-xl text-[#0b1c30] placeholder-[#6c6f7f] focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:border-transparent transition text-sm"
                 placeholder="email@bbelearning.com"
               />
             </div>
@@ -159,7 +159,7 @@ export default function LoginPage() {
             <div>
               <div className="flex justify-between items-center mb-1.5">
                 <label htmlFor="login-password" className="block text-sm font-semibold text-[#172554]">Mật khẩu</label>
-                <Link href="/forgot-password" className="text-xs text-[#2563EB] hover:underline font-semibold">
+                <Link href="/forgot-password" className="inline-flex min-h-6 items-center text-xs text-[#2563EB] hover:underline font-semibold">
                   Quên mật khẩu?
                 </Link>
               </div>
@@ -170,14 +170,14 @@ export default function LoginPage() {
                   autoComplete="current-password"
                   value={form.password}
                   onChange={(e) => setForm({ ...form, password: e.target.value })}
-                  className="w-full px-4 py-3 bg-white border border-[#cbdbf5] rounded-xl text-[#0b1c30] placeholder-[#737686] focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:border-transparent transition pr-12 text-sm"
+                  className="w-full px-4 py-3 bg-white border border-[#cbdbf5] rounded-xl text-[#0b1c30] placeholder-[#6c6f7f] focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:border-transparent transition pr-12 text-sm"
                   placeholder="••••••••"
                 />
                 <button
                   type="button"
                   tabIndex={-1}
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#737686] hover:text-[#2563EB] p-1.5 rounded-lg transition text-lg"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#6c6f7f] hover:text-[#2563EB] p-1.5 rounded-lg transition text-lg"
                 >
                   {showPassword ? '👁️' : '🔒'}
                 </button>
@@ -195,7 +195,7 @@ export default function LoginPage() {
         <div className="text-center space-y-2">
           <Link
             href="/"
-            className="inline-flex items-center gap-1.5 text-xs text-[#737686] hover:text-[#2563EB] transition font-semibold"
+            className="inline-flex items-center gap-1.5 text-xs text-[#6c6f7f] hover:text-[#2563EB] transition font-semibold"
           >
             ← Quay lại trang chủ
           </Link>

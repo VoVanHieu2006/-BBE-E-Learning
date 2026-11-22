@@ -59,7 +59,7 @@ export default function AdminNewCoursePage() {
         <h1 className="text-3xl font-bold text-[#172554] mb-2" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
           Tạo khóa học mới
         </h1>
-        <p className="text-xs text-[#737686] mb-6">
+        <p className="text-xs text-[#6c6f7f] mb-6">
           Khởi tạo khóa học ban đầu ở trạng thái Bản nháp (Draft), sau đó thêm các buổi học và bài giảng video.
         </p>
 
@@ -86,7 +86,7 @@ export default function AdminNewCoursePage() {
                 value={form.title}
                 onChange={handleChange}
                 required
-                className="w-full px-4 py-3 border border-[#cbdbf5] rounded-xl text-[#0b1c30] placeholder-[#737686] focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:border-transparent transition text-sm font-medium"
+                className="w-full px-4 py-3 border border-[#cbdbf5] rounded-xl text-[#0b1c30] placeholder-[#6c6f7f] focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:border-transparent transition text-sm font-medium"
                 placeholder="Ví dụ: Kỹ năng giao tiếp và đào tạo chuẩn văn hóa BBE"
               />
             </div>
@@ -97,7 +97,7 @@ export default function AdminNewCoursePage() {
                 value={form.description}
                 onChange={handleChange}
                 rows={4}
-                className="w-full px-4 py-3 border border-[#cbdbf5] rounded-xl text-[#0b1c30] placeholder-[#737686] focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:border-transparent transition text-sm"
+                className="w-full px-4 py-3 border border-[#cbdbf5] rounded-xl text-[#0b1c30] placeholder-[#6c6f7f] focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:border-transparent transition text-sm"
                 placeholder="Mô tả nội dung, mục tiêu và kết quả đạt được sau khóa học (tùy chọn)"
               />
             </div>

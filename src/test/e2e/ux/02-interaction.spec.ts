@@ -193,7 +193,7 @@ test.describe('Bố cục và điện thoại', () => {
     expect(await overflowWithName(page, request, 'Nguyễn Hoàng Thị Minh Anh Khánh Linh Phương Thảo Nguyên Bảo Ngọc Diệp Chi')).toEqual([])
   })
 
-  uiDefect('BUG-UX-LONG-WORD-OVERFLOW', 'tên hiển thị chứa một từ dài không có dấu cách (36 ký tự) không làm trang chủ học viên phải cuộn ngang', async ({ page, request }) => {
+  test('tên hiển thị chứa một từ dài không có dấu cách (36 ký tự) không làm trang chủ học viên phải cuộn ngang', async ({ page, request }) => {
     test.skip(isPhone(), 'chỉ tái hiện ở bố cục máy tính')
     expect(await overflowWithName(page, request, `Nguyễn Hoàng Thị Minh Anh Khánh Linh ${'Phương'.repeat(6)}`)).toEqual([])
   })

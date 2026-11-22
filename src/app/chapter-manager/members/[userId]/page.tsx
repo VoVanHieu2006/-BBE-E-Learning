@@ -196,7 +196,7 @@ export default function MemberDetailPage({ params }: { params: { userId: string 
                   <button
                     type="button"
                     onClick={() => setShowConfirmModal(false)}
-                    className="text-[#737686] hover:text-[#172554] text-base font-bold px-2 py-1"
+                    className="text-[#6c6f7f] hover:text-[#172554] text-base font-bold px-2 py-1"
                   >
                     ✕
                   </button>

@@ -87,7 +87,7 @@ export default function CourseAssessmentEditor({
               </h3>
               <button
                 onClick={closeAssessmentModal}
-                className="text-[#737686] hover:text-[#172554] font-bold text-xl p-1 rounded-lg hover:bg-slate-100 transition"
+                className="text-[#6c6f7f] hover:text-[#172554] font-bold text-xl p-1 rounded-lg hover:bg-slate-100 transition"
               >
                 ✕
               </button>
@@ -220,7 +220,7 @@ export default function CourseAssessmentEditor({
                       Tải câu hỏi
                     </Button>
                   </div>
-                  <p className="text-[11px] text-[#737686] leading-relaxed">
+                  <p className="text-[11px] text-[#6c6f7f] leading-relaxed">
                     Hãy thực hiện theo mẫu sau:{' '}
                     <a
                       href="https://docs.google.com/spreadsheets/d/1HhM0S2agnLMWz9MQYCswyGL1W8SeplN0DiNMFWYNa20/edit?usp=sharing"
@@ -252,7 +252,7 @@ export default function CourseAssessmentEditor({
                       <div className="flex gap-2"><input aria-label={`Tên nhóm câu hỏi ${poolIndex + 1}`} value={poolName} onChange={(e) => setQuizPoolNames((previous) => previous.map((name, index) => index === poolIndex ? e.target.value : name))} className="flex-1 rounded-xl border border-[#cbdbf5] px-3 py-2 text-sm"/><Button size="sm" variant="secondary" onClick={() => handleAddQuestion(poolIndex)}>＋ Tạo câu hỏi</Button><button type="button" onClick={() => handleRemovePool(poolIndex)} className="rounded-lg px-2 text-red-600 hover:bg-red-50">Xóa nhóm</button></div>
                 {assessmentForm.questions.map((q, qIdx) => (q.poolIndex ?? 0) === poolIndex ? (
                   <details key={qIdx} className="group rounded-2xl border border-[#eff4ff] bg-[#f8f9ff]">
-                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-[#172554]"><span>{quizPoolNames[q.poolIndex ?? 0] || 'Chưa có nhóm'} · Câu {qIdx + 1}</span><span className="max-w-[65%] truncate text-xs font-normal text-[#737686]">{q.questionText || 'Chưa nhập nội dung'}</span></summary>
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-[#172554]"><span>{quizPoolNames[q.poolIndex ?? 0] || 'Chưa có nhóm'} · Câu {qIdx + 1}</span><span className="max-w-[65%] truncate text-xs font-normal text-[#6c6f7f]">{q.questionText || 'Chưa nhập nội dung'}</span></summary>
                   <div className="space-y-3 border-t border-[#eff4ff] p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-center gap-1.5 shrink-0 mt-1">
@@ -263,7 +263,7 @@ export default function CourseAssessmentEditor({
                             <button
                               type="button"
                               onClick={() => handleMoveQuestion(qIdx, 'up')}
-                              className="text-[9px] text-[#737686] hover:text-[#2563EB] px-1 bg-white border border-[#cbdbf5] rounded hover:bg-blue-50"
+                              className="text-[11px] text-[#6c6f7f] hover:text-[#2563EB] px-1 bg-white border border-[#cbdbf5] rounded hover:bg-blue-50"
                               title="Di chuyển câu hỏi lên"
                             >
                               ▲
@@ -273,7 +273,7 @@ export default function CourseAssessmentEditor({
                             <button
                               type="button"
                               onClick={() => handleMoveQuestion(qIdx, 'down')}
-                              className="text-[9px] text-[#737686] hover:text-[#2563EB] px-1 bg-white border border-[#cbdbf5] rounded hover:bg-blue-50"
+                              className="text-[11px] text-[#6c6f7f] hover:text-[#2563EB] px-1 bg-white border border-[#cbdbf5] rounded hover:bg-blue-50"
                               title="Di chuyển câu hỏi xuống"
                             >
                               ▼
@@ -303,7 +303,7 @@ export default function CourseAssessmentEditor({
                       </select>
                       <button
                         onClick={() => handleRemoveQuestion(qIdx)}
-                        className="p-1.5 text-[#737686] hover:text-red-600 rounded-lg hover:bg-red-50 shrink-0"
+                        className="p-1.5 text-[#6c6f7f] hover:text-red-600 rounded-lg hover:bg-red-50 shrink-0"
                         title="Xóa câu hỏi này"
                       >
                         🗑️
@@ -346,7 +346,7 @@ export default function CourseAssessmentEditor({
 
                     {/* Options Editor */}
                     <div className="space-y-2 pt-2 border-t border-[#eff4ff]">
-                      <span className="text-xs font-semibold text-[#737686]">
+                      <span className="text-xs font-semibold text-[#6c6f7f]">
                         {q.type === 'SINGLE_CHOICE'
                           ? 'Chọn 1 nút tròn làm đáp án đúng:'
                           : q.type === 'MULTIPLE_CHOICE'
@@ -389,7 +389,7 @@ export default function CourseAssessmentEditor({
                             <button
                               type="button"
                               onClick={() => handleRemoveOption(qIdx, oIdx)}
-                              className="text-[#737686] hover:text-red-600 font-bold px-1.5"
+                              className="text-[#6c6f7f] hover:text-red-600 font-bold px-1.5"
                               title="Xóa đáp án này"
                             >
                               ✕

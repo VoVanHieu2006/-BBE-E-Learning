@@ -48,7 +48,7 @@ export default function CourseLessonModal({
               <h3 className="text-xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
                 {editingLessonId ? 'Chỉnh sửa bài học' : 'Thêm bài học & Video YouTube'}
               </h3>
-              <button onClick={closeLessonModal} className="text-[#737686] hover:text-[#172554] text-xl font-bold p-1 rounded-lg hover:bg-slate-100 transition">
+              <button onClick={closeLessonModal} className="text-[#6c6f7f] hover:text-[#172554] text-xl font-bold p-1 rounded-lg hover:bg-slate-100 transition">
                 ✕
               </button>
             </div>
@@ -93,7 +93,7 @@ export default function CourseLessonModal({
                         ✓ Tự động nhận diện: {lessonForm.durationFormatted || `${lessonForm.durationSeconds} giây`}
                       </p>
                     ) : (
-                      <p className="text-xs text-[#737686] font-semibold mt-0.5">
+                      <p className="text-xs text-[#6c6f7f] font-semibold mt-0.5">
                         Chưa xác định được thời lượng — cần nhập thủ công
                       </p>
                     )}
