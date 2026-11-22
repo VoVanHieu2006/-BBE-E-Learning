@@ -29,6 +29,8 @@ export async function inviteLink(request: APIRequestContext, inviter: AccountKey
   if (!unit) throw new Error(`${inviter} manages no ${unitType} unit ${unitName || ''}`)
   const invitation = await manager.post('/api/v1/invitations/member', { email, organizationUnitId: unit.id })
   expect(invitation.status, JSON.stringify(invitation.body)).toBe(201)
+  // Fixture time travel: the suite creates far more accounts than the 60 links / 10 minutes one manager may issue.
+  await sql(`UPDATE audit_logs SET created_at = created_at - interval '11 minutes' WHERE action = 'INVITATION_LINK_ISSUED' AND actor_user_id = $1`, [manager.session.user.id])
   const link = await manager.post(`/api/v1/invitations/${invitation.body.invitationId}/link`)
   expect(link.status, JSON.stringify(link.body)).toBe(200)
   return { invitationId: invitation.body.invitationId as string, unit, link: link.body.link as string, token: new URL(link.body.link).searchParams.get('token') as string, invitation: invitation.body }
