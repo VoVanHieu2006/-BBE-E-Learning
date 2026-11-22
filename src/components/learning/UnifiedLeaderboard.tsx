@@ -1,5 +1,4 @@
 'use client'
-import { isLeadRole } from '@/lib/roles'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import Link from 'next/link'
@@ -139,15 +138,6 @@ export default function UnifiedLeaderboard({
       if (c) setSelectedChapterId(c)
     }
 
-    const storedUser = (() => {
-      try { return JSON.parse(localStorage.getItem('user') || 'null') } catch { return null }
-    })()
-
-    if (isLeadRole(storedUser?.role) && storedUser.chapterId) {
-      setChapterList([{ id: storedUser.chapterId, name: storedUser.chapterName || 'Chapter của tôi' }])
-      setSelectedChapterId((current) => current || storedUser.chapterId)
-    }
-
     apiFetch<any>('/api/v1/learning/periods').then((res) => {
       if (res.ok && res.data) {
         const scope = res.data.scope
@@ -171,14 +161,7 @@ export default function UnifiedLeaderboard({
           if (t.chapter_id && t.chapterName) uniqueChapters.set(t.chapter_id, t.chapterName)
         })
         const list = Array.from(uniqueChapters.entries()).map(([id, name]) => ({ id, name }))
-        if (scope?.role === 'GUEST') {
-          setChapterList([])
-          setSelectedChapterId('')
-        } else if (isLeadRole(storedUser?.role) && storedUser.chapterId) {
-          setChapterList(list.filter((chapter) => chapter.id === storedUser.chapterId))
-        } else {
-          setChapterList(list)
-        }
+        setChapterList(list)
       }
     }).catch(() => {})
   }, [refreshCurrentUser])
@@ -488,12 +471,12 @@ export default function UnifiedLeaderboard({
 
         {/* Lọc theo Chapter nếu xem Thành viên hoặc LT (Khối DNA không dùng Chapter) */}
         {(group === 'MEMBER' || group === 'LT') && showChapterSelector && chapterList.length > 0 && (
-          <div className="flex items-center gap-3 pt-2 border-t border-slate-100 text-xs">
+          <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-slate-100 text-xs">
             <span className="font-semibold text-slate-600 shrink-0">Lọc theo Chapter:</span>
             <select
               value={selectedChapterId}
               onChange={(e) => setSelectedChapterId(e.target.value)}
-              className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 font-semibold text-slate-800 outline-none focus:border-blue-500 max-w-xs"
+              className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 font-semibold text-slate-800 outline-none focus:border-blue-500 min-w-0 max-w-full sm:max-w-xs"
             >
               <option value="">{isGlobal ? 'Tất cả Chapter (Toàn hệ thống)' : 'Chapter của bạn'}</option>
               {chapterList.map((ch) => (

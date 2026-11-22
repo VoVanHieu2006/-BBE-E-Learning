@@ -2,13 +2,9 @@ import { chapterActualTermRows } from './chapter-actual-terms'
 import { addCalendarMonthsVietnam } from './chapter-term-rules'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from './prisma'
-import { authenticate } from './auth'
 import { historicalChapterMonthRows, individualPeriodRows, chapterSeasonRows, competitionCohortAt, hasNativeLearningEvidence } from './competition-snapshots'
 import { dnaSeasonEnd } from './chapter-reward-gate'
-import { getLearningManagerKind } from './manager-learning-access'
-import { listAccessibleChapterIds, listManagedOrganizationUnits } from './authorization'
 import { listChapterLearners } from './chapter-members'
-import { currentLearningAffiliation } from './affiliation-access'
 import { readinessForReason } from './learning-readiness-rules'
 import { publicRankingRow } from './fun-display-name'
 
@@ -31,13 +27,8 @@ function unauthorized(message = 'Bạn không có quyền xem bảng xếp hạn
   return NextResponse.json({ error: { code: 'AccessDenied', message } }, { status: 403 })
 }
 
-function loginRequired() {
-  return NextResponse.json({ error: { code: 'UNAUTHORIZED', message: 'Vui lòng đăng nhập để xem bảng xếp hạng này.' } }, { status: 401 })
-}
-
 /** Closed boards are served only from saved snapshots, never rebuilt from today's roles. */
 export async function periodLeaderboard(request: NextRequest) {
-  const auth = await authenticate(request).catch(() => ({ ok: false as const }))
   const query = request.nextUrl.searchParams
   const group = (query.get('group') || 'MEMBER') as Group
   const periodType = (query.get('periodType') || 'MONTH') as PeriodType
@@ -47,50 +38,8 @@ export async function periodLeaderboard(request: NextRequest) {
 
   if (periodType === 'ACTUAL_TERM' && group !== 'CHAPTER') return NextResponse.json({ error: { code: 'InvalidPeriodType' } }, { status: 400 })
 
-  const context = auth.ok ? (auth as any).context! : null
-  const isGuest = !context
-  const isAdmin = context?.role === 'ADMIN'
-  const managerKind = context && !isAdmin ? await getLearningManagerKind(context.userId, context.role) : null
-
-  const requestedChapterId = query.get('chapterId')
-  let chapterId: string | null = null
-  let managedChapterIds: string[] = []
-  let managedDnaUnitIds: string[] = []
-  const ownChapterId: string | null = context?.chapterId || null
-
-  if (isGuest) {
-    // Guests only get the public system-wide member board, never more than a signed-in member.
-    if (group !== 'MEMBER' || requestedChapterId) return loginRequired()
-  } else if (isAdmin) {
-    // Admin defaults to global system-wide.
-    // If and only if an explicit chapterId was requested, apply that filter.
-    chapterId = requestedChapterId || null
-  } else if (managerKind === 'LEAD_CHAPTER') {
-    managedChapterIds = await listAccessibleChapterIds(context!, 'VIEW_MEMBER_PROGRESS')
-    if (!['MEMBER', 'LT'].includes(group)) return unauthorized('Lead Chapter chỉ được xem bảng Thành viên và LT trong Chapter mình quản lý.')
-    if (!managedChapterIds.length) return unauthorized('Tài khoản chưa được gán Chapter quản lý.')
-    if (requestedChapterId && !managedChapterIds.includes(requestedChapterId)) return unauthorized()
-    chapterId = requestedChapterId || managedChapterIds[0] || null
-  } else if (managerKind === 'LEAD_DNA') {
-    const units = await listManagedOrganizationUnits(context!)
-    managedDnaUnitIds = units.filter((unit) => unit.type === 'DNA' || unit.type === 'DNA_GROUP').map((unit) => unit.id)
-    if (group !== 'DNA') return unauthorized('Lead DNA chỉ được xem bảng xếp hạng DNA trong phạm vi quản lý.')
-    if (!managedDnaUnitIds.length) return unauthorized('Tài khoản chưa được gán đơn vị DNA quản lý.')
-  } else if (context?.role === 'MEMBER') {
-    // Authenticated regular member
-    const affiliation = await currentLearningAffiliation(context.userId)
-
-    if (affiliation.dnaUnitIds.length) {
-      if (group !== 'DNA') return unauthorized('Thành viên Khối DNA chỉ được xem bảng xếp hạng Khối DNA.')
-      managedDnaUnitIds = affiliation.dnaUnitIds
-    } else {
-      if (!['MEMBER', 'LT'].includes(group)) return unauthorized('Thành viên Chapter chỉ được xem bảng Thành viên và LT trong Chapter của mình.')
-      const memberChapterId = affiliation.chapterId
-      if (!memberChapterId) return unauthorized('Tài khoản thành viên chưa thuộc Chapter nào.')
-      if (requestedChapterId && requestedChapterId !== memberChapterId) return unauthorized('Bạn chỉ được xem bảng xếp hạng của Chapter mình thuộc.')
-      chapterId = memberChapterId
-    }
-  }
+  // One shared leaderboard: guests and every signed-in role see every board and may filter by any Chapter.
+  const chapterId: string | null = query.get('chapterId') || null
 
   if (periodType === 'ACTUAL_TERM') {
     const termId = query.get('periodId')
@@ -168,10 +117,6 @@ export async function periodLeaderboard(request: NextRequest) {
     }
     if ((group === 'MEMBER' || group === 'LT') && chapterId) {
       payload = { ...payload, items: (payload.items || []).filter((row: any) => row.chapterId === chapterId) }
-    }
-    if (group === 'DNA' && managedDnaUnitIds.length) {
-      const allowed = new Set(managedDnaUnitIds)
-      payload = { ...payload, items: (payload.items || []).filter((row: any) => row.dnaUnitId && allowed.has(row.dnaUnitId)) }
     }
     if (group === 'CHAPTER' && payload.items) {
       payload = {
@@ -256,7 +201,7 @@ export async function periodLeaderboard(request: NextRequest) {
     new Date(Math.min(period.ends_at?.getTime() || now.getTime(), now.getTime())),
     group,
     group === 'DNA' ? undefined : term?.chapter_id || chapterId || undefined,
-    group === 'DNA' ? managedDnaUnitIds : undefined,
+    undefined,
     season?.id,
     { chapterTerms: periodType === 'TERM' },
   )

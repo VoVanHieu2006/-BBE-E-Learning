@@ -49,6 +49,7 @@ hiểu sai hoặc phải làm thừa; **Thấp** = khó chịu nhỏ, chuẩn ac
 
 ## Quan sát chưa xếp thành lỗi
 
+- BUG-LB-GUEST-SCOPE (khách xem được bảng xếp hạng kỳ DNA/Chapter) đã đóng là **hành vi chủ đích**, không sửa: chủ sản phẩm quyết định bảng xếp hạng kỳ là một bảng dùng chung, khách và mọi vai đã đăng nhập xem như nhau (Thành viên, LT, DNA, Chapter, lọc theo Chapter bất kỳ), không lộ email. Test ở `api/07-organization.spec.ts` nay kiểm tra hành vi này.
 - Bảng lời mời và bảng xếp hạng trên điện thoại nằm trong khung cuộn ngang riêng: không vỡ trang, nhưng phải vuốt ngang để thấy cột cuối.
 - Nút "bài tiếp theo" khi còn khóa chỉ trông như bị khóa (màu xám, có `title`), không có thuộc tính `disabled`.
 - Chú thích đầu file `src/lib/quiz/import.ts` ghi 8 cột (có "Điểm") trong khi mẫu Google Sheet và mã đọc 7 cột; mã và mẫu khớp nhau, chỉ chú thích cũ.
