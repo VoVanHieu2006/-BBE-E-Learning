@@ -21,8 +21,6 @@ hiểu sai hoặc phải làm thừa; **Thấp** = khó chịu nhỏ, chuẩn ac
 | Mã | Hiện tượng (đã tái hiện) | Mong đợi | Test |
 |---|---|---|---|
 | BUG-STALE-AFTER-RELOAD | Danh sách (ví dụ lời mời) được lưu trong `sessionStorage` tới 120 giây (`src/lib/api/client.ts`) và trang không yêu cầu dữ liệu mới khi tải lần đầu. Người được mời đã kích hoạt, Lead bấm F5 vẫn thấy "Đang chờ" và nút Hủy. | F5 luôn hiện dữ liệu mới. | `ui/03-lead-management.spec.ts` |
-| BUG-UX-ACCEPT-LOGIN | Nút ghi "Kích hoạt tài khoản & Đăng nhập" nhưng kích hoạt xong lại đưa về trang đăng nhập, bắt gõ lại email và mật khẩu. | Vào thẳng trang học, hoặc đổi chữ trên nút. | `ui/01-guest-and-account.spec.ts` |
-| BUG-UX-CALLBACK-STUDENT | Mở link `/student/...` khi chưa đăng nhập, đăng nhập xong bị đưa về trang chủ học viên thay vì trang đã mở. | Về đúng trang trong `callbackUrl`. | `ui/01-guest-and-account.spec.ts` |
 | BUG-UX-ERROR-AS-EMPTY | Khi API danh sách thành viên trả 500, trang Lead không báo lỗi; Lead thấy màn hình như thể Chapter chưa có ai. | Báo "không tải được" kèm cách thử lại. | `ux/02-interaction.spec.ts` |
 | BUG-UX-LOADING-FALSE-DATA | Trang khóa học của học viên khi mạng chậm (2,5 giây): trong lúc chờ, trang hiện "⚠️ Thành viên · Chưa có Ban" (dù thành viên đã thuộc một ban), "0 / 0 khóa", "0% (0/0 bài)", "Tất cả khóa học (0)" như dữ liệu thật, rồi mới nhảy sang số đúng. | Hiện trạng thái đang tải cho các số liệu và không hiện cảnh báo trước khi có dữ liệu. | `ux/02-interaction.spec.ts` |
 | BUG-LEAD-MEMBER-DETAIL-UNIT | Lead Chapter mở hồ sơ một thành viên (cửa sổ ở "Thành viên & Tiến trình" và trang `/chapter-manager/members/<id>`): hồ sơ luôn ghi "Chưa gán Chapter" và "Ban Chưa phân ban", dù danh sách ngay bên dưới và bảng chuyển giao ghi đúng ban. API `GET /api/v1/chapters/<id>/members/<userId>/course-progress` không trả tên Chapter và Ban trong `user`. Tìm thấy khi dùng thử bằng tay. | Hồ sơ ghi đúng Chapter và Ban của thành viên. | `ui/03-lead-management.spec.ts` |
@@ -39,7 +37,6 @@ hiểu sai hoặc phải làm thừa; **Thấp** = khó chịu nhỏ, chuẩn ac
 |---|---|---|---|
 | BUG-INVITE-EN | Mời với đơn vị không hợp lệ trả thông báo lỗi tiếng Anh. | Tiếng Việt. | `api/02-invitations.spec.ts` |
 | BUG-QUIZ-SCORE-UNIT | `score` ở kết quả nộp bài là điểm thô (180), ở lịch sử lượt làm là phần trăm (90). | Cùng một đơn vị. | `api/05-quiz.spec.ts` |
-| BUG-UX-NETWORK-MSG | Mất mạng lúc đăng nhập hiện "Lỗi kết nối: Failed to fetch". | Thông báo hoàn toàn bằng tiếng Việt. | `ux/02-interaction.spec.ts` |
 | BUG-UX-LONG-WORD-OVERFLOW | Tên hiển thị chứa một từ 36 ký tự không dấu cách làm trang chủ học viên tràn ngang 144px trên máy tính (tên dài có dấu cách thì không sao). | Từ dài được ngắt dòng hoặc cắt bớt. | `ux/02-interaction.spec.ts` |
 | BUG-A11Y-LANDMARK | 5/35 trang không có hoặc có hai vùng `main`: `/leaderboard`, bài học, bài kiểm tra (không có); `/student/stars`, `/chapter-manager/courses` (hai). | Đúng một `main`. | `ux/01-every-page.spec.ts` |
 | BUG-A11Y-H1 | Trang bài kiểm tra và trang soạn khóa học không có `h1`. | Đúng một `h1`. | `ux/01-every-page.spec.ts` |

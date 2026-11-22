@@ -379,7 +379,7 @@ export async function apiFetch<T = any>(
             !currentPath.startsWith('/student/courses') &&
             !currentPath.startsWith('/student/learning')
           ) {
-            window.location.href = '/login'
+            window.location.href = '/login?callbackUrl=' + encodeURIComponent(currentPath)
           }
         }
       }

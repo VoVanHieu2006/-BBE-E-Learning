@@ -80,7 +80,7 @@ test.describe('Mạng chậm hoặc lỗi', () => {
     await expect(page.locator('button[type="submit"]')).toBeEnabled()
   })
 
-  uiDefect('BUG-UX-NETWORK-MSG', 'mất mạng lúc đăng nhập: thông báo hoàn toàn bằng tiếng Việt, không kèm câu kỹ thuật "Failed to fetch"', async ({ page }) => {
+  test('mất mạng lúc đăng nhập: thông báo hoàn toàn bằng tiếng Việt, không kèm câu kỹ thuật "Failed to fetch"', async ({ page }) => {
     await page.route('**/api/v1/auth/login', (route) => route.abort('internetdisconnected'))
     await page.goto('/login')
     await page.locator('input[type="email"]').fill(ACCOUNTS.member)

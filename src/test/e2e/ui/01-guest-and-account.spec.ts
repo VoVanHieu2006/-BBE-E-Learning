@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { as } from '../support/api'
-import { createCourse, createLearner, enforceDeadlines, inviteLink, makeOverdue, PASSWORD, setMandatory, uiDefect, uniqueEmail } from '../support/fixtures'
+import { createCourse, createLearner, enforceDeadlines, inviteLink, makeOverdue, PASSWORD, setMandatory, uniqueEmail } from '../support/fixtures'
 import { ACCOUNTS, SEED_PASSWORD } from '../support/seed'
 import { settle, signIn, signInAs, watchProblems } from '../support/ui'
 
@@ -48,7 +48,7 @@ test.describe('Khách', () => {
     await expect(page).toHaveURL(/\/admin\/users/, { timeout: 20_000 })
   })
 
-  uiDefect('BUG-UX-CALLBACK-STUDENT', 'học viên mở link trang riêng khi chưa đăng nhập thì đăng nhập xong phải về đúng trang đó', async ({ page }) => {
+  test('học viên mở link trang riêng khi chưa đăng nhập thì đăng nhập xong phải về đúng trang đó', async ({ page }) => {
     await page.goto('/student/stars')
     await expect(page).toHaveURL(/\/login/)
     await page.locator('input[type="email"]').fill(ACCOUNTS.member)
@@ -223,7 +223,7 @@ test.describe('Lời mời', () => {
     }
   })
 
-  uiDefect('BUG-UX-ACCEPT-LOGIN', 'nút ghi "Kích hoạt tài khoản & Đăng nhập" thì kích hoạt xong phải vào thẳng trang học, không bắt gõ lại email và mật khẩu', async ({ page, request }) => {
+  test('nút ghi "Kích hoạt tài khoản & Đăng nhập" thì kích hoạt xong phải vào thẳng trang học, không bắt gõ lại email và mật khẩu', async ({ page, request }) => {
     const email = uniqueEmail('moi')
     const link = new URL((await inviteLink(request, 'chapterLead', email)).link)
     await page.goto(link.pathname + link.search)
