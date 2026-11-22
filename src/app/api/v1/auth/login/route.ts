@@ -6,7 +6,7 @@ import crypto from 'crypto'
 import { hasActiveAffiliation } from '@/lib/affiliation-access'
 import { getLearningManagerKind } from '@/lib/manager-learning-access'
 import { invalidateUserAuthCache } from '@/lib/auth'
-import { loginRetryAfterSeconds, loginSource, recordLoginFailure } from '@/lib/login-rate-limit'
+import { loginSource, reserveLoginAttempt } from '@/lib/login-rate-limit'
 import { MAX_LOGIN_ATTEMPTS, failedLoginState, isOverdueLocked, isPasswordLocked } from '@/lib/account-restriction-rules'
 
 const JWT_ACCESS_SECRET = process.env.JWT_ACCESS_SECRET || ''
@@ -47,8 +47,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Nguồn đã sai quá nhiều lần bị từ chối trước khi kiểm tra mật khẩu, kể cả khi mật khẩu đúng.
-    const source = loginSource(request.headers)
-    const retryAfter = await loginRetryAfterSeconds(source)
+    const attempt = await reserveLoginAttempt(loginSource(request.headers))
+    const retryAfter = attempt.retryAfter
     if (retryAfter !== null) {
       return NextResponse.json(
         { error: { code: 'TooManyAttempts', message: `Quá nhiều lần đăng nhập sai. Vui lòng thử lại sau ${Math.ceil(retryAfter / 60)} phút.` } },
@@ -66,7 +66,6 @@ export async function POST(request: NextRequest) {
     // (hash giả khi không có user) để thời gian phản hồi tương đương. Trạng thái tài khoản chỉ lộ khi mật khẩu đúng.
     if (!user) {
       await bcrypt.compare(password, await getDummyHash())
-      await recordLoginFailure(source)
       return invalidCredentials()
     }
 
@@ -91,11 +90,11 @@ export async function POST(request: NextRequest) {
           invalidateUserAuthCache(user.id)
         }
       }
-      await recordLoginFailure(source)
       return invalidCredentials()
     }
 
     // Mật khẩu đúng: lúc này mới báo trạng thái tài khoản.
+    await attempt.release()
     if (user.status === 'INACTIVE') {
       return NextResponse.json({ error: { code: 'AccountInactive', message: 'Tài khoản đã bị vô hiệu hóa' } }, { status: 403 })
     }

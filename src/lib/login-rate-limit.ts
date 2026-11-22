@@ -23,17 +23,21 @@ function windowFor(source: string, now: number) {
   return { key, expiresAt: new Date((index + 1) * LOGIN_FAILURE_WINDOW_MS) }
 }
 
-/** Số giây phải chờ nếu nguồn đã vượt ngưỡng trong cửa sổ hiện tại, ngược lại `null`. */
-export async function loginRetryAfterSeconds(source: string | null, now = Date.now()): Promise<number | null> {
-  if (!source) return null
-  const { key, expiresAt } = windowFor(source, now)
-  const row = await prisma.authRateLimit.findUnique({ where: { key }, select: { count: true } })
-  if (!row || row.count < LOGIN_FAILURE_LIMIT) return null
-  return Math.max(1, Math.ceil((expiresAt.getTime() - now) / 1000))
+export type LoginAttempt = {
+  /** Số giây phải chờ nếu nguồn đã vượt ngưỡng trong cửa sổ hiện tại, ngược lại `null`. */
+  retryAfter: number | null
+  /** Trả lại lượt đã giữ khi đăng nhập thành công: chỉ lần sai mới bị tính. */
+  release: () => Promise<void>
 }
 
-export async function recordLoginFailure(source: string | null, now = Date.now()): Promise<void> {
-  if (!source) return
+const UNLIMITED: LoginAttempt = { retryAfter: null, release: async () => {} }
+
+/**
+ * Giữ trước một lượt cho nguồn rồi mới kiểm tra mật khẩu. Tăng bộ đếm trong cùng một câu lệnh với việc
+ * đọc nó để các request đồng thời không cùng lọt qua ngưỡng trước khi lần sai nào kịp được ghi.
+ */
+export async function reserveLoginAttempt(source: string | null, now = Date.now()): Promise<LoginAttempt> {
+  if (!source) return UNLIMITED
   const { key, expiresAt } = windowFor(source, now)
   const { count } = await prisma.authRateLimit.upsert({
     where: { key },
@@ -42,5 +46,14 @@ export async function recordLoginFailure(source: string | null, now = Date.now()
     select: { count: true },
   })
   // Dọn cửa sổ đã hết hạn mỗi khi một cửa sổ mới được mở, để bảng không lớn dần.
-  if (count === 1) await prisma.authRateLimit.deleteMany({ where: { expires_at: { lt: new Date(now) } } })
+  if (count === 1) await prisma.authRateLimit.deleteMany({ where: { expires_at: { lte: new Date(now) } } })
+  if (count > LOGIN_FAILURE_LIMIT) {
+    return { retryAfter: Math.max(1, Math.ceil((expiresAt.getTime() - now) / 1000)), release: UNLIMITED.release }
+  }
+  return {
+    retryAfter: null,
+    release: async () => {
+      await prisma.authRateLimit.updateMany({ where: { key, count: { gt: 0 } }, data: { count: { decrement: 1 } } })
+    },
+  }
 }

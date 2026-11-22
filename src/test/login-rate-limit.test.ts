@@ -27,10 +27,16 @@ const fakePrisma = {
       const row = counters.get(where.key)
       if (row) row.count += 1
       else counters.set(where.key, { count: create.count, expires_at: create.expires_at })
-      return counters.get(where.key)!
+      return { ...counters.get(where.key)! }
     },
-    deleteMany: async ({ where }: { where: { expires_at: { lt: Date } } }) => {
-      counters.forEach((row, key) => { if (row.expires_at < where.expires_at.lt) counters.delete(key) })
+    updateMany: async ({ where }: { where: { key: string } }) => {
+      const row = counters.get(where.key)
+      if (!row || row.count <= 0) return { count: 0 }
+      row.count -= 1
+      return { count: 1 }
+    },
+    deleteMany: async ({ where }: { where: { expires_at: { lte: Date } } }) => {
+      counters.forEach((row, key) => { if (row.expires_at <= where.expires_at.lte) counters.delete(key) })
       return { count: 0 }
     },
   },
@@ -86,7 +92,15 @@ describe('POST /api/v1/auth/login per-source failure limit', () => {
       assert.equal((await login(user.email, PASSWORD, '203.0.113.7')).status, 200)
       assert.equal((await login('', '', '203.0.113.7')).status, 400)
     }
-    assert.equal(counters.size, 0)
+    assert.deepEqual(Array.from(counters.values()).map((row) => row.count), [0])
+    assert.equal((await login(user.email, PASSWORD, '203.0.113.7')).status, 200)
+  })
+
+  it('admits at most the limit when wrong-password requests arrive at the same time', async () => {
+    const statuses = await Promise.all(Array.from({ length: limiter.LOGIN_FAILURE_LIMIT + 15 }, (_, attempt) =>
+      login(`burst-${attempt}@example.com`, 'wrong-password', '203.0.113.7').then((result) => result.status)))
+    assert.equal(statuses.filter((status) => status === 401).length, limiter.LOGIN_FAILURE_LIMIT)
+    assert.equal(statuses.filter((status) => status === 429).length, 15)
   })
 
   it('does not limit a request whose source is unknown', async () => {
@@ -96,11 +110,9 @@ describe('POST /api/v1/auth/login per-source failure limit', () => {
 
   it('starts a fresh count in the next window and drops the expired one', async () => {
     const start = Math.floor(Date.now() / limiter.LOGIN_FAILURE_WINDOW_MS) * limiter.LOGIN_FAILURE_WINDOW_MS
-    for (let attempt = 0; attempt < limiter.LOGIN_FAILURE_LIMIT; attempt += 1) await limiter.recordLoginFailure('203.0.113.7', start)
-    assert.equal(await limiter.loginRetryAfterSeconds('203.0.113.7', start + 1000), limiter.LOGIN_FAILURE_WINDOW_MS / 1000 - 1)
-    const next = start + limiter.LOGIN_FAILURE_WINDOW_MS
-    assert.equal(await limiter.loginRetryAfterSeconds('203.0.113.7', next), null)
-    await limiter.recordLoginFailure('203.0.113.7', next + 1)
+    for (let attempt = 0; attempt < limiter.LOGIN_FAILURE_LIMIT; attempt += 1) assert.equal((await limiter.reserveLoginAttempt('203.0.113.7', start)).retryAfter, null)
+    assert.equal((await limiter.reserveLoginAttempt('203.0.113.7', start + 1000)).retryAfter, limiter.LOGIN_FAILURE_WINDOW_MS / 1000 - 1)
+    assert.equal((await limiter.reserveLoginAttempt('203.0.113.7', start + limiter.LOGIN_FAILURE_WINDOW_MS)).retryAfter, null)
     assert.equal(counters.size, 1, 'the expired window row is deleted')
   })
 })
