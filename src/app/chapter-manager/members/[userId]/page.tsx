@@ -108,6 +108,10 @@ export default function MemberDetailPage({ params }: { params: { userId: string 
           </Link>
         </div>
 
+        <h1 className="text-3xl font-bold text-[#172554] mb-6" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
+          Hồ sơ thành viên
+        </h1>
+
         {/* Unified Learner Profile View */}
         <LearnerProfileView
           user={{
