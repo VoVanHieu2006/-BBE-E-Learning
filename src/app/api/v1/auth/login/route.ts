@@ -6,6 +6,7 @@ import crypto from 'crypto'
 import { hasActiveAffiliation } from '@/lib/affiliation-access'
 import { getLearningManagerKind } from '@/lib/manager-learning-access'
 import { invalidateUserAuthCache } from '@/lib/auth'
+import { loginRetryAfterSeconds, loginSource, recordLoginFailure } from '@/lib/login-rate-limit'
 import { MAX_LOGIN_ATTEMPTS, failedLoginState, isOverdueLocked, isPasswordLocked } from '@/lib/account-restriction-rules'
 
 const JWT_ACCESS_SECRET = process.env.JWT_ACCESS_SECRET || ''
@@ -45,6 +46,16 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Nguồn đã sai quá nhiều lần bị từ chối trước khi kiểm tra mật khẩu, kể cả khi mật khẩu đúng.
+    const source = loginSource(request.headers)
+    const retryAfter = await loginRetryAfterSeconds(source)
+    if (retryAfter !== null) {
+      return NextResponse.json(
+        { error: { code: 'TooManyAttempts', message: `Quá nhiều lần đăng nhập sai. Vui lòng thử lại sau ${Math.ceil(retryAfter / 60)} phút.` } },
+        { status: 429, headers: { 'Retry-After': String(retryAfter) } }
+      )
+    }
+
     // Find user
     const user = await prisma.user.findUnique({
       where: { email: email.toLowerCase().trim() },
@@ -55,6 +66,7 @@ export async function POST(request: NextRequest) {
     // (hash giả khi không có user) để thời gian phản hồi tương đương. Trạng thái tài khoản chỉ lộ khi mật khẩu đúng.
     if (!user) {
       await bcrypt.compare(password, await getDummyHash())
+      await recordLoginFailure(source)
       return invalidCredentials()
     }
 
@@ -79,6 +91,7 @@ export async function POST(request: NextRequest) {
           invalidateUserAuthCache(user.id)
         }
       }
+      await recordLoginFailure(source)
       return invalidCredentials()
     }
 

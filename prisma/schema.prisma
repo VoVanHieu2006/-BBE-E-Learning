@@ -613,6 +613,16 @@ model EmailDailyUsage {
   @@map("email_daily_usage")
 }
 
+/// Số lần đăng nhập sai của một nguồn trong một cửa sổ cố định; `key` = SHA-256(phạm vi + IP + số thứ tự cửa sổ). Xem src/lib/login-rate-limit.ts.
+model AuthRateLimit {
+  key        String   @id @db.VarChar(64)
+  count      Int      @default(0)
+  expires_at DateTime
+
+  @@index([expires_at])
+  @@map("auth_rate_limits")
+}
+
 model AuditLog {
   id           String    @id @default(uuid()) @db.Uuid
   actor_user_id String?  @db.Uuid

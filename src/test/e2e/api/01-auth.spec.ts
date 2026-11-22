@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { Api, as, errorCode, guest, login, tryLogin } from '../support/api'
-import { userByEmail } from '../support/db'
-import { createLearner, defect, PASSWORD } from '../support/fixtures'
+import { sql, userByEmail } from '../support/db'
+import { createLearner, PASSWORD } from '../support/fixtures'
 import { ACCOUNTS, SEED_PASSWORD } from '../support/seed'
 
 // Intent: docs/business-rules.md "Lời mời và tài khoản" (KHBB 7.2).
@@ -163,10 +163,15 @@ test.describe('Phiên đăng nhập', () => {
     expect(result.body.error.message.length).toBeGreaterThan(10)
   })
 
-  // docs/known-issues.md: endpoint xác thực chưa có rate limit theo IP/gateway.
-  defect('BUG-AUTH-RATE', 'đăng nhập sai dồn dập từ một nguồn phải bị giới hạn tần suất (429)', async ({ request }) => {
-    const statuses: number[] = []
-    for (let attempt = 0; attempt < 40; attempt += 1) statuses.push((await tryLogin(request, `do-mat-khau-${attempt}@e2e.bbe.test`, 'Sai-mat-khau-1')).status)
-    expect(statuses).toContain(429)
+  // Ngưỡng theo nguồn: src/lib/login-rate-limit.ts. Mọi test dùng chung một IP nên bộ đếm được xóa sau khi kiểm tra.
+  test('[BUG-AUTH-RATE] đăng nhập sai dồn dập từ một nguồn phải bị giới hạn tần suất (429)', async ({ request }) => {
+    await sql('DELETE FROM auth_rate_limits')
+    try {
+      const statuses: number[] = []
+      for (let attempt = 0; attempt < 40; attempt += 1) statuses.push((await tryLogin(request, `do-mat-khau-${attempt}@e2e.bbe.test`, 'Sai-mat-khau-1')).status)
+      expect(statuses).toContain(429)
+    } finally {
+      await sql('DELETE FROM auth_rate_limits')
+    }
   })
 })
