@@ -106,15 +106,14 @@ function AcceptInvitationContent() {
     if (res.ok) {
       // Nút ghi "Kích hoạt tài khoản & Đăng nhập": đăng nhập luôn bằng mật khẩu vừa đặt.
       const session = await signIn(form.email.trim(), form.password);
-      if (session) {
-        storeLoginSession(session);
-        setSuccess('Kích hoạt tài khoản thành công! Đang đưa bạn vào hệ thống...');
-        router.replace(accountHome(session.user.role, session.user.managerKind));
-        return;
-      }
-      setSuccess('Kích hoạt tài khoản thành công! Đang chuyển đến trang đăng nhập...');
+      if (session) storeLoginSession(session);
+      setSuccess(
+        session
+          ? 'Kích hoạt tài khoản thành công! Đang đưa bạn vào hệ thống...'
+          : 'Kích hoạt tài khoản thành công! Đang chuyển đến trang đăng nhập...'
+      );
       setTimeout(() => {
-        router.push('/login');
+        router.push(session ? accountHome(session.user.role, session.user.managerKind) : '/login');
       }, 1500);
     } else if (res.error?.code === 'EmailMismatch' || res.error?.code === 'RateLimited') {
       // Link vẫn còn hiệu lực: giữ form để người nhận gõ lại đúng email của mình.

@@ -202,8 +202,6 @@ test.describe('Lời mời', () => {
     await emailField.fill(email)
     await submit.click()
     await expect(page.getByText(/Kích hoạt tài khoản thành công/)).toBeVisible()
-    await expect(page).toHaveURL(/\/login/, { timeout: 10_000 })
-    await signIn(page, email, PASSWORD)
     await expect(page).toHaveURL(/\/student\/dashboard/, { timeout: 20_000 })
     expect(problems.console).toEqual([])
 
