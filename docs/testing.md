@@ -30,6 +30,24 @@ Typecheck dùng `tsconfig.json`, hợp nhất config check trùng lặp. Unit d�
 
 `audit:handbook-formulas` chạy riêng, còn FAIL ở [known-issues](known-issues.md). Không đổi production formulas để ép audit xanh. Giữ test program/department và quiz; những file chưa có npm command cũ vẫn có giá trị. Riêng test **"sáu tháng lịch"** (`chapter-six-month-transfer.test.ts`, `chapter-initial-rewards.test.ts`) **đã được viết lại**: quy tắc đủ sáu tháng đã bị bỏ và cửa sổ mùa đổi thành `01/01–30/06` / `01/07–31/12` — xem [CKNK](CKNK.md#21-chapter-mới-chuyển-giao-được-ngay-không-phải-chờ).
 
+## E2E trên ứng dụng thật
+
+```powershell
+npm run test:e2e                       # API -> giao diện máy tính -> trải nghiệm trên điện thoại
+npm run test:e2e -- --project=api      # chỉ lớp API
+npm run test:e2e -- src/test/e2e/ui    # một thư mục hoặc một file
+```
+
+`scripts/test/run-e2e.mjs` xóa schema `public` của DB đích, chạy baseline/migrate/seed, `next build`, rồi Playwright (`playwright.e2e.config.ts`) tự chạy app ở cổng 3130. DB đích mặc định là container Docker `bbe-e2e-pg` chỉ nghe loopback; hoặc đặt `E2E_DATABASE_URL`. Chỉ nhận PostgreSQL loopback tên `bbe_test_*`. Cần `npx playwright install chromium` một lần.
+
+| Biến | Tác dụng |
+|---|---|
+| `E2E_DATABASE_URL` | DB tạm khác mặc định (vẫn phải loopback, `bbe_test_*`) |
+| `E2E_SKIP_BUILD=1` | Dùng lại `.next` đã build |
+| `E2E_STRICT=1` | Chạy các lỗi đã biết như test thường (đỏ) |
+
+Test viết theo `docs/business-rules.md` và `docs/KHBB.md`. Lỗi của ứng dụng được giữ bằng `defect(...)`/`uiDefect(...)` (unit: `todo`), không sửa test cho xanh: xem [qa/defects.md](qa/defects.md) và bảng đối chiếu [qa/traceability.md](qa/traceability.md). Email, R2, Cloudinary và YouTube thật không được gọi.
+
 ## DB riêng, loopback
 
 Không dùng `DATABASE_URL` chung, cloud DB đang dùng hoặc `.env` fallback cho test ghi. Đọc guard đầu suite trước chạy; không đổi host/tên DB để vượt guard. Chọn đúng một tên suite, ví dụ `npm run test:integration -- test-learning-flow-integration`; không chạy aggregate mọi DB suite. HTTP app test dùng cùng DB/JWT/cron secrets fixture, bind loopback/port riêng. Suite dùng chung DB có thể thay cấu hình học tập/schema nên chạy tuần tự.

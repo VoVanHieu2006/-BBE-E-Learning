@@ -206,9 +206,12 @@ test.describe('Admin: chuyển giao nhiệm kỳ', () => {
     await expect(page.locator('body')).not.toContainText(/Application error|client-side exception/i)
   })
 
-  test('trang mùa chuyển giao không sinh lỗi trong console khi mở', async ({ page }) => {
+  // Khi dữ liệu trang này đã nằm trong bộ nhớ tab thì React báo lỗi: xem BUG-UI-HYDRATION-TRANSFER (ux/01-every-page).
+  test('trang mùa chuyển giao không sinh lỗi trong console khi mở lần đầu (chưa có dữ liệu lưu trong tab)', async ({ page }) => {
     const problems = watchProblems(page)
     await signInAs(page, 'admin')
+    await settle(page)
+    await page.addInitScript(() => sessionStorage.clear())
     await page.goto('/admin/transfer-seasons')
     await expect(page.getByText('Giai đoạn đang theo dõi')).toBeVisible({ timeout: 20_000 })
     await settle(page)
