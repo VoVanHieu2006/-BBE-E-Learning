@@ -65,3 +65,15 @@ Chuẩn "đúng ý đồ" là `docs/business-rules.md` và `docs/KHBB.md`. Mỗi
 - Upload thật lên Cloudflare R2 và Cloudinary, gửi mail thật qua Resend, trình phát YouTube thật (test dùng trình phát giả lập và nhánh dự phòng "copy link mời").
 - Cảm nhận chủ quan (đẹp, dễ hiểu) ngoài các số đo ở trên; cần người dùng thử.
 - Trình duyệt Safari/Firefox và trình đọc màn hình thật.
+
+## Suite có sẵn của repo trên máy kiểm thử
+
+Nhánh này không sửa các suite dưới đây; kết quả ghi lại để người bảo trì biết trạng thái trên một máy sạch (không có `.env`, chỉ cài Chromium).
+
+| Lệnh | Kết quả | Nguyên nhân quan sát được |
+|---|---|---|
+| `npm test` | 77 suite qua | |
+| `npm run typecheck` | sạch | |
+| `npm run build` | qua | |
+| `npm run lint` | không chạy | Repo chưa có cấu hình ESLint, `next lint` hỏi tương tác |
+| `npm run test:browser` | 54 qua, 65 hỏng | Các project WebKit hỏng vì máy không cài WebKit; `tab-cache` và `sidebar-animation` đọc file `.env`; `fb-feedback` đòi đúng một JWT secret fixture; một số test Chromium không tìm thấy nội dung mong đợi (`100/713s`, tiêu đề `Lịch sử tổ chức`, `Còn lại:`) và chưa xác định được là do môi trường hay do test đã lệch so với giao diện |
