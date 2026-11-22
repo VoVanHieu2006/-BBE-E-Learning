@@ -171,7 +171,10 @@ export default function UnifiedLeaderboard({
           if (t.chapter_id && t.chapterName) uniqueChapters.set(t.chapter_id, t.chapterName)
         })
         const list = Array.from(uniqueChapters.entries()).map(([id, name]) => ({ id, name }))
-        if (isLeadRole(storedUser?.role) && storedUser.chapterId) {
+        if (scope?.role === 'GUEST') {
+          setChapterList([])
+          setSelectedChapterId('')
+        } else if (isLeadRole(storedUser?.role) && storedUser.chapterId) {
           setChapterList(list.filter((chapter) => chapter.id === storedUser.chapterId))
         } else {
           setChapterList(list)

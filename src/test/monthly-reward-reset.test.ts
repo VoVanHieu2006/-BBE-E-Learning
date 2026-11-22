@@ -150,6 +150,7 @@ describe('DNA historical season evidence', () => {
         learningSnapshot: { findUnique: async () => scenario === 'saved' ? { payload } : null },
         starLedger: { findFirst: async () => { evidenceReads++; return scenario === 'native' ? { id: 'evidence' } : null } },
       })
+      t.mock.method(require('../lib/auth'), 'authenticate', async () => ({ ok: true, context: { role: 'ADMIN', userId: 'admin' } }))
       const response = await periodLeaderboard(new NextRequest(`http://localhost/api/v1/leaderboard?group=DNA&periodType=TERM&periodId=${dnaSeason.id}`))
       const body = await response.json()
       assert.equal(response.status, 200)

@@ -31,6 +31,10 @@ function unauthorized(message = 'Bạn không có quyền xem bảng xếp hạn
   return NextResponse.json({ error: { code: 'AccessDenied', message } }, { status: 403 })
 }
 
+function loginRequired() {
+  return NextResponse.json({ error: { code: 'UNAUTHORIZED', message: 'Vui lòng đăng nhập để xem bảng xếp hạng này.' } }, { status: 401 })
+}
+
 /** Closed boards are served only from saved snapshots, never rebuilt from today's roles. */
 export async function periodLeaderboard(request: NextRequest) {
   const auth = await authenticate(request).catch(() => ({ ok: false as const }))
@@ -54,8 +58,11 @@ export async function periodLeaderboard(request: NextRequest) {
   let managedDnaUnitIds: string[] = []
   const ownChapterId: string | null = context?.chapterId || null
 
-  if (isGuest || isAdmin) {
-    // Admin and Guest default to global system-wide.
+  if (isGuest) {
+    // Guests only get the public system-wide member board, never more than a signed-in member.
+    if (group !== 'MEMBER' || requestedChapterId) return loginRequired()
+  } else if (isAdmin) {
+    // Admin defaults to global system-wide.
     // If and only if an explicit chapterId was requested, apply that filter.
     chapterId = requestedChapterId || null
   } else if (managerKind === 'LEAD_CHAPTER') {

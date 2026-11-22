@@ -202,6 +202,26 @@ test.describe('Bảng xếp hạng', () => {
     }
   })
 
+  test('bảng xếp hạng theo kỳ không lộ email cho bất kỳ vai nào, kể cả Admin và Lead', async ({ request }) => {
+    const boards: Array<[Parameters<typeof as>[1], string[]]> = [
+      ['admin', ['MEMBER', 'LT', 'DNA', 'CHAPTER']],
+      ['chapterLead', ['MEMBER', 'LT']],
+      ['dnaLead', ['DNA']],
+      ['dnaMember', ['DNA']],
+    ]
+    for (const [role, groups] of boards) {
+      const api = await as(request, role)
+      for (const group of groups) for (const periodType of ['MONTH', 'TERM']) {
+        const path = `/api/v1/leaderboard?group=${group}&periodType=${periodType}`
+        const board = await api.get(path)
+        expect(board.status, `${role} ${path}`).toBe(200)
+        expect(JSON.stringify(board.body), `${role} ${path}`).not.toMatch(/@(bbe\.vn|e2e\.bbe\.test)|"email"/)
+      }
+    }
+    const guestBoard = await guest(request).get('/api/v1/leaderboard?group=MEMBER&periodType=MONTH')
+    expect(JSON.stringify(guestBoard.body)).not.toMatch(/@(bbe\.vn|e2e\.bbe\.test)|"email"/)
+  })
+
   test('bảng theo kỳ: thành viên Chapter chỉ xem bảng Thành viên và LT, tham số kỳ sai bị từ chối', async ({ request }) => {
     const member = await as(request, 'member')
     for (const group of ['DNA', 'CHAPTER']) {
@@ -213,13 +233,19 @@ test.describe('Bảng xếp hạng', () => {
     expect((await member.get("/api/v1/leaderboard?group=MEMBER&periodType=TERM&periodId=1'--")).status).toBe(400)
   })
 
-  defect('BUG-LB-GUEST-SCOPE', 'khách không được xem bảng DNA/Chapter theo kỳ mà thành viên đã đăng nhập bị cấm xem', async ({ request }) => {
+  test('khách không được xem bảng DNA/Chapter theo kỳ mà thành viên đã đăng nhập bị cấm xem', async ({ request }) => {
     const member = await as(request, 'member')
     for (const group of ['DNA', 'CHAPTER']) {
       const path = `/api/v1/leaderboard?group=${group}&periodType=MONTH`
       expect((await member.get(path)).status, group).toBe(403)
       expect((await guest(request).get(path)).status, `khách xem bảng ${group}`).not.toBe(200)
     }
+    const chapterId = await chapterOf(request, 'chapterLead')
+    for (const query of ['group=LT&periodType=MONTH', `group=MEMBER&periodType=MONTH&chapterId=${chapterId}`]) {
+      expect((await guest(request).get(`/api/v1/leaderboard?${query}`)).status, `khách xem ${query}`).toBe(401)
+    }
+    expect((await guest(request).get('/api/v1/leaderboard?group=MEMBER&periodType=MONTH')).status).toBe(200)
+    expect((await guest(request).get('/api/v1/learning/periods')).body.scope.allowedGroups).toEqual(['MEMBER'])
   })
 
   test('thành viên không xem được bảng nội bộ của Chapter khác; bảng DNA chỉ cho Lead DNA và Admin', async ({ request }) => {

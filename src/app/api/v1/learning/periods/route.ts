@@ -19,7 +19,10 @@ export async function GET(request: NextRequest) {
   let allowedGroups: Array<'MEMBER' | 'LT' | 'DNA' | 'CHAPTER'> = ['MEMBER', 'LT', 'DNA', 'CHAPTER']
   let isGlobal = true
 
-  if (isGuest || isAdmin) {
+  if (isGuest) {
+    allowedGroups = ['MEMBER']
+    isGlobal = true
+  } else if (isAdmin) {
     allowedGroups = ['MEMBER', 'LT', 'DNA', 'CHAPTER']
     isGlobal = true
   } else if (managerKind === 'LEAD_CHAPTER') {
