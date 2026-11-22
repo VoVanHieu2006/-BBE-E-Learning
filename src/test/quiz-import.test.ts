@@ -108,10 +108,17 @@ describe('đọc câu hỏi', () => {
     assert.equal(questions.length, 3)
     for (const question of questions) assert.ok(question.options.some((option) => option.isCorrect))
   })
-  it('BUG-QUIZ-IMPORT-GAP: an empty option column must not shift the answer key onto another option', { todo: 'BUG-QUIZ-IMPORT-GAP: known defect, see docs/qa/defects.md' }, () => {
-    // Sheet row: A = "Hà Nội", B empty, C = "Huế", D = "Đà Nẵng", answer C. The correct option is "Huế" (or the row is rejected).
-    const { questions, errors } = parseQuizCsv('Câu 1,Hà Nội,,Huế,Đà Nẵng,C,')
-    const marked = questions[0]?.options.filter((option) => option.isCorrect).map((option) => option.optionText)
-    assert.ok(errors.length === 1 || marked?.join() === 'Huế', `đáp án C ("Huế") bị gán thành: ${marked?.join()}`)
+  it('rejects a row with an empty option column before a filled one, naming the row and the empty option', () => {
+    // Sheet row 2: A = "Hà Nội", B empty, C = "Huế", D = "Đà Nẵng", answer C. Importing it would shift the answer key onto "Đà Nẵng".
+    const { questions, errors } = parseQuizCsv(['Câu 1,a,b,c,d,A,', 'Câu 2,Hà Nội,,Huế,Đà Nẵng,C,'].join('\n'))
+    assert.deepEqual(questions.map((question) => question.questionText), ['Câu 1'])
+    assert.deepEqual(errors.map((error) => error.row), [2])
+    assert.match(errors[0].message, /Lựa chọn B bị bỏ trống/)
+  })
+  it('names every empty option before the last filled one; empty trailing options are still fine', () => {
+    const { questions, errors } = parseQuizCsv(['q1,,,c,d,C,', 'q2,a,b,c,,C,'].join('\n'))
+    assert.deepEqual(errors.map((error) => error.row), [1])
+    assert.match(errors[0].message, /Lựa chọn A, B bị bỏ trống/)
+    assert.deepEqual(questions.map((question) => question.options.findIndex((option) => option.isCorrect)), [2])
   })
 })
