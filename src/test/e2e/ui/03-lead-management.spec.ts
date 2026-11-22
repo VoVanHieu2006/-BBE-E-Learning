@@ -163,7 +163,7 @@ test.describe('Lead Chapter', () => {
     await expect(page.getByText(/Chưa có thành viên nào|Không tìm thấy/).first()).toBeVisible()
   })
 
-  uiDefect('BUG-LEAD-MEMBER-DETAIL-UNIT', 'hồ sơ thành viên do Lead mở ghi đúng Chapter và Ban của người đó, không phải "Chưa gán Chapter" / "Chưa phân ban"', async ({ page, request }) => {
+  test('hồ sơ thành viên do Lead mở ghi đúng Chapter và Ban của người đó, không phải "Chưa gán Chapter" / "Chưa phân ban"', async ({ page, request }) => {
     const learner = await createLearner(request, { unitName: 'Ban Khách Mời' })
     await signInAs(page, 'chapterLead')
     await page.goto('/chapter-manager/members')
@@ -177,6 +177,8 @@ test.describe('Lead Chapter', () => {
     await settle(page)
     await expect.soft(detail, 'cửa sổ hồ sơ').not.toContainText('Chưa gán Chapter')
     await expect.soft(detail, 'cửa sổ hồ sơ').not.toContainText('Chưa phân ban')
+    await expect.soft(detail, 'cửa sổ hồ sơ').toContainText('Ban Khách Mời')
+    await expect.soft(detail, 'cửa sổ hồ sơ').not.toContainText('Ban Ban')
 
     await page.goto(`/chapter-manager/members/${learner.userId}`)
     const profile = page.locator('main').first()
@@ -184,6 +186,7 @@ test.describe('Lead Chapter', () => {
     await settle(page)
     await expect.soft(profile, 'trang hồ sơ').toContainText('Ban Khách Mời')
     await expect.soft(profile, 'trang hồ sơ').not.toContainText('Chưa gán Chapter')
+    await expect.soft(profile, 'trang hồ sơ').not.toContainText('Ban Ban')
   })
 
   test('vô hiệu hóa thành viên: phải gõ đúng "vô hiệu hóa", xong thì người đó không đăng nhập được và Lead không tự mở lại được', async ({ page, request, browser }) => {
