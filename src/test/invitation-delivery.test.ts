@@ -342,3 +342,45 @@ describe('resend and cancel never undo an accepted invitation', () => {
     assert.equal(db.invitations[0].status, 'ACCEPTED')
   })
 })
+
+describe('pending invitation outside the inviter scope', () => {
+  const adminLeadInvite = () => ({ id: 'inv-admin', email: base.email, role: 'LEAD', status: 'PENDING', chapter_id: null, organization_unit_id: null, chapter_name: 'Chapter mới', invited_by: 'admin-1', token_hash: 'h', expires_at: future(), delivery_method: 'EMAIL' })
+
+  it('a Lead inviting an email that holds an Admin new-Chapter Lead invitation is refused; the pending one is untouched', async () => {
+    reset()
+    db.invitations.push(adminLeadInvite())
+    const result = await sendMemberInvitation({ ...base, canManagePending: async () => false })
+    assert.equal(result.ok, false)
+    assert.equal(result.code, 'PendingInvitationOutOfScope')
+    assert.equal(db.invitations.length, 1)
+    assert.deepEqual([db.invitations[0].status, db.invitations[0].cancelled_at], ['PENDING', undefined])
+    assert.equal(emailCalls.length, 0)
+  })
+
+  it('without a scope check a pending invitation for another unit is out of scope', async () => {
+    reset()
+    db.invitations.push({ ...adminLeadInvite(), role: 'MEMBER', organization_unit_id: 'unit-2', chapter_name: null })
+    const result = await sendMemberInvitation(base)
+    assert.equal(result.code, 'PendingInvitationOutOfScope')
+    assert.equal(db.invitations[0].status, 'PENDING')
+  })
+
+  it('a pending invitation the inviter manages, or one for the same unit, is still replaced', async () => {
+    reset()
+    db.invitations.push({ ...adminLeadInvite(), role: 'MEMBER', organization_unit_id: 'unit-2', chapter_name: null })
+    const managed = await sendMemberInvitation({ ...base, canManagePending: async () => true })
+    assert.equal(managed.ok, true)
+    assert.equal(db.invitations[0].status, 'CANCELLED')
+    const again = await sendMemberInvitation(base)
+    assert.equal(again.ok, true)
+    assert.deepEqual(db.invitations.map((row) => row.status), ['CANCELLED', 'CANCELLED', 'PENDING'])
+  })
+
+  it('an expired invitation of another scope no longer blocks a new invitation', async () => {
+    reset()
+    db.invitations.push({ ...adminLeadInvite(), expires_at: new Date(Date.now() - 1000) })
+    const result = await sendMemberInvitation({ ...base, canManagePending: async () => false })
+    assert.equal(result.ok, true)
+    assert.equal(db.invitations[0].status, 'CANCELLED')
+  })
+})

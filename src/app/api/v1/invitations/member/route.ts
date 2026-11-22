@@ -4,6 +4,7 @@ import { sendMemberInvitation } from '@/lib/invitations'
 import { invalidateInvitationsServerCache } from '@/lib/server-cache'
 import { resolveMemberInviteScope } from '@/lib/member-invite-scope'
 import { isValidInviteEmail } from '@/lib/bulk-invite'
+import { canManageInvitation } from '@/lib/invitation-management'
 
 /**
  * POST /api/v1/invitations/member
@@ -39,6 +40,7 @@ export async function POST(request: NextRequest) {
     chapterId,
     organizationUnitId,
     invitedBy: (auth as any).context!.userId,
+    canManagePending: (pending) => canManageInvitation(context, pending),
   })
 
   if (!result.ok) {
@@ -46,6 +48,7 @@ export async function POST(request: NextRequest) {
       EmailAlreadyActive: 400,
       AccessDenied: 403,
       ValidationError: 400,
+      PendingInvitationOutOfScope: 409,
     }
     return NextResponse.json(
       { error: { code: (result as any).code, message: (result as any).message } },
