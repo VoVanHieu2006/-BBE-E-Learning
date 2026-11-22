@@ -47,13 +47,13 @@ export async function reserveLoginAttempt(source: string | null, now = Date.now(
   })
   // Dọn cửa sổ đã hết hạn mỗi khi một cửa sổ mới được mở, để bảng không lớn dần.
   if (count === 1) await prisma.authRateLimit.deleteMany({ where: { expires_at: { lte: new Date(now) } } })
+  const release = async () => {
+    await prisma.authRateLimit.updateMany({ where: { key, count: { gt: 0 } }, data: { count: { decrement: 1 } } })
+  }
   if (count > LOGIN_FAILURE_LIMIT) {
+    // Request bị từ chối không kiểm tra mật khẩu nên không chiếm lượt của nguồn.
+    await release()
     return { retryAfter: Math.max(1, Math.ceil((expiresAt.getTime() - now) / 1000)), release: UNLIMITED.release }
   }
-  return {
-    retryAfter: null,
-    release: async () => {
-      await prisma.authRateLimit.updateMany({ where: { key, count: { gt: 0 } }, data: { count: { decrement: 1 } } })
-    },
-  }
+  return { retryAfter: null, release }
 }

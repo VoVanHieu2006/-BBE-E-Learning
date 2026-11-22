@@ -101,6 +101,7 @@ describe('POST /api/v1/auth/login per-source failure limit', () => {
       login(`burst-${attempt}@example.com`, 'wrong-password', '203.0.113.7').then((result) => result.status)))
     assert.equal(statuses.filter((status) => status === 401).length, limiter.LOGIN_FAILURE_LIMIT)
     assert.equal(statuses.filter((status) => status === 429).length, 15)
+    assert.deepEqual(Array.from(counters.values()).map((row) => row.count), [limiter.LOGIN_FAILURE_LIMIT], 'refused requests do not use up the budget')
   })
 
   it('does not limit a request whose source is unknown', async () => {
