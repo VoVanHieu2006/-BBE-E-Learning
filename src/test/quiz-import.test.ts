@@ -108,10 +108,16 @@ describe('đọc câu hỏi', () => {
     assert.equal(questions.length, 3)
     for (const question of questions) assert.ok(question.options.some((option) => option.isCorrect))
   })
-  it('BUG-QUIZ-IMPORT-GAP: an empty option column must not shift the answer key onto another option', { todo: 'BUG-QUIZ-IMPORT-GAP: known defect, see docs/qa/defects.md' }, () => {
+  it('an empty option column must not shift the answer key onto another option', () => {
     // Sheet row: A = "Hà Nội", B empty, C = "Huế", D = "Đà Nẵng", answer C. The correct option is "Huế" (or the row is rejected).
     const { questions, errors } = parseQuizCsv('Câu 1,Hà Nội,,Huế,Đà Nẵng,C,')
     const marked = questions[0]?.options.filter((option) => option.isCorrect).map((option) => option.optionText)
     assert.ok(errors.length === 1 || marked?.join() === 'Huế', `đáp án C ("Huế") bị gán thành: ${marked?.join()}`)
+  })
+  it('rejects an answer letter that points at an empty option column', () => {
+    const { questions, errors } = parseQuizCsv('Câu 1,Hà Nội,,Huế,Đà Nẵng,B,')
+    assert.equal(questions.length, 0)
+    assert.deepEqual(errors.map((error) => error.row), [1])
+    assert.match(errors[0].message, /A, C, D/)
   })
 })

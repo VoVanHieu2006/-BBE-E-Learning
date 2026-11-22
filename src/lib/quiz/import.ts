@@ -166,8 +166,10 @@ export function parseQuizRows(rows: string[][]): ImportedQuiz {
 
     const optionTexts = [a, b, c, d].map((v) => (v || '').trim())
     const options = optionTexts
-      .map((optionText, i) => ({ optionText, isCorrect: false, sortOrder: i }))
+      .map((optionText, i) => ({ optionText, isCorrect: false, sortOrder: i, letter: LETTERS[i] }))
       .filter((o) => o.optionText !== '')
+    // Chữ đáp án đi theo cột trong sheet, không theo vị trí sau khi bỏ cột trống.
+    const availableLetters = options.map((o) => o.letter)
 
     if (options.length < 2) {
       errors.push({ row: rowNumber, message: 'Phải có ít nhất 2 lựa chọn (cột A và B)' })
@@ -185,19 +187,18 @@ export function parseQuizRows(rows: string[][]): ImportedQuiz {
       return
     }
 
-    const invalidLetters = answerLetters.filter((l) => !LETTERS.slice(0, options.length).includes(l))
+    const invalidLetters = answerLetters.filter((l) => !availableLetters.includes(l))
     if (invalidLetters.length > 0) {
       errors.push({
         row: rowNumber,
-        message: `Đáp án "${invalidLetters.join(', ')}" không khớp các lựa chọn có sẵn (${LETTERS.slice(0, options.length).join(', ')})`,
+        message: `Đáp án "${invalidLetters.join(', ')}" không khớp các lựa chọn có sẵn (${availableLetters.join(', ')})`,
       })
       return
     }
 
     const uniqueLetters = Array.from(new Set(answerLetters))
-    uniqueLetters.forEach((letter) => {
-      const idx = LETTERS.indexOf(letter)
-      if (options[idx]) options[idx].isCorrect = true
+    options.forEach((option) => {
+      if (uniqueLetters.includes(option.letter)) option.isCorrect = true
     })
 
     questions.push({
@@ -205,7 +206,7 @@ export function parseQuizRows(rows: string[][]): ImportedQuiz {
       questionType: uniqueLetters.length > 1 ? 'MULTIPLE_CHOICE' : 'SINGLE_CHOICE',
       points: 1,
       explanation: (explanationRaw || '').trim(),
-      options,
+      options: options.map(({ optionText, isCorrect, sortOrder }) => ({ optionText, isCorrect, sortOrder })),
       sortOrder: questions.length,
     })
   })
