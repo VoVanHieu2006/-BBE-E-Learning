@@ -14,6 +14,8 @@ export const ACCOUNTS = {
   admin: seedConstant('adminEmail'),
   chapterLead: 'chapter.lead.demo@bbe.vn', // Lead of the first seeded Chapter
   otherChapterLead: 'quoc.bao@bbe.vn', // Lead of the second seeded Chapter
+  transferChapterLead: 'mai.anh@bbe.vn', // Lead of the third seeded Chapter, reserved for term-transfer specs
+  transferChapterMember: 'bao.chau@bbe.vn',
   dnaLead: 'dna.lead.demo@bbe.vn',
   member: 'member.demo@bbe.vn', // first Chapter, department BTV
   departmentLead: 'department.lead.demo@bbe.vn', // first Chapter, department BND
