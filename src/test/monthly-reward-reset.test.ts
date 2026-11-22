@@ -257,6 +257,19 @@ describe('system-wide Member/LT term snapshot', () => {
     assert.equal(body.period.starts_at, future.reward_boundary_at.toISOString())
   })
 
+  it('a season picked before its term boundary is not ranked yet', async (t) => {
+    const upcoming = { ...individualSeason, reward_boundary_at: new Date(Date.now() + 86_400_000) }
+    replacePrisma(t, {
+      transferSeason: { findFirst: async () => upcoming },
+      learningSnapshot: { findUnique: async () => null },
+    })
+    const response = await periodLeaderboard(new NextRequest(`http://localhost/api/v1/leaderboard?group=LT&periodType=TERM&periodId=${upcoming.id}`))
+    const body = await response.json()
+    assert.equal(body.state, 'PERIOD_UNAVAILABLE')
+    assert.equal(body.reasonCode, 'TERM_NOT_STARTED')
+    assert.deepEqual(body.items, [])
+  })
+
   for (const group of ['MEMBER', 'LT'] as const) for (const scenario of ['legacy-only', 'native', 'saved'] as const) {
     it(`${group} board serves only supported history: ${scenario}`, async (t) => {
       const payload = { group, periodType: 'TERM', period: individualSeason, state: 'FINALIZED', items: [] }

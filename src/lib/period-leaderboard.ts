@@ -182,6 +182,10 @@ export async function periodLeaderboard(request: NextRequest) {
     if (group === 'CHAPTER') payload = { ...payload, excluded: (snapshot.payload as any).items?.filter((row: any) => row.eligible === false && (!chapterId || row.chapterId === chapterId)) || [] }
     return NextResponse.json(await hydrateRanking(payload), { headers: { 'Cache-Control': 'no-store' } })
   }
+  // A season is listed from the start of its transfer window, before its term begins at the boundary.
+  if (useGlobalIndividualTerm && period.starts_at > now) {
+    return NextResponse.json({ items: [], state: 'PERIOD_UNAVAILABLE', ...readinessForReason('TERM_NOT_STARTED'), group, periodType, period, formula: INDIVIDUAL_FORMULA }, { headers: { 'Cache-Control': 'no-store' } })
+  }
   if (period.ends_at && period.ends_at <= now) {
     if (periodType === 'TERM' && (group === 'DNA' || useGlobalIndividualTerm) && !await hasNativeLearningEvidence(prisma, period.starts_at, period.ends_at)) {
       return NextResponse.json({ items: [], state: 'PERIOD_UNAVAILABLE', ...readinessForReason('HISTORICAL_SEASON_UNAVAILABLE'), group, periodType, period, formula: INDIVIDUAL_FORMULA }, { headers: { 'Cache-Control': 'no-store' } })
