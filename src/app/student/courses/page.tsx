@@ -30,6 +30,7 @@ export default function StudentCoursesPage() {
   const [starBalance, setStarBalance] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [coursesLoadFailed, setCoursesLoadFailed] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [mainTab, setMainTab] = useState<'PROGRAM_TREE' | 'MY_COURSES'>('PROGRAM_TREE');
   const [filter, setFilter] = useState<'ALL' | 'IN_PROGRESS' | 'NOT_STARTED' | 'COMPLETED'>('ALL');
@@ -126,6 +127,7 @@ export default function StudentCoursesPage() {
       if (coursesRes.ok && coursesRes.data) {
         setCourses(coursesRes.data.items || []);
       }
+      setCoursesLoadFailed(!coursesRes.ok);
       setLoading(false);
       setRefreshing(false);
       return;
@@ -156,6 +158,7 @@ export default function StudentCoursesPage() {
     if (starsRes.ok && starsRes.data) {
       setStarBalance(starsRes.data.balance ?? 0);
     }
+    setCoursesLoadFailed(!coursesRes.ok);
     setLoading(false);
     setRefreshing(false);
   }
@@ -302,6 +305,18 @@ export default function StudentCoursesPage() {
   const progressPending = loading && !progressSummary;
   const coursesPending = loading && courses.length === 0;
   const starsPending = loading && starBalance === null;
+  // Tải danh mục lỗi mà chưa có khóa nào để hiện: không được đếm "0 khóa" hay báo "không có khóa học" như dữ liệu thật.
+  const catalogFailed = coursesLoadFailed && courses.length === 0 && !loading;
+  const courseCountsHidden = coursesPending || catalogFailed;
+  const catalogError = (
+    <Card role="alert" className="text-center py-14 border border-red-100">
+      <p className="text-base font-bold text-red-700 mb-1">Không tải được danh sách khóa học</p>
+      <p className="text-xs text-[#737686]">Đã có lỗi khi tải dữ liệu, nên chưa thể biết có những khóa học nào. Vui lòng thử lại.</p>
+      <Button size="sm" onClick={() => loadData(true)} loading={refreshing} loadingText="Đang tải lại..." className="mt-4">
+        Thử lại
+      </Button>
+    </Card>
+  );
   const starBalanceText = (starBalance ?? 0).toLocaleString('vi-VN');
   const pendingText = <span className="text-sm font-semibold text-[#737686] animate-pulse">Đang tải…</span>;
 
@@ -715,7 +730,7 @@ export default function StudentCoursesPage() {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#eff4ff] pb-4">
               <div>
                 <h2 className="text-xl font-bold text-[#172554] flex items-center gap-2" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
-                  <span>📚</span> Tất cả khóa học {coursesPending ? '(đang tải…)' : `(${enrichedCourses.length})`}
+                  <span>📚</span> Tất cả khóa học {coursesPending ? '(đang tải…)' : catalogFailed ? '' : `(${enrichedCourses.length})`}
                 </h2>
                 <p className="text-xs text-[#737686] mt-0.5">Danh mục toàn bộ khóa học, gồm khóa khách cũng xem được và khóa chỉ thành viên BBE</p>
               </div>
@@ -730,7 +745,7 @@ export default function StudentCoursesPage() {
                       : 'text-[#737686] hover:text-[#172554]'
                   }`}
                 >
-                  Tất cả{coursesPending ? '' : ` (${enrichedCourses.length})`}
+                  Tất cả{courseCountsHidden ? '' : ` (${enrichedCourses.length})`}
                 </button>
                 <button
                   onClick={() => setFilter('IN_PROGRESS')}
@@ -740,7 +755,7 @@ export default function StudentCoursesPage() {
                       : 'text-[#737686] hover:text-[#172554]'
                   }`}
                 >
-                  Đang học{coursesPending ? '' : ` (${enrichedCourses.filter((c) => c.isStarted && !c.isCompleted).length})`}
+                  Đang học{courseCountsHidden ? '' : ` (${enrichedCourses.filter((c) => c.isStarted && !c.isCompleted).length})`}
                 </button>
                 <button
                   onClick={() => setFilter('NOT_STARTED')}
@@ -750,7 +765,7 @@ export default function StudentCoursesPage() {
                       : 'text-[#737686] hover:text-[#172554]'
                   }`}
                 >
-                  Chưa học{coursesPending ? '' : ` (${enrichedCourses.filter((c) => !c.isStarted && !c.isCompleted).length})`}
+                  Chưa học{courseCountsHidden ? '' : ` (${enrichedCourses.filter((c) => !c.isStarted && !c.isCompleted).length})`}
                 </button>
                 <button
                   onClick={() => setFilter('COMPLETED')}
@@ -760,7 +775,7 @@ export default function StudentCoursesPage() {
                       : 'text-[#737686] hover:text-[#172554]'
                   }`}
                 >
-                  Đã đạt{coursesPending ? '' : ` (${enrichedCourses.filter((c) => c.isCompleted).length})`}
+                  Đã đạt{courseCountsHidden ? '' : ` (${enrichedCourses.filter((c) => c.isCompleted).length})`}
                 </button>
               </div>
             </div>
@@ -775,6 +790,8 @@ export default function StudentCoursesPage() {
                   </div>
                 ))}
               </div>
+            ) : catalogFailed ? (
+              catalogError
             ) : filteredCourses.length === 0 ? (
               <Card className="text-center py-14 border border-[#eff4ff]">
                 <p className="text-3xl mb-2">🔍</p>
@@ -966,6 +983,8 @@ export default function StudentCoursesPage() {
                   </div>
                 ))}
               </div>
+            ) : catalogFailed ? (
+              catalogError
             ) : courses.length === 0 ? (
               <Card className="text-center py-16">
                 <p className="text-lg font-bold text-[#172554] mb-2">Chưa có khóa học dành cho khách</p>

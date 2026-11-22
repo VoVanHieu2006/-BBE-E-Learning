@@ -14,6 +14,7 @@ export default function ChapterManagerMembersPage() {
   const [members, setMembers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
+  const [hasLoaded, setHasLoaded] = useState(false);
   const [search, setSearch] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
@@ -89,6 +90,7 @@ export default function ChapterManagerMembersPage() {
         if (cached.totalItems !== undefined) {
           setPagination({ totalItems: cached.totalItems, totalPages: cached.totalPages || 1 });
         }
+        setHasLoaded(true);
         setLoading(false);
       }
     }
@@ -126,6 +128,7 @@ export default function ChapterManagerMembersPage() {
       if (cached.totalItems !== undefined) {
         setPagination({ totalItems: cached.totalItems, totalPages: cached.totalPages || 1 });
       }
+      setHasLoaded(true);
       setLoading(false);
     }
 
@@ -136,6 +139,7 @@ export default function ChapterManagerMembersPage() {
         setSummary(res.data.summary);
       }
       setPagination({ totalItems: res.data.totalItems || 0, totalPages: res.data.totalPages || 1 });
+      setHasLoaded(true);
     }
     setLoadError(res.ok ? '' : 'Không tải được danh sách thành viên. Vui lòng thử lại.');
     setLoading(false);
@@ -255,6 +259,10 @@ export default function ChapterManagerMembersPage() {
   const memberRows = members.filter((m) => m.role === 'MEMBER');
   // Tải lỗi mà chưa có dữ liệu nào: không được hiện số 0 hay "chưa có thành viên" như dữ liệu thật.
   const loadFailedWithoutData = Boolean(loadError) && members.length === 0;
+  // Lần tải đầu chưa xong: số 0 mặc định cũng không phải dữ liệu thật.
+  const firstLoadPending = loading && !hasLoaded;
+  const summaryValue = (value: React.ReactNode) =>
+    firstLoadPending ? <span className="text-sm font-semibold text-[#737686]">Đang tải…</span> : loadFailedWithoutData ? '—' : value;
   const activeCount = memberRows.filter((m) => m.status === 'ACTIVE').length;
   const avgChapterProgress =
     memberRows.length > 0
@@ -295,17 +303,17 @@ export default function ChapterManagerMembersPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           <Card shadow="md" className="p-4 border border-[#eff4ff]">
             <div className="text-xs font-semibold text-[#737686]">Tổng thành viên</div>
-            <div className="text-2xl font-bold text-[#172554] mt-1">{loadFailedWithoutData ? '—' : summary.totalMembers}</div>
+            <div className="text-2xl font-bold text-[#172554] mt-1">{summaryValue(summary.totalMembers)}</div>
             <div className="text-[11px] text-[#737686] mt-0.5">Toàn bộ Chapter</div>
           </Card>
           <Card shadow="md" className="p-4 border border-[#eff4ff]">
             <div className="text-xs font-semibold text-green-700">Đang hoạt động (Active)</div>
-            <div className="text-2xl font-bold text-green-700 mt-1">{loadFailedWithoutData ? '—' : summary.activeMembers}</div>
+            <div className="text-2xl font-bold text-green-700 mt-1">{summaryValue(summary.activeMembers)}</div>
             <div className="text-[11px] text-[#737686] mt-0.5">Có quyền đăng nhập học</div>
           </Card>
           <Card shadow="md" className="p-4 border border-[#eff4ff]">
             <div className="text-xs font-semibold text-blue-700">Tiến độ TB Chapter</div>
-            <div className="text-2xl font-bold text-[#2563EB] mt-1">{loadFailedWithoutData ? '—' : `${summary.avgChapterProgress}%`}</div>
+            <div className="text-2xl font-bold text-[#2563EB] mt-1">{summaryValue(`${summary.avgChapterProgress}%`)}</div>
             <div className="text-[11px] text-[#737686] mt-0.5">Tất cả khóa học</div>
           </Card>
         </div>
@@ -362,7 +370,7 @@ export default function ChapterManagerMembersPage() {
         {/* Filter Result Summary & Page Size Controls */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-1 mb-3 text-xs text-[#737686]">
           <div className="font-medium flex items-center gap-2">
-            {!loadFailedWithoutData && (
+            {!loadFailedWithoutData && !firstLoadPending && (
               <span>
                 Đang hiển thị <span className="text-[#2563EB] font-bold">{memberRows.length}</span> trên tổng số{' '}
                 <span className="text-[#172554] font-bold">{summary.totalMembers}</span> tài khoản

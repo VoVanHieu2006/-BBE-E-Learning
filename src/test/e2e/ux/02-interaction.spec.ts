@@ -133,6 +133,51 @@ test.describe('Mạng chậm hoặc lỗi', () => {
     await expect(page.getByText('Hãy gửi lời mời thành viên đầu tiên tham gia Chapter của bạn.')).toHaveCount(0)
   })
 
+  test('danh sách thành viên tải chậm: trong lúc chờ không hiện "0" thành viên hay "0 trên tổng số 0 tài khoản" như số thật', async ({ page }) => {
+    await signInAs(page, 'chapterLead')
+    await settle(page)
+    await slowData(page)
+    await page.goto('/chapter-manager/members')
+    await expect(page.getByText(/Đang tải/).first()).toBeVisible({ timeout: 2_000 })
+    const pending = (await page.locator('main').first().innerText()).replace(/\s+/g, ' ')
+    expect.soft(pending).not.toMatch(/Tổng thành viên 0\b/)
+    expect.soft(pending).not.toMatch(/Đang hoạt động \(Active\) 0\b/)
+    expect.soft(pending).not.toMatch(/Tiến độ TB Chapter 0%/)
+    expect.soft(pending).not.toMatch(/Đang hiển thị 0 trên tổng số 0/)
+    await expect(page.getByText(/trên tổng số [1-9]\d* tài khoản/).first()).toBeVisible({ timeout: 20_000 })
+    const loaded = (await page.locator('main').first().innerText()).replace(/\s+/g, ' ')
+    expect.soft(loaded, 'số thật hiện ra sau khi tải xong').toMatch(/Tổng thành viên [1-9]/)
+  })
+
+  test('máy chủ lỗi khi tải danh mục khóa học: học viên được báo lỗi kèm nút thử lại, không bị hiểu nhầm là không có khóa học nào', async ({ page, request }) => {
+    await createCourse(request, { lessons: [{}] })
+    await signInAs(page, 'member')
+    await settle(page)
+    await page.addInitScript(() => sessionStorage.clear())
+    let catalogDown = true
+    await page.route(/\/api\/v1\/courses(\?.*)?$/, (route) => catalogDown && route.request().method() === 'GET' ? route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: { code: 'InternalError' } }) }) : route.continue())
+    await page.goto('/student/courses?tab=my_courses')
+    await settle(page)
+    await expect(page.getByText('Không tải được danh sách khóa học')).toBeVisible()
+    const failed = (await page.locator('main').first().innerText()).replace(/\s+/g, ' ')
+    expect.soft(failed).not.toContain('Không có khóa học nào trong mục này')
+    expect.soft(failed, 'không đếm "0 khóa" khi chưa tải được danh mục').not.toMatch(/\(0\)/)
+    catalogDown = false
+    await page.getByRole('button', { name: 'Thử lại' }).click()
+    await expect(page.getByText(/Tất cả khóa học \([1-9]\d*\)/)).toBeVisible()
+    await expect(page.getByText('Không tải được danh sách khóa học')).toHaveCount(0)
+  })
+
+  test('máy chủ lỗi khi tải danh mục khóa học cho khách: báo lỗi kèm nút thử lại, không ghi "Chưa có khóa học dành cho khách"', async ({ page }) => {
+    await page.addInitScript(() => sessionStorage.clear())
+    await page.route(/\/api\/v1\/courses(\?.*)?$/, (route) => route.request().method() === 'GET' ? route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: { code: 'InternalError' } }) }) : route.continue())
+    await page.goto('/student/courses')
+    await settle(page)
+    await expect(page.getByText('Không tải được danh sách khóa học')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Thử lại' })).toBeVisible()
+    await expect(page.getByText('Chưa có khóa học dành cho khách')).toHaveCount(0)
+  })
+
   test('phiên hết hạn giữa chừng: thao tác tiếp theo đưa về trang đăng nhập thay vì trang trắng hay lỗi', async ({ page, context }) => {
     await signInAs(page, 'member')
     await context.clearCookies()
