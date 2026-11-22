@@ -77,10 +77,10 @@ export default function AdminNewCoursePage() {
         <Card className="p-6 border border-[#eff4ff] shadow-sm max-w-3xl">
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label className="block text-sm font-semibold text-[#172554] mb-1.5">
+              <label htmlFor="new-course-title" className="block text-sm font-semibold text-[#172554] mb-1.5">
                 Tiêu đề khóa học <span className="text-red-500">*</span>
               </label>
-              <input
+              <input id="new-course-title"
                 type="text"
                 name="title"
                 value={form.title}
@@ -91,8 +91,8 @@ export default function AdminNewCoursePage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-semibold text-[#172554] mb-1.5">Mô tả</label>
-              <textarea
+              <label htmlFor="new-course-description" className="block text-sm font-semibold text-[#172554] mb-1.5">Mô tả</label>
+              <textarea id="new-course-description"
                 name="description"
                 value={form.description}
                 onChange={handleChange}

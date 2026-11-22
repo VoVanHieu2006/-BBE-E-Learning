@@ -54,10 +54,10 @@ export default function CourseLessonModal({
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-[#172554] mb-1">
+              <label htmlFor="lesson-youtube" className="block text-sm font-semibold text-[#172554] mb-1">
                 Link YouTube hoặc Video ID (11 ký tự) *
               </label>
-              <input
+              <input id="lesson-youtube"
                 type="text"
                 required
                 value={lessonForm.youtubeVideoId}
@@ -105,10 +105,10 @@ export default function CourseLessonModal({
                 <div className="mt-2.5 p-3 bg-amber-50 border border-amber-200 rounded-2xl space-y-2">
                   <p className="text-xs text-amber-800 font-semibold">⚠️ {durationWarning}</p>
                   <div>
-                    <label className="block text-xs font-semibold text-[#172554] mb-1">
+                    <label htmlFor="lesson-duration" className="block text-xs font-semibold text-[#172554] mb-1">
                       Thời lượng video * (mm:ss hoặc tổng số giây)
                     </label>
-                    <input
+                    <input id="lesson-duration"
                       type="text"
                       value={lessonForm.manualDuration}
                       onChange={(e) => setLessonForm((prev) => ({ ...prev, manualDuration: e.target.value }))}
@@ -126,8 +126,8 @@ export default function CourseLessonModal({
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-[#172554] mb-1">Tiêu đề bài học *</label>
-              <input
+              <label htmlFor="lesson-title" className="block text-sm font-semibold text-[#172554] mb-1">Tiêu đề bài học *</label>
+              <input id="lesson-title"
                 type="text"
                 required
                 value={lessonForm.title}
@@ -138,8 +138,8 @@ export default function CourseLessonModal({
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-[#172554] mb-1">Mô tả bài học</label>
-              <textarea
+              <label htmlFor="lesson-description" className="block text-sm font-semibold text-[#172554] mb-1">Mô tả bài học</label>
+              <textarea id="lesson-description"
                 rows={3}
                 value={lessonForm.description}
                 onChange={(e) => setLessonForm({ ...lessonForm, description: e.target.value })}

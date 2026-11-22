@@ -117,8 +117,8 @@ export default function CourseAssessmentEditor({
 
               <div className="space-y-3">
                 <div>
-                  <label className="block text-sm font-semibold text-[#172554] mb-1">Tiêu đề bài kiểm tra *</label>
-                  <input
+                  <label htmlFor="assessment-title" className="block text-sm font-semibold text-[#172554] mb-1">Tiêu đề bài kiểm tra *</label>
+                  <input id="assessment-title"
                     type="text"
                     required
                     value={assessmentForm.title}
@@ -127,8 +127,8 @@ export default function CourseAssessmentEditor({
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-[#172554] mb-1">Mô tả / Yêu cầu đạt</label>
-                  <textarea
+                  <label htmlFor="assessment-description" className="block text-sm font-semibold text-[#172554] mb-1">Mô tả / Yêu cầu đạt</label>
+                  <textarea id="assessment-description"
                     rows={2}
                     value={assessmentForm.description}
                     onChange={(e) => setAssessmentForm({ ...assessmentForm, description: e.target.value })}
@@ -205,11 +205,11 @@ export default function CourseAssessmentEditor({
 
                 {/* Import câu hỏi từ Google Sheet / Google Doc */}
                 <div className="p-4 bg-white border border-[#cbdbf5] rounded-2xl space-y-2">
-                  <label className="block text-xs font-semibold text-[#172554]">
+                  <label htmlFor="quiz-import-url" className="block text-xs font-semibold text-[#172554]">
                     Nhập câu hỏi từ Google Sheet / Google Doc
                   </label>
                   <div className="flex flex-col sm:flex-row gap-2">
-                    <input
+                    <input id="quiz-import-url"
                       type="text"
                       value={quizImportUrl}
                       onChange={(e) => setQuizImportUrl(e.target.value)}
@@ -249,7 +249,7 @@ export default function CourseAssessmentEditor({
                   <details key={`pool-${poolIndex}`} className="rounded-2xl border border-blue-200 bg-white">
                     <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 font-bold text-[#172554]"><span>{poolName} · {assessmentForm.questions.filter((question) => (question.poolIndex ?? 0) === poolIndex).length} câu</span><span className="text-xs font-normal text-blue-600">Mở nhóm ▾</span></summary>
                     <div className="space-y-3 border-t border-blue-100 p-3">
-                      <div className="flex gap-2"><input value={poolName} onChange={(e) => setQuizPoolNames((previous) => previous.map((name, index) => index === poolIndex ? e.target.value : name))} className="flex-1 rounded-xl border border-[#cbdbf5] px-3 py-2 text-sm"/><Button size="sm" variant="secondary" onClick={() => handleAddQuestion(poolIndex)}>＋ Tạo câu hỏi</Button><button type="button" onClick={() => handleRemovePool(poolIndex)} className="rounded-lg px-2 text-red-600 hover:bg-red-50">Xóa nhóm</button></div>
+                      <div className="flex gap-2"><input aria-label={`Tên nhóm câu hỏi ${poolIndex + 1}`} value={poolName} onChange={(e) => setQuizPoolNames((previous) => previous.map((name, index) => index === poolIndex ? e.target.value : name))} className="flex-1 rounded-xl border border-[#cbdbf5] px-3 py-2 text-sm"/><Button size="sm" variant="secondary" onClick={() => handleAddQuestion(poolIndex)}>＋ Tạo câu hỏi</Button><button type="button" onClick={() => handleRemovePool(poolIndex)} className="rounded-lg px-2 text-red-600 hover:bg-red-50">Xóa nhóm</button></div>
                 {assessmentForm.questions.map((q, qIdx) => (q.poolIndex ?? 0) === poolIndex ? (
                   <details key={qIdx} className="group rounded-2xl border border-[#eff4ff] bg-[#f8f9ff]">
                     <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-[#172554]"><span>{quizPoolNames[q.poolIndex ?? 0] || 'Chưa có nhóm'} · Câu {qIdx + 1}</span><span className="max-w-[65%] truncate text-xs font-normal text-[#737686]">{q.questionText || 'Chưa nhập nội dung'}</span></summary>
@@ -282,7 +282,7 @@ export default function CourseAssessmentEditor({
                         </div>
                       </div>
 
-                      <input
+                      <input aria-label={`Nội dung câu ${qIdx + 1}`}
                         type="text"
                         required
                         value={q.questionText}
@@ -294,7 +294,7 @@ export default function CourseAssessmentEditor({
                         placeholder="Nhập nội dung câu hỏi..."
                         className="flex-1 px-3 py-2 border border-[#cbdbf5] rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
                       />
-                      <select value={q.poolIndex ?? 0} onChange={(e) => {
+                      <select aria-label={`Nhóm của câu ${qIdx + 1}`} value={q.poolIndex ?? 0} onChange={(e) => {
                         const qs = [...assessmentForm.questions];
                         qs[qIdx].poolIndex = Number(e.target.value);
                         setAssessmentForm({ ...assessmentForm, questions: qs });
@@ -314,7 +314,7 @@ export default function CourseAssessmentEditor({
                     <div className="flex flex-wrap items-center gap-3 text-xs">
                       <div>
                         <label className="font-semibold text-[#434655] mr-1.5">Loại câu:</label>
-                        <select
+                        <select aria-label={`Loại câu ${qIdx + 1}`}
                           value={q.type}
                           onChange={(e) => handleQuestionTypeChange(qIdx, e.target.value as any)}
                           className="px-2.5 py-1.5 border border-[#cbdbf5] rounded-lg bg-white"
@@ -331,7 +331,7 @@ export default function CourseAssessmentEditor({
                       <label className="block text-xs font-semibold text-[#434655] mb-1">
                         💡 Giải thích đáp án (hiện cho học viên khi đạt điểm)
                       </label>
-                      <textarea
+                      <textarea aria-label={`Giải thích đáp án câu ${qIdx + 1}`}
                         rows={2}
                         value={q.explanation ?? ''}
                         onChange={(e) => {
@@ -356,7 +356,7 @@ export default function CourseAssessmentEditor({
 
                       {q.options.map((opt, oIdx) => (
                         <div key={oIdx} className="flex items-center gap-2">
-                          <input
+                          <input aria-label={`Đáp án ${oIdx + 1} của câu ${qIdx + 1} là đáp án đúng`}
                             type={q.type === 'SINGLE_CHOICE' ? 'radio' : 'checkbox'}
                             name={`correct-${qIdx}`}
                             checked={opt.isCorrect}
@@ -374,7 +374,7 @@ export default function CourseAssessmentEditor({
                             }}
                             className="h-4 w-4 text-[#2563EB] shrink-0 cursor-pointer"
                           />
-                          <input
+                          <input aria-label={`Nội dung đáp án ${oIdx + 1} của câu ${qIdx + 1}`}
                             type="text"
                             required
                             value={opt.optionText}

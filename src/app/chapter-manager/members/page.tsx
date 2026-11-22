@@ -304,7 +304,7 @@ export default function ChapterManagerMembersPage() {
         {/* Search & Filter Bar */}
         <Card className="p-4 mb-4 border border-[#eff4ff] shadow-sm">
           <form onSubmit={handleSearch} className="flex flex-col md:flex-row gap-3">
-            <input
+            <input aria-label="Tìm kiếm thành viên theo tên hoặc email"
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -313,7 +313,7 @@ export default function ChapterManagerMembersPage() {
             />
 
             {/* Bộ lọc theo Ban (Chỉ chọn, bấm nút Tìm kiếm mới lọc) */}
-            <select
+            <select aria-label="Lọc theo Ban"
               value={departmentFilter}
               onChange={(e) => setDepartmentFilter(e.target.value)}
               className="px-3.5 py-2.5 border border-[#cbdbf5] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB] bg-white text-[#172554] font-medium"
@@ -330,7 +330,7 @@ export default function ChapterManagerMembersPage() {
             </select>
 
             {/* Bộ lọc theo Chức vụ (Chỉ chọn, bấm nút Tìm kiếm mới lọc) */}
-            <select
+            <select aria-label="Lọc theo chức vụ"
               value={roleFilter}
               onChange={(e) => setRoleFilter(e.target.value)}
               className="px-3.5 py-2.5 border border-[#cbdbf5] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB] bg-white text-[#172554] font-medium"
@@ -369,7 +369,7 @@ export default function ChapterManagerMembersPage() {
 
           <div className="flex items-center gap-2">
             <span>Hiển thị mỗi trang:</span>
-            <select
+            <select aria-label="Số dòng mỗi trang"
               value={limit}
               disabled={loading}
               onChange={(e) => {
@@ -626,8 +626,8 @@ export default function ChapterManagerMembersPage() {
                 {departmentsError ? <p role="alert" className="text-sm text-red-700">{departmentsError}</p> : !departments.length && <p className="text-sm text-[#434655]">Chưa có ban có quyền mời thành viên. Vui lòng liên hệ quản trị viên nếu danh sách không tải được.</p>}
               </div>
               <div>
-                <label className="block text-sm font-semibold text-[#172554] mb-1">Email học viên *</label>
-                <input
+                <label htmlFor="member-invite-email" className="block text-sm font-semibold text-[#172554] mb-1">Email học viên *</label>
+                <input id="member-invite-email"
                   type="email"
                   required
                   value={inviteEmail}
@@ -674,7 +674,7 @@ export default function ChapterManagerMembersPage() {
                 <label className="block text-xs font-semibold text-red-950">
                   Để xác nhận, vui lòng nhập chính xác chữ <strong className="text-red-600 underline font-extrabold">&ldquo;vô hiệu hóa&rdquo;</strong> vào ô bên dưới:
                 </label>
-                <input
+                <input aria-label="Nhập “vô hiệu hóa” để xác nhận"
                   type="text"
                   value={deactivateInputText}
                   onChange={(e) => setDeactivateInputText(e.target.value)}

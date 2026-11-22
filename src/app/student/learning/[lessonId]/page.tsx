@@ -635,7 +635,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
       {/* Main Classroom Body */}
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
         {/* Left Side: Video Theater, Navigation Bar & Details */}
-        <div className="flex-1 flex flex-col overflow-y-auto bg-[#f8f9ff] p-4 md:p-6 lg:p-8 space-y-6">
+        <main className="flex-1 flex flex-col overflow-y-auto bg-[#f8f9ff] p-4 md:p-6 lg:p-8 space-y-6">
           {/* Main Video Cinema Container with Crisp Rounded Corners & Shadow */}
           <div className="w-full bg-black rounded-3xl overflow-hidden shadow-xl border border-slate-900 aspect-video relative max-w-5xl mx-auto">
             {loadingLesson && !lesson ? (
@@ -1076,7 +1076,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
               </Card>
             ) : null}
           </div>
-        </div>
+        </main>
 
         {/* Right Side: Udemy-style Collapsible Playlist Sidebar */}
         {sidebarOpen && (

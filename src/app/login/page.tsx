@@ -144,8 +144,8 @@ export default function LoginPage() {
 
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
-              <label className="block text-sm font-semibold text-[#172554] mb-1.5">Địa chỉ Email</label>
-              <input
+              <label htmlFor="login-email" className="block text-sm font-semibold text-[#172554] mb-1.5">Địa chỉ Email</label>
+              <input id="login-email"
                 type="email"
                 required
                 autoComplete="email"
@@ -158,13 +158,13 @@ export default function LoginPage() {
 
             <div>
               <div className="flex justify-between items-center mb-1.5">
-                <label className="block text-sm font-semibold text-[#172554]">Mật khẩu</label>
+                <label htmlFor="login-password" className="block text-sm font-semibold text-[#172554]">Mật khẩu</label>
                 <Link href="/forgot-password" className="text-xs text-[#2563EB] hover:underline font-semibold">
                   Quên mật khẩu?
                 </Link>
               </div>
               <div className="relative">
-                <input
+                <input id="login-password"
                   type={showPassword ? 'text' : 'password'}
                   required
                   autoComplete="current-password"

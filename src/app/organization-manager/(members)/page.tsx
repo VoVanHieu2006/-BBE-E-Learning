@@ -196,7 +196,7 @@ export default function OrganizationManagerPage() {
         <h1 className="mt-1 text-3xl font-bold text-[#172554]">Quản lý học tập theo tổ chức</h1>
         <p className="mt-1 text-sm text-[#737686]">Phạm vi được quyết định bởi nhiệm kỳ và permission đang hiệu lực, không dựa vào role hiển thị.</p>
       </div>
-      <select value={unitId} onChange={(event) => { setUnitId(event.target.value); setPage(1); }} className="min-w-64 rounded-xl border border-[#cbdbf5] bg-white px-3 py-2.5 text-sm font-semibold text-[#172554]">
+      <select aria-label="Phạm vi quản lý" value={unitId} onChange={(event) => { setUnitId(event.target.value); setPage(1); }} className="min-w-64 rounded-xl border border-[#cbdbf5] bg-white px-3 py-2.5 text-sm font-semibold text-[#172554]">
         {units.map((unit) => <option key={unit.id} value={unit.id}>{unit.type} · {unit.name}</option>)}
       </select>
     </header>
@@ -205,7 +205,7 @@ export default function OrganizationManagerPage() {
 
     {canManage && selectedUnit?.type === 'CHAPTER' && selectedUnit.chapterId && <Card id="term-transition" className="space-y-4 border border-[#eff4ff] scroll-mt-8">
       <div><h2 className="font-bold text-[#172554]">Phân Ban cuối nhiệm kỳ từ Google Sheet</h2><p className="mt-1 text-xs text-[#737686]">Tên cột phải trùng tên Ban. Mỗi ô dùng “Họ tên (email)”; người đầu tiên trong cột được gán LT. Hệ thống đối chiếu bằng email trước khi cho xác nhận.</p></div>
-      <form onSubmit={previewRoster} className="grid gap-3 md:grid-cols-[1fr_auto]"><input required value={rosterUrl} onChange={(event) => setRosterUrl(event.target.value)} placeholder="Dán link Google Sheet danh sách cuối nhiệm kỳ" className="rounded-xl border border-[#cbdbf5] px-3 py-2 text-sm"/><Button type="submit" loading={busy}>Đọc và kiểm tra</Button></form>
+      <form onSubmit={previewRoster} className="grid gap-3 md:grid-cols-[1fr_auto]"><input aria-label="Link Google Sheet danh sách cuối nhiệm kỳ" required value={rosterUrl} onChange={(event) => setRosterUrl(event.target.value)} placeholder="Dán link Google Sheet danh sách cuối nhiệm kỳ" className="rounded-xl border border-[#cbdbf5] px-3 py-2 text-sm"/><Button type="submit" loading={busy}>Đọc và kiểm tra</Button></form>
       {rosterPreview && <div className="space-y-3">
         <div className={`rounded-xl px-4 py-3 text-sm ${rosterPreview.valid ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>{rosterPreview.valid ? `Hợp lệ: ${rosterPreview.summary.members} thành viên, ${rosterPreview.summary.leads} LT.` : `Cần sửa ${rosterPreview.errors.length} lỗi trước khi xác nhận.`}</div>
         {rosterPreview.errors?.length > 0 && <details className="rounded-xl border border-red-100 p-3"><summary className="cursor-pointer text-sm font-semibold text-red-700">Xem lỗi đối chiếu</summary><ul className="mt-2 space-y-1 text-xs text-red-700">{rosterPreview.errors.map((error: any, index: number) => <li key={index}>Dòng {error.row}, {error.column}: {error.message} ({error.value})</li>)}</ul></details>}
@@ -217,18 +217,18 @@ export default function OrganizationManagerPage() {
     {canManage && profile?.role !== 'ADMIN' && <div className="grid gap-4 lg:grid-cols-2">
       <Card className="space-y-3 border border-[#eff4ff]">
         <div><h2 className="font-bold text-[#172554]">Thêm tài khoản đã có</h2><p className="text-xs text-[#737686]">Chỉ thêm tài khoản đang hoạt động; tài khoản bị khóa phải do Admin mở lại.</p></div>
-        <form className="flex gap-2" onSubmit={addExistingMember}><input required type="email" value={addEmail} onChange={(event) => setAddEmail(event.target.value)} placeholder="email@domain.com" className="min-w-0 flex-1 rounded-xl border border-[#cbdbf5] px-3 py-2 text-sm" /><Button type="submit" loading={busy}>Thêm</Button></form>
+        <form className="flex gap-2" onSubmit={addExistingMember}><input aria-label="Email tài khoản cần thêm" required type="email" value={addEmail} onChange={(event) => setAddEmail(event.target.value)} placeholder="email@domain.com" className="min-w-0 flex-1 rounded-xl border border-[#cbdbf5] px-3 py-2 text-sm" /><Button type="submit" loading={busy}>Thêm</Button></form>
       </Card>
       <Card className="space-y-3 border border-[#eff4ff]">
         <div><h2 className="font-bold text-[#172554]">Mời thành viên mới</h2><p className="text-xs text-[#737686]">Lời mời được gắn vào đúng DNA/Chapter/Ban; khi chấp nhận sẽ tạo membership và đồng bộ learning rules.</p></div>
-        <form className="flex gap-2" onSubmit={inviteMember}><input required type="email" value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} placeholder="email@domain.com" className="min-w-0 flex-1 rounded-xl border border-[#cbdbf5] px-3 py-2 text-sm" /><Button type="submit" loading={busy}>Gửi lời mời</Button></form>
+        <form className="flex gap-2" onSubmit={inviteMember}><input aria-label="Email thành viên mới" required type="email" value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} placeholder="email@domain.com" className="min-w-0 flex-1 rounded-xl border border-[#cbdbf5] px-3 py-2 text-sm" /><Button type="submit" loading={busy}>Gửi lời mời</Button></form>
       </Card>
     </div>}
 
     <Card className="border border-[#eff4ff] p-0">
       <div className="flex flex-col gap-3 border-b border-[#eff4ff] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
         <div><h2 className="font-bold text-[#172554]">{selectedUnit?.name} · Thành viên</h2><p className="text-xs text-[#737686]">{pagination.total} thành viên trong phạm vi được cấp quyền</p></div>
-        <form onSubmit={submitSearch} className="flex gap-2"><input value={searchDraft} onChange={(event) => setSearchDraft(event.target.value)} placeholder="Tìm theo email" className="rounded-xl border border-[#cbdbf5] px-3 py-2 text-sm" /><Button type="submit" variant="outline">Tìm</Button></form>
+        <form onSubmit={submitSearch} className="flex gap-2"><input aria-label="Tìm thành viên theo email" value={searchDraft} onChange={(event) => setSearchDraft(event.target.value)} placeholder="Tìm theo email" className="rounded-xl border border-[#cbdbf5] px-3 py-2 text-sm" /><Button type="submit" variant="outline">Tìm</Button></form>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[760px] text-left text-sm">

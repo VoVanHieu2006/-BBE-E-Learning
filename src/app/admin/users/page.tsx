@@ -420,7 +420,7 @@ export default function AdminUsersPage() {
         <Card className="p-4 mb-6 border border-[#eff4ff] shadow-sm">
           <form onSubmit={handleApplyFilter} className="flex flex-col lg:flex-row items-stretch lg:items-center gap-3">
             <div className="flex-1">
-              <input
+              <input aria-label="Tìm theo tên hoặc email"
                 type="text"
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
@@ -429,7 +429,7 @@ export default function AdminUsersPage() {
               />
             </div>
             <div className="w-full lg:w-48">
-              <select
+              <select aria-label="Lọc theo chức vụ"
                 value={roleInput}
                 onChange={(e) => setRoleInput(e.target.value)}
                 className="w-full px-3 py-2.5 border border-[#cbdbf5] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB] bg-white text-[#172554]"
@@ -443,7 +443,7 @@ export default function AdminUsersPage() {
               </select>
             </div>
             <div className="w-full lg:w-48">
-              <select
+              <select aria-label="Lọc theo trạng thái"
                 value={statusInput}
                 onChange={(e) => setStatusInput(e.target.value)}
                 className="w-full px-3 py-2.5 border border-[#cbdbf5] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB] bg-white text-[#172554]"
@@ -455,7 +455,7 @@ export default function AdminUsersPage() {
               </select>
             </div>
             <div className="w-full lg:w-48">
-              <select
+              <select aria-label="Lọc theo Chapter"
                 value={chapterInput}
                 onChange={(e) => setChapterInput(e.target.value)}
                 className="w-full px-3 py-2.5 border border-[#cbdbf5] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB] bg-white text-[#172554]"
@@ -498,7 +498,7 @@ export default function AdminUsersPage() {
 
           <div className="flex items-center gap-2">
             <span>Hiển thị mỗi trang:</span>
-            <select
+            <select aria-label="Số dòng mỗi trang"
               value={limit}
               disabled={loading}
               onChange={(e) => handleLimitChange(Number(e.target.value))}
@@ -907,7 +907,7 @@ export default function AdminUsersPage() {
                     <label className="block text-xs font-semibold text-red-950">
                       Để xác nhận, vui lòng nhập chính xác chữ <strong className="text-red-600 underline font-extrabold">&ldquo;vô hiệu hóa&rdquo;</strong> vào ô bên dưới:
                     </label>
-                    <input
+                    <input aria-label="Nhập “vô hiệu hóa” để xác nhận"
                       type="text"
                       value={deactivateInputText}
                       onChange={(e) => setDeactivateInputText(e.target.value)}
@@ -1018,7 +1018,7 @@ export default function AdminUsersPage() {
                 </div>
                 <div className="mt-2 flex items-center gap-2">
                   <span className="text-xs text-[#737686]">Hoặc số ngày khác:</span>
-                  <input
+                  <input aria-label="Số ngày gia hạn"
                     type="number"
                     min={1}
                     max={365}

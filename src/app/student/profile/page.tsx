@@ -95,8 +95,8 @@ export default function ProfilePage() {
           <div className="mt-1 font-medium text-[#172554]">{profile?.email || (loading ? 'Đang tải…' : '—')}</div>
         </div>
         <form onSubmit={save} className="space-y-3">
-          <label className="block text-sm font-semibold text-[#172554]">Họ và tên</label>
-          <input
+          <label htmlFor="profile-display-name" className="block text-sm font-semibold text-[#172554]">Họ và tên</label>
+          <input id="profile-display-name"
             required
             minLength={2}
             maxLength={120}

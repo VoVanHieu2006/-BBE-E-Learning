@@ -280,8 +280,8 @@ export default function AdminInvitationsPage() {
             <EmailQuotaNotice quota={quota} />
             <form onSubmit={handleSendLeaderInvite} className="space-y-4">
               <div>
-                <label className="block text-sm font-semibold text-[#172554] mb-1">Email *</label>
-                <input
+                <label htmlFor="leader-invite-email" className="block text-sm font-semibold text-[#172554] mb-1">Email *</label>
+                <input id="leader-invite-email"
                   type="email"
                   required
                   value={leaderForm.email}
@@ -291,8 +291,8 @@ export default function AdminInvitationsPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-semibold text-[#172554] mb-1">Tên Chapter *</label>
-                <input
+                <label htmlFor="leader-invite-chapter" className="block text-sm font-semibold text-[#172554] mb-1">Tên Chapter *</label>
+                <input id="leader-invite-chapter"
                   type="text"
                   required
                   value={leaderForm.chapterName}
@@ -322,7 +322,7 @@ export default function AdminInvitationsPage() {
             <h3 className="text-xl font-bold text-[#172554]">Mời Lead DNA</h3>
             <p className="text-sm text-[#737686]">Hệ thống chỉ cho phép một Lead DNA đang hoạt động.</p>
             <EmailQuotaNotice quota={quota} />
-            <input type="email" required value={dnaEmail} onChange={(e) => setDnaEmail(e.target.value)} placeholder="dna.lead@bbe.vn" className="w-full px-4 py-2.5 border border-[#cbdbf5] rounded-xl text-sm" />
+            <input aria-label="Email Lead DNA" type="email" required value={dnaEmail} onChange={(e) => setDnaEmail(e.target.value)} placeholder="dna.lead@bbe.vn" className="w-full px-4 py-2.5 border border-[#cbdbf5] rounded-xl text-sm" />
             <div className="flex justify-end gap-3"><Button variant="outline" type="button" onClick={() => setShowDnaModal(false)}>Hủy</Button><Button type="submit" loading={leaderSending}>Gửi lời mời</Button></div>
           </form>
         </Modal>

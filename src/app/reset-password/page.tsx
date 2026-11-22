@@ -118,9 +118,9 @@ function ResetPasswordForm() {
                 </div>
               )}
               <div>
-                <label className="block text-sm font-semibold text-[#172554] mb-1.5">Mật khẩu mới</label>
+                <label htmlFor="reset-new-password" className="block text-sm font-semibold text-[#172554] mb-1.5">Mật khẩu mới</label>
                 <div className="relative">
-                  <input
+                  <input id="reset-new-password"
                     type={showPw ? 'text' : 'password'}
                     required
                     minLength={8}
@@ -140,8 +140,8 @@ function ResetPasswordForm() {
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-semibold text-[#172554] mb-1.5">Xác nhận mật khẩu</label>
-                <input
+                <label htmlFor="reset-confirm-password" className="block text-sm font-semibold text-[#172554] mb-1.5">Xác nhận mật khẩu</label>
+                <input id="reset-confirm-password"
                   type={showPw ? 'text' : 'password'}
                   required
                   value={form.confirmPassword}

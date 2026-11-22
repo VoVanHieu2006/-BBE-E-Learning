@@ -198,10 +198,10 @@ function AcceptInvitationContent() {
         </div>
 
         <div>
-          <label className="block text-sm font-semibold text-[#172554] mb-1.5">
+          <label htmlFor="invite-password" className="block text-sm font-semibold text-[#172554] mb-1.5">
             Tạo mật khẩu mới (tối thiểu 8 ký tự) *
           </label>
-          <input
+          <input id="invite-password"
             type="password"
             required
             minLength={8}
@@ -213,10 +213,10 @@ function AcceptInvitationContent() {
         </div>
 
         <div>
-          <label className="block text-sm font-semibold text-[#172554] mb-1.5">
+          <label htmlFor="invite-confirm-password" className="block text-sm font-semibold text-[#172554] mb-1.5">
             Xác nhận lại mật khẩu *
           </label>
-          <input
+          <input id="invite-confirm-password"
             type="password"
             required
             minLength={8}
