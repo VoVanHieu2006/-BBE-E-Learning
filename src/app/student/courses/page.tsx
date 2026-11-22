@@ -730,7 +730,7 @@ export default function StudentCoursesPage() {
                       : 'text-[#737686] hover:text-[#172554]'
                   }`}
                 >
-                  Tất cả ({enrichedCourses.length})
+                  Tất cả{coursesPending ? '' : ` (${enrichedCourses.length})`}
                 </button>
                 <button
                   onClick={() => setFilter('IN_PROGRESS')}
@@ -740,7 +740,7 @@ export default function StudentCoursesPage() {
                       : 'text-[#737686] hover:text-[#172554]'
                   }`}
                 >
-                  Đang học ({enrichedCourses.filter((c) => c.isStarted && !c.isCompleted).length})
+                  Đang học{coursesPending ? '' : ` (${enrichedCourses.filter((c) => c.isStarted && !c.isCompleted).length})`}
                 </button>
                 <button
                   onClick={() => setFilter('NOT_STARTED')}
@@ -750,7 +750,7 @@ export default function StudentCoursesPage() {
                       : 'text-[#737686] hover:text-[#172554]'
                   }`}
                 >
-                  Chưa học ({enrichedCourses.filter((c) => !c.isStarted && !c.isCompleted).length})
+                  Chưa học{coursesPending ? '' : ` (${enrichedCourses.filter((c) => !c.isStarted && !c.isCompleted).length})`}
                 </button>
                 <button
                   onClick={() => setFilter('COMPLETED')}
@@ -760,7 +760,7 @@ export default function StudentCoursesPage() {
                       : 'text-[#737686] hover:text-[#172554]'
                   }`}
                 >
-                  Đã đạt ({enrichedCourses.filter((c) => c.isCompleted).length})
+                  Đã đạt{coursesPending ? '' : ` (${enrichedCourses.filter((c) => c.isCompleted).length})`}
                 </button>
               </div>
             </div>

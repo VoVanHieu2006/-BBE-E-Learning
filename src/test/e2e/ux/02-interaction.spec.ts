@@ -117,6 +117,10 @@ test.describe('Mạng chậm hoặc lỗi', () => {
     expect.soft(header, 'thành viên đã thuộc một ban').not.toContain('Chưa có Ban')
     expect.soft(header).not.toMatch(/0 \/ 0 ?khóa/)
     expect.soft(header).not.toContain('(0/0 bài)')
+    await page.getByRole('button', { name: /Khóa học của bạn/ }).click()
+    const myCourses = (await page.locator('main').first().innerText()).replace(/\s+/g, ' ')
+    expect.soft(myCourses, 'số đếm khóa học chưa tải xong').not.toMatch(/\(0\)/)
+    expect.soft(myCourses, 'vẫn đang trong lúc chờ').toContain('đang tải')
   })
 
   test('máy chủ lỗi khi tải danh sách thành viên: Lead được báo là có lỗi, không bị hiểu nhầm là Chapter chưa có ai', async ({ page }) => {
