@@ -17,7 +17,7 @@ export default function FinalAssessmentSummary({
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h2 className="text-lg font-bold text-[#172554]">Bài thi cuối khóa</h2>
-                  <p className="mt-1 text-sm text-[#737686]">
+                  <p className="mt-1 text-sm text-[#6c6f7f]">
                     Mở sau khi học viên hoàn tất 100% video và đạt tất cả quiz từng bài học.
                     {course.finalAssessment?.title ? ` Hiện tại: ${course.finalAssessment.title} (${course.finalAssessment.questionCount || 0} câu).` : ' Chưa cấu hình.'}
                   </p>

@@ -86,7 +86,7 @@ function ResetPasswordForm() {
           <h1 className="text-3xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
             Đặt lại mật khẩu
           </h1>
-          <p className="text-[#737686] mt-1 text-sm">Nhập mật khẩu mới cho tài khoản của bạn</p>
+          <p className="text-[#6c6f7f] mt-1 text-sm">Nhập mật khẩu mới cho tài khoản của bạn</p>
         </div>
 
         <div className="bg-white rounded-3xl p-8 border border-[#eff4ff] shadow-xl">
@@ -133,7 +133,7 @@ function ResetPasswordForm() {
                     type="button"
                     tabIndex={-1}
                     onClick={() => setShowPw(!showPw)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#737686] text-lg"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#6c6f7f] text-lg"
                   >
                     {showPw ? '👁️' : '🙈'}
                   </button>
@@ -158,7 +158,7 @@ function ResetPasswordForm() {
             </form>
           )}
           <div className="mt-5 text-center">
-            <Link href="/login" className="text-sm text-[#2563EB] hover:underline font-medium">← Quay lại đăng nhập</Link>
+            <Link href="/login" className="inline-flex min-h-6 items-center text-sm text-[#2563EB] hover:underline font-medium">← Quay lại đăng nhập</Link>
           </div>
         </div>
       </div>

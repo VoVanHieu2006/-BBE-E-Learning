@@ -262,20 +262,20 @@ export default function LessonComments({
   const renderRoleBadge = (role: string) => {
     if (role === 'ADMIN') {
       return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
           👑 Quản trị viên
         </span>
       );
     }
     if (isLeadRole(role)) {
       return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
           ⭐ Ban điều hành
         </span>
       );
     }
     return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-600">
+      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-600">
         Học viên
       </span>
     );
@@ -292,7 +292,7 @@ export default function LessonComments({
           >
             <span>💬</span> Hỏi đáp & Thảo luận ({comments.reduce((acc, c) => acc + 1 + (c.replies?.length || 0), 0)})
           </h3>
-          <p className="text-xs text-[#737686] mt-0.5">
+          <p className="text-xs text-[#6c6f7f] mt-0.5">
             Đặt câu hỏi hoặc trao đổi cùng giảng viên và các bạn học viên khác.
           </p>
         </div>
@@ -315,10 +315,10 @@ export default function LessonComments({
                 onChange={(e) => setRootInput(e.target.value)}
                 placeholder="Bạn có thắc mắc gì về bài học này? Hãy đặt câu hỏi tại đây..."
                 rows={3}
-                className="w-full px-4 py-3 bg-[#f8f9ff] border border-[#cbdbf5] focus:border-[#2563EB] focus:bg-white focus:outline-none rounded-2xl text-xs text-[#172554] placeholder-[#737686] transition resize-none leading-relaxed"
+                className="w-full px-4 py-3 bg-[#f8f9ff] border border-[#cbdbf5] focus:border-[#2563EB] focus:bg-white focus:outline-none rounded-2xl text-xs text-[#172554] placeholder-[#6c6f7f] transition resize-none leading-relaxed"
               />
               <div className="flex items-center justify-between mt-2">
-                <span className="text-[11px] text-[#737686]">
+                <span className="text-[11px] text-[#6c6f7f]">
                   {rootInput.length > 0 ? `${rootInput.length}/3000 ký tự` : ''}
                 </span>
                 <Button
@@ -360,7 +360,7 @@ export default function LessonComments({
         <div className="py-10 text-center text-slate-400 space-y-2">
           <p className="text-2xl">💡</p>
           <p className="text-xs font-semibold text-[#172554]">Chưa có thảo luận nào</p>
-          <p className="text-[11px] text-[#737686]">
+          <p className="text-[11px] text-[#6c6f7f]">
             Hãy là người đầu tiên đặt câu hỏi về nội dung bài giảng này!
           </p>
         </div>
@@ -393,7 +393,7 @@ export default function LessonComments({
                           </span>
                           {renderRoleBadge(comment.userRole)}
                         </div>
-                        <span className="text-[10px] text-[#737686]">
+                        <span className="text-[11px] text-[#6c6f7f]">
                           {formatRelativeTime(comment.createdAt)}
                         </span>
                       </div>
@@ -429,7 +429,7 @@ export default function LessonComments({
                           type="button"
                           disabled={deletingId === comment.id}
                           onClick={() => handleDeleteComment(comment.id)}
-                          className="text-[#737686] hover:text-red-600 transition disabled:opacity-50"
+                          className="text-[#6c6f7f] hover:text-red-600 transition disabled:opacity-50"
                         >
                           {deletingId === comment.id ? 'Đang xóa...' : 'Xóa'}
                         </button>
@@ -445,7 +445,7 @@ export default function LessonComments({
                         <div
                           className={`w-7 h-7 rounded-full bg-gradient-to-br ${getAvatarBg(
                             currentUser?.email || ''
-                          )} text-white flex items-center justify-center text-[10px] font-bold shrink-0 shadow-xs`}
+                          )} text-white flex items-center justify-center text-[11px] font-bold shrink-0 shadow-xs`}
                         >
                           {getInitials(currentUser?.email || '')}
                         </div>
@@ -456,7 +456,7 @@ export default function LessonComments({
                             onChange={(e) => setReplyInput(e.target.value)}
                             placeholder={`Trả lời ${comment.userEmail.split('@')[0]}...`}
                             rows={2}
-                            className="w-full px-3 py-2 bg-white border border-[#2563EB] focus:outline-none rounded-xl text-xs text-[#172554] placeholder-[#737686] transition resize-none leading-relaxed shadow-xs"
+                            className="w-full px-3 py-2 bg-white border border-[#2563EB] focus:outline-none rounded-xl text-xs text-[#172554] placeholder-[#6c6f7f] transition resize-none leading-relaxed shadow-xs"
                           />
                           <div className="flex items-center justify-end gap-2 mt-1">
                             <button
@@ -465,7 +465,7 @@ export default function LessonComments({
                                 setReplyingToId(null);
                                 setReplyInput('');
                               }}
-                              className="px-2.5 py-1 text-[11px] text-[#737686] hover:text-[#172554] rounded-lg transition"
+                              className="px-2.5 py-1 text-[11px] text-[#6c6f7f] hover:text-[#172554] rounded-lg transition"
                             >
                               Hủy
                             </button>
@@ -497,7 +497,7 @@ export default function LessonComments({
                               <div
                                 className={`w-7 h-7 rounded-full bg-gradient-to-br ${getAvatarBg(
                                   reply.userEmail
-                                )} text-white flex items-center justify-center text-[10px] font-bold shrink-0 shadow-2xs`}
+                                )} text-white flex items-center justify-center text-[11px] font-bold shrink-0 shadow-2xs`}
                               >
                                 {getInitials(reply.userEmail)}
                               </div>
@@ -511,7 +511,7 @@ export default function LessonComments({
                                       </span>
                                       {renderRoleBadge(reply.userRole)}
                                     </div>
-                                    <span className="text-[10px] text-[#737686]">
+                                    <span className="text-[11px] text-[#6c6f7f]">
                                       {formatRelativeTime(reply.createdAt)}
                                     </span>
                                   </div>
@@ -521,7 +521,7 @@ export default function LessonComments({
                                   </p>
                                 </div>
 
-                                <div className="flex items-center gap-3 mt-1 px-2 text-[10px]">
+                                <div className="flex items-center gap-3 mt-1 px-2 text-[11px]">
                                   {accessToken && (
                                     <button
                                       type="button"
@@ -540,7 +540,7 @@ export default function LessonComments({
                                       type="button"
                                       disabled={deletingId === reply.id}
                                       onClick={() => handleDeleteComment(reply.id, comment.id)}
-                                      className="text-[#737686] hover:text-red-600 transition disabled:opacity-50"
+                                      className="text-[#6c6f7f] hover:text-red-600 transition disabled:opacity-50"
                                     >
                                       {deletingId === reply.id ? 'Đang xóa...' : 'Xóa'}
                                     </button>

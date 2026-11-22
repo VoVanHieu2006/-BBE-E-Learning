@@ -242,7 +242,7 @@ export default function AdminChaptersProgressPage() {
           <h1 className="text-3xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
             Bảng xếp hạng Chapter
           </h1>
-          <p className="text-[#737686] mt-1 text-sm">
+          <p className="text-[#6c6f7f] mt-1 text-sm">
             Xếp hạng theo độ đồng đều học tập, ⭐ bình quân/thành viên, KPI và quy mô Chapter
           </p>
         </div>
@@ -264,14 +264,14 @@ export default function AdminChaptersProgressPage() {
         <div className="mt-4 grid gap-3 rounded-2xl border border-blue-200 bg-white p-4 text-sm md:grid-cols-2">
           <div>
             <div className="font-bold text-[#2563EB]">⭐ Điểm xếp hạng = Tổng Star / quân số active</div>
-            <p className="text-xs text-[#737686] mt-1">
+            <p className="text-xs text-[#6c6f7f] mt-1">
               Công thức chính thức: <strong>S_m = A_m / N_m</strong> (tổng Star trong kỳ chia quân số active bình quân).
               Tháng có chuyển giao dùng snapshot theo chặng, quân số được trọng số theo thời lượng chặng; không dùng công thức cộng dồn hay trọng số cũ.
             </p>
           </div>
           <div>
             <div className="font-bold text-emerald-700">🟢 Điều kiện tham gia xếp hạng</div>
-            <ul className="text-xs text-[#737686] mt-1 list-disc list-inside space-y-0.5">
+            <ul className="text-xs text-[#6c6f7f] mt-1 list-disc list-inside space-y-0.5">
               <li>Số thành viên bình quân <strong>&gt; 20 người</strong></li>
               <li>Tối thiểu <strong>50%</strong> thành viên đạt <strong>&ge; 70%</strong> bài học bắt buộc</li>
               <li>KPI tháng đạt <strong>Xanh</strong> hoặc <strong>Vàng</strong> (KPI Đỏ hoặc Đen bị loại)</li>
@@ -302,24 +302,24 @@ export default function AdminChaptersProgressPage() {
         )}
         <div className={`grid grid-cols-2 lg:grid-cols-5 gap-4 transition-opacity duration-200 ${loading ? 'pointer-events-none select-none opacity-40' : ''}`}>
           <Card shadow="md" className="p-4 border border-[#eff4ff]">
-            <div className="text-xs font-semibold text-[#737686]">Chapter đủ điều kiện BXH</div>
+            <div className="text-xs font-semibold text-[#6c6f7f]">Chapter đủ điều kiện BXH</div>
             <div className="text-2xl font-bold text-[#172554] mt-1">{chapters.length}</div>
-            <div className="text-[11px] text-[#737686] mt-0.5">Chapter đỏ/thiếu điều kiện bị loại</div>
+            <div className="text-[11px] text-[#6c6f7f] mt-0.5">Chapter đỏ/thiếu điều kiện bị loại</div>
           </Card>
           <Card shadow="md" className="p-4 border border-[#eff4ff]">
             <div className="text-xs font-semibold text-blue-700">Tổng thành viên</div>
             <div className="text-2xl font-bold text-[#2563EB] mt-1">{totalMembersAll}</div>
-            <div className="text-[11px] text-[#737686] mt-0.5">Học viên tham gia</div>
+            <div className="text-[11px] text-[#6c6f7f] mt-0.5">Học viên tham gia</div>
           </Card>
           <Card shadow="md" className="p-4 border border-[#eff4ff]">
             <div className="text-xs font-semibold text-green-700">% thành viên đạt ≥70%</div>
             <div className="text-2xl font-bold text-green-700 mt-1">{averageChapterCompletion}%</div>
-            <div className="text-[11px] text-[#737686] mt-0.5">Trung bình các Chapter đủ điều kiện</div>
+            <div className="text-[11px] text-[#6c6f7f] mt-0.5">Trung bình các Chapter đủ điều kiện</div>
           </Card>
           <Card shadow="md" className="p-4 border border-[#eff4ff]">
             <div className="text-xs font-semibold text-amber-700">⭐ Bình quân / thành viên</div>
             <div className="text-2xl font-bold text-amber-600 mt-1">{averageStarsPerMember} ⭐</div>
-            <div className="text-[11px] text-[#737686] mt-0.5">Không dùng tổng Star để so quy mô</div>
+            <div className="text-[11px] text-[#6c6f7f] mt-0.5">Không dùng tổng Star để so quy mô</div>
           </Card>
           <Card shadow="md" className="p-4 border border-[#eff4ff]">
             <div className="text-xs font-semibold text-amber-700">Chapter dẫn đầu</div>
@@ -329,7 +329,7 @@ export default function AdminChaptersProgressPage() {
             >
               {chapters[0]?.name || '—'}
             </div>
-            <div className="text-[11px] text-[#737686] mt-0.5">Điểm BXH: {chapters[0]?.score || 0}</div>
+            <div className="text-[11px] text-[#6c6f7f] mt-0.5">Điểm BXH: {chapters[0]?.score || 0}</div>
           </Card>
         </div>
       </div>
@@ -349,7 +349,7 @@ export default function AdminChaptersProgressPage() {
         <div className={`grid items-start gap-6 xl:grid-cols-[300px_minmax(0,1fr)] transition-opacity duration-200 ${loading ? 'pointer-events-none select-none opacity-40' : ''}`}>
           <Card className="p-4 xl:sticky xl:top-24">
             <h2 className="font-bold text-[#172554]">Tất cả Chapter</h2>
-            <p className="mb-3 mt-1 text-xs text-[#737686]">Chọn Chapter để nhập KPI và xem lịch sử.</p>
+            <p className="mb-3 mt-1 text-xs text-[#6c6f7f]">Chọn Chapter để nhập KPI và xem lịch sử.</p>
             <div className="max-h-[620px] space-y-2 overflow-auto">
               {[...chapters, ...excludedChapters].sort((a, b) => a.name.localeCompare(b.name, 'vi')).map((chapter) => <button key={chapter.chapterId} onClick={() => !loading && handleOpenChapterDrillDown(chapter)} className="flex w-full items-center justify-between gap-2 rounded-xl border border-[#eff4ff] p-3 text-left text-xs hover:border-blue-300 hover:bg-blue-50">
                 <span className="font-semibold text-[#172554]">{chapter.name}</span>
@@ -367,14 +367,14 @@ export default function AdminChaptersProgressPage() {
               ))}
             </div>
           ) : leaderboardStatus.state === 'AWAITING_SNAPSHOT' ? (
-            <div role="status" data-reason-code={leaderboardStatus.reasonCode} className="text-center py-16 text-[#737686]">
+            <div role="status" data-reason-code={leaderboardStatus.reasonCode} className="text-center py-16 text-[#6c6f7f]">
               <p className="text-lg font-semibold text-[#172554] mb-1">Tháng này chưa có dữ liệu lịch sử</p>
-              <p className="text-sm text-[#737686]">Vui lòng chọn tháng khác để xem bảng xếp hạng.</p>
+              <p className="text-sm text-[#6c6f7f]">Vui lòng chọn tháng khác để xem bảng xếp hạng.</p>
             </div>
           ) : chapters.length === 0 ? (
-            <div className="text-center py-16 text-[#737686]">
+            <div className="text-center py-16 text-[#6c6f7f]">
               <p className="text-lg font-semibold text-[#172554] mb-1">Chưa có dữ liệu Chapter</p>
-              <p className="text-sm text-[#737686]">Vui lòng tạo chapter hoặc mời Trưởng Chapter.</p>
+              <p className="text-sm text-[#6c6f7f]">Vui lòng tạo chapter hoặc mời Trưởng Chapter.</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -404,7 +404,7 @@ export default function AdminChaptersProgressPage() {
                       <td className="px-6 py-4 font-bold text-[#172554]">
                         <div className="group-hover:text-[#2563EB] transition-colors">{ch.name}</div>
                         {ch.description && (
-                          <p className="text-xs text-[#737686] font-normal mt-0.5 line-clamp-1">{ch.description}</p>
+                          <p className="text-xs text-[#6c6f7f] font-normal mt-0.5 line-clamp-1">{ch.description}</p>
                         )}
                       </td>
                       <td className="px-6 py-4 text-center font-medium text-[#434655]">
@@ -448,7 +448,7 @@ export default function AdminChaptersProgressPage() {
         {excludedChapters.length > 0 && (
           <Card className="mt-6 border border-amber-200 bg-amber-50/50 shadow-sm">
             <h2 className="font-bold text-[#172554]">Chưa đủ điều kiện tham gia BXH</h2>
-            <p className="mt-1 text-xs text-[#737686]">Admin có thể dùng danh sách này để theo dõi Chapter cần hỗ trợ.</p>
+            <p className="mt-1 text-xs text-[#6c6f7f]">Admin có thể dùng danh sách này để theo dõi Chapter cần hỗ trợ.</p>
             <div className="mt-3 flex flex-wrap gap-2">
               {excludedChapters.map((chapter) => <button key={chapter.chapterId} onClick={() => !loading && handleOpenChapterDrillDown(chapter)} className="min-w-[260px] rounded-xl border border-amber-200 bg-white px-4 py-3 text-left text-xs text-[#434655] hover:border-blue-300 hover:shadow-sm">
                 <strong>{chapter.name}</strong>
@@ -483,7 +483,7 @@ export default function AdminChaptersProgressPage() {
                         {selectedChapter.name}
                       </h3>
                     </div>
-                    <p className="text-xs text-[#737686] mt-1">
+                    <p className="text-xs text-[#6c6f7f] mt-1">
                       Theo dõi tiến độ học tập và bài học hoàn thành của từng học viên trong Chapter
                     </p>
                     <div className="mt-2 flex items-center gap-2 flex-wrap">
@@ -497,7 +497,7 @@ export default function AdminChaptersProgressPage() {
                   </div>
                   <button
                     onClick={handleCloseModal}
-                    className="text-[#737686] hover:text-[#172554] text-xl font-bold p-1 rounded-lg hover:bg-slate-100 transition shrink-0"
+                    className="text-[#6c6f7f] hover:text-[#172554] text-xl font-bold p-1 rounded-lg hover:bg-slate-100 transition shrink-0"
                     title="Đóng modal"
                   >
                     ✕
@@ -518,8 +518,8 @@ export default function AdminChaptersProgressPage() {
                     <Button loading={kpiSaving} onClick={saveKpi}>Lưu KPI</Button>
                   </div>
                   <input aria-label="Ghi chú KPI" value={kpiForm.note} onChange={(e) => setKpiForm({ ...kpiForm, note: e.target.value })} placeholder="Ghi chú KPI" className="w-full rounded-xl border border-[#cbdbf5] px-3 py-2 text-sm bg-white" />
-                  <h5 className="text-xs font-bold uppercase tracking-wide text-[#737686]">Lịch sử các tháng</h5>
-                  <div className="max-h-36 overflow-auto divide-y divide-blue-100 text-xs">{kpiHistory.map((item, index) => <div key={`${item.month}-${index}`} className="grid grid-cols-3 gap-2 py-2"><span>{new Date(item.month).toLocaleDateString('vi-VN', { month: '2-digit', year: 'numeric' })}</span><strong>{item.status}</strong><span>{item.note || 'Không ghi chú'}</span></div>)}{!kpiHistory.length && <p className="py-2 text-[#737686]">Chưa có KPI tháng nào.</p>}</div>
+                  <h5 className="text-xs font-bold uppercase tracking-wide text-[#6c6f7f]">Lịch sử các tháng</h5>
+                  <div className="max-h-36 overflow-auto divide-y divide-blue-100 text-xs">{kpiHistory.map((item, index) => <div key={`${item.month}-${index}`} className="grid grid-cols-3 gap-2 py-2"><span>{new Date(item.month).toLocaleDateString('vi-VN', { month: '2-digit', year: 'numeric' })}</span><strong>{item.status}</strong><span>{item.note || 'Không ghi chú'}</span></div>)}{!kpiHistory.length && <p className="py-2 text-[#6c6f7f]">Chưa có KPI tháng nào.</p>}</div>
                 </div>
 
                 {/* Search & Filter Toolbar */}
@@ -581,7 +581,7 @@ export default function AdminChaptersProgressPage() {
                     )}
                   </div>
 
-                  <div className="flex items-center gap-2 self-end sm:self-auto text-xs text-[#737686]">
+                  <div className="flex items-center gap-2 self-end sm:self-auto text-xs text-[#6c6f7f]">
                     <span>Số lượng/trang:</span>
                     <select aria-label="Số lượng mỗi trang"
                       value={memberLimit}
@@ -601,7 +601,7 @@ export default function AdminChaptersProgressPage() {
                 </div>
 
                 {/* Total Count Summary & Loading Indicator */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-[#737686]">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-[#6c6f7f]">
                   <div>
                     Đang hiển thị <span className="font-bold text-[#2563EB]">{chapterMembers.length}</span> trên tổng số{' '}
                     <span className="font-bold text-[#172554]">{memberTotal}</span> thành viên hợp lệ trong Chapter
@@ -617,12 +617,12 @@ export default function AdminChaptersProgressPage() {
 
                 {/* Member List */}
                 {membersLoading && chapterMembers.length === 0 ? (
-                  <div className="py-16 text-center text-[#737686]">
+                  <div className="py-16 text-center text-[#6c6f7f]">
                     <div className="w-8 h-8 border-3 border-[#2563EB] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
                     <p className="text-xs font-medium">Đang tải danh sách thành viên Chapter...</p>
                   </div>
                 ) : chapterMembers.length === 0 ? (
-                  <div className="py-12 text-center text-[#737686] bg-slate-50 rounded-2xl border border-slate-100">
+                  <div className="py-12 text-center text-[#6c6f7f] bg-slate-50 rounded-2xl border border-slate-100">
                     <p className="font-semibold text-[#172554] mb-1">Không tìm thấy thành viên</p>
                     <p className="text-xs">
                       {memberSearch || memberRoleFilter
@@ -650,22 +650,22 @@ export default function AdminChaptersProgressPage() {
                                   <span>{m.displayName || m.email}</span>
                                 </button>
                                 {m.displayName && m.email && (
-                                  <span className="text-xs text-[#737686] font-normal">({m.email})</span>
+                                  <span className="text-xs text-[#6c6f7f] font-normal">({m.email})</span>
                                 )}
                                 {m.isLead && (
-                                  <span className="whitespace-nowrap px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                                  <span className="whitespace-nowrap px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
                                     LT
                                   </span>
                                 )}
                                 <span
-                                  className={`whitespace-nowrap inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                  className={`whitespace-nowrap inline-flex items-center text-[11px] font-bold px-2 py-0.5 rounded-full ${
                                     isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
                                   }`}
                                 >
                                   {isActive ? 'Active' : 'Inactive'}
                                 </span>
                               </div>
-                              <div className="text-xs text-[#737686] flex flex-wrap items-center gap-x-3 gap-y-1">
+                              <div className="text-xs text-[#6c6f7f] flex flex-wrap items-center gap-x-3 gap-y-1">
                                 <span>Khóa học: <strong className="text-[#172554]">{m.completedCourses || 0} / {m.totalCourses || 0}</strong></span>
                                 <span>•</span>
                                 <span>⭐ <strong className="text-amber-600">{m.stars || 0}</strong></span>
@@ -703,7 +703,7 @@ export default function AdminChaptersProgressPage() {
                     {/* Pagination Controls */}
                     {memberTotalPages > 1 && (
                       <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-[#eff4ff] text-xs">
-                        <span className="text-[#737686]">
+                        <span className="text-[#6c6f7f]">
                           Trang <strong className="text-[#172554]">{memberPage}</strong> / {memberTotalPages} (Tổng số: {memberTotal} thành viên)
                         </span>
                         <div className="flex items-center gap-1.5">
@@ -783,7 +783,7 @@ export default function AdminChaptersProgressPage() {
                       <h3 className="text-lg font-bold text-[#172554]">
                         Hồ sơ học tập: {selectedMemberSummary?.displayName || selectedMemberSummary?.email}
                       </h3>
-                      <p className="text-xs text-[#737686]">
+                      <p className="text-xs text-[#6c6f7f]">
                         Chapter {selectedChapter.name}
                         {selectedMemberSummary?.isLead && ' • Ban Lãnh Đạo (LT)'}
                       </p>
@@ -791,7 +791,7 @@ export default function AdminChaptersProgressPage() {
                   </div>
                   <button
                     onClick={handleCloseModal}
-                    className="text-[#737686] hover:text-[#172554] text-xl font-bold p-1 rounded-lg hover:bg-slate-100 transition"
+                    className="text-[#6c6f7f] hover:text-[#172554] text-xl font-bold p-1 rounded-lg hover:bg-slate-100 transition"
                     title="Đóng modal"
                   >
                     ✕
@@ -801,7 +801,7 @@ export default function AdminChaptersProgressPage() {
                 {memberProfileLoading && !memberProfileData ? (
                   <div className="py-16 text-center space-y-3">
                     <div className="w-8 h-8 border-3 border-[#2563EB] border-t-transparent rounded-full animate-spin mx-auto" />
-                    <p className="text-xs text-[#737686] font-medium">Đang tải hồ sơ học tập chi tiết...</p>
+                    <p className="text-xs text-[#6c6f7f] font-medium">Đang tải hồ sơ học tập chi tiết...</p>
                   </div>
                 ) : memberProfileError ? (
                   <div className="py-12 text-center space-y-3 bg-red-50 rounded-2xl p-6 border border-red-200">

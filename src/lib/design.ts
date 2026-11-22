@@ -13,7 +13,7 @@ export const design = {
     error: '#ba1a1a',
     onSurface: '#0b1c30',
     onSurfaceVariant: '#434655',
-    outline: '#737686',
+    outline: '#6c6f7f',
     white: '#ffffff',
     black: '#0b1c30',
   },

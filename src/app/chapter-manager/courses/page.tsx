@@ -187,13 +187,13 @@ export default function ChapterManagerCoursesPage() {
             ) : (
               <p className="font-semibold text-[#172554] truncate">{st.displayName || 'Chưa cập nhật tên'}</p>
             )}
-            <p className="text-[11px] text-[#737686] truncate">{st.email}</p>
-            <p className="text-xs text-[#737686]">
+            <p className="text-[11px] text-[#6c6f7f] truncate">{st.email}</p>
+            <p className="text-xs text-[#6c6f7f]">
               {st.completedLessons}/{st.totalLessons} bài học
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${meta.badge}`}>{meta.label}</span>
+            <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${meta.badge}`}>{meta.label}</span>
             <span className="font-bold text-[#2563EB] w-11 text-right">{st.progressPercent}%</span>
           </div>
         </div>
@@ -212,7 +212,7 @@ export default function ChapterManagerCoursesPage() {
             <h1 className="text-3xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
               Thống kê khóa học Chapter
             </h1>
-            <p className="text-[#737686] mt-1">Tỷ lệ hoàn thành, học viên, nội dung và bài kiểm tra của từng khóa học</p>
+            <p className="text-[#6c6f7f] mt-1">Tỷ lệ hoàn thành, học viên, nội dung và bài kiểm tra của từng khóa học</p>
           </div>
           <button
             type="button"
@@ -227,11 +227,11 @@ export default function ChapterManagerCoursesPage() {
         </div>
 
         {loading && courses.length === 0 ? (
-          <div className="text-center py-12 text-[#737686]">Đang tải dữ liệu...</div>
+          <div className="text-center py-12 text-[#6c6f7f]">Đang tải dữ liệu...</div>
         ) : courses.length === 0 ? (
           <Card className="text-center py-12">
             <p className="text-[#172554] font-semibold text-lg mb-2">Chưa có khóa học nào được xuất bản</p>
-            <p className="text-sm text-[#737686]">Các khóa học do Admin xuất bản sẽ hiển thị tại đây.</p>
+            <p className="text-sm text-[#6c6f7f]">Các khóa học do Admin xuất bản sẽ hiển thị tại đây.</p>
           </Card>
         ) : (
           <div className="grid md:grid-cols-2 gap-6">
@@ -247,7 +247,7 @@ export default function ChapterManagerCoursesPage() {
                   </div>
                   {c.description && <p className="text-sm text-[#434655] mb-4 line-clamp-2">{c.description}</p>}
                   <div className="space-y-2 mb-4">
-                    <div className="flex justify-between text-xs text-[#737686]">
+                    <div className="flex justify-between text-xs text-[#6c6f7f]">
                       <span>Số thành viên hoàn thành 100%</span>
                       <span className="font-bold text-[#172554]">
                         {c.completedCount || 0} / {c.totalMembers || 0} học viên
@@ -287,7 +287,7 @@ export default function ChapterManagerCoursesPage() {
                   👥 Học viên — {studentsModal?.title}
                 </h3>
                 {studentsSummary && (
-                  <p className="text-xs text-[#737686] mt-1">
+                  <p className="text-xs text-[#6c6f7f] mt-1">
                     {studentsSummary.totalStudents} thành viên • {studentsSummary.completed} hoàn thành •{' '}
                     {studentsSummary.inProgress} đang học • {studentsSummary.notStarted} chưa học
                   </p>
@@ -295,16 +295,16 @@ export default function ChapterManagerCoursesPage() {
               </div>
               <button
                 onClick={() => setStudentsModal(null)}
-                className="text-[#737686] hover:text-[#172554] text-xl font-bold p-1 rounded-lg hover:bg-slate-100 transition"
+                className="text-[#6c6f7f] hover:text-[#172554] text-xl font-bold p-1 rounded-lg hover:bg-slate-100 transition"
               >
                 ✕
               </button>
             </div>
 
             {studentsLoading ? (
-              <div className="py-12 text-center text-[#737686]">Đang tải danh sách học viên...</div>
+              <div className="py-12 text-center text-[#6c6f7f]">Đang tải danh sách học viên...</div>
             ) : students.length === 0 ? (
-              <div className="text-center py-10 text-[#737686]">Chưa có thành viên nào trong chapter.</div>
+              <div className="text-center py-10 text-[#6c6f7f]">Chưa có thành viên nào trong chapter.</div>
             ) : (
               <div className="divide-y divide-[#eff4ff]">{students.map(renderStudentRow)}</div>
             )}
@@ -329,22 +329,22 @@ export default function ChapterManagerCoursesPage() {
                 <h3 className="text-xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
                   📚 Nội dung — {contentModal?.title}
                 </h3>
-                <p className="text-xs text-[#737686] mt-1">
+                <p className="text-xs text-[#6c6f7f] mt-1">
                   Video và tài liệu được mở trong lộ trình học theo thứ tự.
                 </p>
               </div>
               <button
                 onClick={() => setContentModal(null)}
-                className="text-[#737686] hover:text-[#172554] text-xl font-bold p-1 rounded-lg hover:bg-slate-100 transition"
+                className="text-[#6c6f7f] hover:text-[#172554] text-xl font-bold p-1 rounded-lg hover:bg-slate-100 transition"
               >
                 ✕
               </button>
             </div>
 
             {contentLoading ? (
-              <div className="py-12 text-center text-[#737686]">Đang tải nội dung khóa học...</div>
+              <div className="py-12 text-center text-[#6c6f7f]">Đang tải nội dung khóa học...</div>
             ) : !contentModal?.sessions || contentModal.sessions.length === 0 ? (
-              <div className="text-center py-10 text-[#737686]">Khóa học chưa có buổi học nào.</div>
+              <div className="text-center py-10 text-[#6c6f7f]">Khóa học chưa có buổi học nào.</div>
             ) : (
               <div className="space-y-4">
                 {contentModal.sessions.map((session: any, sIdx: number) => (
@@ -356,7 +356,7 @@ export default function ChapterManagerCoursesPage() {
                       <h4 className="font-bold text-sm text-[#172554]">{session.title}</h4>
                     </div>
                     {!session.lessons || session.lessons.length === 0 ? (
-                      <p className="px-4 py-3 text-xs text-[#737686]">Chưa có bài học.</p>
+                      <p className="px-4 py-3 text-xs text-[#6c6f7f]">Chưa có bài học.</p>
                     ) : (
                       <div className="divide-y divide-[#eff4ff]">
                         {session.lessons.map((lesson: any, lIdx: number) => {
@@ -368,7 +368,7 @@ export default function ChapterManagerCoursesPage() {
                                 <p className="font-semibold text-sm text-[#172554] truncate">
                                   {sIdx + 1}.{lIdx + 1} {lesson.title}
                                 </p>
-                                <p className="text-xs text-[#737686]">
+                                <p className="text-xs text-[#6c6f7f]">
                                   Thời lượng: {formatDuration(durSec)}
                                   {lesson.documents?.length > 0 ? ` • ${lesson.documents.length} tài liệu` : ''}
                                 </p>
@@ -406,12 +406,12 @@ export default function ChapterManagerCoursesPage() {
                   <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm">
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-amber-900 bg-amber-200/80 px-2 py-0.5 rounded-md">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-amber-900 bg-amber-200/80 px-2 py-0.5 rounded-md">
                           Đánh giá cuối khóa
                         </span>
                         <h4 className="font-bold text-sm text-[#172554]">{contentModal.finalAssessment.title || 'Bài kiểm tra cuối khóa'}</h4>
                       </div>
-                      <p className="text-xs text-[#737686] mt-1">
+                      <p className="text-xs text-[#6c6f7f] mt-1">
                         {contentModal.finalAssessment.questionCount || contentModal.finalAssessment._count?.questions || 0} câu hỏi đánh giá tổng hợp khóa học
                       </p>
                     </div>
@@ -454,7 +454,7 @@ export default function ChapterManagerCoursesPage() {
               <button
                 type="button"
                 onClick={() => setVideoModal(null)}
-                className="text-[#737686] hover:text-[#172554] text-xl font-bold p-1 rounded-lg hover:bg-slate-100 transition"
+                className="text-[#6c6f7f] hover:text-[#172554] text-xl font-bold p-1 rounded-lg hover:bg-slate-100 transition"
               >
                 ✕
               </button>
@@ -471,13 +471,13 @@ export default function ChapterManagerCoursesPage() {
                     />
                   </div>
                 ) : (
-                  <div className="p-12 text-center text-[#737686] bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                  <div className="p-12 text-center text-[#6c6f7f] bg-slate-50 rounded-2xl border border-dashed border-slate-200">
                     <p className="text-3xl mb-2">📹</p>
                     <p className="font-semibold text-[#172554]">Chưa cấu hình Video ID cho bài học này</p>
-                    <p className="text-xs text-[#737686] mt-1">Vui lòng cập nhật YouTube Video ID trong trang quản trị khóa học.</p>
+                    <p className="text-xs text-[#6c6f7f] mt-1">Vui lòng cập nhật YouTube Video ID trong trang quản trị khóa học.</p>
                   </div>
                 )}
-                <p className="text-xs text-[#737686] flex items-center gap-1.5">
+                <p className="text-xs text-[#6c6f7f] flex items-center gap-1.5">
                   <span>💡</span> Video trong chế độ xem trước dành cho Ban Định Hướng, hỗ trợ tua thời gian và chỉnh tốc độ tự do.
                 </p>
               </div>
@@ -506,7 +506,7 @@ export default function ChapterManagerCoursesPage() {
                     Ngân hàng câu hỏi & Đáp án
                   </span>
                   {quizData && (
-                    <span className="text-xs font-semibold text-[#737686]">
+                    <span className="text-xs font-semibold text-[#6c6f7f]">
                       {quizData.questions?.length || 0} câu hỏi
                     </span>
                   )}
@@ -524,7 +524,7 @@ export default function ChapterManagerCoursesPage() {
               <button
                 type="button"
                 onClick={() => setQuizModal(null)}
-                className="text-[#737686] hover:text-[#172554] text-xl font-bold p-1 rounded-lg hover:bg-slate-100 transition"
+                className="text-[#6c6f7f] hover:text-[#172554] text-xl font-bold p-1 rounded-lg hover:bg-slate-100 transition"
               >
                 ✕
               </button>
@@ -544,14 +544,14 @@ export default function ChapterManagerCoursesPage() {
                   <button
                     type="button"
                     onClick={() => setQuizSearch('')}
-                    className="absolute right-3 top-3 text-xs text-[#737686] hover:text-[#172554] font-bold"
+                    className="absolute right-3 top-3 text-xs text-[#6c6f7f] hover:text-[#172554] font-bold"
                   >
                     ✕
                   </button>
                 )}
               </div>
               {quizData && quizSearch && (
-                <p className="text-xs text-[#737686] mt-1.5">
+                <p className="text-xs text-[#6c6f7f] mt-1.5">
                   Tìm thấy <strong className="text-[#172554]">{filteredQuestions.length}</strong> câu hỏi phù hợp với từ khóa &ldquo;{quizSearch}&rdquo;
                 </p>
               )}
@@ -560,20 +560,20 @@ export default function ChapterManagerCoursesPage() {
             {/* Content / Question List */}
             <div className="flex-1 overflow-y-auto pr-1 space-y-4">
               {quizLoading ? (
-                <div className="py-16 text-center text-[#737686] space-y-2">
+                <div className="py-16 text-center text-[#6c6f7f] space-y-2">
                   <div className="animate-spin text-2xl">⏳</div>
                   <p className="text-sm">Đang tải câu hỏi và kết quả quiz...</p>
                 </div>
               ) : !quizData?.questions || quizData.questions.length === 0 ? (
-                <div className="py-12 text-center text-[#737686]">
+                <div className="py-12 text-center text-[#6c6f7f]">
                   <p className="text-2xl mb-1">📋</p>
                   <p className="font-medium text-[#172554]">Quiz này chưa có câu hỏi nào.</p>
                 </div>
               ) : filteredQuestions.length === 0 ? (
-                <div className="py-12 text-center text-[#737686]">
+                <div className="py-12 text-center text-[#6c6f7f]">
                   <p className="text-2xl mb-1">🔍</p>
                   <p className="font-medium text-[#172554]">Không tìm thấy câu hỏi phù hợp</p>
-                  <p className="text-xs text-[#737686] mt-1">Thử tìm kiếm bằng từ khóa khác.</p>
+                  <p className="text-xs text-[#6c6f7f] mt-1">Thử tìm kiếm bằng từ khóa khác.</p>
                 </div>
               ) : (
                 filteredQuestions.map((q: any, qIdx: number) => {
@@ -624,7 +624,7 @@ export default function ChapterManagerCoursesPage() {
                                 <span className="leading-relaxed whitespace-pre-wrap pt-0.5">{opt.optionText}</span>
                               </div>
                               {isCorrect && (
-                                <span className="shrink-0 px-2 py-0.5 bg-emerald-600 text-white rounded-md text-[10px] font-bold flex items-center gap-1">
+                                <span className="shrink-0 px-2 py-0.5 bg-emerald-600 text-white rounded-md text-[11px] font-bold flex items-center gap-1">
                                   ✓ Đáp án đúng
                                 </span>
                               )}

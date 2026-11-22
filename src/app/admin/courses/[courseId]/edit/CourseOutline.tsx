@@ -46,7 +46,7 @@ export default function CourseOutline({
                   <h2 className="text-xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
                     Chương trình & Buổi học ({course.sessions?.length || 0})
                   </h2>
-                  <p className="text-xs text-[#737686]">
+                  <p className="text-xs text-[#6c6f7f]">
                     Quản lý các buổi học, bài giảng video YouTube và tài liệu đính kèm (tối đa 25MB/tài liệu)
                   </p>
                 </div>
@@ -62,7 +62,7 @@ export default function CourseOutline({
               {course.sessions?.length === 0 ? (
                 <Card className="text-center py-12 border-dashed border-2 border-slate-200">
                   <p className="text-base font-semibold text-[#172554] mb-2">Chưa có buổi học nào</p>
-                  <p className="text-xs text-[#737686] mb-4">Khóa học cần ít nhất 1 buổi học trước khi có thể xuất bản.</p>
+                  <p className="text-xs text-[#6c6f7f] mb-4">Khóa học cần ít nhất 1 buổi học trước khi có thể xuất bản.</p>
                   <Button size="sm" disabled={editorLocked} onClick={openAddSessionModal}>
                     ＋ Tạo buổi học đầu tiên
                   </Button>
@@ -82,7 +82,7 @@ export default function CourseOutline({
                             <div className="min-w-0 flex-1">
                               <h3 className="text-base font-bold text-[#172554] break-words line-clamp-2" title={session.title}>{session.title}</h3>
                               {session.description && (
-                                <p className="text-xs text-[#737686] mt-0.5 leading-relaxed break-words">{session.description}</p>
+                                <p className="text-xs text-[#6c6f7f] mt-0.5 leading-relaxed break-words">{session.description}</p>
                               )}
                             </div>
                           </div>
@@ -138,7 +138,7 @@ export default function CourseOutline({
                         {/* Lessons in session with Move Up/Down (Request 1) */}
                         <div className="mt-4 border-t border-[#eff4ff] pt-4">
                         {session.lessons?.length === 0 ? (
-                          <div className="py-6 text-center text-xs text-[#737686] bg-[#f8f9ff] rounded-xl">
+                          <div className="py-6 text-center text-xs text-[#6c6f7f] bg-[#f8f9ff] rounded-xl">
                             Chưa có bài học nào trong buổi này.
                           </div>
                         ) : (
@@ -158,7 +158,7 @@ export default function CourseOutline({
                                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                                     <div className="flex items-center gap-3 min-w-0 flex-1">
                                       <div className="flex flex-col items-center gap-0.5 shrink-0">
-                                        <span className="text-xs font-bold text-[#737686]">
+                                        <span className="text-xs font-bold text-[#6c6f7f]">
                                           {sIdx + 1}.{lIdx + 1}
                                         </span>
                                         {!editorLocked && (
@@ -167,7 +167,7 @@ export default function CourseOutline({
                                               <button
                                                 type="button"
                                                 onClick={() => handleMoveLesson(sId, lIdx, 'up')}
-                                                className="text-[9px] text-slate-400 hover:text-[#2563EB] px-1 bg-white border border-[#cbdbf5] rounded"
+                                                className="text-[11px] text-slate-400 hover:text-[#2563EB] px-1 bg-white border border-[#cbdbf5] rounded"
                                                 title="Di chuyển bài học lên"
                                               >
                                                 ▲
@@ -177,7 +177,7 @@ export default function CourseOutline({
                                               <button
                                                 type="button"
                                                 onClick={() => handleMoveLesson(sId, lIdx, 'down')}
-                                                className="text-[9px] text-slate-400 hover:text-[#2563EB] px-1 bg-white border border-[#cbdbf5] rounded"
+                                                className="text-[11px] text-slate-400 hover:text-[#2563EB] px-1 bg-white border border-[#cbdbf5] rounded"
                                                 title="Di chuyển bài học xuống"
                                               >
                                                 ▼
@@ -203,7 +203,7 @@ export default function CourseOutline({
                                             </span>
                                           )}
                                         </div>
-                                        <p className="text-xs text-[#737686] truncate">
+                                        <p className="text-xs text-[#6c6f7f] truncate">
                                           Video YouTube: <span className="font-mono">{vidId}</span> • Thời lượng:{' '}
                                           {durSec > 0 ? `${durMin}:${durRemSec.toString().padStart(2, '0')} (${durSec}s)` : '—'}
                                         </p>

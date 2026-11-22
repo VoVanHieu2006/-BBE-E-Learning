@@ -90,7 +90,7 @@ export default function ChapterManagerDashboard() {
             <h1 className="text-3xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
               Dashboard Lead Chapter — <span suppressHydrationWarning>{mounted && user?.chapterName ? user.chapterName : 'Chapter của bạn'}</span>
             </h1>
-            <p className="text-[#737686] mt-1 text-sm">
+            <p className="text-[#6c6f7f] mt-1 text-sm">
               Theo dõi tiến độ học tập và quản lý học viên trong Chapter trực thuộc
             </p>
           </div>
@@ -108,31 +108,31 @@ export default function ChapterManagerDashboard() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
           <Card shadow="md" className="p-4 border border-[#eff4ff]">
-            <div className="text-xs font-semibold text-[#737686] mb-1">Thành viên Chapter</div>
+            <div className="text-xs font-semibold text-[#6c6f7f] mb-1">Thành viên Chapter</div>
             <div className="text-2xl font-bold text-[#172554] mb-0.5">{totalMembers}</div>
-            <div className="text-[11px] text-[#737686]">Toàn bộ Chapter</div>
+            <div className="text-[11px] text-[#6c6f7f]">Toàn bộ Chapter</div>
           </Card>
           <Card shadow="md" className="p-4 border border-[#eff4ff]">
-            <div className="text-xs font-semibold text-[#737686] mb-1">Khóa học Published</div>
+            <div className="text-xs font-semibold text-[#6c6f7f] mb-1">Khóa học Published</div>
             <div className="text-2xl font-bold text-[#172554] mb-0.5">{totalCourses}</div>
-            <div className="text-[11px] text-[#737686]">Chương trình đào tạo</div>
+            <div className="text-[11px] text-[#6c6f7f]">Chương trình đào tạo</div>
           </Card>
           <Card shadow="md" className="p-4 border border-[#eff4ff]">
             <div className="text-xs font-semibold text-blue-700 mb-1">Tiến độ TB Chapter</div>
             <div className="text-2xl font-bold text-[#2563EB] mb-0.5">{avgProgress}%</div>
-            <div className="text-[11px] text-[#737686]">Tất cả các khóa học</div>
+            <div className="text-[11px] text-[#6c6f7f]">Tất cả các khóa học</div>
           </Card>
           <Card shadow="md" className="p-4 border border-[#eff4ff]">
             <div className="text-xs font-semibold text-amber-700 mb-1">Tổng ⭐ Star Chapter</div>
             <div className="text-2xl font-bold text-amber-600 mb-0.5">⭐ {totalStars}</div>
-            <div className="text-[11px] text-[#737686]">Học tập & Quiz tích lũy</div>
+            <div className="text-[11px] text-[#6c6f7f]">Học tập & Quiz tích lũy</div>
           </Card>
           <Card shadow="md" className="p-4 border border-[#eff4ff]">
             <div className="text-xs font-semibold text-emerald-700 mb-1">Đạt tiến độ ≥ 70%</div>
             <div className="text-2xl font-bold text-emerald-600 mb-0.5">
-              {membersOver70} <span className="text-xs font-normal text-[#737686]">/ {totalMembers}</span>
+              {membersOver70} <span className="text-xs font-normal text-[#6c6f7f]">/ {totalMembers}</span>
             </div>
-            <div className="text-[11px] text-[#737686]">
+            <div className="text-[11px] text-[#6c6f7f]">
               {Number(totalMembers) > 0 ? Math.round((Number(membersOver70) / Number(totalMembers)) * 100) : 0}% thành viên
             </div>
           </Card>

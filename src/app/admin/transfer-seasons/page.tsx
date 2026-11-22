@@ -302,7 +302,7 @@ export default function TransferSeasonsProgressPage() {
           <h1 className="text-3xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
             Tiến độ chuyển giao nhiệm kỳ
           </h1>
-          <p className="mt-1 max-w-3xl text-sm text-[#737686]">
+          <p className="mt-1 max-w-3xl text-sm text-[#6c6f7f]">
             Theo dõi từng giai đoạn chuyển giao, nhiệm kỳ tương ứng và chapter nào đã hoàn tất chuyển giao.
             Trang này chỉ để xem; việc đặt lịch, áp dụng hay hủy chuyển giao thuộc Chapter Quản lý, còn cấu hình mùa thuộc phần cấu hình học tập.
           </p>
@@ -329,32 +329,32 @@ export default function TransferSeasonsProgressPage() {
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Card shadow="md" className="border border-[#eff4ff] p-5">
-          <p className="text-xs font-semibold uppercase tracking-wide text-[#737686]">Giai đoạn đang theo dõi</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-[#6c6f7f]">Giai đoạn đang theo dõi</p>
           <p className="mt-2 text-2xl font-bold text-[#172554]">
             {loading && !data ? '...' : `${summaries.length}${data?.windowsTruncated ? '+' : ''}`}
           </p>
         </Card>
         <Card shadow="md" className="border border-[#eff4ff] p-5">
-          <p className="text-xs font-semibold uppercase tracking-wide text-[#737686]">Giai đoạn đã đủ cấu hình</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-[#6c6f7f]">Giai đoạn đã đủ cấu hình</p>
           <p className="mt-2 text-2xl font-bold text-emerald-700">{loading && !data ? '...' : readyWindows}</p>
         </Card>
         <Card shadow="md" className="border border-[#eff4ff] p-5">
-          <p className="text-xs font-semibold uppercase tracking-wide text-[#737686]">Lượt chuyển giao đã áp dụng</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-[#6c6f7f]">Lượt chuyển giao đã áp dụng</p>
           <p className="mt-2 text-2xl font-bold text-[#2563EB]">{loading && !data ? '...' : appliedTotal}</p>
         </Card>
         <Card shadow="md" className="border border-[#eff4ff] p-5">
-          <p className="text-xs font-semibold uppercase tracking-wide text-[#737686]">Lượt đang chờ áp dụng</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-[#6c6f7f]">Lượt đang chờ áp dụng</p>
           <p className="mt-2 text-2xl font-bold text-amber-700">{loading && !data ? '...' : scheduledTotal}</p>
           {overdueTotal > 0 && <p className="mt-1 text-xs font-semibold text-rose-700">{overdueTotal} quá hạn</p>}
         </Card>
       </div>
 
       {loading && !data ? (
-        <Card className="border border-[#eff4ff] p-6 text-sm text-[#737686]">Đang tải tiến độ chuyển giao…</Card>
+        <Card className="border border-[#eff4ff] p-6 text-sm text-[#6c6f7f]">Đang tải tiến độ chuyển giao…</Card>
       ) : !summaries.length ? (
         <Card className="border border-[#eff4ff] p-6">
           <h2 className="font-semibold text-[#172554]">Chưa có giai đoạn chuyển giao nào</h2>
-          <p className="mt-1 text-sm text-[#737686]">
+          <p className="mt-1 text-sm text-[#6c6f7f]">
             Khi Admin tạo mùa chuyển giao hoặc khi một chapter được lên lịch chuyển giao, giai đoạn tương ứng sẽ xuất hiện ở đây.
           </p>
         </Card>
@@ -362,7 +362,7 @@ export default function TransferSeasonsProgressPage() {
         <>
           <Card shadow="md" className="border border-[#eff4ff] p-4">
             <div className="flex flex-col gap-3 xl:flex-row xl:items-end">
-              <label className="min-w-0 flex-1 text-xs font-semibold uppercase tracking-wide text-[#737686]">
+              <label className="min-w-0 flex-1 text-xs font-semibold uppercase tracking-wide text-[#6c6f7f]">
                 Giai đoạn
                 <select
                   value={windowSelectValue}
@@ -386,7 +386,7 @@ export default function TransferSeasonsProgressPage() {
                   applyFilters({ q: searchInput.trim() });
                 }}
               >
-                <label className="min-w-0 flex-1 text-xs font-semibold uppercase tracking-wide text-[#737686]">
+                <label className="min-w-0 flex-1 text-xs font-semibold uppercase tracking-wide text-[#6c6f7f]">
                   Tìm chapter
                   <input
                     type="search"
@@ -411,7 +411,7 @@ export default function TransferSeasonsProgressPage() {
                 </button>
               </form>
 
-              <label className="text-xs font-semibold uppercase tracking-wide text-[#737686]">
+              <label className="text-xs font-semibold uppercase tracking-wide text-[#6c6f7f]">
                 Trạng thái
                 <select
                   value={filters.status || ''}
@@ -426,7 +426,7 @@ export default function TransferSeasonsProgressPage() {
                 </select>
               </label>
 
-              <label className="text-xs font-semibold uppercase tracking-wide text-[#737686]">
+              <label className="text-xs font-semibold uppercase tracking-wide text-[#6c6f7f]">
                 Số dòng
                 <select
                   value={filters.pageSize}
@@ -440,7 +440,7 @@ export default function TransferSeasonsProgressPage() {
               </label>
             </div>
             {data?.windowsTruncated && (
-              <p className="mt-2 text-xs text-[#737686]">
+              <p className="mt-2 text-xs text-[#6c6f7f]">
                 Bộ chọn chỉ hiển thị {summaries.length} giai đoạn gần nhất; thống kê phía trên cũng chỉ tính trong các giai đoạn này.
               </p>
             )}
@@ -457,7 +457,7 @@ export default function TransferSeasonsProgressPage() {
                         {selected.statusLabel}
                       </span>
                     </div>
-                    <p className="mt-1 text-sm text-[#737686]">
+                    <p className="mt-1 text-sm text-[#6c6f7f]">
                       Mốc thưởng {formatDate(selected.window.anchor)} · Nhiệm kỳ {selected.term.label}
                     </p>
                   </div>
@@ -481,7 +481,7 @@ export default function TransferSeasonsProgressPage() {
                 {selected.message && (
                   <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{selected.message}</p>
                 )}
-                <div className="mt-3 flex flex-wrap gap-2 text-xs text-[#737686]">
+                <div className="mt-3 flex flex-wrap gap-2 text-xs text-[#6c6f7f]">
                   {selected.seasons.length ? selected.seasons.map((season) => (
                     <span key={season.id} className="rounded-lg border border-[#cbdbf5] bg-white px-3 py-1.5">
                       {season.rewardBoundaryAt ? `Mùa thưởng ${formatDate(season.rewardBoundaryAt)}` : 'Mùa chuyển giao'} · {season.stateLabel} · {formatDate(season.startsAt)} – {formatInclusiveEnd(season.endsAt)}
@@ -557,7 +557,7 @@ export default function TransferSeasonsProgressPage() {
                     ))}
                     {!selected.chapters.length && (
                       <tr>
-                        <td colSpan={7} className="px-4 py-8 text-center text-sm text-[#737686]">
+                        <td colSpan={7} className="px-4 py-8 text-center text-sm text-[#6c6f7f]">
                           Không có chapter khớp bộ lọc hiện tại.
                         </td>
                       </tr>
@@ -568,7 +568,7 @@ export default function TransferSeasonsProgressPage() {
 
               {pagination && pagination.total > 0 && (
                 <div className="flex flex-col gap-3 border-t border-[#eff4ff] bg-[#f8f9ff] p-4 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="text-xs text-[#737686]">
+                  <p className="text-xs text-[#6c6f7f]">
                     Hiển thị {firstRow}–{lastRow} / {pagination.total} chapter · Trang {pagination.page}/{pagination.totalPages}
                   </p>
                   <div className="flex items-center gap-1.5">
@@ -584,7 +584,7 @@ export default function TransferSeasonsProgressPage() {
                       const previous = list[index - 1];
                       return (
                         <span key={page} className="flex items-center">
-                          {previous && page - previous > 1 && <span className="px-1 text-[#737686]">...</span>}
+                          {previous && page - previous > 1 && <span className="px-1 text-[#6c6f7f]">...</span>}
                           <button
                             type="button"
                             disabled={busy}
@@ -618,7 +618,7 @@ export default function TransferSeasonsProgressPage() {
       )}
 
       {data?.generatedAt && (
-        <p className="text-right text-xs text-[#737686]">Cập nhật lúc {formatDateTime(data.generatedAt)}</p>
+        <p className="text-right text-xs text-[#6c6f7f]">Cập nhật lúc {formatDateTime(data.generatedAt)}</p>
       )}
 
       {historyChapter && (
@@ -638,7 +638,7 @@ export default function TransferSeasonsProgressPage() {
                 <h2 id="chapter-history-title" className="text-lg font-bold text-[#172554]">
                   Lịch sử chuyển giao · {historyChapter.name}
                 </h2>
-                <p className="mt-1 text-sm text-[#737686]">
+                <p className="mt-1 text-sm text-[#6c6f7f]">
                   Chỉ xem. Mọi thao tác đặt lịch, áp dụng hoặc hủy do Chapter Quản lý thực hiện.
                 </p>
               </div>
@@ -654,7 +654,7 @@ export default function TransferSeasonsProgressPage() {
 
             <div className="p-5">
               {historyLoading ? (
-                <p className="text-sm text-[#737686]">Đang tải lịch sử chuyển giao…</p>
+                <p className="text-sm text-[#6c6f7f]">Đang tải lịch sử chuyển giao…</p>
               ) : historyError ? (
                 <div className="space-y-3">
                   <p role="status" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{historyError}</p>
@@ -722,7 +722,7 @@ export default function TransferSeasonsProgressPage() {
                         ))}
                         {!historyData.entries.length && (
                           <tr>
-                            <td colSpan={7} className="px-4 py-8 text-center text-sm text-[#737686]">
+                            <td colSpan={7} className="px-4 py-8 text-center text-sm text-[#6c6f7f]">
                               Chapter này chưa có lần chuyển giao nào.
                             </td>
                           </tr>
@@ -731,7 +731,7 @@ export default function TransferSeasonsProgressPage() {
                     </table>
                   </div>
                   {historyData.entriesTruncated && (
-                    <p className="mt-3 text-xs text-[#737686]">
+                    <p className="mt-3 text-xs text-[#6c6f7f]">
                       Chỉ hiển thị 50 bản ghi gần nhất; số lần áp dụng ở trên là tổng toàn bộ lịch sử.
                     </p>
                   )}

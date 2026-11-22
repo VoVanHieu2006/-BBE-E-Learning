@@ -94,7 +94,7 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
           {editor.draftConflict && <div role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">Bản nháp hoặc bản xuất bản đã thay đổi bởi Admin khác. Hãy tải lại để xem phiên bản mới trước khi tiếp tục. <Button variant="secondary" onClick={editor.reloadDraft}>Tải lại bản nháp</Button></div>}
           {editor.draftError && <p role="alert" className="text-sm text-red-700">Bản nháp cũ không hợp lệ: {editor.draftError} Đang hiển thị bản xuất bản. Hãy bỏ thay đổi để bắt đầu bản nháp mới.</p>}
           <button type="button" disabled={editor.editorLocked || editor.hasDraftChanges || hasUnsavedCourseInfo} onClick={() => setShowUnpublishConfirm(true)} className="text-sm font-semibold text-red-700 underline underline-offset-4 disabled:opacity-50">Hủy xuất bản khẩn cấp</button>
-          {(editor.hasDraftChanges || hasUnsavedCourseInfo) && <p className="text-xs text-[#737686]">Cập nhật hoặc bỏ thay đổi trước khi hủy xuất bản khẩn cấp.</p>}
+          {(editor.hasDraftChanges || hasUnsavedCourseInfo) && <p className="text-xs text-[#6c6f7f]">Cập nhật hoặc bỏ thay đổi trước khi hủy xuất bản khẩn cấp.</p>}
         </div>}
 
         {/* IMP-03: Unpublish Confirmation Modal */}

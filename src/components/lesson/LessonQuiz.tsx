@@ -463,7 +463,7 @@ export default function LessonQuiz({
         <li className="flex items-center gap-1"><span className="h-3 w-3 rounded border-2 border-[#2563EB] bg-[#2563EB]" />Đã trả lời</li>
         <li className="flex items-center gap-1"><span className="h-3 w-3 rounded border-2 border-amber-500 bg-amber-100" />Gắn cờ</li>
       </ul>
-      <p className="text-[10px] text-[#737686] leading-relaxed">
+      <p className="text-[11px] text-[#6c6f7f] leading-relaxed">
         Bấm vào ô để tới câu. Chuột phải (hoặc nhấn giữ trên điện thoại) để gắn/bỏ cờ.
       </p>
     </div>
@@ -480,7 +480,7 @@ export default function LessonQuiz({
           >
             <span>📝</span> {assessmentLabel}
           </h3>
-          <p className="text-xs text-[#737686] mt-0.5">
+          <p className="text-xs text-[#6c6f7f] mt-0.5">
             {attempt ? `${questions.length} câu hỏi trong lượt này` : 'Đang tải cấu hình đề'} · Cần đạt tối thiểu <strong>85%</strong> điểm để vượt qua bài học.
           </p>
         </div>
@@ -608,7 +608,7 @@ export default function LessonQuiz({
                         className={`shrink-0 text-[11px] px-2.5 py-1 rounded-full font-bold border transition ${
                           isFlagged
                             ? 'bg-amber-100 text-amber-900 border-amber-400'
-                            : 'bg-white text-[#737686] border-slate-200 hover:border-amber-400'
+                            : 'bg-white text-[#6c6f7f] border-slate-200 hover:border-amber-400'
                         }`}
                       >
                         🚩 {isFlagged ? 'Bỏ cờ' : 'Gắn cờ'}
@@ -673,7 +673,7 @@ export default function LessonQuiz({
             {/* Submit & Cancel Actions */}
             {!result && (
               <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-[#eff4ff]">
-                <span className="text-xs text-[#737686]">
+                <span className="text-xs text-[#6c6f7f]">
                   Đã chọn: {answeredCount}/{questions.length} câu
                 </span>
                 <div className="flex items-center gap-2.5 w-full sm:w-auto">

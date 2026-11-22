@@ -422,7 +422,7 @@ export default function Sidebar({
           <div className="px-2">
             <div className="text-xs font-semibold text-[#172554] truncate">{user.email}</div>
             {user.chapterName && (
-              <div className="text-[11px] text-[#737686] truncate">🏛️ {user.chapterName}</div>
+              <div className="text-[11px] text-[#6c6f7f] truncate">🏛️ {user.chapterName}</div>
             )}
           </div>
         )}

@@ -107,11 +107,11 @@ test.describe('Mọi trang', () => {
     expect(new Set(rows.map((row) => row.title)).size).toBeGreaterThan(rows.length / 2)
   })
 
-  uiDefect('BUG-UX-TINY-TEXT', 'không có chữ nhỏ hơn 11px', async ({ page, request }) => {
+  test('không có chữ nhỏ hơn 11px', async ({ page, request }) => {
     expect(offenders(await rowsFor(page.context().browser()!, request), (row) => row.tinyText)).toEqual([])
   })
 
-  uiDefect('BUG-UX-TOUCH-TARGET', 'trên điện thoại, mọi nút đều đủ lớn để chạm (tối thiểu 24px theo WCAG 2.2)', async ({ page, request }) => {
+  test('trên điện thoại, mọi nút đều đủ lớn để chạm (tối thiểu 24px theo WCAG 2.2)', async ({ page, request }) => {
     test.skip(test.info().project.name !== 'mobile', 'chỉ đo trên điện thoại')
     expect(offenders(await rowsFor(page.context().browser()!, request), (row) => row.smallTargets)).toEqual([])
   })

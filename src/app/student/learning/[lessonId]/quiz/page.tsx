@@ -270,7 +270,7 @@ export default function LessonQuizPage({ params }: { params: { lessonId: string 
             <h1 className="text-lg font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
               Bài kiểm tra đang bị khóa
             </h1>
-            <p className="text-xs text-[#737686] leading-relaxed">
+            <p className="text-xs text-[#6c6f7f] leading-relaxed">
               Bạn cần xem đủ <strong>100%</strong> thời lượng video bài giảng trước khi được phép làm bài kiểm tra.
             </p>
             <div className="p-3 bg-[#eff4ff] rounded-xl text-xs font-semibold text-[#172554]">
@@ -297,7 +297,7 @@ export default function LessonQuizPage({ params }: { params: { lessonId: string 
           <h1 className="text-sm md:text-base font-bold text-[#172554] truncate" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
             📝 {assessment.title || 'Bài kiểm tra bài học'} <NewContentChip show={progress?.quizIsNew && !quizCompleted} />
           </h1>
-          <p className="text-[11px] text-[#737686] truncate">
+          <p className="text-[11px] text-[#6c6f7f] truncate">
             {lesson.session?.courseTitle ? `${lesson.session.courseTitle} • ` : ''}
             <span className="text-[#2563EB] font-bold">{lesson.title} <NewContentChip show={progress?.isNew} /></span>
           </p>
@@ -497,7 +497,7 @@ export default function LessonQuizPage({ params }: { params: { lessonId: string 
                           : 'bg-white border-[#e5eeff] text-[#172554]'
                       }`}
                     >
-                      <p className="text-[11px] text-[#737686]"><MonthPartLabel kind="quiz" /> tháng này</p>
+                      <p className="text-[11px] text-[#6c6f7f]"><MonthPartLabel kind="quiz" /> tháng này</p>
                       <p className="text-sm font-extrabold mt-0.5">
                         {thisMonthQuizLabel({
                           quiz: quizThisMonth, locked: quizLock, monthlyPending,
@@ -505,23 +505,23 @@ export default function LessonQuizPage({ params }: { params: { lessonId: string 
                         })}
                       </p>
                       {(quizThisMonth?.attempted || 0) > 0 && (
-                        <p className="text-[10px] text-[#737686] mt-1">
+                        <p className="text-[11px] text-[#6c6f7f] mt-1">
                           {quizThisMonth.attempted} lượt nộp trong tháng · điểm cao nhất {quizThisMonth.bestScorePercent}%
                         </p>
                       )}
                     </div>
                   </div>
                   {latestSubmitted && (
-                    <p className="text-[10px] text-[#737686]">
+                    <p className="text-[11px] text-[#6c6f7f]">
                       Lần nộp gần nhất: {Math.round(latestSubmitted.score || 0)}% — {latestSubmitted.passed ? 'đạt' : 'chưa đạt'} · {formatDate(latestSubmitted.submittedAt)}
                     </p>
                   )}
                 </div>
 
                 <div className="pt-2 border-t border-dashed border-[#e5eeff] space-y-1.5">
-                  <h3 className="text-[10px] font-bold text-[#737686] uppercase tracking-wide">Những tháng trước</h3>
+                  <h3 className="text-[11px] font-bold text-[#6c6f7f] uppercase tracking-wide">Những tháng trước</h3>
                   {monthHistory.length === 0 ? (
-                    <p className="text-xs text-[#737686]">Chưa có tháng nào trước đó.</p>
+                    <p className="text-xs text-[#6c6f7f]">Chưa có tháng nào trước đó.</p>
                   ) : (
                     <ul className="space-y-1">
                       {monthHistory.map((row: any) => (
@@ -529,7 +529,7 @@ export default function LessonQuizPage({ params }: { params: { lessonId: string 
                           <span className="font-bold text-[#172554]">{formatMonthKey(row.competitionMonth)}</span>
                           <span className="text-[#434655]" title={monthHistoryLabel(row)}><MonthStarParts {...monthHistoryParts(row)} /></span>
                           {row.quiz?.attempted > 0 && (
-                            <span className="w-full text-[10px] text-[#737686]">{row.quiz.attempted} lượt nộp · điểm cao nhất {row.quiz.bestScorePercent}%</span>
+                            <span className="w-full text-[11px] text-[#6c6f7f]">{row.quiz.attempted} lượt nộp · điểm cao nhất {row.quiz.bestScorePercent}%</span>
                           )}
                         </li>
                       ))}

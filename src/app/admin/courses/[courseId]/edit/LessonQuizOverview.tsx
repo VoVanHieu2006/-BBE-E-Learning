@@ -15,7 +15,7 @@ export default function LessonQuizOverview({
                 <h2 className="text-xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
                   Bài kiểm tra theo từng bài giảng (Quiz per-lesson)
                 </h2>
-                <p className="text-xs text-[#737686]">
+                <p className="text-xs text-[#6c6f7f]">
                   Hệ thống áp dụng mô hình làm bài kiểm tra sau khi xem xong từng video bài giảng. Bạn có thể bấm <strong>"+ Thêm Quiz"</strong> hoặc <strong>"Sửa Quiz"</strong> ở từng bài học trong danh sách bên trên.
                 </p>
               </div>
@@ -26,7 +26,7 @@ export default function LessonQuizOverview({
                     <span className="text-3xl p-2.5 bg-blue-50 border border-blue-200 rounded-2xl">📝</span>
                     <div>
                       <h4 className="text-sm font-bold text-[#172554]">Trạng thái cấu hình bài kiểm tra</h4>
-                      <p className="text-xs text-[#737686] mt-0.5">
+                      <p className="text-xs text-[#6c6f7f] mt-0.5">
                         {(() => {
                           let totalL = 0;
                           let quizL = 0;

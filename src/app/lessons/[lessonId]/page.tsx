@@ -16,7 +16,7 @@ export default function PlayerPage({ params }: { params: { lessonId: string } })
         <h1 className="text-3xl font-bold text-[#172554] mb-2" style={{ fontFamily: "'Be Vietnam Pro', 'Inter', sans-serif" }}>
           BBE E-Learning — Video Player
         </h1>
-        <p className="text-[#737686] mb-6">Source of truth cho completed vẫn là server (BR-03).</p>
+        <p className="text-[#6c6f7f] mb-6">Source of truth cho completed vẫn là server (BR-03).</p>
 
         <div className="bg-white rounded-2xl p-4 border border-[#eff4ff] shadow-md mb-6">
           <label htmlFor="lesson-access-token" className="block text-sm font-semibold text-[#172554] mb-1">Access Token (from /api/v1/auth/login)</label>
@@ -71,7 +71,7 @@ export default function PlayerPage({ params }: { params: { lessonId: string } })
             <li>Playback rate 1.5x / 2x</li>
             <li>UI controls ẩn thanh tua mặc định, custom control bar</li>
           </ul>
-          <p className="text-xs mt-3 italic text-[#737686]">
+          <p className="text-xs mt-3 italic text-[#6c6f7f]">
             Note: YouTube controls mặc định đã ẩn (controls=0).
           </p>
         </Card>
