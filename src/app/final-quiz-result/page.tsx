@@ -61,9 +61,9 @@ function QuizResultContent() {
         </div>
 
         <div>
-          <h2 className="text-3xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
+          <h1 className="text-3xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
             {passed ? 'Chúc mừng bạn đã vượt qua!' : 'Chưa đạt yêu cầu hoàn thành'}
-          </h2>
+          </h1>
           <p className="text-sm text-[#737686] mt-1">
             {passed
               ? 'Bạn đã hoàn thành bài kiểm tra cuối khóa xuất sắc.'

@@ -289,7 +289,7 @@ export default function CurrentRoster({
                         </td>
                         <td className="py-2.5 px-4 text-[#737686]">{m.email}</td>
                         <td className="py-2.5 px-4 text-center">
-                          <select
+                          <select aria-label={`Đổi Ban cho ${m.displayName || m.email}`}
                             value={changeDeptModal?.userId === m.userId ? selectedDeptId : ''}
                             disabled={Boolean(actionLoading)}
                             onChange={(e) => {

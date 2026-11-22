@@ -508,8 +508,8 @@ export default function AdminChaptersProgressPage() {
                 <div className="rounded-2xl border border-blue-200 bg-blue-50/50 p-4 space-y-3">
                   <h4 className="font-bold text-[#172554]">Nhập KPI Chapter theo tháng</h4>
                   <div className="grid gap-2 sm:grid-cols-3">
-                    <input type="month" value={kpiForm.month} onChange={(e) => setKpiForm({ ...kpiForm, month: e.target.value })} className="rounded-xl border border-[#cbdbf5] px-3 py-2 text-sm bg-white" />
-                    <select value={kpiForm.status} onChange={(e) => setKpiForm({ ...kpiForm, status: e.target.value })} className="rounded-xl border border-[#cbdbf5] px-3 py-2 text-sm bg-white">
+                    <input aria-label="Tháng KPI" type="month" value={kpiForm.month} onChange={(e) => setKpiForm({ ...kpiForm, month: e.target.value })} className="rounded-xl border border-[#cbdbf5] px-3 py-2 text-sm bg-white" />
+                    <select aria-label="Trạng thái KPI" value={kpiForm.status} onChange={(e) => setKpiForm({ ...kpiForm, status: e.target.value })} className="rounded-xl border border-[#cbdbf5] px-3 py-2 text-sm bg-white">
                       <option value="BLACK">Đen</option>
                       <option value="RED">Đỏ</option>
                       <option value="YELLOW">Vàng</option>
@@ -517,7 +517,7 @@ export default function AdminChaptersProgressPage() {
                     </select>
                     <Button loading={kpiSaving} onClick={saveKpi}>Lưu KPI</Button>
                   </div>
-                  <input value={kpiForm.note} onChange={(e) => setKpiForm({ ...kpiForm, note: e.target.value })} placeholder="Ghi chú KPI" className="w-full rounded-xl border border-[#cbdbf5] px-3 py-2 text-sm bg-white" />
+                  <input aria-label="Ghi chú KPI" value={kpiForm.note} onChange={(e) => setKpiForm({ ...kpiForm, note: e.target.value })} placeholder="Ghi chú KPI" className="w-full rounded-xl border border-[#cbdbf5] px-3 py-2 text-sm bg-white" />
                   <h5 className="text-xs font-bold uppercase tracking-wide text-[#737686]">Lịch sử các tháng</h5>
                   <div className="max-h-36 overflow-auto divide-y divide-blue-100 text-xs">{kpiHistory.map((item, index) => <div key={`${item.month}-${index}`} className="grid grid-cols-3 gap-2 py-2"><span>{new Date(item.month).toLocaleDateString('vi-VN', { month: '2-digit', year: 'numeric' })}</span><strong>{item.status}</strong><span>{item.note || 'Không ghi chú'}</span></div>)}{!kpiHistory.length && <p className="py-2 text-[#737686]">Chưa có KPI tháng nào.</p>}</div>
                 </div>
@@ -526,7 +526,7 @@ export default function AdminChaptersProgressPage() {
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2">
                   <div className="flex items-center gap-2 flex-1">
                     <div className="relative flex-1 max-w-sm">
-                      <input
+                      <input aria-label="Tìm thành viên theo tên hoặc email"
                         type="text"
                         value={memberSearch}
                         placeholder="Tìm tên hoặc email..."
@@ -541,7 +541,7 @@ export default function AdminChaptersProgressPage() {
                       />
                       <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs">🔍</span>
                     </div>
-                    <select
+                    <select aria-label="Lọc theo chức vụ"
                       value={memberRoleFilter}
                       onChange={(e) => {
                         const nextRole = e.target.value;
@@ -583,7 +583,7 @@ export default function AdminChaptersProgressPage() {
 
                   <div className="flex items-center gap-2 self-end sm:self-auto text-xs text-[#737686]">
                     <span>Số lượng/trang:</span>
-                    <select
+                    <select aria-label="Số lượng mỗi trang"
                       value={memberLimit}
                       onChange={(e) => {
                         const newLimit = Number(e.target.value);

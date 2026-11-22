@@ -219,57 +219,57 @@ export default function LessonQuizPage({ params }: { params: { lessonId: string 
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#f8f9ff] flex items-center justify-center">
+      <main className="min-h-screen bg-[#f8f9ff] flex items-center justify-center">
         <div className="flex flex-col items-center gap-3 text-slate-400">
           <div className="w-10 h-10 border-4 border-[#2563EB] border-t-transparent rounded-full animate-spin"></div>
           <p className="text-xs font-medium">Đang nạp bài kiểm tra...</p>
         </div>
-      </div>
+      </main>
     );
   }
 
   if (loadError || !lesson) {
     return (
-      <div className="min-h-screen bg-[#f8f9ff] flex items-center justify-center p-6">
+      <main className="min-h-screen bg-[#f8f9ff] flex items-center justify-center p-6">
         <Card className="p-8 text-center max-w-md w-full space-y-4">
-          <p className="text-base font-bold text-[#172554]">⚠️ {loadError || 'Không tìm thấy bài học'}</p>
+          <h1 className="text-base font-bold text-[#172554]">⚠️ {loadError || 'Không tìm thấy bài học'}</h1>
           <Link href="/student/courses">
             <Button variant="outline" className="w-full">
               ← Về danh sách khóa học
             </Button>
           </Link>
         </Card>
-      </div>
+      </main>
     );
   }
 
   if (!assessment || !assessmentId) {
     return (
-      <div className="min-h-screen bg-[#f8f9ff] flex items-center justify-center p-6">
+      <main className="min-h-screen bg-[#f8f9ff] flex items-center justify-center p-6">
         <Card className="p-8 text-center max-w-md w-full space-y-4">
-          <p className="text-base font-bold text-[#172554]">Bài học này không có bài kiểm tra.</p>
+          <h1 className="text-base font-bold text-[#172554]">Bài học này không có bài kiểm tra.</h1>
           <Link href={`/student/learning/${params.lessonId}`}>
             <Button variant="outline" className="w-full">
               ← Quay lại bài học
             </Button>
           </Link>
         </Card>
-      </div>
+      </main>
     );
   }
 
   // Chặn ngay nếu chưa hoàn thành xem 100% video bài học
   if (!canAccessQuiz) {
     return (
-      <div className="min-h-screen bg-[#f8f9ff] flex items-center justify-center p-6">
+      <main className="min-h-screen bg-[#f8f9ff] flex items-center justify-center p-6">
         <Card className="p-8 text-center max-w-md w-full space-y-5 border border-amber-200 shadow-md">
           <div className="w-16 h-16 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center text-3xl mx-auto shadow-inner">
             🔒
           </div>
           <div className="space-y-2">
-            <h2 className="text-lg font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
+            <h1 className="text-lg font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
               Bài kiểm tra đang bị khóa
-            </h2>
+            </h1>
             <p className="text-xs text-[#737686] leading-relaxed">
               Bạn cần xem đủ <strong>100%</strong> thời lượng video bài giảng trước khi được phép làm bài kiểm tra.
             </p>
@@ -283,7 +283,7 @@ export default function LessonQuizPage({ params }: { params: { lessonId: string 
             </Button>
           </Link>
         </Card>
-      </div>
+      </main>
     );
   }
 
@@ -327,7 +327,7 @@ export default function LessonQuizPage({ params }: { params: { lessonId: string 
         )}
       </header>
 
-      <div className={`${started ? 'max-w-5xl' : 'max-w-3xl'} mx-auto p-4 md:p-8`}>
+      <main className={`${started ? 'max-w-5xl' : 'max-w-3xl'} mx-auto p-4 md:p-8`}>
         {started ? (
           <div className="space-y-4">
             {rewardNote?.passed && (
@@ -592,7 +592,7 @@ export default function LessonQuizPage({ params }: { params: { lessonId: string 
             </div>
           </Card>
         )}
-      </div>
+      </main>
       {starReward !== null && <StarRewardCelebration amount={starReward} message="Quiz đạt yêu cầu — phần thưởng của bạn!" />}
 
       {/* Modal Xác nhận trước khi vào làm bài — portal, căn giữa viewport */}

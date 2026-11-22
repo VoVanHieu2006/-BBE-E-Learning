@@ -206,7 +206,7 @@ export default function ChapterManagerCoursesPage() {
 
   return (
     <div className="min-h-screen bg-[#f8f9ff]">
-      <main className="max-w-5xl mx-auto px-8 py-10">
+      <div className="max-w-5xl mx-auto px-8 py-10">
         <div className="flex justify-between items-center mb-6">
           <div>
             <h1 className="text-3xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
@@ -533,7 +533,7 @@ export default function ChapterManagerCoursesPage() {
             {/* Search Box */}
             <div className="shrink-0">
               <div className="relative">
-                <input
+                <input aria-label="Tìm kiếm câu hỏi, đáp án hoặc giải thích"
                   type="text"
                   value={quizSearch}
                   onChange={(e) => setQuizSearch(e.target.value)}
@@ -654,7 +654,7 @@ export default function ChapterManagerCoursesPage() {
           </div>
         </Modal>
 
-      </main>
+      </div>
     </div>
   );
 }

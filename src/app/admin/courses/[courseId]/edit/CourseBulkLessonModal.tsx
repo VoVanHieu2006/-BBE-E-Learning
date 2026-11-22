@@ -141,10 +141,10 @@ export default function CourseBulkLessonModal({
         </div>
 
         <div>
-          <label className="block text-sm font-semibold text-[#172554] mb-1">
+          <label htmlFor="bulk-lesson-links" className="block text-sm font-semibold text-[#172554] mb-1">
             Dán các link YouTube — mỗi link một dòng
           </label>
-          <textarea
+          <textarea id="bulk-lesson-links"
             rows={7}
             value={text}
             disabled={bulkLessonSaving}

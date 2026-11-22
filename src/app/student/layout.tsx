@@ -109,7 +109,9 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
         </div>
       );
     }
-    return <ContentTransition>{children}</ContentTransition>;
+    // Khách: trang danh sách khóa học tự dựng header và <main>; trang chi tiết khóa học thì chưa có vùng main.
+    const guestContent = <ContentTransition>{children}</ContentTransition>;
+    return pathname === '/student/courses' ? guestContent : <main>{guestContent}</main>;
   }
 
   // Route student riêng tư (/student/* khác): cần đăng nhập — hiệu ứng auth check phía effect sẽ redirect khách về /login

@@ -351,8 +351,8 @@ export default function ChapterManagerInvitationsPage() {
             ) : (
             <form onSubmit={handleSendInvite} className="space-y-4">
               <div>
-                <label className="block text-sm font-semibold text-[#172554] mb-1">Email học viên *</label>
-                <input
+                <label htmlFor="invite-email" className="block text-sm font-semibold text-[#172554] mb-1">Email học viên *</label>
+                <input id="invite-email"
                   type="email"
                   required
                   value={inviteEmail}

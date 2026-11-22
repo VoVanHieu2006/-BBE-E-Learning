@@ -53,6 +53,10 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
     <>
         <Toast toast={toast} onClose={() => setToast(null)} />
 
+        <h1 className="text-3xl font-bold text-[#172554] mb-4" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
+          Chỉnh sửa khóa học
+        </h1>
+
         <div className="sticky top-3 z-30 flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 rounded-2xl border border-blue-100 bg-white/95 p-3 shadow-lg backdrop-blur">
           <Link
             href="/admin/courses"

@@ -97,7 +97,7 @@ export default function MemberDetailPage({ params }: { params: { userId: string 
   return (
     <div className="min-h-screen bg-[#f8f9ff]">
       <Toast toast={toast} onClose={() => setToast(null)} />
-      <main className="px-6 sm:px-8 py-8 w-full min-w-0 max-w-6xl mx-auto">
+      <div className="px-6 sm:px-8 py-8 w-full min-w-0 max-w-6xl mx-auto">
         {/* Navigation Breadcrumb */}
         <div className="mb-6 flex items-center justify-between">
           <Link
@@ -210,7 +210,7 @@ export default function MemberDetailPage({ params }: { params: { userId: string 
                       <strong className="text-red-600 underline font-extrabold">&ldquo;vô hiệu hóa&rdquo;</strong>{' '}
                       vào ô bên dưới:
                     </label>
-                    <input
+                    <input aria-label="Nhập “vô hiệu hóa” để xác nhận"
                       type="text"
                       value={deactivateInputText}
                       onChange={(e) => setDeactivateInputText(e.target.value)}
@@ -255,7 +255,7 @@ export default function MemberDetailPage({ params }: { params: { userId: string 
             </Modal>
           )}
         </LearnerProfileView>
-      </main>
+      </div>
     </div>
   );
 }

@@ -310,7 +310,7 @@ export default function LessonComments({
               {getInitials(currentUser?.email || '')}
             </div>
             <div className="flex-1 min-w-0">
-              <textarea
+              <textarea aria-label="Câu hỏi hoặc bình luận về bài học"
                 value={rootInput}
                 onChange={(e) => setRootInput(e.target.value)}
                 placeholder="Bạn có thắc mắc gì về bài học này? Hãy đặt câu hỏi tại đây..."
@@ -450,7 +450,7 @@ export default function LessonComments({
                           {getInitials(currentUser?.email || '')}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <textarea
+                          <textarea aria-label={`Trả lời ${comment.userEmail.split('@')[0]}`}
                             autoFocus
                             value={replyInput}
                             onChange={(e) => setReplyInput(e.target.value)}

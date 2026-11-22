@@ -142,10 +142,10 @@ export default function TransferDraft({
               <form onSubmit={handleParseSheet} className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3">
                   <div>
-                    <label className="block text-xs font-bold text-[#172554] mb-1">
+                    <label htmlFor="transfer-roster-url" className="block text-xs font-bold text-[#172554] mb-1">
                       Đường dẫn Google Sheet danh sách nhiệm kỳ mới:
                     </label>
-                    <input
+                    <input id="transfer-roster-url"
                       required
                       type="url"
                       value={rosterUrl}
@@ -163,10 +163,10 @@ export default function TransferDraft({
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-xl">
                   <div>
-                    <label className="block text-xs font-bold text-[#172554] mb-1">
+                    <label htmlFor="transfer-term-number" className="block text-xs font-bold text-[#172554] mb-1">
                       Nhiệm kỳ chuyển giao *
                     </label>
-                    <select
+                    <select id="transfer-term-number"
                       required
                       value={selectedTermNumber}
                       onChange={(e) => setSelectedTermNumber(e.target.value ? Number(e.target.value) : '')}
@@ -187,10 +187,10 @@ export default function TransferDraft({
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-[#172554] mb-1">
+                    <label htmlFor="transfer-effective-at" className="block text-xs font-bold text-[#172554] mb-1">
                       Thời gian bắt đầu có hiệu lực *
                     </label>
-                    <input
+                    <input id="transfer-effective-at"
                       required
                       type="datetime-local"
                       value={effectiveAt}

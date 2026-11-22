@@ -263,7 +263,7 @@ export default function AdminCoursesPage() {
       {/* Thanh tìm kiếm */}
       <div className="mb-6 flex flex-col sm:flex-row items-center justify-between gap-3">
         <div className="relative w-full sm:w-96">
-          <input
+          <input aria-label="Tìm kiếm tên khóa học"
             type="text"
             placeholder="Tìm kiếm tên khóa học..."
             value={searchQuery}
@@ -546,7 +546,7 @@ function CourseCardRow({
               <span>Chương trình:</span>
               {isProgramBusy && <span className="text-[10px] text-blue-600 animate-pulse">Đang lưu...</span>}
             </label>
-            <select
+            <select aria-label={`Chương trình của khóa ${course.title}`}
               value={currentProgramCode}
               disabled={isProgramBusy}
               onChange={(e) => onChangeProgram(cId, e.target.value, course.title)}

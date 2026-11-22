@@ -80,7 +80,7 @@ export default function StudentCourseFinalExamPage({ params }: { params: { cours
         {!started && <Link href={`/student/courses/${params.courseId}`} className="text-sm font-semibold text-blue-700">← Về khóa học</Link>}
       </header>
 
-      <main className={`mx-auto ${started ? 'max-w-5xl' : 'max-w-3xl'} p-4 md:p-8`}>
+      <div className={`mx-auto ${started ? 'max-w-5xl' : 'max-w-3xl'} p-4 md:p-8`}>
         {loadError ? (
           <Card className="space-y-4 p-8 text-center">
             <h2 className="font-bold text-[#172554]">Chưa thể tải bài thi</h2>
@@ -177,7 +177,7 @@ export default function StudentCourseFinalExamPage({ params }: { params: { cours
             )}
           </Card>
         )}
-      </main>
+      </div>
     </div>
   );
 }

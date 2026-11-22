@@ -420,7 +420,7 @@ export default function UnifiedLeaderboard({
         <div className="flex flex-col gap-2 pt-2 border-t border-slate-100 text-xs">
           <div className="flex flex-wrap items-center gap-3">
             <span className="font-semibold text-slate-600 shrink-0">Kỳ xếp hạng:</span>
-            <select
+            <select aria-label="Kỳ xếp hạng"
               value={periodId}
               onChange={(event) => setPeriodId(event.target.value)}
               className="max-w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 font-semibold text-slate-800 outline-none focus:border-blue-500 sm:max-w-xs"
@@ -487,7 +487,7 @@ export default function UnifiedLeaderboard({
         {(group === 'MEMBER' || group === 'LT') && showChapterSelector && chapterList.length > 0 && (
           <div className="flex items-center gap-3 pt-2 border-t border-slate-100 text-xs">
             <span className="font-semibold text-slate-600 shrink-0">Lọc theo Chapter:</span>
-            <select
+            <select aria-label="Lọc theo Chapter"
               value={selectedChapterId}
               onChange={(e) => setSelectedChapterId(e.target.value)}
               className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 font-semibold text-slate-800 outline-none focus:border-blue-500 max-w-xs"

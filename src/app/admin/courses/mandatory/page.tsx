@@ -357,7 +357,7 @@ export default function MandatoryCourseMatrixPage() {
             </summary>
             <div className="mt-3.5 pt-3 border-t border-slate-100 flex items-center gap-2">
               <span className="text-xs font-semibold text-slate-600">Thời hạn hoàn thành:</span>
-              <input
+              <input aria-label={`Số ngày hoàn thành ${course.title}`}
                 type="number"
                 min={1}
                 max={3650}
@@ -508,7 +508,7 @@ export default function MandatoryCourseMatrixPage() {
                     )}
                     <div className="mt-2 flex items-center gap-2 flex-wrap">
                       <div className="inline-flex items-center gap-1 bg-slate-100 px-2 py-1 rounded-xl border border-slate-200">
-                        <input
+                        <input aria-label={`Số ngày hoàn thành ${course.title}`}
                           type="number"
                           min={1}
                           max={3650}

@@ -31,8 +31,8 @@ export default function CourseInfo({
               {hasUnsavedCourseInfo && <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-800">Bạn có thay đổi chưa lưu.</div>}
               <form onSubmit={handleSaveInfo} className="space-y-4">
                 <div>
-                  <label className="block text-sm font-semibold text-[#172554] mb-1">Tiêu đề khóa học *</label>
-                  <input
+                  <label htmlFor="course-title" className="block text-sm font-semibold text-[#172554] mb-1">Tiêu đề khóa học *</label>
+                  <input id="course-title"
                     type="text"
                     required
                     disabled={editorLocked}
@@ -42,8 +42,8 @@ export default function CourseInfo({
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-[#172554] mb-1">Mô tả</label>
-                  <textarea
+                  <label htmlFor="course-description" className="block text-sm font-semibold text-[#172554] mb-1">Mô tả</label>
+                  <textarea id="course-description"
                     rows={3}
                     disabled={editorLocked}
                     value={form.description}
@@ -74,7 +74,7 @@ export default function CourseInfo({
                       </div>
                     )}
                     <div className="space-y-2 flex-1">
-                      <input
+                      <input aria-label="Ảnh bìa khóa học"
                         type="file"
                         accept="image/jpeg,image/png,image/webp"
                         disabled={editorLocked || coverUploading}

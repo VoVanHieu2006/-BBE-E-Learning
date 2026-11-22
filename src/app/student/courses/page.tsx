@@ -451,7 +451,7 @@ export default function StudentCoursesPage() {
                   </p>
                 </div>
                 <div className="relative w-full sm:w-80">
-                  <input
+                  <input aria-label="Tìm bài học theo tên"
                     type="text"
                     value={lessonSearchQuery}
                     onChange={(e) => setLessonSearchQuery(e.target.value)}
