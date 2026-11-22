@@ -163,7 +163,7 @@ export default function LearnerProfileView({
             <div className="flex items-center gap-3 text-xs text-slate-500 mt-2 flex-wrap">
               <span>🏛️ <strong>{chapterDisplay}</strong></span>
               <span>•</span>
-              <span>🏢 <strong>Ban {deptDisplay}</strong></span>
+              <span>🏢 <strong>{/^Ban\s/i.test(deptDisplay) ? deptDisplay : `Ban ${deptDisplay}`}</strong></span>
               {user.createdAt && (
                 <>
                   <span>•</span>

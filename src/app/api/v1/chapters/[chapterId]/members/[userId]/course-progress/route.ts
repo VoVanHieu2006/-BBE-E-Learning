@@ -44,8 +44,8 @@ export async function GET(
 
   const targetUserId = params.userId
   const chapter = isAdminAllScope
-    ? { organization_unit_id: null }
-    : await prisma.chapter.findUnique({ where: { id: chapterId }, select: { organization_unit_id: true } })
+    ? { name: null, organization_unit_id: null }
+    : await prisma.chapter.findUnique({ where: { id: chapterId }, select: { name: true, organization_unit_id: true } })
   if (!chapter) return NextResponse.json({ error: { code: 'NotFound', message: 'Chapter không tồn tại' } }, { status: 404 })
 
   // Thành viên phải thuộc chapter này (cho phép cả INACTIVE để BĐHU vẫn xem được thành viên bị khóa)
@@ -71,25 +71,26 @@ export async function GET(
 
   const legacyMembership = target.chapter_members.find((cm) => cm.chapter_id === chapterId)
   let joinedAt = legacyMembership?.joined_at || target.created_at
+  const unitIds = chapter.organization_unit_id ? await getOrganizationUnitTreeIds(chapter.organization_unit_id) : []
+  const organizationMemberships = unitIds.length
+    ? await prisma.organizationMembership.findMany({
+        where: {
+          user_id: targetUserId,
+          unit_id: { in: unitIds },
+          status: 'ACTIVE',
+          starts_at: { lte: new Date() },
+          OR: [{ ends_at: null }, { ends_at: { gt: new Date() } }],
+        },
+        select: { starts_at: true, unit: { select: { name: true, type: true } } },
+      })
+    : []
   if (!isAdminAllScope && !legacyMembership) {
-    const unitIds = chapter.organization_unit_id ? await getOrganizationUnitTreeIds(chapter.organization_unit_id) : []
-    const organizationMembership = unitIds.length
-      ? await prisma.organizationMembership.findFirst({
-          where: {
-            user_id: targetUserId,
-            unit_id: { in: unitIds },
-            status: 'ACTIVE',
-            starts_at: { lte: new Date() },
-            OR: [{ ends_at: null }, { ends_at: { gt: new Date() } }],
-          },
-          select: { starts_at: true },
-        })
-      : null
-    if (!organizationMembership) {
+    if (!organizationMemberships.length) {
       return NextResponse.json({ error: { code: 'NotFound', message: 'Thành viên không thuộc chapter này' } }, { status: 404 })
     }
-    joinedAt = organizationMembership.starts_at
+    joinedAt = organizationMemberships[0].starts_at
   }
+  const department = organizationMemberships.find((membership) => membership.unit.type === 'DEPARTMENT')?.unit
 
   const userSummary = await calculateUserProgress(targetUserId)
 
@@ -235,6 +236,8 @@ export async function GET(
         status: target.status,
         joinedAt,
         displayName: target.display_name,
+        chapterName: chapter.name,
+        departmentName: department?.name ?? null,
         completedLessons: userSummary.completedLessons,
         totalLessons: userSummary.totalLessons,
         overallProgressPercent: userSummary.overallProgressPercent,
