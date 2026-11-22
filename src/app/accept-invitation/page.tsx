@@ -5,11 +5,27 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Button from '@/components/ui/Button';
 import { apiFetch } from '@/lib/api/client';
+import { storeLoginSession } from '@/lib/client-session';
+import { accountHome } from '@/lib/session-role';
 
 interface InviteInfo {
   role: string;
   chapterName: string;
   expiresAt: string;
+}
+
+async function signIn(email: string, password: string) {
+  try {
+    const res = await fetch('/api/v1/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    const data = await res.json();
+    return res.ok && data?.accessToken && data?.user ? data : null;
+  } catch {
+    return null;
+  }
 }
 
 function AcceptInvitationContent() {
@@ -88,9 +104,16 @@ function AcceptInvitationContent() {
     });
 
     if (res.ok) {
-      setSuccess('Kích hoạt tài khoản thành công! Đang chuyển đến trang đăng nhập...');
+      // Nút ghi "Kích hoạt tài khoản & Đăng nhập": đăng nhập luôn bằng mật khẩu vừa đặt.
+      const session = await signIn(form.email.trim(), form.password);
+      if (session) storeLoginSession(session);
+      setSuccess(
+        session
+          ? 'Kích hoạt tài khoản thành công! Đang đưa bạn vào hệ thống...'
+          : 'Kích hoạt tài khoản thành công! Đang chuyển đến trang đăng nhập...'
+      );
       setTimeout(() => {
-        router.push('/login');
+        router.push(session ? accountHome(session.user.role, session.user.managerKind) : '/login');
       }, 1500);
     } else if (res.error?.code === 'EmailMismatch' || res.error?.code === 'RateLimited') {
       // Link vẫn còn hiệu lực: giữ form để người nhận gõ lại đúng email của mình.

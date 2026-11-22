@@ -1,6 +1,7 @@
 'use client';
 import { isLeadRole } from '@/lib/roles'
 import { accountHome, canOpenManagerArea } from '@/lib/session-role'
+import { storeLoginSession } from '@/lib/client-session'
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -63,13 +64,7 @@ export default function LoginPage() {
       }
 
       if (data.accessToken && data.user) {
-        localStorage.setItem('accessToken', data.accessToken);
-        localStorage.setItem('refreshToken', data.refreshToken || '');
-        localStorage.setItem('user', JSON.stringify(data.user));
-
-        // Sync cookies for server-side middleware
-        document.cookie = `accessToken=${data.accessToken}; path=/; max-age=900; SameSite=Lax`;
-        document.cookie = `userRole=${data.user.role}; path=/; max-age=604800; SameSite=Lax`;
+        storeLoginSession(data);
 
         const role = data.user.role;
         if (role !== 'ADMIN' && !isLeadRole(role)) {
@@ -108,8 +103,8 @@ export default function LoginPage() {
       } else {
         setError('Phản hồi từ máy chủ không hợp lệ.');
       }
-    } catch (err: any) {
-      setError('Lỗi kết nối: ' + (err.message || 'Không thể kết nối tới máy chủ'));
+    } catch {
+      setError('Lỗi kết nối: không thể kết nối tới máy chủ. Vui lòng kiểm tra mạng và thử lại.');
     } finally {
       setLoading(false);
     }
