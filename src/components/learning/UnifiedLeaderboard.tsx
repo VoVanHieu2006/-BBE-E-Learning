@@ -94,6 +94,9 @@ export default function UnifiedLeaderboard({
   const [loadingProfile, setLoadingProfile] = useState(false)
 
   const canViewProfile = Boolean(currentUser && ['ADMIN', 'LEAD'].includes(currentUser.role))
+  // The shared board lists every Chapter; a Lead may only open profiles of their own Chapter.
+  const canOpenProfile = (row: { chapterId?: string | null }) => canViewProfile
+    && (currentUser?.role === 'ADMIN' || !row.chapterId || !currentUser?.chapterId || row.chapterId === currentUser.chapterId)
 
   const handleOpenProfile = async (memberId: string, chapId?: string) => {
     if (!canViewProfile) return
@@ -189,7 +192,7 @@ export default function UnifiedLeaderboard({
       // Bảng tổng toàn hệ thống không âm thầm gán chapterId từ user
       const activeChapId = isGlobal ? (selectedChapterId || '') : (selectedChapterId || currentUser?.chapterId || propChapterId || '')
       const params = new URLSearchParams({ group, periodType })
-      if ((group === 'MEMBER' || group === 'LT' || periodType === 'ACTUAL_TERM') && activeChapId) {
+      if ((group === 'MEMBER' || group === 'LT') && activeChapId) {
         params.set('chapterId', activeChapId)
       }
       if (periodId) {
@@ -561,7 +564,7 @@ export default function UnifiedLeaderboard({
                     Hạng 2 • Á quân
                   </div>
                   <div className="font-extrabold text-[#172554] text-base truncate mb-0.5">
-                    {group !== 'CHAPTER' && canViewProfile && (topThree[1].userId || topThree[1].id) ? (
+                    {group !== 'CHAPTER' && canOpenProfile(topThree[1]) && (topThree[1].userId || topThree[1].id) ? (
                       <button
                         type="button"
                         onClick={() => handleOpenProfile((topThree[1].userId || topThree[1].id)!, topThree[1].chapterId)}
@@ -602,7 +605,7 @@ export default function UnifiedLeaderboard({
                   </div>
                   <div className="text-5xl mb-1">🥇</div>
                   <div className="font-black text-lg text-[#172554] truncate mb-0.5">
-                    {group !== 'CHAPTER' && canViewProfile && (topThree[0].userId || topThree[0].id) ? (
+                    {group !== 'CHAPTER' && canOpenProfile(topThree[0]) && (topThree[0].userId || topThree[0].id) ? (
                       <button
                         type="button"
                         onClick={() => handleOpenProfile((topThree[0].userId || topThree[0].id)!, topThree[0].chapterId)}
@@ -641,7 +644,7 @@ export default function UnifiedLeaderboard({
                     Hạng 3 • Quý quân
                   </div>
                   <div className="font-extrabold text-[#172554] text-base truncate mb-0.5">
-                    {group !== 'CHAPTER' && canViewProfile && (topThree[2].userId || topThree[2].id) ? (
+                    {group !== 'CHAPTER' && canOpenProfile(topThree[2]) && (topThree[2].userId || topThree[2].id) ? (
                       <button
                         type="button"
                         onClick={() => handleOpenProfile((topThree[2].userId || topThree[2].id)!, topThree[2].chapterId)}
@@ -742,7 +745,7 @@ export default function UnifiedLeaderboard({
                               {(item.displayName || item.name || 'U').charAt(0).toUpperCase()}
                             </div>
                             <div className="min-w-0">
-                              {group !== 'CHAPTER' && canViewProfile && (item.userId || item.id) ? (
+                              {group !== 'CHAPTER' && canOpenProfile(item) && (item.userId || item.id) ? (
                                 <button
                                   type="button"
                                   onClick={() => handleOpenProfile((item.userId || item.id)!, item.chapterId)}
