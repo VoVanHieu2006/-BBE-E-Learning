@@ -12,7 +12,6 @@ hiểu sai hoặc phải làm thừa; **Thấp** = khó chịu nhỏ, chuẩn ac
 | Mã | Hiện tượng (đã tái hiện) | Mong đợi | Test |
 |---|---|---|---|
 | BUG-VIDEO-SPAM | Gửi dồn 150 heartbeat hoàn thành video 10 phút trong khoảng 3 giây: mỗi request được cộng 4 giây xem bất kể thời gian thật trôi qua. Học viên nhận sao mà không xem. | Thời gian xem chỉ được cộng theo thời gian thật do máy chủ đo (`docs/business-rules.md`, mục video). | `src/test/e2e/api/04-video.spec.ts` |
-| BUG-INVITE-LEAD-500 | Admin mời Lead cho một Chapter mới luôn nhận lỗi 500 (vi phạm ràng buộc `invitations_exactly_one_scope_check`); trên giao diện không có lời mời nào được tạo. | Lời mời được tạo, người nhận kích hoạt thành LEAD của đúng Chapter. | `api/02-invitations.spec.ts`, `ui/04-admin-management.spec.ts` |
 | BUG-AUTH-RATE | 40 lần đăng nhập sai liên tiếp từ một nguồn không bị giới hạn tần suất. Đã ghi trong `docs/known-issues.md`. | Trả 429 sau một ngưỡng hợp lý. | `api/01-auth.spec.ts` |
 | BUG-LB-GUEST-SCOPE | Khách chưa đăng nhập gọi được bảng xếp hạng kỳ của DNA/Chapter mà thành viên đã đăng nhập bị 403. | Khách không được xem nhiều hơn thành viên. | `api/07-organization.spec.ts` |
 

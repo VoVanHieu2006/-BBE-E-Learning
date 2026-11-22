@@ -541,7 +541,7 @@ export async function acceptInvitation(
         },
       })
       await ensureChapterStandardDepartments(unit.id, tx)
-      await tx.invitation.update({ where: { id: invitation.id }, data: { chapter_id: chapter.id, organization_unit_id: unit.id } })
+      await tx.invitation.update({ where: { id: invitation.id }, data: { chapter_id: chapter.id } })
     }
     if (chapterId) {
       const chapter = await tx.chapter.findUnique({ where: { id: chapterId }, select: { id: true, name: true, organization_unit_id: true } })
