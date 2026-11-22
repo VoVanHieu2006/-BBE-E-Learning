@@ -20,7 +20,6 @@ hiểu sai hoặc phải làm thừa; **Thấp** = khó chịu nhỏ, chuẩn ac
 
 | Mã | Hiện tượng (đã tái hiện) | Mong đợi | Test |
 |---|---|---|---|
-| BUG-STALE-AFTER-RELOAD | Danh sách (ví dụ lời mời) được lưu trong `sessionStorage` tới 120 giây (`src/lib/api/client.ts`) và trang không yêu cầu dữ liệu mới khi tải lần đầu. Người được mời đã kích hoạt, Lead bấm F5 vẫn thấy "Đang chờ" và nút Hủy. | F5 luôn hiện dữ liệu mới. | `ui/03-lead-management.spec.ts` |
 | BUG-UX-ACCEPT-LOGIN | Nút ghi "Kích hoạt tài khoản & Đăng nhập" nhưng kích hoạt xong lại đưa về trang đăng nhập, bắt gõ lại email và mật khẩu. | Vào thẳng trang học, hoặc đổi chữ trên nút. | `ui/01-guest-and-account.spec.ts` |
 | BUG-UX-CALLBACK-STUDENT | Mở link `/student/...` khi chưa đăng nhập, đăng nhập xong bị đưa về trang chủ học viên thay vì trang đã mở. | Về đúng trang trong `callbackUrl`. | `ui/01-guest-and-account.spec.ts` |
 | BUG-UX-ERROR-AS-EMPTY | Khi API danh sách thành viên trả 500, trang Lead không báo lỗi; Lead thấy màn hình như thể Chapter chưa có ai. | Báo "không tải được" kèm cách thử lại. | `ux/02-interaction.spec.ts` |
@@ -29,7 +28,6 @@ hiểu sai hoặc phải làm thừa; **Thấp** = khó chịu nhỏ, chuẩn ac
 | BUG-PROFILE-500 | Admin sửa tên của tài khoản không tồn tại nhận lỗi 500. | 404. | `api/08-permission-matrix.spec.ts` |
 | BUG-MOVE-SESSION-MSG | Thành viên bị chuyển ban: phiên cũ nhận thông báo như tài khoản bị vô hiệu hóa. | Thông báo tiếng Việt yêu cầu đăng nhập lại. | `api/07-organization.spec.ts` |
 | BUG-QUIZ-IMPORT-GAP | Nhập quiz từ Google Sheet: nếu một cột lựa chọn bị bỏ trống ở giữa (A, trống, C, D) và đáp án là "C", hệ thống đánh dấu lựa chọn D là đúng, không báo lỗi. Đề thi có đáp án sai mà Admin không biết. | Đánh dấu đúng lựa chọn ở cột C, hoặc từ chối dòng đó. | `src/test/quiz-import.test.ts` |
-| BUG-UI-HYDRATION-TRANSFER | Trang `/admin/transfer-seasons` sinh lỗi React #425 và #422 khi dữ liệu của trang đã được lưu trong tab (mở lại trang, hoặc đôi khi ngay lần đầu sau đăng nhập): `useState(() => readCachedProgress() === null)` đọc `sessionStorage` lúc dựng lần đầu nên nội dung trình duyệt dựng khác nội dung máy chủ dựng. React phải dựng lại cả trang. | Không có lỗi JavaScript. | `ux/01-every-page.spec.ts` |
 | BUG-A11Y-LABELS | 14/35 trang có ô nhập hoặc ô chọn không gắn nhãn (131 ô trên máy tính, 317 trên điện thoại), gồm email và mật khẩu ở trang đăng nhập, ô tìm kiếm, ô chọn kỳ, ô chọn chương trình ở danh sách khóa học, ô số ngày ở ma trận bắt buộc. Trình đọc màn hình chỉ đọc "ô nhập". | Mỗi ô có `<label>` hoặc `aria-label`. | `ux/01-every-page.spec.ts` |
 | BUG-UX-TOUCH-TARGET | Trên điện thoại nhiều nút nhỏ hơn 24px: "Đổi ban" 55×16 và "Bổ nhiệm LT" 78×16 ở trang chuyển giao (521 nút), nút xóa 22×40 ở danh sách khóa học (102), "Hủy" 23×16 ở lời mời, link "Quên mật khẩu?" cao 16px. | Tối thiểu 24×24px (WCAG 2.2), nên 44px cho thao tác chính. | `ux/01-every-page.spec.ts` |
 

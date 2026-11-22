@@ -109,7 +109,7 @@ test.describe('Lead Chapter', () => {
     expect(accepted.status).toBeGreaterThanOrEqual(400)
   })
 
-  uiDefect('BUG-STALE-AFTER-RELOAD', 'người được mời kích hoạt xong, Lead bấm tải lại trang (F5) phải thấy "Đã kích hoạt" chứ không phải bản cũ lưu trong tab tới 2 phút', async ({ page, request }) => {
+  test('người được mời kích hoạt xong, Lead bấm tải lại trang (F5) phải thấy "Đã kích hoạt" chứ không phải bản cũ lưu trong tab tới 2 phút', async ({ page, request }) => {
     const email = uniqueEmail('ui-stale')
     const { token } = await inviteLink(request, 'chapterLead', email)
     await signInAs(page, 'chapterLead')
