@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { sendMemberInvitation } from '@/lib/invitations'
 import { invalidateInvitationsServerCache } from '@/lib/server-cache'
 import { resolveMemberInviteScope } from '@/lib/member-invite-scope'
+import { canManageInvitation } from '@/lib/invitation-management'
 import { releaseEmailSlots, reserveEmailSlots } from '@/lib/email-quota'
 import { splitBatchByQuota, unusedSlots } from '@/lib/email-quota-core'
 import { BULK_INVITE_MAX_EMAILS, BULK_INVITE_TIME_BUDGET_MS, parseBulkInviteEmails, runBulkInvites, summarizeBulkResults } from '@/lib/bulk-invite'
@@ -66,6 +67,7 @@ export async function POST(request: NextRequest) {
       send: async (email) => {
         const result = await sendMemberInvitation({
           email, role: 'MEMBER', chapterId: scope.chapterId, organizationUnitId: scope.organizationUnitId, invitedBy: context.userId,
+          canManagePending: (pending) => canManageInvitation(context, pending),
           mail: mailSet.has(email) ? { kind: 'reserved', day: reservation.day } : { kind: 'link' },
         })
         // Slot đã giao cho một lời mời được tạo thì email.ts lo giữ/hoàn; các slot còn lại hoàn ở dưới.

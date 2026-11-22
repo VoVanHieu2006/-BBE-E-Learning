@@ -174,7 +174,7 @@ export async function runBulkInvites(parsed: { valid: string[]; invalid: string[
       const result = await deps.send(email)
       if (result.ok === false) {
         if (result.code === 'EmailAlreadyActive' || result.code === 'EmailAlreadyExists') return { email, status: 'ALREADY_MEMBER', message: result.message }
-        if (result.code === 'AccessDenied') return { email, status: 'DENIED', message: result.message }
+        if (result.code === 'AccessDenied' || result.code === 'PendingInvitationOutOfScope') return { email, status: 'DENIED', message: result.message }
         return { email, status: 'FAILED', message: result.message }
       }
       return result.emailSent

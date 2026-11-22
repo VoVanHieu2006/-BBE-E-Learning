@@ -473,7 +473,7 @@ Hạn mức email của ngày lịch UTC hiện tại (mặc định `limit = 90
 
 | Method | Truy cập / guard | Đầu vào đọc trực tiếp | Response thành công | Mã lỗi thấy trong handler |
 |---|---|---|---|---|
-| [POST](../src/app/api/v1/invitations/member/route.ts#L18) | `authenticate`, `canAccessChapterPermission`, `canAccessOrganizationUnitPermission`, `role ADMIN`, `role LEAD` | `body.chapterId`, `body.email`, `body.organizationUnitId` | `invitationId, id, chapterId, organizationUnitId, status, expiresAt, emailSent, emailError, delivery` | `AccessDenied`, `OrganizationUnitNotFound`, `ValidationError` |
+| [POST](../src/app/api/v1/invitations/member/route.ts#L18) | `authenticate`, `canAccessChapterPermission`, `canAccessOrganizationUnitPermission`, `role ADMIN`, `role LEAD` | `body.chapterId`, `body.email`, `body.organizationUnitId` | `invitationId, id, chapterId, organizationUnitId, status, expiresAt, emailSent, emailError, delivery` | `AccessDenied`, `OrganizationUnitNotFound`, `PendingInvitationOutOfScope` (409: email đang có lời mời còn hiệu lực ngoài phạm vi người mời, lời mời cũ giữ nguyên), `ValidationError` |
 
 ### `/api/v1/invitations`
 

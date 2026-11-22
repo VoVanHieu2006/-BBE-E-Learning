@@ -163,6 +163,22 @@ test.describe('Phạm vi quyền mời', () => {
     expect(list.body.items.map((item: any) => item.id), 'danh sách chỉ gồm lời mời trong phạm vi').not.toContain(invitationId)
   })
 
+  test('email đang có lời mời còn hiệu lực ngoài phạm vi người mời: lời mời mới bị từ chối, lời mời cũ giữ nguyên', async ({ request }) => {
+    const email = uniqueEmail('outscope')
+    const { invitationId, token } = await inviteLink(request, 'chapterLead', email)
+    const other = await as(request, 'otherChapterLead')
+    const unit = (await other.get('/api/v1/organization/managed-units')).body.items.find((item: any) => item.type === 'DEPARTMENT' && item.canManageMembers)
+    const refused = await other.post('/api/v1/invitations/member', { email, organizationUnitId: unit.id })
+    expect(refused.status, JSON.stringify(refused.body)).toBe(409)
+    expect(errorCode(refused)).toBe('PendingInvitationOutOfScope')
+    expect(refused.body.error.message.length).toBeGreaterThan(5)
+    const bulk = await other.post('/api/v1/invitations/member/bulk', { emails: [email], organizationUnitId: unit.id })
+    expect(bulk.body.results[0].status, JSON.stringify(bulk.body)).toBe('ALREADY_INVITED')
+    const rows = await sql(`SELECT id, status FROM invitations WHERE email = $1`, [email])
+    expect(rows, 'lời mời cũ còn nguyên và không có lời mời mới').toEqual([{ id: invitationId, status: 'PENDING' }])
+    expect((await guest(request).get(`/api/v1/invitations/validate?token=${token}`)).body.valid).toBe(true)
+  })
+
   test('chỉ Admin mời được Lead Chapter và Lead DNA; không có đường nâng MEMBER thành LEAD', async ({ request }) => {
     for (const account of ['chapterLead', 'dnaLead', 'member'] as const) {
       const actor = await as(request, account)
