@@ -136,3 +136,30 @@ export async function starBalance(learner: Learner) {
   expect(stars.status).toBe(200)
   return stars.body.balance as number
 }
+
+export const CRON_HEADERS = { Cookie: 'e2e_isolated=1', Authorization: 'Bearer e2e-fixture-only-cron-secret' }
+const DAY_MS = 86_400_000
+export const daysBetween = (from: string | Date, to: string | Date) => (new Date(to).getTime() - new Date(from).getTime()) / DAY_MS
+
+/** Admin ticks course × learner group in "Khóa học bắt buộc" with the course's number of days. */
+export async function setMandatory(request: APIRequestContext, courseId: string, targetKey: string, dueDays: number | null) {
+  const admin = await as(request, 'admin')
+  const body = dueDays === null
+    ? { changes: [{ courseId, targetKey, enabled: false }] }
+    : { rowDefaults: [{ courseId, dueDays }], changes: [{ courseId, targetKey, enabled: true, dueDays }] }
+  const result = await admin.put('/api/v1/admin/mandatory-matrix', body)
+  expect(result.status, JSON.stringify(result.body)).toBe(200)
+  return result
+}
+
+/** Fixture time travel: the learner's shared deadline passed `days` ago. */
+export async function makeOverdue(userId: string, days = 1) {
+  await sql(`UPDATE learning_paths SET due_at = now() - make_interval(days => $2) WHERE user_id = $1`, [userId, days])
+  await sql(`UPDATE user_learning_assignments SET due_at = now() - make_interval(days => $2) WHERE user_id = $1 AND ended_at IS NULL`, [userId, days])
+}
+
+export async function enforceDeadlines(request: APIRequestContext) {
+  const response = await request.post('/api/internal/learning/deadlines/enforce', { headers: CRON_HEADERS })
+  expect(response.status(), await response.text()).toBe(200)
+  return response.json()
+}
