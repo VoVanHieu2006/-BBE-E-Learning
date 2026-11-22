@@ -165,7 +165,7 @@ export default function CurrentRoster({
                               {/* Click vào tên để xem chi tiết */}
                               <Link
                                 href={`/chapter-manager/members/${member.userId}`}
-                                className="font-bold text-[#172554] hover:text-[#2563EB] flex min-h-6 items-center text-[13px] transition break-words"
+                                className="font-bold text-[#172554] hover:text-[#2563EB] block text-[13px] leading-6 transition break-words"
                                 title="Bấm để xem chi tiết thành viên"
                               >
                                 {member.displayName}
