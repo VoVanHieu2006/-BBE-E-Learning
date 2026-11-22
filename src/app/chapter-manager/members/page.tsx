@@ -13,6 +13,8 @@ export default function ChapterManagerMembersPage() {
   const [user, setUser] = useState<any>(null);
   const [members, setMembers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [hasLoaded, setHasLoaded] = useState(false);
   const [search, setSearch] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
@@ -88,6 +90,7 @@ export default function ChapterManagerMembersPage() {
         if (cached.totalItems !== undefined) {
           setPagination({ totalItems: cached.totalItems, totalPages: cached.totalPages || 1 });
         }
+        setHasLoaded(true);
         setLoading(false);
       }
     }
@@ -125,6 +128,7 @@ export default function ChapterManagerMembersPage() {
       if (cached.totalItems !== undefined) {
         setPagination({ totalItems: cached.totalItems, totalPages: cached.totalPages || 1 });
       }
+      setHasLoaded(true);
       setLoading(false);
     }
 
@@ -135,9 +139,16 @@ export default function ChapterManagerMembersPage() {
         setSummary(res.data.summary);
       }
       setPagination({ totalItems: res.data.totalItems || 0, totalPages: res.data.totalPages || 1 });
+      setHasLoaded(true);
     }
+    setLoadError(res.ok ? '' : 'Không tải được danh sách thành viên. Vui lòng thử lại.');
     setLoading(false);
   }
+
+  const handleRetryLoad = () => {
+    setLoading(true);
+    loadMembers(user?.chapterId, search, true, page, departmentFilter, roleFilter, limit);
+  };
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -246,6 +257,12 @@ export default function ChapterManagerMembersPage() {
 
   // Chỉ hiển thị thành viên (MEMBER) — không hiện tài khoản Lead Chapter/Admin trong danh sách
   const memberRows = members.filter((m) => m.role === 'MEMBER');
+  // Tải lỗi mà chưa có dữ liệu nào: không được hiện số 0 hay "chưa có thành viên" như dữ liệu thật.
+  const loadFailedWithoutData = Boolean(loadError) && members.length === 0;
+  // Lần tải đầu chưa xong: số 0 mặc định cũng không phải dữ liệu thật.
+  const firstLoadPending = loading && !hasLoaded;
+  const summaryValue = (value: React.ReactNode) =>
+    firstLoadPending ? <span className="text-sm font-semibold text-[#737686]">Đang tải…</span> : loadFailedWithoutData ? '—' : value;
   const activeCount = memberRows.filter((m) => m.status === 'ACTIVE').length;
   const avgChapterProgress =
     memberRows.length > 0
@@ -286,17 +303,17 @@ export default function ChapterManagerMembersPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           <Card shadow="md" className="p-4 border border-[#eff4ff]">
             <div className="text-xs font-semibold text-[#6c6f7f]">Tổng thành viên</div>
-            <div className="text-2xl font-bold text-[#172554] mt-1">{summary.totalMembers}</div>
+            <div className="text-2xl font-bold text-[#172554] mt-1">{summaryValue(summary.totalMembers)}</div>
             <div className="text-[11px] text-[#6c6f7f] mt-0.5">Toàn bộ Chapter</div>
           </Card>
           <Card shadow="md" className="p-4 border border-[#eff4ff]">
             <div className="text-xs font-semibold text-green-700">Đang hoạt động (Active)</div>
-            <div className="text-2xl font-bold text-green-700 mt-1">{summary.activeMembers}</div>
+            <div className="text-2xl font-bold text-green-700 mt-1">{summaryValue(summary.activeMembers)}</div>
             <div className="text-[11px] text-[#6c6f7f] mt-0.5">Có quyền đăng nhập học</div>
           </Card>
           <Card shadow="md" className="p-4 border border-[#eff4ff]">
             <div className="text-xs font-semibold text-blue-700">Tiến độ TB Chapter</div>
-            <div className="text-2xl font-bold text-[#2563EB] mt-1">{summary.avgChapterProgress}%</div>
+            <div className="text-2xl font-bold text-[#2563EB] mt-1">{summaryValue(`${summary.avgChapterProgress}%`)}</div>
             <div className="text-[11px] text-[#6c6f7f] mt-0.5">Tất cả khóa học</div>
           </Card>
         </div>
@@ -353,13 +370,15 @@ export default function ChapterManagerMembersPage() {
         {/* Filter Result Summary & Page Size Controls */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-1 mb-3 text-xs text-[#6c6f7f]">
           <div className="font-medium flex items-center gap-2">
-            <span>
-              Đang hiển thị <span className="text-[#2563EB] font-bold">{memberRows.length}</span> trên tổng số{' '}
-              <span className="text-[#172554] font-bold">{summary.totalMembers}</span> tài khoản
-              {(search || departmentFilter || roleFilter) && (
-                <span> (kết quả lọc: <strong className="text-[#172554]">{pagination.totalItems}</strong> tài khoản)</span>
-              )}
-            </span>
+            {!loadFailedWithoutData && !firstLoadPending && (
+              <span>
+                Đang hiển thị <span className="text-[#2563EB] font-bold">{memberRows.length}</span> trên tổng số{' '}
+                <span className="text-[#172554] font-bold">{summary.totalMembers}</span> tài khoản
+                {(search || departmentFilter || roleFilter) && (
+                  <span> (kết quả lọc: <strong className="text-[#172554]">{pagination.totalItems}</strong> tài khoản)</span>
+                )}
+              </span>
+            )}
             {loading && (
               <span className="inline-flex items-center gap-1 text-[#2563EB] font-semibold animate-pulse">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#2563EB]"></span> Đang tải...
@@ -400,11 +419,26 @@ export default function ChapterManagerMembersPage() {
             </div>
           )}
 
+          {loadError && !loading && members.length > 0 && (
+            <div role="alert" className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-red-50 border-b border-red-100 text-sm text-red-700">
+              <span>{loadError} Danh sách bên dưới có thể chưa phải dữ liệu mới nhất.</span>
+              <Button size="sm" variant="outline" onClick={handleRetryLoad}>Thử lại</Button>
+            </div>
+          )}
+
           {loading && members.length === 0 ? (
             <div className="p-8 space-y-4 animate-pulse">
               {[1, 2, 3].map((n) => (
                 <div key={n} className="h-14 bg-slate-100 rounded-xl"></div>
               ))}
+            </div>
+          ) : loadFailedWithoutData ? (
+            <div role="alert" className="text-center py-16 text-[#737686]">
+              <p className="text-lg font-semibold text-red-700 mb-1">Không tải được danh sách thành viên</p>
+              <p className="text-sm">Đã có lỗi khi tải dữ liệu, nên chưa thể biết Chapter có bao nhiêu thành viên. Vui lòng thử lại.</p>
+              <Button size="sm" onClick={handleRetryLoad} className="mt-4">
+                Thử lại
+              </Button>
             </div>
           ) : memberRows.length === 0 ? (
             <div className="text-center py-16 text-[#6c6f7f]">
