@@ -98,7 +98,9 @@ export async function recordVideoHeartbeat(
     const elapsed = isNewSession ? 0 : heartbeatElapsed(lastAt, now)
     // Only an explicit ENDED event may claim a slightly larger wall-clock reach,
     // because the final content seconds never trigger a scheduled heartbeat.
-    const grace = event === 'ENDED' ? endedReachAllowanceSeconds(playbackRate) : 0
+    // It is granted only at the end of the video, so repeated ENDED requests cannot add it up.
+    const atVideoEnd = safeDuration > 0 && position >= safeDuration - endedCompletionToleranceSeconds(safeDuration)
+    const grace = event === 'ENDED' && atVideoEnd ? endedReachAllowanceSeconds(playbackRate) : 0
     // Database duration is an admin-maintained integer while the player reports
     // fractional seconds. A persistent gap beyond the ENDED tolerance can never
     // complete, so report it instead of silently stranding the viewer at 99.x%.

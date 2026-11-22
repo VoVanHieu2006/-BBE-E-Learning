@@ -162,6 +162,28 @@ describe('P0 — Video Continuity & Anti-Seek Verification Suite (Section 6 Scen
     assert.equal(isCompleted, false, 'Malicious jump to end followed by ENDED must NOT complete')
   })
 
+  it('Scenario 9b: Gửi dồn heartbeat (BUG-VIDEO-SPAM) -> dung sai không cộng dồn theo số request', () => {
+    // 160 requests 20ms apart, each claiming 6s more than the server confirmed, at the fastest rate.
+    let currentFurthest = 0
+    const requests = 160
+    const elapsedSeconds = 0.02
+    for (let i = 0; i < requests; i++) {
+      const position = currentFurthest + 6
+      const cap = capVideoProgress(currentFurthest, position, position, elapsedSeconds, 2, 0)
+      currentFurthest = cap.furthestWatchedPositionSeconds
+    }
+    const realSeconds = requests * elapsedSeconds
+    assert.ok(currentFurthest <= realSeconds * 2 * 1.25 + 0.001, `credited ${currentFurthest}s for ${realSeconds}s of real time`)
+    // A request with no measured time at all is never worth any watch time.
+    assert.equal(capVideoProgress(100, 106, 106, 0, 2, 0).furthestWatchedPositionSeconds, 100)
+  })
+
+  it('Scenario 9c: Heartbeat 20 giây bình thường vẫn giữ dung sai trễ mạng 4–6 giây', () => {
+    assert.equal(capVideoProgress(100, 124, 124, 20, 1, 0).furthestWatchedPositionSeconds, 124)
+    assert.equal(capVideoProgress(100, 144, 144, 20, 2, 0).furthestWatchedPositionSeconds, 144)
+    assert.equal(capVideoProgress(100, 146, 146, 20, 2, 0).furthestWatchedPositionSeconds, 144)
+  })
+
   it('Scenario 10: Đổi A -> B -> A nhanh -> Không rò rỉ session/progress', () => {
     const guardA = new VideoPlaybackGuard({
       lessonId: 'lesson-A',

@@ -156,7 +156,10 @@ export function hasCompletedVideoAtEnd(
  *    - Furthest remains at currentFurthest (monotonic).
  *    - lastPosition updates to reflect the current rewound position.
  * 4. Client-reported furthest (requestedFurthestSeconds) is never trusted independently.
+ * 5. Watch time follows the wall-clock time the server measured, not the number of requests.
  */
+const JITTER_SHARE_OF_TIMED_ADVANCE = 0.25
+
 export function capVideoProgress(
   currentFurthestSeconds: number,
   requestedPositionSeconds: number,
@@ -172,9 +175,12 @@ export function capVideoProgress(
   const rate = Math.min(MAX_VIDEO_PLAYBACK_RATE, nonNegative(maxPlaybackRate))
   const grace = Math.min(10, nonNegative(graceSeconds))
 
-  // Allow a jitter buffer (4.0s - 6.0s) for audio clock drift, mobile timer throttling and network latency
-  const jitterTolerance = Math.max(4.0, rate * 2.0)
-  const maxAdvance = elapsed * rate + grace + jitterTolerance
+  // Jitter buffer (up to 4.0s - 6.0s) for audio clock drift, mobile timer throttling and network latency.
+  // It is bounded by the server-measured advance, so it cannot be collected once per request:
+  // requests sent back to back earn (almost) nothing, a scheduled heartbeat keeps the full buffer.
+  const timedAdvance = elapsed * rate
+  const jitterTolerance = Math.min(Math.max(4.0, rate * 2.0), timedAdvance * JITTER_SHARE_OF_TIMED_ADVANCE)
+  const maxAdvance = timedAdvance + grace + jitterTolerance
   const continuousCeiling = current + maxAdvance
 
   if (position <= current) {
