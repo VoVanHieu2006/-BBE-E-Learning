@@ -90,16 +90,34 @@ test.describe('Mạng chậm hoặc lỗi', () => {
     await expect(page.locator('body')).not.toContainText(/Failed to fetch|TypeError|NetworkError/)
   })
 
-  test('danh sách khóa học tải chậm: hiện trạng thái đang tải, không nháy thông báo "chưa có khóa học"', async ({ page, request }) => {
+  const slowData = async (page: Page) => {
+    await page.addInitScript(() => sessionStorage.clear())
+    await page.route(/\/api\/v1\/(?!auth)/, async (route) => { await new Promise((resolve) => setTimeout(resolve, 2500)); await route.continue() })
+  }
+
+  test('trang khóa học tải chậm: hiện trạng thái đang tải, không nháy thông báo "chưa có khóa học", rồi hiện nội dung', async ({ page, request }) => {
     await createCourse(request, { lessons: [{}] })
     await signInAs(page, 'member')
     await settle(page)
-    await page.addInitScript(() => sessionStorage.clear())
-    await page.route('**/api/v1/courses**', async (route) => { await new Promise((resolve) => setTimeout(resolve, 2500)); await route.continue() })
+    await slowData(page)
     await page.goto('/student/courses')
-    await expect(page.locator('.animate-pulse, [aria-busy="true"]').first().or(page.getByText(/Đang tải/).first())).toBeVisible({ timeout: 2_000 })
+    await expect(page.locator('.animate-pulse:visible').first().or(page.getByText(/Đang tải/).first())).toBeVisible({ timeout: 2_000 })
     await expect(page.getByText(/Chưa có khóa học/)).toHaveCount(0)
-    await expect(page.locator('.animate-pulse').first()).toBeHidden({ timeout: 20_000 })
+    await expect(page.locator('.animate-pulse:visible')).toHaveCount(0, { timeout: 20_000 })
+    await expect(page.getByText(/Mở khóa học/).first()).toBeVisible()
+  })
+
+  // Trong lúc chờ dữ liệu, trang hiện sẵn số 0 và cảnh báo như thể đó là dữ liệu thật.
+  uiDefect('BUG-UX-LOADING-FALSE-DATA', 'trang khóa học tải chậm: không hiện "0 / 0 khóa" hay cảnh báo "Chưa có Ban" trước khi có dữ liệu thật', async ({ page }) => {
+    await signInAs(page, 'member')
+    await settle(page)
+    await slowData(page)
+    await page.goto('/student/courses')
+    await expect(page.getByText(/Đang tải/).first()).toBeVisible({ timeout: 2_000 })
+    const header = (await page.locator('main').first().innerText()).replace(/\s+/g, ' ')
+    expect.soft(header, 'thành viên đã thuộc một ban').not.toContain('Chưa có Ban')
+    expect.soft(header).not.toMatch(/0 \/ 0 ?khóa/)
+    expect.soft(header).not.toContain('(0/0 bài)')
   })
 
   uiDefect('BUG-UX-ERROR-AS-EMPTY', 'máy chủ lỗi khi tải danh sách thành viên: Lead được báo là có lỗi, không bị hiểu nhầm là Chapter chưa có ai', async ({ page }) => {

@@ -35,7 +35,8 @@ test.describe('Admin: khóa học', () => {
     await page.locator('textarea[name="description"]').fill('Mô tả do test giao diện nhập')
     await page.getByText('Chỉ thành viên BBE (phải đăng nhập)').click()
     await create.click()
-    await expect(page.getByText(/Tạo khóa học thành công/)).toBeVisible()
+    // Thông báo thành công chỉ hiện thoáng qua trước khi chuyển trang; bằng chứng chắc chắn là trang soạn nội dung mở ra.
+    await expect(page.getByText(/Tạo khóa học thành công/).or(page.getByText('Thông tin chung khóa học'))).toBeVisible()
     await expect(page).toHaveURL(/\/admin\/courses\/[^/]+\/edit/, { timeout: 15_000 })
     await findCourse(page, title)
     await expect(courseCard(page, title)).toContainText('Bản nháp')
