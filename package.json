@@ -59,6 +59,7 @@
     "test:unit": "node scripts/test/run-tests.cjs unit",
     "test:integration": "node scripts/test/run-tests.cjs integration",
     "test:browser": "node scripts/test/run-tests.cjs browser",
+    "test:e2e": "node scripts/test/run-e2e.mjs",
     "test:refactor-browser": "playwright test -c playwright.refactor.config.ts",
     "test:program-departments": "node scripts/test/run-tests.cjs integration admin-program",
     "test:quiz-integration": "node scripts/test/run-tests.cjs integration quiz-and-refresh",
