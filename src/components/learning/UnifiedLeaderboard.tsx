@@ -1,5 +1,4 @@
 'use client'
-import { isLeadRole } from '@/lib/roles'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import Link from 'next/link'
@@ -95,6 +94,9 @@ export default function UnifiedLeaderboard({
   const [loadingProfile, setLoadingProfile] = useState(false)
 
   const canViewProfile = Boolean(currentUser && ['ADMIN', 'LEAD'].includes(currentUser.role))
+  // The shared board lists every Chapter; a Lead may only open profiles of their own Chapter.
+  const canOpenProfile = (row: { chapterId?: string | null }) => canViewProfile
+    && (currentUser?.role === 'ADMIN' || !row.chapterId || !currentUser?.chapterId || row.chapterId === currentUser.chapterId)
 
   const handleOpenProfile = async (memberId: string, chapId?: string) => {
     if (!canViewProfile) return
@@ -139,15 +141,6 @@ export default function UnifiedLeaderboard({
       if (c) setSelectedChapterId(c)
     }
 
-    const storedUser = (() => {
-      try { return JSON.parse(localStorage.getItem('user') || 'null') } catch { return null }
-    })()
-
-    if (isLeadRole(storedUser?.role) && storedUser.chapterId) {
-      setChapterList([{ id: storedUser.chapterId, name: storedUser.chapterName || 'Chapter của tôi' }])
-      setSelectedChapterId((current) => current || storedUser.chapterId)
-    }
-
     apiFetch<any>('/api/v1/learning/periods').then((res) => {
       if (res.ok && res.data) {
         const scope = res.data.scope
@@ -171,11 +164,7 @@ export default function UnifiedLeaderboard({
           if (t.chapter_id && t.chapterName) uniqueChapters.set(t.chapter_id, t.chapterName)
         })
         const list = Array.from(uniqueChapters.entries()).map(([id, name]) => ({ id, name }))
-        if (isLeadRole(storedUser?.role) && storedUser.chapterId) {
-          setChapterList(list.filter((chapter) => chapter.id === storedUser.chapterId))
-        } else {
-          setChapterList(list)
-        }
+        setChapterList(list)
       }
     }).catch(() => {})
   }, [refreshCurrentUser])
@@ -203,7 +192,7 @@ export default function UnifiedLeaderboard({
       // Bảng tổng toàn hệ thống không âm thầm gán chapterId từ user
       const activeChapId = isGlobal ? (selectedChapterId || '') : (selectedChapterId || currentUser?.chapterId || propChapterId || '')
       const params = new URLSearchParams({ group, periodType })
-      if ((group === 'MEMBER' || group === 'LT' || periodType === 'ACTUAL_TERM') && activeChapId) {
+      if ((group === 'MEMBER' || group === 'LT') && activeChapId) {
         params.set('chapterId', activeChapId)
       }
       if (periodId) {
@@ -485,12 +474,12 @@ export default function UnifiedLeaderboard({
 
         {/* Lọc theo Chapter nếu xem Thành viên hoặc LT (Khối DNA không dùng Chapter) */}
         {(group === 'MEMBER' || group === 'LT') && showChapterSelector && chapterList.length > 0 && (
-          <div className="flex items-center gap-3 pt-2 border-t border-slate-100 text-xs">
+          <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-slate-100 text-xs">
             <span className="font-semibold text-slate-600 shrink-0">Lọc theo Chapter:</span>
             <select aria-label="Lọc theo Chapter"
               value={selectedChapterId}
               onChange={(e) => setSelectedChapterId(e.target.value)}
-              className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 font-semibold text-slate-800 outline-none focus:border-blue-500 max-w-xs"
+              className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 font-semibold text-slate-800 outline-none focus:border-blue-500 min-w-0 max-w-full sm:max-w-xs"
             >
               <option value="">{isGlobal ? 'Tất cả Chapter (Toàn hệ thống)' : 'Chapter của bạn'}</option>
               {chapterList.map((ch) => (
@@ -575,7 +564,7 @@ export default function UnifiedLeaderboard({
                     Hạng 2 • Á quân
                   </div>
                   <div className="font-extrabold text-[#172554] text-base truncate mb-0.5">
-                    {group !== 'CHAPTER' && canViewProfile && (topThree[1].userId || topThree[1].id) ? (
+                    {group !== 'CHAPTER' && canOpenProfile(topThree[1]) && (topThree[1].userId || topThree[1].id) ? (
                       <button
                         type="button"
                         onClick={() => handleOpenProfile((topThree[1].userId || topThree[1].id)!, topThree[1].chapterId)}
@@ -616,7 +605,7 @@ export default function UnifiedLeaderboard({
                   </div>
                   <div className="text-5xl mb-1">🥇</div>
                   <div className="font-black text-lg text-[#172554] truncate mb-0.5">
-                    {group !== 'CHAPTER' && canViewProfile && (topThree[0].userId || topThree[0].id) ? (
+                    {group !== 'CHAPTER' && canOpenProfile(topThree[0]) && (topThree[0].userId || topThree[0].id) ? (
                       <button
                         type="button"
                         onClick={() => handleOpenProfile((topThree[0].userId || topThree[0].id)!, topThree[0].chapterId)}
@@ -655,7 +644,7 @@ export default function UnifiedLeaderboard({
                     Hạng 3 • Quý quân
                   </div>
                   <div className="font-extrabold text-[#172554] text-base truncate mb-0.5">
-                    {group !== 'CHAPTER' && canViewProfile && (topThree[2].userId || topThree[2].id) ? (
+                    {group !== 'CHAPTER' && canOpenProfile(topThree[2]) && (topThree[2].userId || topThree[2].id) ? (
                       <button
                         type="button"
                         onClick={() => handleOpenProfile((topThree[2].userId || topThree[2].id)!, topThree[2].chapterId)}
@@ -756,7 +745,7 @@ export default function UnifiedLeaderboard({
                               {(item.displayName || item.name || 'U').charAt(0).toUpperCase()}
                             </div>
                             <div className="min-w-0">
-                              {group !== 'CHAPTER' && canViewProfile && (item.userId || item.id) ? (
+                              {group !== 'CHAPTER' && canOpenProfile(item) && (item.userId || item.id) ? (
                                 <button
                                   type="button"
                                   onClick={() => handleOpenProfile((item.userId || item.id)!, item.chapterId)}

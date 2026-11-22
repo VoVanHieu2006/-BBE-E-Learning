@@ -9,7 +9,7 @@ Danh mục đọc từ 96 file route trong `src/app/api`. Đường dẫn độn
 - Lỗi thường có dạng `{error:{code,message?}}`. Không phải route nào cũng phân biệt 401/403 giống nhau: helper Admin có thể trả 403 cả khi chưa xác thực. Đọc handler để lấy status chính xác.
 - `authenticate` là xác thực; quyền chức vụ/đơn vị phải đọc cùng `authorization`, `organization-auth`, `chapter-lead` và service của route. Tên guard trong bảng cho biết nhánh kiểm soát thực tế, không cấp thêm quyền.
 - `/api/internal/organization/reorganizations/apply` yêu cầu Bearer `CRON_SECRET`; auto-submit/deadline còn hỗ trợ cron header hoặc Admin theo handler. Các endpoint này ghi dữ liệu kể cả một số GET, không dùng làm health probe. `GET /api/v1/health` là endpoint sức khỏe riêng.
-- Khách có thể đọc danh mục/khóa/bài/tài liệu công khai, và một số bảng xếp hạng. Authentication xuất hiện trong handler công khai có thể là optional; xem nhãn dưới đây và điều kiện visibility trong source.
+- Khách có thể đọc danh mục/khóa/bài/tài liệu công khai, và bảng xếp hạng kỳ (đủ bốn nhóm, không có email). Authentication xuất hiện trong handler công khai có thể là optional; xem nhãn dưới đây và điều kiện visibility trong source.
 - Pagination, tên ID, response alias (ví dụ `id` và `courseId`) được giữ theo từng route; không chuẩn hóa payload trong đợt dọn repo.
 
 ## Hợp đồng luồng quan trọng
@@ -21,7 +21,7 @@ Danh mục đọc từ 96 file route trong `src/app/api`. Đường dẫn độn
 | Attempt | Tạo attempt từ assessment; lưu đáp án theo question thuộc attempt; submit/cancel; GET để resume/kết quả | Ownership, course publication, video/progression gate, server expiry, snapshot câu hỏi/grading và idempotency; không sửa payload cũ |
 | Course authoring | Draft → session/lesson/video/document → assessment/bank → publish; draft snapshot/publish riêng | Admin; used bank/version và content publishing có guard; không tự reset attempt |
 | Chuyển giao | Đọc roster, parse sheet, preview/POST batch, apply/cancel theo batch | Scope Chapter thực tế; GET danh sách/roster hiện có thể apply đợt đến hạn (xem known-issues); scheduling chưa reset; successful apply mới reset và tạo outbox |
-| BXH kỳ | `group=MEMBER/LT/DNA/CHAPTER`, `periodType=MONTH/TERM/ACTUAL_TERM`; thêm periodId/chapterId theo source | ACTUAL_TERM chỉ CHAPTER, statisticsOnly; bảng đóng đọc snapshot, thiếu dữ liệu trả reason; thành viên/manager bị giới hạn đơn vị |
+| BXH kỳ | `group=MEMBER/LT/DNA/CHAPTER`, `periodType=MONTH/TERM/ACTUAL_TERM`; thêm periodId/chapterId theo source | ACTUAL_TERM chỉ CHAPTER, statisticsOnly; bảng đóng đọc snapshot, thiếu dữ liệu trả reason; PUBLIC: khách và mọi vai xem cùng một bảng, cả bốn nhóm và `chapterId` bất kỳ, không 401/403 theo vai; `/api/v1/learning/periods` trả cùng danh mục kỳ cho mọi người |
 | Cấu hình học tập | Admin GET cấu hình; PUT catalog/mapping/season/normalization/outbox | Không đổi quyền hay quy tắc cấu hình; mapping đề xuất chưa được tự duyệt; season không chồng lấn, boundary April/October UTC+7, và phải phủ cửa sổ `01/01–30/06` / `01/07–31/12` |
 
 ## Danh mục route

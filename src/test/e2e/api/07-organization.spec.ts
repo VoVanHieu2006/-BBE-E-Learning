@@ -202,24 +202,48 @@ test.describe('Bảng xếp hạng', () => {
     }
   })
 
-  test('bảng theo kỳ: thành viên Chapter chỉ xem bảng Thành viên và LT, tham số kỳ sai bị từ chối', async ({ request }) => {
-    const member = await as(request, 'member')
-    for (const group of ['DNA', 'CHAPTER']) {
-      const denied = await member.get(`/api/v1/leaderboard?group=${group}&periodType=MONTH`)
-      expect(denied.status, group).toBe(403)
-      expect(denied.body.error.message).toMatch(/Thành viên và LT/)
+  test('bảng xếp hạng theo kỳ là một bảng dùng chung: khách và mọi vai xem cả bốn nhóm, lọc Chapter bất kỳ, không lộ email', async ({ request }) => {
+    const own = await chapterOf(request, 'chapterLead')
+    const other = await chapterOf(request, 'otherChapterLead')
+    const queries = [
+      ...['MEMBER', 'LT', 'DNA', 'CHAPTER'].flatMap((group) => ['MONTH', 'TERM'].map((periodType) => `group=${group}&periodType=${periodType}`)),
+      'group=CHAPTER&periodType=ACTUAL_TERM',
+      ...[own, other].flatMap((chapterId) => [`group=MEMBER&periodType=MONTH&chapterId=${chapterId}`, `group=LT&periodType=TERM&chapterId=${chapterId}`, `group=CHAPTER&periodType=ACTUAL_TERM&chapterId=${chapterId}`]),
+    ]
+    const guestApi = guest(request)
+    const guestCatalog = (await guestApi.get('/api/v1/learning/periods')).body
+    for (const role of ['guest', 'member', 'dnaMember', 'chapterLead', 'dnaLead', 'admin'] as const) {
+      const api = role === 'guest' ? guestApi : await as(request, role)
+      for (const query of queries) {
+        const board = await api.get(`/api/v1/leaderboard?${query}`)
+        expect(board.status, `${role} ${query}`).toBe(200)
+        expect(JSON.stringify(board.body), `${role} ${query}`).not.toMatch(/@(bbe\.vn|e2e\.bbe\.test)|"email"|password|token|phone/i)
+      }
+      const catalog = await api.get('/api/v1/learning/periods')
+      expect(catalog.status, role).toBe(200)
+      expect(catalog.body.scope.allowedGroups, role).toEqual(['MEMBER', 'LT', 'DNA', 'CHAPTER'])
+      expect(catalog.body.scope.isGlobal, role).toBe(true)
+      expect(JSON.stringify(catalog.body), role).not.toMatch(/@(bbe\.vn|e2e\.bbe\.test)|"email"/)
+      for (const key of ['months', 'terms', 'seasons', 'actualTerms']) {
+        expect(catalog.body[key].map((row: any) => row.id), `${role} ${key}`).toEqual(guestCatalog[key].map((row: any) => row.id))
+      }
     }
-    expect((await member.get('/api/v1/leaderboard?group=MEMBER&periodType=MONTH&periodId=2026-13')).status).toBe(400)
-    expect((await member.get("/api/v1/leaderboard?group=MEMBER&periodType=TERM&periodId=1'--")).status).toBe(400)
   })
 
-  defect('BUG-LB-GUEST-SCOPE', 'khách không được xem bảng DNA/Chapter theo kỳ mà thành viên đã đăng nhập bị cấm xem', async ({ request }) => {
+  test('khách xem bảng theo kỳ không mở được hồ sơ thành viên: email chỉ dành cho Admin và Lead', async ({ request }) => {
+    const chapterId = await chapterOf(request, 'chapterLead')
+    const rows = (await guest(request).get(`/api/v1/leaderboard?group=MEMBER&periodType=MONTH&chapterId=${chapterId}`)).body.items as any[]
+    const userId = rows[0]?.userId ?? '00000000-0000-0000-0000-000000000000'
+    const profile = `/api/v1/chapters/${chapterId}/members/${userId}/course-progress`
+    expect((await guest(request).get(profile)).status).toBe(401)
+    expect((await (await as(request, 'member')).get(profile)).status).toBe(403)
+  })
+
+  test('bảng theo kỳ: tham số kỳ sai bị từ chối', async ({ request }) => {
     const member = await as(request, 'member')
-    for (const group of ['DNA', 'CHAPTER']) {
-      const path = `/api/v1/leaderboard?group=${group}&periodType=MONTH`
-      expect((await member.get(path)).status, group).toBe(403)
-      expect((await guest(request).get(path)).status, `khách xem bảng ${group}`).not.toBe(200)
-    }
+    expect((await member.get('/api/v1/leaderboard?group=MEMBER&periodType=MONTH&periodId=2026-13')).status).toBe(400)
+    expect((await member.get("/api/v1/leaderboard?group=MEMBER&periodType=TERM&periodId=1'--")).status).toBe(400)
+    expect((await guest(request).get('/api/v1/leaderboard?group=MEMBER&periodType=ACTUAL_TERM')).status).toBe(400)
   })
 
   test('thành viên không xem được bảng nội bộ của Chapter khác; bảng DNA chỉ cho Lead DNA và Admin', async ({ request }) => {

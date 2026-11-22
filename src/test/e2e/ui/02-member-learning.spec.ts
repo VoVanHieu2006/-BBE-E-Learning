@@ -159,6 +159,6 @@ test.describe('Hành trình học viên', () => {
     await settle(page)
     const text = await page.locator('main').first().innerText()
     expect(text).not.toMatch(/[\w.+-]+@(?!e2e\.bbe\.test)[\w-]+\.[\w.]+/)
-    await expect(page.getByRole('button', { name: /Khối DNA/ }), 'thành viên Chapter không có bảng DNA').toHaveCount(0)
+    await expect(page.getByRole('button', { name: /Khối DNA/ }), 'bảng dùng chung: thành viên Chapter cũng thấy bảng DNA').toHaveCount(1)
   })
 })

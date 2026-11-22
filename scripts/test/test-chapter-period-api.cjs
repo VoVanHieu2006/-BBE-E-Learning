@@ -16,6 +16,8 @@ global.prisma = new Proxy({
   if(checkingReadiness){readinessReads++;throw new Error('Readiness must not access the database')}
   return Reflect.get(target,key,receiver)
 }})
+// The CHAPTER board is not public: read it as Admin.
+require('../../src/lib/auth').authenticate=async()=>({ok:true,context:{role:'ADMIN',userId:'admin'}})
 const { periodLeaderboard }=require('../../src/lib/period-leaderboard')
 const { readLearningReadiness }=require('../../src/lib/learning-readiness')
 const { readinessForReason }=require('../../src/lib/learning-readiness-rules')

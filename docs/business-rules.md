@@ -12,8 +12,8 @@ Mục tiêu là tập trung đào tạo và giúp người học/Lead theo dõi 
 
 | Người dùng | Phạm vi chính |
 |---|---|
-| Khách | PUBLISHED + PUBLIC, xem/tua/tải nội dung công khai; không quiz/tiến độ/sao |
-| Thành viên Chapter / LT / President | Khóa đã xuất bản, lộ trình theo vị trí và tài nguyên của mình; BXH giới hạn affiliation |
+| Khách | PUBLISHED + PUBLIC, xem/tua/tải nội dung công khai; không quiz/tiến độ/sao; xem BXH kỳ như mọi người |
+| Thành viên Chapter / LT / President | Khóa đã xuất bản, lộ trình theo vị trí và tài nguyên của mình; BXH kỳ dùng chung, không giới hạn theo vai |
 | Thành viên DNA | Chương trình DNA và khóa published; học khóa Thành viên không tạo tư cách Chapter |
 | Lead Chapter / Lead DNA | Quản lý đúng đơn vị/chức vụ có hiệu lực; không mặc nhiên là người thi đua |
 | Admin | Quản trị toàn hệ thống, nội dung, tổ chức, tài khoản và vận hành |
@@ -91,7 +91,7 @@ Tháng runtime dùng ranh giới tự nhiên `[00:00 đầu tháng, 00:00 đầu
 
 Không dùng trọng số 30/30/20/20 cũ. Roster hiện tại khác quân số bình quân thi đua; không lấy learner count quản lý làm mẫu số. Mẫu số core dựa trên publication/version hợp lệ. Thiếu core/KPI/snapshot có reason, không giả thành 0.
 
-Nhóm gồm Thành viên, LT, DNA, Chapter. President thuộc LT; DNA TT không lên BXH DNA. Sang DNA giữa tháng loại toàn bộ sao/quân số người ấy khỏi Chapter tháng chuyển; tháng đã chốt trước đó giữ nguyên. DNA tính cả sao trước gia nhập trong cùng kỳ; không di chuyển ledger. Đổi tên không đổi ID/sao.
+Nhóm gồm Thành viên, LT, DNA, Chapter. BXH kỳ là một bảng dùng chung: khách chưa đăng nhập và mọi vai đã đăng nhập đều xem được cả bốn nhóm và lọc theo bất kỳ Chapter nào; hàng xếp hạng không có email (email chỉ có trong hồ sơ thành viên mà Admin/Lead mở). President thuộc LT; DNA TT không lên BXH DNA. Sang DNA giữa tháng loại toàn bộ sao/quân số người ấy khỏi Chapter tháng chuyển; tháng đã chốt trước đó giữ nguyên. DNA tính cả sao trước gia nhập trong cùng kỳ; không di chuyển ledger. Đổi tên không đổi ID/sao.
 
 Bảng đóng đọc snapshot, không dựng lại bằng roles/affiliation hôm nay. Thiếu history phải báo thiếu evidence. Bổ sung KPI không mở lại reward budget hoặc tính lại facts đã chốt. `ACTUAL_TERM` là thống kê Chapter, không tự có thứ hạng chính thức. Legacy chưa phân bổ báo riêng tránh đếm lặp.
 
