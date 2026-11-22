@@ -2,6 +2,9 @@
 // The suite resets its database, so only a loopback disposable bbe_test_* database is accepted.
 const DEFAULT_URL = 'postgresql://postgres:pg@127.0.0.1:55440/bbe_test_e2e'
 const PORT = Number(process.env.E2E_PORT || 3130)
+// Next middleware builds its redirects on `localhost`, so the browser must use the same host or it loses its cookies.
+const HOST = 'localhost'
+const BASE_URL = `http://${HOST}:${PORT}`
 
 function validateE2eTarget(target) {
   if (!target) throw new Error('E2E_DATABASE_URL for a disposable local bbe_test_* database is required')
@@ -27,7 +30,7 @@ function appEnv(databaseUrl) {
     JWT_REFRESH_SECRET: 'e2e-fixture-only-refresh-secret-32-bytes!',
     TOKEN_HASH_PEPPER: 'e2e-fixture-only-token-hash-pepper',
     CRON_SECRET: 'e2e-fixture-only-cron-secret',
-    NEXT_PUBLIC_APP_URL: `http://127.0.0.1:${PORT}`,
+    NEXT_PUBLIC_APP_URL: BASE_URL,
     NEXT_TELEMETRY_DISABLED: '1',
     // External services stay unconfigured: mail falls back to invitation links, uploads are not exercised.
     RESEND_API_KEY: '', YOUTUBE_API_KEY: '',
@@ -36,4 +39,4 @@ function appEnv(databaseUrl) {
   }
 }
 
-module.exports = { DEFAULT_URL, PORT, validateE2eTarget, appEnv }
+module.exports = { DEFAULT_URL, PORT, HOST, BASE_URL, validateE2eTarget, appEnv }

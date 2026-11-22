@@ -2,10 +2,10 @@ import { defineConfig, devices } from '@playwright/test'
 
 // Real end-to-end suite: real UI + real API + real disposable PostgreSQL. Start it with `npm run test:e2e`
 // (scripts/test/run-e2e.mjs resets the database and builds first); the guard below refuses any other target.
-const { PORT, validateE2eTarget, appEnv } = require('./scripts/test/e2e-target.cjs')
+const { PORT, HOST, BASE_URL, validateE2eTarget, appEnv } = require('./scripts/test/e2e-target.cjs')
 const databaseUrl = process.env.E2E_DATABASE_URL
 validateE2eTarget(databaseUrl)
-const baseURL = `http://127.0.0.1:${PORT}`
+const baseURL = BASE_URL
 
 export default defineConfig({
   testDir: './src/test/e2e',
@@ -23,7 +23,7 @@ export default defineConfig({
     { name: 'mobile', testMatch: 'ux/**/*.spec.ts', use: { ...devices['Pixel 7'] }, dependencies: ['desktop'] },
   ],
   webServer: {
-    command: `npm run start -- --hostname 127.0.0.1 --port ${PORT}`,
+    command: `npm run start -- --hostname ${HOST} --port ${PORT}`,
     url: `${baseURL}/login`,
     timeout: 120_000,
     reuseExistingServer: process.env.E2E_REUSE_SERVER === '1',
