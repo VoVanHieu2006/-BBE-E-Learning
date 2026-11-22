@@ -27,7 +27,7 @@ export default function StudentCoursesPage() {
   const [progressSummary, setProgressSummary] = useState<any>(null);
   const [deadlines, setDeadlines] = useState<Record<string, string | null>>({});
   const [deadlinesSummary, setDeadlinesSummary] = useState<any>(null);
-  const [starBalance, setStarBalance] = useState<number>(0);
+  const [starBalance, setStarBalance] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -296,6 +296,15 @@ export default function StudentCoursesPage() {
   const overallLessonsTotal = progressSummary?.totalLessons ?? courses.reduce((sum, c) => sum + (c.sessionCount || 0), 0);
   const overallProgress = progressSummary?.overallProgressPercent ?? (overallLessonsTotal > 0 ? Math.round((overallLessonsDone / overallLessonsTotal) * 100) : 0);
 
+  // Trong lúc chờ lần tải đầu, giá trị mặc định (0, chưa có ban) không phải dữ liệu thật: hiện "Đang tải…" thay cho chúng.
+  const departmentName = user?.currentDepartment?.name || user?.department?.name;
+  const affiliationPending = loading && !departmentName;
+  const progressPending = loading && !progressSummary;
+  const coursesPending = loading && courses.length === 0;
+  const starsPending = loading && starBalance === null;
+  const starBalanceText = (starBalance ?? 0).toLocaleString('vi-VN');
+  const pendingText = <span className="text-sm font-semibold text-[#737686] animate-pulse">Đang tải…</span>;
+
   return (
     <div className="w-full">
       {mounted && user ? (
@@ -306,8 +315,10 @@ export default function StudentCoursesPage() {
               <div className="space-y-2">
                 <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/15 backdrop-blur-md rounded-full text-xs font-semibold">
                   <span>🏛️</span>
-                  <span>
-                    {user.currentDepartment?.name
+                  <span className={affiliationPending ? 'animate-pulse' : undefined}>
+                    {affiliationPending
+                      ? 'Thành viên · Đang tải…'
+                      : user.currentDepartment?.name
                       ? `Thành viên · ${user.currentDepartment.name}${user.currentTermLabel ? ` (${user.currentTermLabel})` : ''}`
                       : user.department?.name
                       ? `Thành viên · ${user.department.name}`
@@ -349,7 +360,7 @@ export default function StudentCoursesPage() {
                   href="/student/stars"
                   className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-amber-950 text-xs font-extrabold transition shadow-md"
                 >
-                  <span>⭐</span> {starBalance.toLocaleString('vi-VN')} Star
+                  <span>⭐</span> {starsPending ? <span className="animate-pulse">Đang tải…</span> : `${starBalanceText} Star`}
                 </Link>
               </div>
             </div>
@@ -364,7 +375,7 @@ export default function StudentCoursesPage() {
                 <span className="text-2xl">🎓</span>
               </div>
               <div className="text-2xl md:text-3xl font-extrabold text-[#172554] mb-1">
-                {completedCoursesCount} / {totalCoursesCount} <span className="text-sm font-semibold text-[#737686]">khóa</span>
+                {progressPending ? pendingText : <>{completedCoursesCount} / {totalCoursesCount} <span className="text-sm font-semibold text-[#737686]">khóa</span></>}
               </div>
               <p className="text-xs text-[#737686]">Hoàn thành 100% video và bài kiểm tra</p>
             </Card>
@@ -375,8 +386,12 @@ export default function StudentCoursesPage() {
                 <span className="text-2xl">📊</span>
               </div>
               <div className="flex items-baseline gap-2 mb-1">
-                <span className="text-2xl md:text-3xl font-extrabold text-[#2563EB]">{overallProgress}%</span>
-                <span className="text-xs font-bold text-[#737686]">({overallLessonsDone}/{overallLessonsTotal} bài)</span>
+                {progressPending ? pendingText : (
+                  <>
+                    <span className="text-2xl md:text-3xl font-extrabold text-[#2563EB]">{overallProgress}%</span>
+                    <span className="text-xs font-bold text-[#737686]">({overallLessonsDone}/{overallLessonsTotal} bài)</span>
+                  </>
+                )}
               </div>
               <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden mt-2">
                 <div className="bg-[#2563EB] h-full rounded-full transition-all duration-500" style={{ width: `${overallProgress}%` }}></div>
@@ -389,7 +404,7 @@ export default function StudentCoursesPage() {
                 <span className="text-2xl">⭐</span>
               </div>
               <div className="text-2xl md:text-3xl font-extrabold text-amber-600 mb-1">
-                {starBalance.toLocaleString('vi-VN')} <span className="text-sm font-bold text-amber-700">Star</span>
+                {starsPending ? pendingText : <>{starBalanceText} <span className="text-sm font-bold text-amber-700">Star</span></>}
               </div>
               <p className="text-xs text-[#737686]">Tích lũy từ video và quiz bài học</p>
             </Card>
@@ -700,7 +715,7 @@ export default function StudentCoursesPage() {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#eff4ff] pb-4">
               <div>
                 <h2 className="text-xl font-bold text-[#172554] flex items-center gap-2" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
-                  <span>📚</span> Tất cả khóa học ({enrichedCourses.length})
+                  <span>📚</span> Tất cả khóa học {coursesPending ? '(đang tải…)' : `(${enrichedCourses.length})`}
                 </h2>
                 <p className="text-xs text-[#737686] mt-0.5">Danh mục toàn bộ khóa học, gồm khóa khách cũng xem được và khóa chỉ thành viên BBE</p>
               </div>
