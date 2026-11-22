@@ -181,7 +181,7 @@ export async function periodLeaderboard(request: NextRequest) {
     return NextResponse.json(await hydrateRanking(payload), { headers: { 'Cache-Control': 'no-store' } })
   }
   if (period.ends_at && period.ends_at <= now) {
-    if (group === 'DNA' && periodType === 'TERM' && !await hasNativeLearningEvidence(prisma, period.starts_at, period.ends_at)) {
+    if (periodType === 'TERM' && (group === 'DNA' || useGlobalIndividualTerm) && !await hasNativeLearningEvidence(prisma, period.starts_at, period.ends_at)) {
       return NextResponse.json({ items: [], state: 'PERIOD_UNAVAILABLE', ...readinessForReason('HISTORICAL_SEASON_UNAVAILABLE'), group, periodType, period, formula: INDIVIDUAL_FORMULA }, { headers: { 'Cache-Control': 'no-store' } })
     }
     return NextResponse.json({ items: [], state: 'AWAITING_SNAPSHOT', ...readinessForReason('SNAPSHOT_MISSING'), group, periodType, period, formula: group === 'CHAPTER' ? CHAPTER_FORMULA : INDIVIDUAL_FORMULA })

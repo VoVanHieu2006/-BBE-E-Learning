@@ -162,6 +162,79 @@ describe('DNA historical season evidence', () => {
   }
 })
 
+// Closed system-wide Member/LT season boards (no Chapter filter) must be frozen by the scheduler.
+const individualSeason = {
+  id: '00000000-0000-4000-8000-0000000000e1',
+  code: '2026-H1',
+  starts_at: at('2026-01-01T00:00:00+07:00'),
+  ends_at: at('2026-07-01T00:00:00+07:00'),
+  reward_boundary_at: null,
+}
+
+describe('system-wide Member/LT season snapshot', () => {
+  for (const scenario of ['native', 'legacy-only', 'saved'] as const) {
+    it(`scheduler freezes a closed season once: ${scenario}`, async (t) => {
+      const ledger = [
+        { user_id: USER, amount: 7, provenance: scenario === 'legacy-only' ? 'LEGACY' : 'NATIVE', awarded_at: at('2026-05-10T05:00:00Z') },
+        { user_id: USER, amount: 5, provenance: 'NATIVE', awarded_at: at('2026-07-02T05:00:00Z') },
+      ]
+      const inWindow = (where: any) => ledger.filter(row => row.provenance === where.provenance
+        && row.awarded_at >= where.awarded_at.gte && row.awarded_at < where.awarded_at.lt)
+      const saved = { payload: { state: 'FINALIZED', items: [{ stars: 9 }] } }
+      const unchanged = JSON.stringify(saved)
+      const created: any[] = []
+      const tx: any = {
+        user: { findMany: async () => [{ id: USER }] },
+        $queryRaw: async () => [{ id: USER }],
+        learningSnapshot: {
+          findUnique: async () => scenario === 'saved' ? saved : null,
+          create: async ({ data }: any) => { created.push(data); return data },
+        },
+        starLedger: { findFirst: async ({ where }: any) => inWindow(where)[0] || null, findMany: async ({ where }: any) => inWindow(where) },
+        accountStateInterval: { findMany: async () => [{ user_id: USER, role: 'MEMBER', status: 'ACTIVE' }] },
+        chapterAffiliationInterval: { findMany: async () => [{ user_id: USER, chapter_id: CHAPTER }] },
+        chapter: { findMany: async () => [{ id: CHAPTER, name: 'Chapter A' }] },
+        positionAssignment: { findMany: async () => [] },
+        organizationMembership: { findMany: async () => [] },
+        chapterCompetitionTerm: { findMany: async () => [] },
+      }
+      replacePrisma(t, {
+        chapterCompetitionTerm: { findMany: async () => [] },
+        transferSeason: { findMany: async ({ where }: any) => where.ends_at ? [individualSeason] : [] },
+        $transaction: async (callback: any) => callback(tx),
+      })
+      assert.equal(await closeCompetitionTerms(), scenario === 'native' ? 2 : 0)
+      assert.deepEqual(created.map(row => row.key), scenario === 'native'
+        ? [`ranking:MEMBER:${individualSeason.id}`, `ranking:LT:${individualSeason.id}`] : [])
+      assert.equal(JSON.stringify(saved), unchanged)
+      if (scenario === 'native') {
+        const member = created[0].payload
+        assert.equal(member.state, 'FINALIZED')
+        assert.equal(member.periodType, 'TERM')
+        assert.equal(member.period.id, individualSeason.id)
+        assert.equal(member.period.ends_at, individualSeason.ends_at.toISOString())
+        assert.deepEqual(member.items.map((row: any) => [row.userId, row.stars]), [[USER, 7]])
+      }
+    })
+  }
+
+  for (const group of ['MEMBER', 'LT'] as const) for (const scenario of ['legacy-only', 'native', 'saved'] as const) {
+    it(`${group} board serves only supported history: ${scenario}`, async (t) => {
+      const payload = { group, periodType: 'TERM', period: individualSeason, state: 'FINALIZED', items: [] }
+      replacePrisma(t, {
+        transferSeason: { findFirst: async () => individualSeason },
+        learningSnapshot: { findUnique: async () => scenario === 'saved' ? { payload } : null },
+        starLedger: { findFirst: async () => scenario === 'native' ? { id: 'evidence' } : null },
+      })
+      const response = await periodLeaderboard(new NextRequest(`http://localhost/api/v1/leaderboard?group=${group}&periodType=TERM&periodId=${individualSeason.id}`))
+      const body = await response.json()
+      assert.equal(response.status, 200)
+      assert.equal(body.state, scenario === 'saved' ? 'FINALIZED' : scenario === 'native' ? 'AWAITING_SNAPSHOT' : 'PERIOD_UNAVAILABLE')
+      if (scenario === 'legacy-only') assert.equal(body.reasonCode, 'HISTORICAL_SEASON_UNAVAILABLE')
+    })
+  }
+})
+
 describe('Learning configuration route compatibility', () => {
   const handlers = () => require('../app/api/v1/admin/learning-config/route')
 

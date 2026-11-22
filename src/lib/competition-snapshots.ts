@@ -512,6 +512,22 @@ export async function closeCompetitionTerms() {
       captured++
     }, { timeout: 60_000 })
   }
+  // System-wide Member/LT season boards (no Chapter filter) close with the transfer season itself.
+  // Freeze them with the same window and per-Chapter terms the live board used.
+  for (const season of seasons) for (const group of ['MEMBER', 'LT']) {
+    await prisma.$transaction(async (tx) => {
+      const key = `ranking:${group}:${season.id}`
+      if (await tx.learningSnapshot.findUnique({ where: { key } })) return
+      // Same rule as DNA seasons: never invent an empty history for a season without native evidence.
+      if (!await hasNativeLearningEvidence(tx, season.starts_at, season.ends_at)) return
+      const users = await tx.user.findMany({ select: { id: true }, orderBy: { id: 'asc' } })
+      for (const user of users) await lockLearningUser(tx, user.id)
+      if (await tx.learningSnapshot.findUnique({ where: { key } })) return
+      const items = await individualPeriodRows(tx, season.starts_at, season.ends_at, group, undefined, undefined, season.id, { chapterTerms: true })
+      await saveSnapshot(tx, key, { group, periodType: 'TERM', period: season, state: 'FINALIZED', items }, now)
+      captured++
+    }, { timeout: 60_000 })
+  }
   const resultSeasons = seasons.filter(s => s.reward_boundary_at && addCalendarMonthsVietnam(s.reward_boundary_at, 6) <= now).map(s => ({ ...s, ends_at: addCalendarMonthsVietnam(s.reward_boundary_at!, 6) }))
   for (const period of [...terms, ...resultSeasons]) await prisma.$transaction(async (tx) => {
     const users = await tx.user.findMany({ select: { id: true }, orderBy: { id: 'asc' } })
