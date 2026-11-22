@@ -116,7 +116,7 @@ test.describe('Mọi trang', () => {
     expect(offenders(await rowsFor(page.context().browser()!, request), (row) => row.smallTargets)).toEqual([])
   })
 
-  uiDefect('BUG-UI-HYDRATION-TRANSFER', 'mở lại trang mùa chuyển giao trong cùng tab không sinh lỗi React', async ({ page }) => {
+  test('mở lại trang mùa chuyển giao trong cùng tab không sinh lỗi React', async ({ page }) => {
     const problems = watchProblems(page)
     await signInAs(page, 'admin')
     for (let visit = 0; visit < 2; visit += 1) {

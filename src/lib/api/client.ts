@@ -29,6 +29,27 @@ function createInFlightStore(): Map<string, Promise<ApiResponse<any>>> {
   return host.__bbeApiInFlight
 }
 
+/**
+ * sessionStorage outlives a reload, so a reloaded page would keep painting the
+ * pre-reload copy for up to two minutes. A reload asks for current data: drop
+ * the persisted GET cache once per document, before any page reads it.
+ */
+function dropPersistedCacheOnReload() {
+  if (typeof window === 'undefined') return
+  const host = window as any
+  if (host.__bbeApiReloadChecked) return
+  host.__bbeApiReloadChecked = true
+  try {
+    const [navigation] = performance.getEntriesByType('navigation') as PerformanceNavigationTiming[]
+    if (navigation?.type !== 'reload') return
+    Object.keys(sessionStorage).forEach((k) => {
+      if (k.startsWith('api_cache:')) sessionStorage.removeItem(k)
+    })
+  } catch {}
+}
+
+dropPersistedCacheOnReload()
+
 // Shared across layout/page chunk instances so a layout prefetch and a page
 // request for the same URL collapse into one network call.
 const inFlightRequests = createInFlightStore()

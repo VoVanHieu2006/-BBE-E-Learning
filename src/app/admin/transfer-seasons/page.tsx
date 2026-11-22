@@ -173,8 +173,10 @@ function pageNumbers(current: number, total: number): number[] {
 }
 
 export default function TransferSeasonsProgressPage() {
-  const [data, setData] = useState<ProgressPayload | null>(() => readCachedProgress());
-  const [loading, setLoading] = useState(() => readCachedProgress() === null);
+  // The first render must match the server's, which has no browser cache; the
+  // effect below paints the cached snapshot right after hydration.
+  const [data, setData] = useState<ProgressPayload | null>(null);
+  const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [message, setMessage] = useState('');

@@ -70,7 +70,7 @@ Cookie login/refresh có HttpOnly, Secure ở production; client hiện vẫn l�
 
 ## Cache và request cũ
 
-Client có memory GET TTL 30 giây, sessionStorage cho đường phù hợp, in-flight dedupe và refresh 401. Tập route chuyển tab có memory-only tab cache tối đa 30 entries, chung trên `window` giữa layout/page chunk và gắn identity; không serialize tab data vào sessionStorage. Giữ invalidation prefix sau mutation.
+Client có memory GET TTL 30 giây, sessionStorage cho đường phù hợp (bị bỏ khi người dùng tải lại trang, nên F5 luôn lấy dữ liệu mới), in-flight dedupe và refresh 401. Tập route chuyển tab có memory-only tab cache tối đa 30 entries, chung trên `window` giữa layout/page chunk và gắn identity; không serialize tab data vào sessionStorage. Giữ invalidation prefix sau mutation.
 
 Server cache riêng theo role/scope/loại dữ liệu: course list TTL 15 giây, leaderboard/progress/roster có helper riêng. Cấu hình học tập/readiness/progress nhạy cảm có no-store. Cache không thay quyền DB đang có hiệu lực. Tách component/hook phải giữ request identity, cancellation/stale guard, effect dependencies, payload/loading/error và React key để không remount ngoài ý muốn.
 
