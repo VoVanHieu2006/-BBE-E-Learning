@@ -7,7 +7,7 @@ import { orderOrganizationTree, organizationParentTypeMatches, organizationSubtr
 import { selectQuizQuestions, validateQuizPoolAssignments } from '../lib/quiz-pool-selection'
 import { mergeChapterMemberRecords } from '../lib/chapter-membership-rules'
 import { normalizeStarHistoryPagination } from '../lib/star-history-rules'
-import { gradeQuizAttempt, validateAttemptAnswerSelections } from '../lib/quiz-attempt-rules'
+import { gradeQuizAttempt, scoreRatioToPercent, validateAttemptAnswerSelections } from '../lib/quiz-attempt-rules'
 import { isOrganizationId, normalizeOrganizationPagination, normalizeOrganizationSearch, parseAssignmentFilterStatus, parseMembershipFilterStatus } from '../lib/organization-admin-rules'
 import { parseLearningRuleInput } from '../lib/learning-rule-rules'
 import { canDeleteLessonComment, hasPermissionInOrganizationScope, isLegacyChapterCompatibilityPermission, resolveLegacyChapterMembershipScope } from '../lib/authorization-rules'
@@ -275,6 +275,16 @@ describe('Quiz attempt grading', () => {
     assert.equal(result.totalPoints, 2)
     assert.equal(result.score, 2)
     assert.equal(result.passed, true)
+  })
+
+  it('reports the same whole percent at submission as the stored two-decimal score gives later', () => {
+    // 23/40 * 100 is 57.49999999999999 in floating point; the column stores 0.58.
+    assert.equal(scoreRatioToPercent(23 / 40), 58)
+    assert.equal(scoreRatioToPercent(0.58), 58)
+    assert.equal(scoreRatioToPercent(180 / 200), 90)
+    assert.equal(scoreRatioToPercent(1 / 3), 33)
+    assert.equal(scoreRatioToPercent(0), 0)
+    assert.equal(scoreRatioToPercent(1), 100)
   })
 })
 

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { QUIZ_PASS_PERCENT } from '@/lib/config/quiz'
-import { gradeQuizAttempt, GradingQuestion } from '@/lib/quiz-attempt-rules'
+import { gradeQuizAttempt, GradingQuestion, scoreRatioToPercent } from '@/lib/quiz-attempt-rules'
 
 export async function GET(request: NextRequest, { params }: { params: { attemptId: string } }) {
   const auth = await authenticate(request)
@@ -55,7 +55,7 @@ export async function GET(request: NextRequest, { params }: { params: { attemptI
 
   return NextResponse.json({
     attemptId: attempt.id,
-    score: attempt.score === null ? 0 : Math.round(Number(attempt.score) * 100),
+    score: attempt.score === null ? 0 : scoreRatioToPercent(Number(attempt.score)),
     passed,
     answers: answerResults,
   })
