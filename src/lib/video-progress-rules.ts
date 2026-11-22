@@ -204,8 +204,10 @@ export function capVideoProgress(
   // This prevents cascading lockout where one delayed heartbeat permanently freezes progress.
   const remoteJumpThreshold = 10.0
   if (position <= continuousCeiling + remoteJumpThreshold) {
+    // The ENDED grace is excluded here: it only helps a claim it fully covers, so repeated
+    // ENDED requests cannot walk the last seconds of a video one grace at a time.
     return {
-      furthestWatchedPositionSeconds: Math.min(position, continuousCeiling),
+      furthestWatchedPositionSeconds: Math.min(position, continuousCeiling - grace),
       lastPositionSeconds: position,
     }
   }

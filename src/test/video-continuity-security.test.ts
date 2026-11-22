@@ -178,6 +178,19 @@ describe('P0 — Video Continuity & Anti-Seek Verification Suite (Section 6 Scen
     assert.equal(capVideoProgress(100, 106, 106, 0, 2, 0).furthestWatchedPositionSeconds, 100)
   })
 
+  it('Scenario 9d: Gửi dồn ENDED ở gần cuối video -> dung sai ENDED không cộng dồn', () => {
+    const duration = 600
+    const endGrace = endedReachAllowanceSeconds(2)
+    const endPosition = duration - endedCompletionToleranceSeconds(duration)
+    let currentFurthest = endPosition - endGrace - 8
+    for (let i = 0; i < 20; i++) {
+      currentFurthest = capVideoProgress(currentFurthest, endPosition, endPosition, 0.02, 2, endGrace).furthestWatchedPositionSeconds
+    }
+    assert.equal(hasCompletedVideoAtEnd(currentFurthest, duration, 'ENDED'), false, `reached ${currentFurthest}s`)
+    // One ENDED that the grace fully covers still completes.
+    assert.equal(capVideoProgress(endPosition - endGrace, endPosition, endPosition, 0, 2, endGrace).furthestWatchedPositionSeconds, endPosition)
+  })
+
   it('Scenario 9c: Heartbeat 20 giây bình thường vẫn giữ dung sai trễ mạng 4–6 giây', () => {
     assert.equal(capVideoProgress(100, 124, 124, 20, 1, 0).furthestWatchedPositionSeconds, 124)
     assert.equal(capVideoProgress(100, 144, 144, 20, 2, 0).furthestWatchedPositionSeconds, 144)
