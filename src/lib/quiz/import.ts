@@ -166,13 +166,22 @@ export function parseQuizRows(rows: string[][]): ImportedQuiz {
 
     const optionTexts = [a, b, c, d].map((v) => (v || '').trim())
     const options = optionTexts
-      .map((optionText, i) => ({ optionText, isCorrect: false, sortOrder: i, letter: LETTERS[i] }))
+      .map((optionText, i) => ({ optionText, isCorrect: false, sortOrder: i }))
       .filter((o) => o.optionText !== '')
-    // Chữ đáp án đi theo cột trong sheet, không theo vị trí sau khi bỏ cột trống.
-    const availableLetters = options.map((o) => o.letter)
 
     if (options.length < 2) {
       errors.push({ row: rowNumber, message: 'Phải có ít nhất 2 lựa chọn (cột A và B)' })
+      return
+    }
+
+    // Cột trống đứng trước một cột có nội dung sẽ làm lệch chữ đáp án, nên từ chối cả dòng.
+    const lastFilled = optionTexts.reduce((last, text, i) => (text !== '' ? i : last), -1)
+    const gapLetters = LETTERS.filter((_, i) => i < lastFilled && optionTexts[i] === '')
+    if (gapLetters.length > 0) {
+      errors.push({
+        row: rowNumber,
+        message: `Lựa chọn ${gapLetters.join(', ')} bị bỏ trống: không được để trống lựa chọn đứng trước một lựa chọn khác`,
+      })
       return
     }
 
@@ -187,18 +196,19 @@ export function parseQuizRows(rows: string[][]): ImportedQuiz {
       return
     }
 
-    const invalidLetters = answerLetters.filter((l) => !availableLetters.includes(l))
+    const invalidLetters = answerLetters.filter((l) => !LETTERS.slice(0, options.length).includes(l))
     if (invalidLetters.length > 0) {
       errors.push({
         row: rowNumber,
-        message: `Đáp án "${invalidLetters.join(', ')}" không khớp các lựa chọn có sẵn (${availableLetters.join(', ')})`,
+        message: `Đáp án "${invalidLetters.join(', ')}" không khớp các lựa chọn có sẵn (${LETTERS.slice(0, options.length).join(', ')})`,
       })
       return
     }
 
     const uniqueLetters = Array.from(new Set(answerLetters))
-    options.forEach((option) => {
-      if (uniqueLetters.includes(option.letter)) option.isCorrect = true
+    uniqueLetters.forEach((letter) => {
+      const idx = LETTERS.indexOf(letter)
+      if (options[idx]) options[idx].isCorrect = true
     })
 
     questions.push({
@@ -206,7 +216,7 @@ export function parseQuizRows(rows: string[][]): ImportedQuiz {
       questionType: uniqueLetters.length > 1 ? 'MULTIPLE_CHOICE' : 'SINGLE_CHOICE',
       points: 1,
       explanation: (explanationRaw || '').trim(),
-      options: options.map(({ optionText, isCorrect, sortOrder }) => ({ optionText, isCorrect, sortOrder })),
+      options,
       sortOrder: questions.length,
     })
   })
