@@ -2,7 +2,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { expect, test } from '@playwright/test'
 import { Api, as, guest } from '../support/api'
-import { createCourse, createLearner, CRON_HEADERS, defect, inviteLink, uniqueEmail } from '../support/fixtures'
+import { createCourse, createLearner, CRON_HEADERS, inviteLink, uniqueEmail } from '../support/fixtures'
 
 // Intent: docs/business-rules.md "Vai trò và phạm vi" + docs/api.md guards.
 // Every route handler in src/app/api must be classified here; an unclassified route fails the suite.
@@ -202,7 +202,7 @@ test('route cron: secret đúng mới chạy, cookie Admin không thay được 
   }
 })
 
-defect('BUG-PROFILE-500', 'Admin sửa tên của tài khoản không tồn tại phải nhận 404, không phải lỗi 500', async ({ request }) => {
+test('Admin sửa tên của tài khoản không tồn tại phải nhận 404, không phải lỗi 500', async ({ request }) => {
   const result = await call(request, 'admin', 'PATCH v1/users/[userId]/profile', {}, { displayName: 'Tên Hợp Lệ' })
   expect(result.status).toBe(404)
 })

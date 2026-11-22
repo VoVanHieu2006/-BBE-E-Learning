@@ -45,7 +45,7 @@ describe('tách ID video từ link Admin dán', () => {
     `https://www.youtube.com/v/${ID}`,
   ]) it(`reads ${link.trim()}`, () => assert.equal(parseYouTubeVideoId(link), ID))
   // The module supports recorded livestreams, and YouTube's share link for them is /live/<id>.
-  it('BUG-YOUTUBE-LIVE-LINK: reads the share link of a recorded livestream', { todo: 'BUG-YOUTUBE-LIVE-LINK: known defect, see docs/qa/defects.md' }, () => {
+  it('reads the share link of a recorded livestream', () => {
     assert.equal(parseYouTubeVideoId(`https://www.youtube.com/live/${ID}`), ID)
     assert.equal(parseYouTubeVideoId(`https://www.youtube.com/live/${ID}?si=abc`), ID)
   })

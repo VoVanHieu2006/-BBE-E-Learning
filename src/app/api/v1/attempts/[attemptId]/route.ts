@@ -55,7 +55,7 @@ export async function GET(request: NextRequest, { params }: { params: { attemptI
 
   return NextResponse.json({
     attemptId: attempt.id,
-    score: attempt.score === null ? 0 : Number(attempt.score) * 100,
+    score: attempt.score === null ? 0 : Math.round(Number(attempt.score) * 100),
     passed,
     answers: answerResults,
   })

@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { as, errorCode } from '../support/api'
 import { one, sql } from '../support/db'
-import { createCourse, createLearner, defect, quizQuestions, skipQuizCooldown, starBalance, takeQuiz, watchWholeVideo } from '../support/fixtures'
+import { createCourse, createLearner, quizQuestions, skipQuizCooldown, starBalance, takeQuiz, watchWholeVideo } from '../support/fixtures'
 
 // Intent: docs/business-rules.md "Quiz và sao".
 async function readyForQuiz(request: any, questions = 20, extra: { perAttempt?: number; durationMinutes?: number } = {}) {
@@ -190,8 +190,7 @@ test.describe('Chấm điểm và ngưỡng 85%', () => {
     expect(reread.body.answers.map((answer: any) => answer.isCorrect)).toEqual(result.answers.map((answer: any) => answer.isCorrect))
   })
 
-  // POST /submit trả `score` là điểm thô (180/200) còn GET /attempts/[id] trả `score` là phần trăm (90).
-  defect('BUG-QUIZ-SCORE-UNIT', 'trường score phải cùng đơn vị ở kết quả nộp bài và ở lịch sử lượt làm', async ({ request }) => {
+  test('trường score phải cùng đơn vị ở kết quả nộp bài và ở lịch sử lượt làm', async ({ request }) => {
     const { learner, assessmentId } = await readyForQuiz(request)
     const { attemptId, result } = await takeQuiz(learner, assessmentId, 18)
     const reread = await learner.api.get(`/api/v1/attempts/${attemptId}`)

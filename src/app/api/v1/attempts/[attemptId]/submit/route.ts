@@ -19,7 +19,8 @@ export async function POST(request: NextRequest, { params }: { params: { attempt
   const reasonCode = 'reasonCode' in result ? result.reasonCode : null
   ;(globalThis as any).__bbeLearningMeCache?.delete(auth.context!.userId)
   return NextResponse.json({
-    attemptId: params.attemptId, score: Math.round(grading.score), totalPoints: grading.totalPoints,
+    // `score` is a percentage on every attempt endpoint; raw points are earnedPoints/totalPoints.
+    attemptId: params.attemptId, score: Math.round(grading.scoreRatio * 100), earnedPoints: Math.round(grading.score), totalPoints: grading.totalPoints,
     scorePercent: Math.round(grading.scoreRatio * 100), passed: grading.passed,
     starReward: {
       awarded: amount > 0, amount, rewardKey: rewardKey || null, balance: balance || 0,

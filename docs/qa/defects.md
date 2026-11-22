@@ -26,8 +26,6 @@ hiểu sai hoặc phải làm thừa; **Thấp** = khó chịu nhỏ, chuẩn ac
 | BUG-UX-ERROR-AS-EMPTY | Khi API danh sách thành viên trả 500, trang Lead không báo lỗi; Lead thấy màn hình như thể Chapter chưa có ai. | Báo "không tải được" kèm cách thử lại. | `ux/02-interaction.spec.ts` |
 | BUG-UX-LOADING-FALSE-DATA | Trang khóa học của học viên khi mạng chậm (2,5 giây): trong lúc chờ, trang hiện "⚠️ Thành viên · Chưa có Ban" (dù thành viên đã thuộc một ban), "0 / 0 khóa", "0% (0/0 bài)", "Tất cả khóa học (0)" như dữ liệu thật, rồi mới nhảy sang số đúng. | Hiện trạng thái đang tải cho các số liệu và không hiện cảnh báo trước khi có dữ liệu. | `ux/02-interaction.spec.ts` |
 | BUG-LEAD-MEMBER-DETAIL-UNIT | Lead Chapter mở hồ sơ một thành viên (cửa sổ ở "Thành viên & Tiến trình" và trang `/chapter-manager/members/<id>`): hồ sơ luôn ghi "Chưa gán Chapter" và "Ban Chưa phân ban", dù danh sách ngay bên dưới và bảng chuyển giao ghi đúng ban. API `GET /api/v1/chapters/<id>/members/<userId>/course-progress` không trả tên Chapter và Ban trong `user`. Tìm thấy khi dùng thử bằng tay. | Hồ sơ ghi đúng Chapter và Ban của thành viên. | `ui/03-lead-management.spec.ts` |
-| BUG-PROFILE-500 | Admin sửa tên của tài khoản không tồn tại nhận lỗi 500. | 404. | `api/08-permission-matrix.spec.ts` |
-| BUG-MOVE-SESSION-MSG | Thành viên bị chuyển ban: phiên cũ nhận thông báo như tài khoản bị vô hiệu hóa. | Thông báo tiếng Việt yêu cầu đăng nhập lại. | `api/07-organization.spec.ts` |
 | BUG-QUIZ-IMPORT-GAP | Nhập quiz từ Google Sheet: nếu một cột lựa chọn bị bỏ trống ở giữa (A, trống, C, D) và đáp án là "C", hệ thống đánh dấu lựa chọn D là đúng, không báo lỗi. Đề thi có đáp án sai mà Admin không biết. | Đánh dấu đúng lựa chọn ở cột C, hoặc từ chối dòng đó. | `src/test/quiz-import.test.ts` |
 | BUG-UI-HYDRATION-TRANSFER | Trang `/admin/transfer-seasons` sinh lỗi React #425 và #422 khi dữ liệu của trang đã được lưu trong tab (mở lại trang, hoặc đôi khi ngay lần đầu sau đăng nhập): `useState(() => readCachedProgress() === null)` đọc `sessionStorage` lúc dựng lần đầu nên nội dung trình duyệt dựng khác nội dung máy chủ dựng. React phải dựng lại cả trang. | Không có lỗi JavaScript. | `ux/01-every-page.spec.ts` |
 | BUG-A11Y-LABELS | 14/35 trang có ô nhập hoặc ô chọn không gắn nhãn (131 ô trên máy tính, 317 trên điện thoại), gồm email và mật khẩu ở trang đăng nhập, ô tìm kiếm, ô chọn kỳ, ô chọn chương trình ở danh sách khóa học, ô số ngày ở ma trận bắt buộc. Trình đọc màn hình chỉ đọc "ô nhập". | Mỗi ô có `<label>` hoặc `aria-label`. | `ux/01-every-page.spec.ts` |
@@ -37,8 +35,6 @@ hiểu sai hoặc phải làm thừa; **Thấp** = khó chịu nhỏ, chuẩn ac
 
 | Mã | Hiện tượng (đã tái hiện) | Mong đợi | Test |
 |---|---|---|---|
-| BUG-INVITE-EN | Mời với đơn vị không hợp lệ trả thông báo lỗi tiếng Anh. | Tiếng Việt. | `api/02-invitations.spec.ts` |
-| BUG-QUIZ-SCORE-UNIT | `score` ở kết quả nộp bài là điểm thô (180), ở lịch sử lượt làm là phần trăm (90). | Cùng một đơn vị. | `api/05-quiz.spec.ts` |
 | BUG-UX-NETWORK-MSG | Mất mạng lúc đăng nhập hiện "Lỗi kết nối: Failed to fetch". | Thông báo hoàn toàn bằng tiếng Việt. | `ux/02-interaction.spec.ts` |
 | BUG-UX-LONG-WORD-OVERFLOW | Tên hiển thị chứa một từ 36 ký tự không dấu cách làm trang chủ học viên tràn ngang 144px trên máy tính (tên dài có dấu cách thì không sao). | Từ dài được ngắt dòng hoặc cắt bớt. | `ux/02-interaction.spec.ts` |
 | BUG-A11Y-LANDMARK | 5/35 trang không có hoặc có hai vùng `main`: `/leaderboard`, bài học, bài kiểm tra (không có); `/student/stars`, `/chapter-manager/courses` (hai). | Đúng một `main`. | `ux/01-every-page.spec.ts` |
@@ -46,7 +42,6 @@ hiểu sai hoặc phải làm thừa; **Thấp** = khó chịu nhỏ, chuẩn ac
 | BUG-UX-PAGE-TITLE | Cả 35 trang cùng tên tab "BBE E-Learning"; mở nhiều tab không phân biệt được. | Tên tab theo trang. | `ux/01-every-page.spec.ts` |
 | BUG-UX-TINY-TEXT | 8/35 trang có chữ 9–10px, ví dụ "Khách cũng xem được" (9px), "Chương trình lõi", "Trưởng ban", "Cần làm" (10px). | Tối thiểu 11px. | `ux/01-every-page.spec.ts` |
 | BUG-UX-CONTRAST | Màu chữ phụ `#737686` trên nền trang `#f8f9ff` có tỉ lệ tương phản 4,28:1. | Tối thiểu 4,5:1 (WCAG AA). | `src/test/small-lib-modules.test.ts` |
-| BUG-YOUTUBE-LIVE-LINK | Link chia sẻ của bản lưu livestream (`youtube.com/live/<id>`) không được nhận diện, dù hệ thống hỗ trợ bản lưu livestream. | Đọc được ID video. | `src/test/youtube-duration.test.ts` |
 
 ## Quan sát chưa xếp thành lỗi
 

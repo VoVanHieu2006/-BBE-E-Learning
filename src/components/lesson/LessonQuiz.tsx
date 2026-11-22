@@ -520,7 +520,7 @@ export default function LessonQuiz({
           </h4>
           <div className="flex items-center justify-center gap-4 text-xs font-semibold">
             <span className="px-3 py-1 bg-white rounded-lg shadow-2xs">
-              Điểm: <strong>{result.scorePercent}%</strong> ({result.score}/{result.totalPoints} điểm)
+              Điểm: <strong>{result.scorePercent}%</strong> ({result.earnedPoints}/{result.totalPoints} điểm)
             </span>
             <span
               className={`px-3 py-1 rounded-lg ${
