@@ -6,6 +6,7 @@ import crypto from 'crypto'
 import { hasActiveAffiliation } from '@/lib/affiliation-access'
 import { getLearningManagerKind } from '@/lib/manager-learning-access'
 import { invalidateUserAuthCache } from '@/lib/auth'
+import { loginSource, reserveLoginAttempt } from '@/lib/login-rate-limit'
 import { MAX_LOGIN_ATTEMPTS, failedLoginState, isOverdueLocked, isPasswordLocked } from '@/lib/account-restriction-rules'
 
 const JWT_ACCESS_SECRET = process.env.JWT_ACCESS_SECRET || ''
@@ -42,6 +43,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: { code: 'ConfigError', message: 'Thiếu cấu hình biến môi trường JWT_ACCESS_SECRET hoặc JWT_REFRESH_SECRET trên Vercel.' } },
         { status: 500 }
+      )
+    }
+
+    // Nguồn đã sai quá nhiều lần bị từ chối trước khi kiểm tra mật khẩu, kể cả khi mật khẩu đúng.
+    const attempt = await reserveLoginAttempt(loginSource(request.headers))
+    const retryAfter = attempt.retryAfter
+    if (retryAfter !== null) {
+      return NextResponse.json(
+        { error: { code: 'TooManyAttempts', message: `Quá nhiều lần đăng nhập sai. Vui lòng thử lại sau ${Math.ceil(retryAfter / 60)} phút.` } },
+        { status: 429, headers: { 'Retry-After': String(retryAfter) } }
       )
     }
 
@@ -83,6 +94,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Mật khẩu đúng: lúc này mới báo trạng thái tài khoản.
+    await attempt.release()
     if (user.status === 'INACTIVE') {
       return NextResponse.json({ error: { code: 'AccountInactive', message: 'Tài khoản đã bị vô hiệu hóa' } }, { status: 403 })
     }
