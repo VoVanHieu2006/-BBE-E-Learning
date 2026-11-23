@@ -21,16 +21,18 @@ const exclusionTexts: Record<string, string> = {
   TERM_NOT_STARTED: 'Nhiệm kỳ chưa bắt đầu', SEASON_BOUNDARY_MISSING: 'Chưa cấu hình mốc nhiệm kỳ', MONTH_NOT_CONFIGURED: 'Tháng thi đua chưa được cấu hình',
 }
 
-// Round away from the threshold so the shown number never contradicts the PASS/FAIL decision.
-function oneDecimal(value: number, mode: 'floor' | 'ceil' | 'round') {
-  return (Math[mode](Math.round(value * 1e7) / 1e6) / 10).toLocaleString('vi-VN', { maximumFractionDigits: 1 })
+// Rounds to one decimal; only when that would land on the wrong side of the cutoff does it round away from it.
+function oneDecimal(value: number, contradicts: (rounded: number) => boolean, mode: 'floor' | 'ceil') {
+  const tenths = Math.round(value * 1e7) / 1e6
+  const rounded = Math.round(tenths) / 10
+  return (contradicts(rounded) ? Math[mode](tenths) / 10 : rounded).toLocaleString('vi-VN', { maximumFractionDigits: 1 })
 }
 
 function formatValue(condition: ChapterEligibilityCondition) {
   if (condition.value === null || condition.value === undefined) return null
-  if (condition.kind === 'CORE_COMPLETION') return `${oneDecimal(Number(condition.value) * 100, condition.state === 'FAIL' ? 'floor' : 'round')}%`
+  if (condition.kind === 'CORE_COMPLETION') return `${oneDecimal(Number(condition.value) * 100, shown => condition.state === 'FAIL' && shown >= 50, 'floor')}%`
   if (condition.kind === 'KPI') return kpiNames[String(condition.value)] || String(condition.value)
-  return oneDecimal(Number(condition.value), condition.state === 'PASS' ? 'ceil' : 'round')
+  return oneDecimal(Number(condition.value), shown => condition.state === 'PASS' && shown <= 20, 'ceil')
 }
 
 function formatTime(value: string | Date) {
