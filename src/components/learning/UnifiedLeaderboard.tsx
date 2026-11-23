@@ -589,7 +589,7 @@ const formatChapterScore = (val: number | null | undefined) => {
                   </div>
                   <p className="text-xs text-[#6c6f7f] truncate mb-3">
                     {group === 'CHAPTER'
-                      ? `${topThree[1].memberCount || 0} học viên • Đạt ≥70%: ${topThree[1].atLeast70Percent !== null && topThree[1].atLeast70Percent !== undefined ? `${topThree[1].atLeast70Percent}%` : '—'}`
+                      ? `${(topThree[1].memberCount || 0).toLocaleString('vi-VN')} học viên • Đạt ≥70%: ${topThree[1].atLeast70Percent !== null && topThree[1].atLeast70Percent !== undefined ? `${topThree[1].atLeast70Percent.toLocaleString('vi-VN')}%` : '—'}`
                       : `${topThree[1].positionName || 'Thành viên'} • ${topThree[1].departmentName || (group === 'DNA' ? 'Khối DNA' : '—')}${isGlobal && topThree[1].chapterName ? ` • ${topThree[1].chapterName}` : ''}`}
                   </p>
                   <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-100 text-slate-800 rounded-full text-sm font-black border border-slate-200">
@@ -630,7 +630,7 @@ const formatChapterScore = (val: number | null | undefined) => {
                   </div>
                   <p className="text-xs text-[#6c6f7f] truncate mb-3">
                     {group === 'CHAPTER'
-                      ? `${topThree[0].memberCount || 0} học viên • Đạt ≥70%: ${topThree[0].atLeast70Percent !== null && topThree[0].atLeast70Percent !== undefined ? `${topThree[0].atLeast70Percent}%` : '—'}`
+                      ? `${(topThree[0].memberCount || 0).toLocaleString('vi-VN')} học viên • Đạt ≥70%: ${topThree[0].atLeast70Percent !== null && topThree[0].atLeast70Percent !== undefined ? `${topThree[0].atLeast70Percent.toLocaleString('vi-VN')}%` : '—'}`
                       : `${topThree[0].positionName || 'Thành viên'} • ${topThree[0].departmentName || (group === 'DNA' ? 'Khối DNA' : '—')}${isGlobal && topThree[0].chapterName ? ` • ${topThree[0].chapterName}` : ''}`}
                   </p>
                   <div className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-amber-100 text-amber-900 rounded-full text-base font-black border border-amber-300 shadow-inner">
@@ -669,7 +669,7 @@ const formatChapterScore = (val: number | null | undefined) => {
                   </div>
                   <p className="text-xs text-[#6c6f7f] truncate mb-3">
                     {group === 'CHAPTER'
-                      ? `${topThree[2].memberCount || 0} học viên • Đạt ≥70%: ${topThree[2].atLeast70Percent !== null && topThree[2].atLeast70Percent !== undefined ? `${topThree[2].atLeast70Percent}%` : '—'}`
+                      ? `${(topThree[2].memberCount || 0).toLocaleString('vi-VN')} học viên • Đạt ≥70%: ${topThree[2].atLeast70Percent !== null && topThree[2].atLeast70Percent !== undefined ? `${topThree[2].atLeast70Percent.toLocaleString('vi-VN')}%` : '—'}`
                       : `${topThree[2].positionName || 'Thành viên'} • ${topThree[2].departmentName || (group === 'DNA' ? 'Khối DNA' : '—')}${isGlobal && topThree[2].chapterName ? ` • ${topThree[2].chapterName}` : ''}`}
                   </p>
                   <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-900 rounded-full text-sm font-black border border-amber-200">
