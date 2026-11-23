@@ -884,7 +884,7 @@ export default function UnifiedLeaderboard({
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 pt-1">
                 {excludedChapters.map((ch: any) => (
                   <div key={ch.chapterId || ch.id} className="p-3 bg-white border border-amber-200 rounded-2xl text-xs space-y-1">
-                    <p className="font-bold text-[#172554]">{ch.name}</p>
+                    <p className="font-bold text-[#172554]">{ch.name || ch.chapterName}</p>
                     <p>{(ch.totalStars ?? 0).toLocaleString('vi-VN')} sao · Điểm BXH: {formatChapterScore(ch.score)}</p>
                     <ChapterConditions chapter={ch} />
                   </div>

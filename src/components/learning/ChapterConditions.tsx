@@ -52,7 +52,7 @@ export default function ChapterConditions({ chapter }: { chapter: any }) {
     </li>)}
   </ul>
   return <div className="space-y-1 text-xs text-slate-600">
-    <p>Học viên hiện tại: {chapter.currentRosterCount ?? 'Chưa có dữ liệu'}</p>
+    {chapter.currentRosterCount != null && <p>Học viên hiện tại: {chapter.currentRosterCount}</p>}
     <ul className="space-y-0.5">
       {conditions.map(condition => {
         const mark = marks[condition.state]
