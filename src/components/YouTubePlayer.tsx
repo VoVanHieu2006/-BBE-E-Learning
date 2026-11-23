@@ -1186,12 +1186,12 @@ export default function YouTubePlayer({
 
                 {/* Status Badge */}
                 {canSeekFree ? (
-                  <span className="text-[10px] text-amber-200 font-semibold px-2 py-1 bg-amber-950/85 border border-amber-600/60 rounded-xl shadow-md backdrop-blur-xs hidden lg:inline-flex items-center gap-1 shrink-0">
+                  <span className="text-[11px] text-amber-200 font-semibold px-2 py-1 bg-amber-950/85 border border-amber-600/60 rounded-xl shadow-md backdrop-blur-xs hidden lg:inline-flex items-center gap-1 shrink-0">
                     <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
                     Có thể tua
                   </span>
                 ) : (
-                  <span className="text-[10px] text-slate-300 font-semibold px-2 py-1 bg-slate-800/85 border border-slate-700/70 rounded-xl shadow-md backdrop-blur-xs hidden xl:inline-flex items-center gap-1 shrink-0">
+                  <span className="text-[11px] text-slate-300 font-semibold px-2 py-1 bg-slate-800/85 border border-slate-700/70 rounded-xl shadow-md backdrop-blur-xs hidden xl:inline-flex items-center gap-1 shrink-0">
                     <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
                     Chưa mở tua tới
                   </span>

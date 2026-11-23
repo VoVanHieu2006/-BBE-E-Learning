@@ -27,9 +27,10 @@ export default function StudentCoursesPage() {
   const [progressSummary, setProgressSummary] = useState<any>(null);
   const [deadlines, setDeadlines] = useState<Record<string, string | null>>({});
   const [deadlinesSummary, setDeadlinesSummary] = useState<any>(null);
-  const [starBalance, setStarBalance] = useState<number>(0);
+  const [starBalance, setStarBalance] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [coursesLoadFailed, setCoursesLoadFailed] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [mainTab, setMainTab] = useState<'PROGRAM_TREE' | 'MY_COURSES'>('PROGRAM_TREE');
   const [filter, setFilter] = useState<'ALL' | 'IN_PROGRESS' | 'NOT_STARTED' | 'COMPLETED'>('ALL');
@@ -126,6 +127,7 @@ export default function StudentCoursesPage() {
       if (coursesRes.ok && coursesRes.data) {
         setCourses(coursesRes.data.items || []);
       }
+      setCoursesLoadFailed(!coursesRes.ok);
       setLoading(false);
       setRefreshing(false);
       return;
@@ -156,6 +158,7 @@ export default function StudentCoursesPage() {
     if (starsRes.ok && starsRes.data) {
       setStarBalance(starsRes.data.balance ?? 0);
     }
+    setCoursesLoadFailed(!coursesRes.ok);
     setLoading(false);
     setRefreshing(false);
   }
@@ -296,6 +299,27 @@ export default function StudentCoursesPage() {
   const overallLessonsTotal = progressSummary?.totalLessons ?? courses.reduce((sum, c) => sum + (c.sessionCount || 0), 0);
   const overallProgress = progressSummary?.overallProgressPercent ?? (overallLessonsTotal > 0 ? Math.round((overallLessonsDone / overallLessonsTotal) * 100) : 0);
 
+  // Trong lúc chờ lần tải đầu, giá trị mặc định (0, chưa có ban) không phải dữ liệu thật: hiện "Đang tải…" thay cho chúng.
+  const departmentName = user?.currentDepartment?.name || user?.department?.name;
+  const affiliationPending = loading && !departmentName;
+  const progressPending = loading && !progressSummary;
+  const coursesPending = loading && courses.length === 0;
+  const starsPending = loading && starBalance === null;
+  // Tải danh mục lỗi mà chưa có khóa nào để hiện: không được đếm "0 khóa" hay báo "không có khóa học" như dữ liệu thật.
+  const catalogFailed = coursesLoadFailed && courses.length === 0 && !loading;
+  const courseCountsHidden = coursesPending || catalogFailed;
+  const catalogError = (
+    <Card role="alert" className="text-center py-14 border border-red-100">
+      <p className="text-base font-bold text-red-700 mb-1">Không tải được danh sách khóa học</p>
+      <p className="text-xs text-[#737686]">Đã có lỗi khi tải dữ liệu, nên chưa thể biết có những khóa học nào. Vui lòng thử lại.</p>
+      <Button size="sm" onClick={() => loadData(true)} loading={refreshing} loadingText="Đang tải lại..." className="mt-4">
+        Thử lại
+      </Button>
+    </Card>
+  );
+  const starBalanceText = (starBalance ?? 0).toLocaleString('vi-VN');
+  const pendingText = <span className="text-sm font-semibold text-[#737686] animate-pulse">Đang tải…</span>;
+
   return (
     <div className="w-full">
       {mounted && user ? (
@@ -306,8 +330,10 @@ export default function StudentCoursesPage() {
               <div className="space-y-2">
                 <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/15 backdrop-blur-md rounded-full text-xs font-semibold">
                   <span>🏛️</span>
-                  <span>
-                    {user.currentDepartment?.name
+                  <span className={affiliationPending ? 'animate-pulse' : undefined}>
+                    {affiliationPending
+                      ? 'Thành viên · Đang tải…'
+                      : user.currentDepartment?.name
                       ? `Thành viên · ${user.currentDepartment.name}${user.currentTermLabel ? ` (${user.currentTermLabel})` : ''}`
                       : user.department?.name
                       ? `Thành viên · ${user.department.name}`
@@ -349,7 +375,7 @@ export default function StudentCoursesPage() {
                   href="/student/stars"
                   className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-amber-950 text-xs font-extrabold transition shadow-md"
                 >
-                  <span>⭐</span> {starBalance.toLocaleString('vi-VN')} Star
+                  <span>⭐</span> {starsPending ? <span className="animate-pulse">Đang tải…</span> : `${starBalanceText} Star`}
                 </Link>
               </div>
             </div>
@@ -360,23 +386,27 @@ export default function StudentCoursesPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             <Card className="p-6 border border-[#eff4ff] shadow-sm hover:shadow-md transition">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold text-[#737686] uppercase tracking-wider">Khóa học hoàn thành</span>
+                <span className="text-xs font-bold text-[#6c6f7f] uppercase tracking-wider">Khóa học hoàn thành</span>
                 <span className="text-2xl">🎓</span>
               </div>
               <div className="text-2xl md:text-3xl font-extrabold text-[#172554] mb-1">
-                {completedCoursesCount} / {totalCoursesCount} <span className="text-sm font-semibold text-[#737686]">khóa</span>
+                {progressPending ? pendingText : <>{completedCoursesCount} / {totalCoursesCount} <span className="text-sm font-semibold text-[#6c6f7f]">khóa</span></>}
               </div>
-              <p className="text-xs text-[#737686]">Hoàn thành 100% video và bài kiểm tra</p>
+              <p className="text-xs text-[#6c6f7f]">Hoàn thành 100% video và bài kiểm tra</p>
             </Card>
 
             <Card className="p-6 border border-[#eff4ff] shadow-sm hover:shadow-md transition">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold text-[#737686] uppercase tracking-wider">Tiến độ bài học</span>
+                <span className="text-xs font-bold text-[#6c6f7f] uppercase tracking-wider">Tiến độ bài học</span>
                 <span className="text-2xl">📊</span>
               </div>
               <div className="flex items-baseline gap-2 mb-1">
-                <span className="text-2xl md:text-3xl font-extrabold text-[#2563EB]">{overallProgress}%</span>
-                <span className="text-xs font-bold text-[#737686]">({overallLessonsDone}/{overallLessonsTotal} bài)</span>
+                {progressPending ? pendingText : (
+                  <>
+                    <span className="text-2xl md:text-3xl font-extrabold text-[#2563EB]">{overallProgress}%</span>
+                    <span className="text-xs font-bold text-[#6c6f7f]">({overallLessonsDone}/{overallLessonsTotal} bài)</span>
+                  </>
+                )}
               </div>
               <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden mt-2">
                 <div className="bg-[#2563EB] h-full rounded-full transition-all duration-500" style={{ width: `${overallProgress}%` }}></div>
@@ -385,13 +415,13 @@ export default function StudentCoursesPage() {
 
             <Card className="p-6 border border-[#eff4ff] shadow-sm hover:shadow-md transition">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold text-[#737686] uppercase tracking-wider">Tổng Star tích lũy</span>
+                <span className="text-xs font-bold text-[#6c6f7f] uppercase tracking-wider">Tổng Star tích lũy</span>
                 <span className="text-2xl">⭐</span>
               </div>
               <div className="text-2xl md:text-3xl font-extrabold text-amber-600 mb-1">
-                {starBalance.toLocaleString('vi-VN')} <span className="text-sm font-bold text-amber-700">Star</span>
+                {starsPending ? pendingText : <>{starBalanceText} <span className="text-sm font-bold text-amber-700">Star</span></>}
               </div>
-              <p className="text-xs text-[#737686]">Tích lũy từ video và quiz bài học</p>
+              <p className="text-xs text-[#6c6f7f]">Tích lũy từ video và quiz bài học</p>
             </Card>
           </div>
 
@@ -421,7 +451,7 @@ export default function StudentCoursesPage() {
               <span>📌</span>
               <span>Khóa học của bạn</span>
               {mandatoryCourses.length > 0 && (
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-100 text-rose-700">
+                <span className="px-2 py-0.5 rounded-full text-[11px] font-black bg-rose-100 text-rose-700">
                   {mandatoryCourses.length}
                 </span>
               )}
@@ -446,12 +476,12 @@ export default function StudentCoursesPage() {
                   <h2 className="text-base font-bold text-[#172554] flex items-center gap-2">
                     <span>🔍</span> Tìm kiếm bài học
                   </h2>
-                  <p className="text-xs text-[#737686] mt-0.5">
+                  <p className="text-xs text-[#6c6f7f] mt-0.5">
                     Tra cứu nhanh bài học theo tên (hỗ trợ tiếng Việt có dấu và không dấu)
                   </p>
                 </div>
                 <div className="relative w-full sm:w-80">
-                  <input
+                  <input aria-label="Tìm bài học theo tên"
                     type="text"
                     value={lessonSearchQuery}
                     onChange={(e) => setLessonSearchQuery(e.target.value)}
@@ -487,7 +517,7 @@ export default function StudentCoursesPage() {
                     <div className="py-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200">
                       <span className="text-2xl">🔎</span>
                       <p className="text-sm font-bold text-[#172554] mt-1.5">Không tìm thấy bài học phù hợp</p>
-                      <p className="text-xs text-[#737686] mt-0.5">
+                      <p className="text-xs text-[#6c6f7f] mt-0.5">
                         Không có bài học nào chứa từ khóa &ldquo;{lessonSearchQuery}&rdquo;. Hãy thử tìm với từ khóa khác.
                       </p>
                     </div>
@@ -540,19 +570,19 @@ export default function StudentCoursesPage() {
                             <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
                               <div>
                                 {isDone ? (
-                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
                                     ✓ Đã hoàn thành
                                   </span>
                                 ) : isLocked ? (
-                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-200 text-slate-600 border border-slate-300">
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-200 text-slate-600 border border-slate-300">
                                     🔒 Đang khóa
                                   </span>
                                 ) : isInProgress ? (
-                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200 animate-pulse">
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-100 text-blue-800 border border-blue-200 animate-pulse">
                                     ⏳ Đang học
                                   </span>
                                 ) : (
-                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
                                     ▶ Sẵn sàng học
                                   </span>
                                 )}
@@ -605,14 +635,14 @@ export default function StudentCoursesPage() {
 
                 <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 bg-white px-5 py-4 rounded-2xl border border-slate-200 shadow-xs shrink-0">
                   <div className="text-center sm:text-left">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Thời gian còn lại</p>
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Thời gian còn lại</p>
                     <p className={`text-xl md:text-2xl font-mono font-extrabold tabular-nums ${urgencyLevel.textColor}`}>
                       {formatCountdown(msRemaining)}
                     </p>
                   </div>
                   <div className="h-8 w-px bg-slate-200 hidden sm:block"></div>
                   <div>
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Khóa bắt buộc</p>
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Khóa bắt buộc</p>
                     <p className="text-sm font-bold text-[#172554]">
                       {enrichedCourses.filter((c) => c.isMandatory && c.isCompleted).length} / {enrichedCourses.filter((c) => c.isMandatory).length} hoàn thành
                     </p>
@@ -630,7 +660,7 @@ export default function StudentCoursesPage() {
                   <h2 className="text-xl font-bold text-[#172554] flex items-center gap-2" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
                     <span>📌</span> Khóa học bắt buộc của bạn ({mandatoryCourses.length})
                   </h2>
-                  <p className="text-xs text-[#737686] mt-0.5">Khóa học bắt buộc theo ban và chức vụ của bạn</p>
+                  <p className="text-xs text-[#6c6f7f] mt-0.5">Khóa học bắt buộc theo ban và chức vụ của bạn</p>
                 </div>
               </div>
 
@@ -665,7 +695,7 @@ export default function StudentCoursesPage() {
                             <h3 className="font-bold text-base text-[#172554] group-hover:text-[#2563EB] transition line-clamp-2">
                               {c.title}
                             </h3>
-                            <p className="text-xs text-[#737686] line-clamp-2 leading-relaxed">
+                            <p className="text-xs text-[#6c6f7f] line-clamp-2 leading-relaxed">
                               {c.description || 'Chương trình đào tạo kỹ năng chuyên sâu BBE.'}
                             </p>
 
@@ -682,7 +712,7 @@ export default function StudentCoursesPage() {
                         </div>
 
                         <div className="px-5 py-3.5 bg-[#f8f9ff] border-t border-[#eff4ff] flex items-center justify-between text-xs">
-                          <span className="text-[#737686]">🏛️ {c.sessionCount || 0} buổi học</span>
+                          <span className="text-[#6c6f7f]">🏛️ {c.sessionCount || 0} buổi học</span>
                           <span className="font-bold text-[#2563EB] group-hover:underline">
                             {c.isStarted ? 'Tiếp tục học →' : 'Bắt đầu học →'}
                           </span>
@@ -700,9 +730,9 @@ export default function StudentCoursesPage() {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#eff4ff] pb-4">
               <div>
                 <h2 className="text-xl font-bold text-[#172554] flex items-center gap-2" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
-                  <span>📚</span> Tất cả khóa học ({enrichedCourses.length})
+                  <span>📚</span> Tất cả khóa học {coursesPending ? '(đang tải…)' : catalogFailed ? '' : `(${enrichedCourses.length})`}
                 </h2>
-                <p className="text-xs text-[#737686] mt-0.5">Danh mục toàn bộ khóa học, gồm khóa khách cũng xem được và khóa chỉ thành viên BBE</p>
+                <p className="text-xs text-[#6c6f7f] mt-0.5">Danh mục toàn bộ khóa học, gồm khóa khách cũng xem được và khóa chỉ thành viên BBE</p>
               </div>
 
               {/* Filter Tabs */}
@@ -712,40 +742,40 @@ export default function StudentCoursesPage() {
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
                     filter === 'ALL'
                       ? 'bg-white text-[#2563EB] shadow-xs'
-                      : 'text-[#737686] hover:text-[#172554]'
+                      : 'text-[#6c6f7f] hover:text-[#172554]'
                   }`}
                 >
-                  Tất cả ({enrichedCourses.length})
+                  Tất cả{courseCountsHidden ? '' : ` (${enrichedCourses.length})`}
                 </button>
                 <button
                   onClick={() => setFilter('IN_PROGRESS')}
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
                     filter === 'IN_PROGRESS'
                       ? 'bg-white text-[#2563EB] shadow-xs'
-                      : 'text-[#737686] hover:text-[#172554]'
+                      : 'text-[#6c6f7f] hover:text-[#172554]'
                   }`}
                 >
-                  Đang học ({enrichedCourses.filter((c) => c.isStarted && !c.isCompleted).length})
+                  Đang học{courseCountsHidden ? '' : ` (${enrichedCourses.filter((c) => c.isStarted && !c.isCompleted).length})`}
                 </button>
                 <button
                   onClick={() => setFilter('NOT_STARTED')}
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
                     filter === 'NOT_STARTED'
                       ? 'bg-white text-[#2563EB] shadow-xs'
-                      : 'text-[#737686] hover:text-[#172554]'
+                      : 'text-[#6c6f7f] hover:text-[#172554]'
                   }`}
                 >
-                  Chưa học ({enrichedCourses.filter((c) => !c.isStarted && !c.isCompleted).length})
+                  Chưa học{courseCountsHidden ? '' : ` (${enrichedCourses.filter((c) => !c.isStarted && !c.isCompleted).length})`}
                 </button>
                 <button
                   onClick={() => setFilter('COMPLETED')}
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
                     filter === 'COMPLETED'
                       ? 'bg-white text-emerald-700 shadow-xs'
-                      : 'text-[#737686] hover:text-[#172554]'
+                      : 'text-[#6c6f7f] hover:text-[#172554]'
                   }`}
                 >
-                  Đã đạt ({enrichedCourses.filter((c) => c.isCompleted).length})
+                  Đã đạt{courseCountsHidden ? '' : ` (${enrichedCourses.filter((c) => c.isCompleted).length})`}
                 </button>
               </div>
             </div>
@@ -760,11 +790,13 @@ export default function StudentCoursesPage() {
                   </div>
                 ))}
               </div>
+            ) : catalogFailed ? (
+              catalogError
             ) : filteredCourses.length === 0 ? (
               <Card className="text-center py-14 border border-[#eff4ff]">
                 <p className="text-3xl mb-2">🔍</p>
                 <p className="text-base font-bold text-[#172554] mb-1">Không có khóa học nào trong mục này</p>
-                <p className="text-xs text-[#737686]">Hãy thử chọn bộ lọc khác hoặc quay lại xem tất cả khóa học.</p>
+                <p className="text-xs text-[#6c6f7f]">Hãy thử chọn bộ lọc khác hoặc quay lại xem tất cả khóa học.</p>
                 <button
                   onClick={() => setFilter('ALL')}
                   className="mt-4 px-4 py-2 bg-blue-50 text-[#2563EB] text-xs font-bold rounded-xl hover:bg-blue-100 transition"
@@ -813,7 +845,7 @@ export default function StudentCoursesPage() {
                             <h3 className="font-bold text-base text-[#172554] group-hover:text-[#2563EB] transition line-clamp-2">
                               {c.title}
                             </h3>
-                            <p className="text-xs text-[#737686] line-clamp-2 leading-relaxed">
+                            <p className="text-xs text-[#6c6f7f] line-clamp-2 leading-relaxed">
                               {c.description || 'Chương trình đào tạo kỹ năng chuyên sâu BBE.'}
                             </p>
 
@@ -838,7 +870,7 @@ export default function StudentCoursesPage() {
                         </div>
 
                         <div className="px-5 py-3.5 bg-[#f8f9ff] border-t border-[#eff4ff] flex items-center justify-between text-xs">
-                          <span className="text-[#737686]">🏛️ {c.sessionCount || 0} buổi học</span>
+                          <span className="text-[#6c6f7f]">🏛️ {c.sessionCount || 0} buổi học</span>
                           <span className="font-bold text-[#2563EB] group-hover:underline">
                             {c.isCompleted ? 'Xem lại bài học →' : c.isStarted ? 'Tiếp tục học →' : 'Vào học ngay →'}
                           </span>
@@ -864,11 +896,11 @@ export default function StudentCoursesPage() {
                   <h3 className="text-lg font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
                     📜 Lịch sử phân ban qua các nhiệm kỳ
                   </h3>
-                  <p className="text-xs text-[#737686]">Quá trình cống hiến và tham gia công tác tại Chapter của bạn</p>
+                  <p className="text-xs text-[#6c6f7f]">Quá trình cống hiến và tham gia công tác tại Chapter của bạn</p>
                 </div>
                 <button
                   onClick={() => setShowHistoryModal(false)}
-                  className="text-[#737686] hover:text-[#172554] text-xl font-bold p-1 rounded-lg hover:bg-slate-100 transition"
+                  className="text-[#6c6f7f] hover:text-[#172554] text-xl font-bold p-1 rounded-lg hover:bg-slate-100 transition"
                 >
                   ✕
                 </button>
@@ -884,7 +916,7 @@ export default function StudentCoursesPage() {
                         <p className="font-bold text-sm text-[#172554]">
                           {item.termLabel || 'Nhiệm kỳ'} — {item.departmentName}
                         </p>
-                        <p className="text-[11px] text-[#737686] mt-0.5">
+                        <p className="text-[11px] text-[#6c6f7f] mt-0.5">
                           Thời gian: {new Date(item.startsAt).toLocaleDateString('vi-VN')}
                           {item.endsAt && ` • ${new Date(item.endsAt).toLocaleDateString('vi-VN')}`}
                         </p>
@@ -937,7 +969,7 @@ export default function StudentCoursesPage() {
               <h1 className="text-3xl md:text-4xl font-extrabold text-[#172554] mb-3" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
                 Khám phá các khóa học BBE
               </h1>
-              <p className="text-[#737686] text-sm">
+              <p className="text-[#6c6f7f] text-sm">
                 Đăng nhập để xem đầy đủ các khóa chỉ thành viên BBE và bài kiểm tra cấp chứng chỉ.
               </p>
             </div>
@@ -951,10 +983,12 @@ export default function StudentCoursesPage() {
                   </div>
                 ))}
               </div>
+            ) : catalogFailed ? (
+              catalogError
             ) : courses.length === 0 ? (
               <Card className="text-center py-16">
                 <p className="text-lg font-bold text-[#172554] mb-2">Chưa có khóa học dành cho khách</p>
-                <p className="text-sm text-[#737686]">Vui lòng quay lại sau.</p>
+                <p className="text-sm text-[#6c6f7f]">Vui lòng quay lại sau.</p>
               </Card>
             ) : (
               <div className="grid md:grid-cols-3 gap-6">
@@ -980,10 +1014,10 @@ export default function StudentCoursesPage() {
                           <h3 className="text-lg font-bold text-[#172554] group-hover:text-[#2563EB] transition-colors mb-2 line-clamp-2">
                             {c.title}
                           </h3>
-                          <p className="text-sm text-[#737686] line-clamp-3 mb-4">
+                          <p className="text-sm text-[#6c6f7f] line-clamp-3 mb-4">
                             {c.description || 'Chương trình đào tạo kỹ năng chuyên sâu BBE.'}
                           </p>
-                          <div className="flex items-center justify-between pt-4 border-t border-[#eff4ff] text-xs text-[#737686]">
+                          <div className="flex items-center justify-between pt-4 border-t border-[#eff4ff] text-xs text-[#6c6f7f]">
                             <span>🏛️ {c.sessionCount || 0} buổi học</span>
                             <span className="font-bold text-[#2563EB] group-hover:underline">Chi tiết →</span>
                           </div>

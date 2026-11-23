@@ -5,11 +5,27 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Button from '@/components/ui/Button';
 import { apiFetch } from '@/lib/api/client';
+import { storeLoginSession } from '@/lib/client-session';
+import { accountHome } from '@/lib/session-role';
 
 interface InviteInfo {
   role: string;
   chapterName: string;
   expiresAt: string;
+}
+
+async function signIn(email: string, password: string) {
+  try {
+    const res = await fetch('/api/v1/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    const data = await res.json();
+    return res.ok && data?.accessToken && data?.user ? data : null;
+  } catch {
+    return null;
+  }
 }
 
 function AcceptInvitationContent() {
@@ -88,9 +104,16 @@ function AcceptInvitationContent() {
     });
 
     if (res.ok) {
-      setSuccess('Kích hoạt tài khoản thành công! Đang chuyển đến trang đăng nhập...');
+      // Nút ghi "Kích hoạt tài khoản & Đăng nhập": đăng nhập luôn bằng mật khẩu vừa đặt.
+      const session = await signIn(form.email.trim(), form.password);
+      if (session) storeLoginSession(session);
+      setSuccess(
+        session
+          ? 'Kích hoạt tài khoản thành công! Đang đưa bạn vào hệ thống...'
+          : 'Kích hoạt tài khoản thành công! Đang chuyển đến trang đăng nhập...'
+      );
       setTimeout(() => {
-        router.push('/login');
+        router.push(session ? accountHome(session.user.role, session.user.managerKind) : '/login');
       }, 1500);
     } else if (res.error?.code === 'EmailMismatch' || res.error?.code === 'RateLimited') {
       // Link vẫn còn hiệu lực: giữ form để người nhận gõ lại đúng email của mình.
@@ -107,7 +130,7 @@ function AcceptInvitationContent() {
     return (
       <div className="bg-white rounded-3xl p-8 border border-[#eff4ff] shadow-lg text-center py-10">
         <div className="w-8 h-8 border-[3px] border-[#2563EB] border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-        <p className="text-sm text-[#737686]">Đang xác thực thông tin lời mời...</p>
+        <p className="text-sm text-[#6c6f7f]">Đang xác thực thông tin lời mời...</p>
       </div>
     );
   }
@@ -120,13 +143,13 @@ function AcceptInvitationContent() {
         </div>
         <div>
           <h2 className="text-lg font-bold text-[#172554]">Lời mời không khả dụng</h2>
-          <p className="text-sm text-[#737686] mt-2">{invalidReason || 'Liên kết lời mời không hợp lệ (thiếu token).'}</p>
-          <p className="text-xs text-[#737686] mt-1">
+          <p className="text-sm text-[#6c6f7f] mt-2">{invalidReason || 'Liên kết lời mời không hợp lệ (thiếu token).'}</p>
+          <p className="text-xs text-[#6c6f7f] mt-1">
             Vui lòng liên hệ người gửi để nhận liên kết mời mới.
           </p>
         </div>
         <div className="pt-3">
-          <Link href="/login">
+          <Link href="/login" className="inline-flex">
             <Button variant="outline">Về trang đăng nhập</Button>
           </Link>
         </div>
@@ -175,10 +198,10 @@ function AcceptInvitationContent() {
         </div>
 
         <div>
-          <label className="block text-sm font-semibold text-[#172554] mb-1.5">
+          <label htmlFor="invite-password" className="block text-sm font-semibold text-[#172554] mb-1.5">
             Tạo mật khẩu mới (tối thiểu 8 ký tự) *
           </label>
-          <input
+          <input id="invite-password"
             type="password"
             required
             minLength={8}
@@ -190,10 +213,10 @@ function AcceptInvitationContent() {
         </div>
 
         <div>
-          <label className="block text-sm font-semibold text-[#172554] mb-1.5">
+          <label htmlFor="invite-confirm-password" className="block text-sm font-semibold text-[#172554] mb-1.5">
             Xác nhận lại mật khẩu *
           </label>
-          <input
+          <input id="invite-confirm-password"
             type="password"
             required
             minLength={8}
@@ -231,9 +254,9 @@ export default function AcceptInvitationPage() {
           <h1 className="text-3xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
             Kích hoạt tài khoản
           </h1>
-          <p className="text-[#737686] mt-1">Chào mừng bạn đến với BBE E-Learning</p>
+          <p className="text-[#6c6f7f] mt-1">Chào mừng bạn đến với BBE E-Learning</p>
         </div>
-        <Suspense fallback={<div className="text-center text-[#737686]">Đang tải...</div>}>
+        <Suspense fallback={<div className="text-center text-[#6c6f7f]">Đang tải...</div>}>
           <AcceptInvitationContent />
         </Suspense>
       </div>

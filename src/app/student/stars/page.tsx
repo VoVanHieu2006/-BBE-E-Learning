@@ -96,7 +96,7 @@ export default function StudentStarsPage() {
   const totalPages = Math.max(history?.totalPages || 1, 1)
 
   return (
-    <main className="mx-auto w-full max-w-5xl">
+    <div className="mx-auto w-full max-w-5xl">
       <header className="mb-7 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <LearningPeriodSummary refreshTrigger={summaryRefresh} />
@@ -210,6 +210,6 @@ export default function StudentStarsPage() {
           </>
         )}
       </section>
-    </main>
+    </div>
   )
 }

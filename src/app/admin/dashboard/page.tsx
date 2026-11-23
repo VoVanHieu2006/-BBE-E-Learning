@@ -78,7 +78,7 @@ export default function AdminDashboard() {
           <h1 className="text-3xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
             Tổng quan Admin
           </h1>
-          <p className="text-[#737686] mt-1 text-sm">BBE E-Learning Platform Management</p>
+          <p className="text-[#6c6f7f] mt-1 text-sm">BBE E-Learning Platform Management</p>
         </div>
         <button
           type="button"
@@ -98,13 +98,13 @@ export default function AdminDashboard() {
           <Link key={s.label} href={s.href}>
             <Card shadow="md" className="hover:-translate-y-1 transition-transform cursor-pointer border border-[#eff4ff] h-full p-5">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-semibold text-[#737686]">{s.label}</span>
+                <span className="text-xs font-semibold text-[#6c6f7f]">{s.label}</span>
                 <span className="text-lg">{s.icon}</span>
               </div>
               <div className="text-3xl font-bold text-[#172554] mb-1">
                 {!isDataReady ? <span className="animate-pulse text-slate-300">...</span> : s.value}
               </div>
-              <div className="text-xs text-[#737686]">{s.sub}</div>
+              <div className="text-xs text-[#6c6f7f]">{s.sub}</div>
             </Card>
           </Link>
         ))}

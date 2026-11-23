@@ -72,7 +72,7 @@ export default function ProfilePage() {
           <h1 className="text-3xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
             Hồ sơ cá nhân
           </h1>
-          <p className="mt-1 text-sm text-[#737686]">
+          <p className="mt-1 text-sm text-[#6c6f7f]">
             Tên giúp Lead Chapter và Admin đối chiếu bạn với danh sách cuối nhiệm kỳ. Email vẫn là mã nhận diện duy nhất.
           </p>
         </div>
@@ -91,12 +91,12 @@ export default function ProfilePage() {
 
       <Card className="space-y-5 border border-[#eff4ff]">
         <div>
-          <div className="text-xs font-semibold uppercase tracking-wide text-[#737686]">Email đăng nhập</div>
+          <div className="text-xs font-semibold uppercase tracking-wide text-[#6c6f7f]">Email đăng nhập</div>
           <div className="mt-1 font-medium text-[#172554]">{profile?.email || (loading ? 'Đang tải…' : '—')}</div>
         </div>
         <form onSubmit={save} className="space-y-3">
-          <label className="block text-sm font-semibold text-[#172554]">Họ và tên</label>
-          <input
+          <label htmlFor="profile-display-name" className="block text-sm font-semibold text-[#172554]">Họ và tên</label>
+          <input id="profile-display-name"
             required
             minLength={2}
             maxLength={120}
@@ -112,7 +112,7 @@ export default function ProfilePage() {
       <Card className="space-y-4 border border-[#eff4ff]">
         <div>
           <h2 className="font-bold text-[#172554]">Tư cách hiện tại</h2>
-          <p className="mt-1 text-xs text-[#737686]">
+          <p className="mt-1 text-xs text-[#6c6f7f]">
             {profile?.managerKind === 'LEAD_DNA'
               ? 'Tài khoản quản lý hệ thống DNA, không tham gia lộ trình học tập.'
               : 'Quyền Chapter và DNA được quản lý độc lập.'}
@@ -179,7 +179,7 @@ export default function ProfilePage() {
             <h2 className="font-bold text-[#172554] flex items-center gap-2">
               <span>📜</span> Lịch sử phân ban qua các nhiệm kỳ
             </h2>
-            <p className="mt-1 text-xs text-[#737686]">Quá trình tham gia công tác và cống hiến tại các ban thuộc Chapter.</p>
+            <p className="mt-1 text-xs text-[#6c6f7f]">Quá trình tham gia công tác và cống hiến tại các ban thuộc Chapter.</p>
           </div>
 
           <div className="space-y-2">
@@ -189,7 +189,7 @@ export default function ProfilePage() {
                   <p className="font-bold text-sm text-[#172554]">
                     {item.termLabel || 'Nhiệm kỳ'} — {item.departmentName}
                   </p>
-                  <p className="text-[11px] text-[#737686] mt-0.5">
+                  <p className="text-[11px] text-[#6c6f7f] mt-0.5">
                     Bắt đầu: {new Date(item.startsAt).toLocaleDateString('vi-VN')}
                     {item.endsAt && ` • Kết thúc: ${new Date(item.endsAt).toLocaleDateString('vi-VN')}`}
                   </p>

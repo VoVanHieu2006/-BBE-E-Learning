@@ -66,7 +66,7 @@ export default function CurrentRoster({
                   <span>🏛️ Sơ đồ Phân ban nhiệm kỳ hiện tại</span>
                 )}
               </h2>
-              <p className="text-xs text-[#737686] mt-0.5">
+              <p className="text-xs text-[#6c6f7f] mt-0.5">
                 Người đứng đầu mỗi Ban là Trưởng ban. Bấm vào thành viên để xem chi tiết hoặc đổi Ban. Bảng cuộn ngang ↔ để xem đủ 8 cột.
               </p>
             </div>
@@ -88,7 +88,7 @@ export default function CurrentRoster({
           </div>
 
           {rosterLoading ? (
-            <Card className="p-16 text-center text-[#737686]">
+            <Card className="p-16 text-center text-[#6c6f7f]">
               <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-blue-600 border-t-transparent mb-3" />
               <p className="font-semibold">Đang tải sơ đồ phân ban của Chapter...</p>
             </Card>
@@ -153,11 +153,11 @@ export default function CurrentRoster({
                             >
                               {/* Badge Chức vụ */}
                               {isPresidentBan ? (
-                                <div className="inline-flex items-center gap-1 text-[10px] font-black uppercase text-amber-900 bg-amber-200/80 px-2 py-0.5 rounded-md mb-1.5 shadow-2xs">
+                                <div className="inline-flex items-center gap-1 text-[11px] font-black uppercase text-amber-900 bg-amber-200/80 px-2 py-0.5 rounded-md mb-1.5 shadow-2xs">
                                   <span>⭐</span> Chủ tịch Chapter
                                 </div>
                               ) : isLead ? (
-                                <div className="inline-flex items-center gap-1 text-[10px] font-extrabold uppercase text-amber-800 bg-amber-100 px-2 py-0.5 rounded-md mb-1.5 border border-amber-200">
+                                <div className="inline-flex items-center gap-1 text-[11px] font-extrabold uppercase text-amber-800 bg-amber-100 px-2 py-0.5 rounded-md mb-1.5 border border-amber-200">
                                   <span>👑</span> Trưởng ban
                                 </div>
                               ) : null}
@@ -165,12 +165,12 @@ export default function CurrentRoster({
                               {/* Click vào tên để xem chi tiết */}
                               <Link
                                 href={`/chapter-manager/members/${member.userId}`}
-                                className="font-bold text-[#172554] hover:text-[#2563EB] block text-[13px] transition break-words"
+                                className="font-bold text-[#172554] hover:text-[#2563EB] block text-[13px] leading-6 transition break-words"
                                 title="Bấm để xem chi tiết thành viên"
                               >
                                 {member.displayName}
                               </Link>
-                              <div className="text-[11px] text-[#737686] truncate mt-0.5" title={member.email}>
+                              <div className="text-[11px] text-[#6c6f7f] truncate mt-0.5" title={member.email}>
                                 {member.email}
                               </div>
 
@@ -196,7 +196,7 @@ export default function CurrentRoster({
                                     )}
                                   </button>
                                 ) : (
-                                  <span className="text-[10px] text-amber-800 font-bold">{isPresidentBan ? '⭐ Lãnh đạo' : '👑 Trưởng ban'}</span>
+                                  <span className="text-[11px] text-amber-800 font-bold">{isPresidentBan ? '⭐ Lãnh đạo' : '👑 Trưởng ban'}</span>
                                 )}
                                 <button
                                   type="button"
@@ -241,7 +241,7 @@ export default function CurrentRoster({
                 <h3 className="text-sm font-bold text-amber-900 flex items-center gap-1.5">
                   <span>⚠️ Thành viên chưa có Ban ({unassignedMembers.length})</span>
                 </h3>
-                <p className="text-xs text-[#737686] mt-0.5">
+                <p className="text-xs text-[#6c6f7f] mt-0.5">
                   Các thành viên thuộc Chapter nhưng chưa phân ban (bao gồm thành viên không có trong sheet sau khi chuyển giao). Bạn có thể gán Ban hoặc vô hiệu hóa tài khoản.
                 </p>
               </div>
@@ -262,7 +262,7 @@ export default function CurrentRoster({
             </div>
 
             {unassignedMembers.length === 0 ? (
-              <p className="text-xs text-[#737686] italic py-2">
+              <p className="text-xs text-[#6c6f7f] italic py-2">
                 Tất cả thành viên trong Chapter đã được phân vào các Ban đầy đủ.
               </p>
             ) : (
@@ -287,9 +287,9 @@ export default function CurrentRoster({
                             {m.displayName}
                           </Link>
                         </td>
-                        <td className="py-2.5 px-4 text-[#737686]">{m.email}</td>
+                        <td className="py-2.5 px-4 text-[#6c6f7f]">{m.email}</td>
                         <td className="py-2.5 px-4 text-center">
-                          <select
+                          <select aria-label={`Đổi Ban cho ${m.displayName || m.email}`}
                             value={changeDeptModal?.userId === m.userId ? selectedDeptId : ''}
                             disabled={Boolean(actionLoading)}
                             onChange={(e) => {

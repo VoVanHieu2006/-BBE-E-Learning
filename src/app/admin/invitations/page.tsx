@@ -146,7 +146,7 @@ export default function AdminInvitationsPage() {
             <h1 className="text-3xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
               Mời & quản lý Lead
             </h1>
-            <p className="text-[#737686] mt-1 text-sm">
+            <p className="text-[#6c6f7f] mt-1 text-sm">
               Admin mời Lead Chapter để tạo Chapter mới và quản lý một Lead DNA duy nhất.
             </p>
           </div>
@@ -168,9 +168,9 @@ export default function AdminInvitationsPage() {
               ))}
             </div>
           ) : items.length === 0 ? (
-            <div className="text-center py-16 text-[#737686]">
+            <div className="text-center py-16 text-[#6c6f7f]">
               <p className="text-lg font-semibold text-[#172554] mb-1">Chưa có lời mời nào được gửi</p>
-              <p className="text-sm text-[#737686]">Bấm nút &quot;Mời Lead Chapter&quot; ở trên để bắt đầu.</p>
+              <p className="text-sm text-[#6c6f7f]">Bấm nút &quot;Mời Lead Chapter&quot; ở trên để bắt đầu.</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -222,7 +222,7 @@ export default function AdminInvitationsPage() {
                           </span>
                           <DeliveryNote status={inv.status} deliveryMethod={inv.deliveryMethod} />
                         </td>
-                        <td className="px-6 py-4 text-xs text-[#737686]" suppressHydrationWarning>
+                        <td className="px-6 py-4 text-xs text-[#6c6f7f]" suppressHydrationWarning>
                           {inv.expiresAt ? new Date(inv.expiresAt).toLocaleDateString('vi-VN') : '—'}
                         </td>
                         <td className="px-6 py-4 text-right">
@@ -274,14 +274,14 @@ export default function AdminInvitationsPage() {
             <h3 className="text-xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
               Mời Lead Chapter
             </h3>
-            <p className="text-xs text-[#737686]">
+            <p className="text-xs text-[#6c6f7f]">
               Nhập email của Trưởng Chapter và tên Chapter mới cần khởi tạo.
             </p>
             <EmailQuotaNotice quota={quota} />
             <form onSubmit={handleSendLeaderInvite} className="space-y-4">
               <div>
-                <label className="block text-sm font-semibold text-[#172554] mb-1">Email *</label>
-                <input
+                <label htmlFor="leader-invite-email" className="block text-sm font-semibold text-[#172554] mb-1">Email *</label>
+                <input id="leader-invite-email"
                   type="email"
                   required
                   value={leaderForm.email}
@@ -291,8 +291,8 @@ export default function AdminInvitationsPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-semibold text-[#172554] mb-1">Tên Chapter *</label>
-                <input
+                <label htmlFor="leader-invite-chapter" className="block text-sm font-semibold text-[#172554] mb-1">Tên Chapter *</label>
+                <input id="leader-invite-chapter"
                   type="text"
                   required
                   value={leaderForm.chapterName}
@@ -320,9 +320,9 @@ export default function AdminInvitationsPage() {
         <Modal isOpen={showDnaModal} onClose={() => setShowDnaModal(false)} maxWidth="max-w-md">
           <form onSubmit={handleSendDnaInvite} className="p-6 space-y-4">
             <h3 className="text-xl font-bold text-[#172554]">Mời Lead DNA</h3>
-            <p className="text-sm text-[#737686]">Hệ thống chỉ cho phép một Lead DNA đang hoạt động.</p>
+            <p className="text-sm text-[#6c6f7f]">Hệ thống chỉ cho phép một Lead DNA đang hoạt động.</p>
             <EmailQuotaNotice quota={quota} />
-            <input type="email" required value={dnaEmail} onChange={(e) => setDnaEmail(e.target.value)} placeholder="dna.lead@bbe.vn" className="w-full px-4 py-2.5 border border-[#cbdbf5] rounded-xl text-sm" />
+            <input aria-label="Email Lead DNA" type="email" required value={dnaEmail} onChange={(e) => setDnaEmail(e.target.value)} placeholder="dna.lead@bbe.vn" className="w-full px-4 py-2.5 border border-[#cbdbf5] rounded-xl text-sm" />
             <div className="flex justify-end gap-3"><Button variant="outline" type="button" onClick={() => setShowDnaModal(false)}>Hủy</Button><Button type="submit" loading={leaderSending}>Gửi lời mời</Button></div>
           </form>
         </Modal>

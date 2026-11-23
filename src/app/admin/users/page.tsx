@@ -370,7 +370,7 @@ export default function AdminUsersPage() {
             <h1 className="text-3xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
               Quản lý tài khoản
             </h1>
-            <p className="text-[#737686] mt-1 text-sm">
+            <p className="text-[#6c6f7f] mt-1 text-sm">
               Quản lý toàn bộ tài khoản Lead Chapter và học viên theo từng Chapter, phân quyền và kiểm soát hoạt động
             </p>
           </div>
@@ -389,30 +389,30 @@ export default function AdminUsersPage() {
         {/* Global Stat Cards (Non-Admin Users Total) */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <Card shadow="md" className="p-4 border border-[#eff4ff]">
-            <div className="text-xs font-semibold text-[#737686]">Tổng thành viên & Lead Chapter</div>
+            <div className="text-xs font-semibold text-[#6c6f7f]">Tổng thành viên & Lead Chapter</div>
             <div className="text-2xl font-bold text-[#172554] mt-1">{stats?.total ?? (loading ? '...' : users.length)}</div>
-            <div className="text-[11px] text-[#737686] mt-0.5">Toàn hệ thống (trừ Admin)</div>
+            <div className="text-[11px] text-[#6c6f7f] mt-0.5">Toàn hệ thống (trừ Admin)</div>
           </Card>
           <Card shadow="md" className="p-4 border border-[#eff4ff]">
             <div className="text-xs font-semibold text-green-700">Đang hoạt động (Active)</div>
             <div className="text-2xl font-bold text-green-700 mt-1">
               {stats?.active ?? (loading ? '...' : users.filter((u) => u.status === 'ACTIVE').length)}
             </div>
-            <div className="text-[11px] text-[#737686] mt-0.5">Có quyền đăng nhập</div>
+            <div className="text-[11px] text-[#6c6f7f] mt-0.5">Có quyền đăng nhập</div>
           </Card>
           <Card shadow="md" className="p-4 border border-[#eff4ff]">
             <div className="text-xs font-semibold text-red-600">Đã vô hiệu hóa (Inactive)</div>
             <div className="text-2xl font-bold text-red-600 mt-1">
               {stats?.inactive ?? (loading ? '...' : users.filter((u) => u.status === 'INACTIVE').length)}
             </div>
-            <div className="text-[11px] text-[#737686] mt-0.5">Đã khóa truy cập</div>
+            <div className="text-[11px] text-[#6c6f7f] mt-0.5">Đã khóa truy cập</div>
           </Card>
           <Card shadow="md" className="p-4 border border-[#eff4ff]">
             <div className="text-xs font-semibold text-purple-700">Lead Chapter</div>
             <div className="text-2xl font-bold text-purple-700 mt-1">
               {stats?.leaders ?? (loading ? '...' : users.filter((u) => isLeadRole(u.role)).length)}
             </div>
-            <div className="text-[11px] text-[#737686] mt-0.5">Trưởng các chapter</div>
+            <div className="text-[11px] text-[#6c6f7f] mt-0.5">Trưởng các chapter</div>
           </Card>
         </div>
 
@@ -420,7 +420,7 @@ export default function AdminUsersPage() {
         <Card className="p-4 mb-6 border border-[#eff4ff] shadow-sm">
           <form onSubmit={handleApplyFilter} className="flex flex-col lg:flex-row items-stretch lg:items-center gap-3">
             <div className="flex-1">
-              <input
+              <input aria-label="Tìm theo tên hoặc email"
                 type="text"
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
@@ -429,7 +429,7 @@ export default function AdminUsersPage() {
               />
             </div>
             <div className="w-full lg:w-48">
-              <select
+              <select aria-label="Lọc theo chức vụ"
                 value={roleInput}
                 onChange={(e) => setRoleInput(e.target.value)}
                 className="w-full px-3 py-2.5 border border-[#cbdbf5] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB] bg-white text-[#172554]"
@@ -443,7 +443,7 @@ export default function AdminUsersPage() {
               </select>
             </div>
             <div className="w-full lg:w-48">
-              <select
+              <select aria-label="Lọc theo trạng thái"
                 value={statusInput}
                 onChange={(e) => setStatusInput(e.target.value)}
                 className="w-full px-3 py-2.5 border border-[#cbdbf5] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB] bg-white text-[#172554]"
@@ -455,7 +455,7 @@ export default function AdminUsersPage() {
               </select>
             </div>
             <div className="w-full lg:w-48">
-              <select
+              <select aria-label="Lọc theo Chapter"
                 value={chapterInput}
                 onChange={(e) => setChapterInput(e.target.value)}
                 className="w-full px-3 py-2.5 border border-[#cbdbf5] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB] bg-white text-[#172554]"
@@ -482,7 +482,7 @@ export default function AdminUsersPage() {
         </Card>
 
         {/* Filter Result Summary & Page Size Controls */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-1 mb-3 text-xs text-[#737686]">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-1 mb-3 text-xs text-[#6c6f7f]">
           <div className="font-medium flex items-center gap-2">
             <span>
               Đang hiển thị <span className="text-[#2563EB] font-bold">{users.length}</span> trên tổng số{' '}
@@ -498,7 +498,7 @@ export default function AdminUsersPage() {
 
           <div className="flex items-center gap-2">
             <span>Hiển thị mỗi trang:</span>
-            <select
+            <select aria-label="Số dòng mỗi trang"
               value={limit}
               disabled={loading}
               onChange={(e) => handleLimitChange(Number(e.target.value))}
@@ -531,9 +531,9 @@ export default function AdminUsersPage() {
               ))}
             </div>
           ) : users.length === 0 ? (
-            <div className="text-center py-16 text-[#737686]">
+            <div className="text-center py-16 text-[#6c6f7f]">
               <p className="text-lg font-semibold text-[#172554] mb-1">Không tìm thấy tài khoản nào phù hợp</p>
-              <p className="text-sm text-[#737686]">Hãy thử thay đổi điều kiện tìm kiếm hoặc bấm &quot;Đặt lại&quot; bộ lọc.</p>
+              <p className="text-sm text-[#6c6f7f]">Hãy thử thay đổi điều kiện tìm kiếm hoặc bấm &quot;Đặt lại&quot; bộ lọc.</p>
               {hasActiveFilters && (
                 <Button variant="outline" size="sm" onClick={handleResetFilter} className="mt-4">
                   ↺ Bỏ tất cả bộ lọc
@@ -573,12 +573,12 @@ export default function AdminUsersPage() {
                               {u.displayName || u.email}
                             </span>
                             {u.displayName && (
-                              <span className="text-xs text-[#737686] group-hover:text-[#2563EB] transition-colors block">
+                              <span className="text-xs text-[#6c6f7f] group-hover:text-[#2563EB] transition-colors block">
                                 {u.email}
                               </span>
                             )}
                           </button>
-                          <div className="text-[11px] text-[#737686] mt-1" suppressHydrationWarning>
+                          <div className="text-[11px] text-[#6c6f7f] mt-1" suppressHydrationWarning>
                             Tham gia: {u.createdAt ? new Date(u.createdAt).toLocaleDateString('vi-VN') : '—'}
                           </div>
                         </td>
@@ -632,7 +632,7 @@ export default function AdminUsersPage() {
                               <span>🏛️</span> {formatChapterName(u.chapter.name)}
                             </Link>
                           ) : (
-                            <span className="text-xs text-[#737686]">Chưa gán</span>
+                            <span className="text-xs text-[#6c6f7f]">Chưa gán</span>
                           )}
                         </td>
                         <td className="px-6 py-4 text-center">
@@ -652,11 +652,11 @@ export default function AdminUsersPage() {
                             <div>
                               <div className="flex items-center justify-center gap-2">
                                 <span className="font-bold text-[#172554]">{u.avgProgress || 0}%</span>
-                                <span className="text-xs text-[#737686]">
+                                <span className="text-xs text-[#6c6f7f]">
                                   ({u.completedCourses || 0}/{u.totalCourses || 0} khóa)
                                 </span>
                               </div>
-                              <div className="text-[11px] text-[#737686] mt-0.5">
+                              <div className="text-[11px] text-[#6c6f7f] mt-0.5">
                                 Đã học {u.completedLessons || 0} / {u.totalLessons || 0} bài
                               </div>
                               <div className="w-24 bg-slate-100 h-1.5 rounded-full mx-auto mt-1 overflow-hidden">
@@ -674,14 +674,14 @@ export default function AdminUsersPage() {
                               <span className="whitespace-nowrap inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full bg-rose-100 text-rose-800 border border-rose-300 shadow-2xs">
                                 <span>⏰</span> Khóa: Quá hạn bài học
                               </span>
-                              <div className="text-[10px] text-rose-600 mt-0.5">Quá hạn bài học bắt buộc</div>
+                              <div className="text-[11px] text-rose-600 mt-0.5">Quá hạn bài học bắt buộc</div>
                             </div>
                           ) : u.accountState === 'PASSWORD_LOCK' ? (
                             <div>
                               <span className="whitespace-nowrap inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-900 border border-amber-300 shadow-2xs">
                                 <span>🔒</span> Khóa: Quên/Sai MK
                               </span>
-                              <div className="text-[10px] text-amber-700 mt-0.5">Sai MK 5 lần: chỉ mở bằng mail đặt lại MK</div>
+                              <div className="text-[11px] text-amber-700 mt-0.5">Sai MK 5 lần: chỉ mở bằng mail đặt lại MK</div>
                             </div>
                           ) : isActive ? (
                             <span className="whitespace-nowrap inline-flex items-center text-xs font-bold px-2.5 py-1 rounded-full bg-green-100 text-green-700">
@@ -693,11 +693,11 @@ export default function AdminUsersPage() {
                                 <span>⛔</span> Vô hiệu hóa
                               </span>
                               {u.cascadeLeadId ? (
-                                <div className="text-[10px] text-red-500 mt-0.5">Theo Lead Chapter</div>
+                                <div className="text-[11px] text-red-500 mt-0.5">Theo Lead Chapter</div>
                               ) : isLeadRole(u.deactivatedByRole) ? (
-                                <div className="text-[10px] text-red-500 mt-0.5">Bởi Lead Chapter</div>
+                                <div className="text-[11px] text-red-500 mt-0.5">Bởi Lead Chapter</div>
                               ) : u.deactivatedByRole === 'ADMIN' ? (
-                                <div className="text-[10px] text-red-500 mt-0.5">Bởi Admin</div>
+                                <div className="text-[11px] text-red-500 mt-0.5">Bởi Admin</div>
                               ) : null}
                             </div>
                           )}
@@ -801,7 +801,7 @@ export default function AdminUsersPage() {
           {/* Pagination Controls */}
           {totalPages > 1 && (
             <div className="p-4 border-t border-[#eff4ff] bg-[#f8f9ff] flex flex-col sm:flex-row items-center justify-between gap-3">
-              <div className="text-xs text-[#737686]">
+              <div className="text-xs text-[#6c6f7f]">
                 Trang <span className="font-bold text-[#172554]">{page}</span> / {totalPages} (Tổng {totalFilteredCount} tài khoản)
               </div>
 
@@ -822,7 +822,7 @@ export default function AdminUsersPage() {
                     const prevP = arr[idx - 1];
                     return (
                       <span key={p} className="flex items-center">
-                        {prevP && p - prevP > 1 && <span className="px-1 text-[#737686]">...</span>}
+                        {prevP && p - prevP > 1 && <span className="px-1 text-[#6c6f7f]">...</span>}
                         <button
                           disabled={loading}
                           onClick={() => handlePageChange(p)}
@@ -907,7 +907,7 @@ export default function AdminUsersPage() {
                     <label className="block text-xs font-semibold text-red-950">
                       Để xác nhận, vui lòng nhập chính xác chữ <strong className="text-red-600 underline font-extrabold">&ldquo;vô hiệu hóa&rdquo;</strong> vào ô bên dưới:
                     </label>
-                    <input
+                    <input aria-label="Nhập “vô hiệu hóa” để xác nhận"
                       type="text"
                       value={deactivateInputText}
                       onChange={(e) => setDeactivateInputText(e.target.value)}
@@ -1017,8 +1017,8 @@ export default function AdminUsersPage() {
                   ))}
                 </div>
                 <div className="mt-2 flex items-center gap-2">
-                  <span className="text-xs text-[#737686]">Hoặc số ngày khác:</span>
-                  <input
+                  <span className="text-xs text-[#6c6f7f]">Hoặc số ngày khác:</span>
+                  <input aria-label="Số ngày gia hạn"
                     type="number"
                     min={1}
                     max={365}
@@ -1031,7 +1031,7 @@ export default function AdminUsersPage() {
                     }
                     className="w-20 px-2 py-1 text-xs border border-[#cbdbf5] rounded-lg text-center font-bold text-[#172554]"
                   />
-                  <span className="text-xs text-[#737686]">ngày kể từ hôm nay</span>
+                  <span className="text-xs text-[#6c6f7f]">ngày kể từ hôm nay</span>
                 </div>
               </div>
 
@@ -1087,11 +1087,11 @@ export default function AdminUsersPage() {
                   <h3 className="text-xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
                     Hồ sơ học viên & Quản trị tài khoản
                   </h3>
-                  <p className="text-xs text-[#737686]">Chi tiết tiến độ học tập, video, bài kiểm tra và các thao tác nghiệp vụ.</p>
+                  <p className="text-xs text-[#6c6f7f]">Chi tiết tiến độ học tập, video, bài kiểm tra và các thao tác nghiệp vụ.</p>
                 </div>
                 <button
                   onClick={handleCloseUserDetail}
-                  className="text-[#737686] hover:text-[#172554] text-xl font-bold p-1 rounded-lg hover:bg-slate-100 transition"
+                  className="text-[#6c6f7f] hover:text-[#172554] text-xl font-bold p-1 rounded-lg hover:bg-slate-100 transition"
                 >
                   ✕
                 </button>

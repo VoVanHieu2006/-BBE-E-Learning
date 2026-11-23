@@ -51,7 +51,7 @@ describe('bảng màu', () => {
     }
     assert.ok(contrast(design.colors.white, design.colors.primary) >= 4.5, 'chữ trắng trên nút chính')
   })
-  it('BUG-UX-CONTRAST: the secondary text colour (outline, used for hints and captions) is readable on the surface', { todo: 'BUG-UX-CONTRAST: known defect, see docs/qa/defects.md' }, () => {
+  it('the secondary text colour (outline, used for hints and captions) is readable on the surface', () => {
     const luminance = (hex: string) => {
       const [r, g, b] = [1, 3, 5].map((start) => parseInt(hex.slice(start, start + 2), 16) / 255).map((channel) => channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4)
       return 0.2126 * r + 0.7152 * g + 0.0722 * b

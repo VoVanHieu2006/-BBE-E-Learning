@@ -16,25 +16,25 @@ export default function PlayerPage({ params }: { params: { lessonId: string } })
         <h1 className="text-3xl font-bold text-[#172554] mb-2" style={{ fontFamily: "'Be Vietnam Pro', 'Inter', sans-serif" }}>
           BBE E-Learning — Video Player
         </h1>
-        <p className="text-[#737686] mb-6">Source of truth cho completed vẫn là server (BR-03).</p>
+        <p className="text-[#6c6f7f] mb-6">Source of truth cho completed vẫn là server (BR-03).</p>
 
         <div className="bg-white rounded-2xl p-4 border border-[#eff4ff] shadow-md mb-6">
-          <label className="block text-sm font-semibold text-[#172554] mb-1">Access Token (from /api/v1/auth/login)</label>
-          <input
+          <label htmlFor="lesson-access-token" className="block text-sm font-semibold text-[#172554] mb-1">Access Token (from /api/v1/auth/login)</label>
+          <input id="lesson-access-token"
             type="text"
             placeholder="Bearer token..."
             className="w-full px-4 py-2.5 border border-[#cbdbf5] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
             onChange={(e) => setAccessToken(e.target.value)}
           />
-          <label className="block text-sm font-semibold text-[#172554] mb-1 mt-3">YouTube Video ID</label>
-          <input
+          <label htmlFor="lesson-youtube-video-id" className="block text-sm font-semibold text-[#172554] mb-1 mt-3">YouTube Video ID</label>
+          <input id="lesson-youtube-video-id"
             type="text"
             value={youtubeVideoId}
             className="w-full px-4 py-2.5 border border-[#cbdbf5] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
             onChange={(e) => setYoutubeVideoId(e.target.value)}
           />
-          <label className="block text-sm font-semibold text-[#172554] mb-1 mt-3">Saved position (seconds)</label>
-          <input
+          <label htmlFor="lesson-saved-position" className="block text-sm font-semibold text-[#172554] mb-1 mt-3">Saved position (seconds)</label>
+          <input id="lesson-saved-position"
             type="number"
             min={0}
             data-resume-position
@@ -71,7 +71,7 @@ export default function PlayerPage({ params }: { params: { lessonId: string } })
             <li>Playback rate 1.5x / 2x</li>
             <li>UI controls ẩn thanh tua mặc định, custom control bar</li>
           </ul>
-          <p className="text-xs mt-3 italic text-[#737686]">
+          <p className="text-xs mt-3 italic text-[#6c6f7f]">
             Note: YouTube controls mặc định đã ẩn (controls=0).
           </p>
         </Card>

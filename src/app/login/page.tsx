@@ -1,6 +1,7 @@
 'use client';
 import { isLeadRole } from '@/lib/roles'
 import { accountHome, canOpenManagerArea } from '@/lib/session-role'
+import { storeLoginSession } from '@/lib/client-session'
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -63,13 +64,7 @@ export default function LoginPage() {
       }
 
       if (data.accessToken && data.user) {
-        localStorage.setItem('accessToken', data.accessToken);
-        localStorage.setItem('refreshToken', data.refreshToken || '');
-        localStorage.setItem('user', JSON.stringify(data.user));
-
-        // Sync cookies for server-side middleware
-        document.cookie = `accessToken=${data.accessToken}; path=/; max-age=900; SameSite=Lax`;
-        document.cookie = `userRole=${data.user.role}; path=/; max-age=604800; SameSite=Lax`;
+        storeLoginSession(data);
 
         const role = data.user.role;
         if (role !== 'ADMIN' && !isLeadRole(role)) {
@@ -108,8 +103,8 @@ export default function LoginPage() {
       } else {
         setError('Phản hồi từ máy chủ không hợp lệ.');
       }
-    } catch (err: any) {
-      setError('Lỗi kết nối: ' + (err.message || 'Không thể kết nối tới máy chủ'));
+    } catch {
+      setError('Lỗi kết nối: không thể kết nối tới máy chủ. Vui lòng kiểm tra mạng và thử lại.');
     } finally {
       setLoading(false);
     }
@@ -128,7 +123,7 @@ export default function LoginPage() {
           <h1 className="text-3xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
             Đăng nhập
           </h1>
-          <p className="text-[#737686] mt-1 text-sm">Hệ thống đào tạo trực tuyến BBE E-Learning</p>
+          <p className="text-[#6c6f7f] mt-1 text-sm">Hệ thống đào tạo trực tuyến BBE E-Learning</p>
         </div>
 
         {/* Card */}
@@ -149,40 +144,40 @@ export default function LoginPage() {
 
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
-              <label className="block text-sm font-semibold text-[#172554] mb-1.5">Địa chỉ Email</label>
-              <input
+              <label htmlFor="login-email" className="block text-sm font-semibold text-[#172554] mb-1.5">Địa chỉ Email</label>
+              <input id="login-email"
                 type="email"
                 required
                 autoComplete="email"
                 value={form.email}
                 onChange={(e) => setForm({ ...form, email: e.target.value })}
-                className="w-full px-4 py-3 bg-white border border-[#cbdbf5] rounded-xl text-[#0b1c30] placeholder-[#737686] focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:border-transparent transition text-sm"
+                className="w-full px-4 py-3 bg-white border border-[#cbdbf5] rounded-xl text-[#0b1c30] placeholder-[#6c6f7f] focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:border-transparent transition text-sm"
                 placeholder="email@bbelearning.com"
               />
             </div>
 
             <div>
               <div className="flex justify-between items-center mb-1.5">
-                <label className="block text-sm font-semibold text-[#172554]">Mật khẩu</label>
-                <Link href="/forgot-password" className="text-xs text-[#2563EB] hover:underline font-semibold">
+                <label htmlFor="login-password" className="block text-sm font-semibold text-[#172554]">Mật khẩu</label>
+                <Link href="/forgot-password" className="inline-flex min-h-6 items-center text-xs text-[#2563EB] hover:underline font-semibold">
                   Quên mật khẩu?
                 </Link>
               </div>
               <div className="relative">
-                <input
+                <input id="login-password"
                   type={showPassword ? 'text' : 'password'}
                   required
                   autoComplete="current-password"
                   value={form.password}
                   onChange={(e) => setForm({ ...form, password: e.target.value })}
-                  className="w-full px-4 py-3 bg-white border border-[#cbdbf5] rounded-xl text-[#0b1c30] placeholder-[#737686] focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:border-transparent transition pr-12 text-sm"
+                  className="w-full px-4 py-3 bg-white border border-[#cbdbf5] rounded-xl text-[#0b1c30] placeholder-[#6c6f7f] focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:border-transparent transition pr-12 text-sm"
                   placeholder="••••••••"
                 />
                 <button
                   type="button"
                   tabIndex={-1}
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#737686] hover:text-[#2563EB] p-1.5 rounded-lg transition text-lg"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#6c6f7f] hover:text-[#2563EB] p-1.5 rounded-lg transition text-lg"
                 >
                   {showPassword ? '👁️' : '🔒'}
                 </button>
@@ -200,7 +195,7 @@ export default function LoginPage() {
         <div className="text-center space-y-2">
           <Link
             href="/"
-            className="inline-flex items-center gap-1.5 text-xs text-[#737686] hover:text-[#2563EB] transition font-semibold"
+            className="inline-flex items-center gap-1.5 text-xs text-[#6c6f7f] hover:text-[#2563EB] transition font-semibold"
           >
             ← Quay lại trang chủ
           </Link>

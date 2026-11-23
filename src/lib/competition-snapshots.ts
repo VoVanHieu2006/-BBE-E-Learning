@@ -137,6 +137,13 @@ export function rankIndividuals<T extends { stars: number; elapsedMs: number; us
   })
 }
 
+/**
+ * System-wide Member/LT term board (no Chapter filter): `false` counts everyone over the whole
+ * fixed term (01/04→01/10, 01/10→01/04); `true` counts each Chapter's people from the day their
+ * Chapter's handover was applied. Read by both the live board and the close job.
+ */
+export const SYSTEM_WIDE_TERM_COUNTS_FROM_CHAPTER_HANDOVER = false
+
 export async function individualPeriodRows(
   tx: Tx,
   startsAt: Date,
@@ -164,7 +171,8 @@ export async function individualPeriodRows(
         : { starts_at: { lte: endsAt }, OR: [{ ends_at: null }, { ends_at: { gte: startsAt } }] },
     })
     for (const t of terms) {
-      termByChapter.set(t.chapter_id, t)
+      // A handover applied after the window ended opens a term that cannot score inside it.
+      if (t.starts_at < endsAt) termByChapter.set(t.chapter_id, t)
     }
   }
 
@@ -509,6 +517,25 @@ export async function closeCompetitionTerms() {
       if (await tx.learningSnapshot.findUnique({ where: { key } })) return
       const period = { ...season, starts_at: season.reward_boundary_at!, ends_at: end }
       await saveSnapshot(tx, key, { group: 'DNA', periodType: 'TERM', period, state: 'FINALIZED', items: await individualPeriodRows(tx, period.starts_at, end, 'DNA') }, now)
+      captured++
+    }, { timeout: 60_000 })
+  }
+  // System-wide Member/LT boards (no Chapter filter) rank over the competition term that starts at
+  // the season's 01/04 or 01/10 boundary, like DNA. Freeze each term once it has ended.
+  for (const season of dnaSeasons) for (const group of ['MEMBER', 'LT']) {
+    const end = dnaSeasonEnd(season.reward_boundary_at!)
+    if (end > now) continue
+    await prisma.$transaction(async (tx) => {
+      const key = `ranking:${group}:${season.id}`
+      if (await tx.learningSnapshot.findUnique({ where: { key } })) return
+      // Same rule as DNA: never invent an empty history for a term without native evidence.
+      if (!await hasNativeLearningEvidence(tx, season.reward_boundary_at!, end)) return
+      const users = await tx.user.findMany({ select: { id: true }, orderBy: { id: 'asc' } })
+      for (const user of users) await lockLearningUser(tx, user.id)
+      if (await tx.learningSnapshot.findUnique({ where: { key } })) return
+      const period = { ...season, starts_at: season.reward_boundary_at!, ends_at: end }
+      const items = await individualPeriodRows(tx, period.starts_at, end, group, undefined, undefined, season.id, { chapterTerms: SYSTEM_WIDE_TERM_COUNTS_FROM_CHAPTER_HANDOVER })
+      await saveSnapshot(tx, key, { group, periodType: 'TERM', period, state: 'FINALIZED', items }, now)
       captured++
     }, { timeout: 60_000 })
   }

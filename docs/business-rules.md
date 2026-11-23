@@ -12,8 +12,8 @@ Mục tiêu là tập trung đào tạo và giúp người học/Lead theo dõi 
 
 | Người dùng | Phạm vi chính |
 |---|---|
-| Khách | PUBLISHED + PUBLIC, xem/tua/tải nội dung công khai; không quiz/tiến độ/sao |
-| Thành viên Chapter / LT / President | Khóa đã xuất bản, lộ trình theo vị trí và tài nguyên của mình; BXH giới hạn affiliation |
+| Khách | PUBLISHED + PUBLIC, xem/tua/tải nội dung công khai; không quiz/tiến độ/sao; xem BXH kỳ như mọi người |
+| Thành viên Chapter / LT / President | Khóa đã xuất bản, lộ trình theo vị trí và tài nguyên của mình; BXH kỳ dùng chung, không giới hạn theo vai |
 | Thành viên DNA | Chương trình DNA và khóa published; học khóa Thành viên không tạo tư cách Chapter |
 | Lead Chapter / Lead DNA | Quản lý đúng đơn vị/chức vụ có hiệu lực; không mặc nhiên là người thi đua |
 | Admin | Quản trị toàn hệ thống, nội dung, tổ chức, tài khoản và vận hành |
@@ -25,6 +25,7 @@ Một người chỉ có một tư cách Chapter/DNA đang hoạt động. Chapt
 ## Lời mời và tài khoản
 
 - Lời mời dùng một lần, hạn 24 giờ; gửi lại vô hiệu token cũ. Email chuẩn hóa/kiểm tra tồn tại; chấp nhận hợp lệ thiết lập mật khẩu và kích hoạt tài khoản.
+- **Lời mời đang chờ ngoài phạm vi người mời.** Mỗi email chỉ có một lời mời còn hiệu lực. Mời lại một email đang có lời mời `PENDING` chưa hết hạn chỉ thay (hủy) lời mời cũ khi lời mời cũ cùng đơn vị đích hoặc thuộc phạm vi người mời quản lý được (Admin: mọi lời mời; Lead: lời mời vào đơn vị mình có quyền quản lý thành viên). Nếu lời mời cũ nằm ngoài phạm vi đó, ví dụ Lead mời một email đang giữ lời mời Lead Chapter mới của Admin hoặc lời mời của Chapter khác, lời mời mới bị từ chối với lỗi `PendingInvitationOutOfScope` (HTTP 409) và lời mời cũ giữ nguyên, không bị hủy. Mời hàng loạt báo email đó là `ALREADY_INVITED`. Lời mời cũ đã quá hạn không còn hiệu lực nên vẫn được thay.
 - **Hạn mức email (Resend gói miễn phí).** Mọi email gửi qua Resend (mời, gửi lại, đặt lại mật khẩu) đều tính vào bộ đếm theo ngày lịch UTC (`email_daily_usage`, reset 0h UTC = 7h sáng giờ Việt Nam). Lời mời chỉ được dùng tối đa **90 email/ngày** (`EMAIL_DAILY_LIMIT`, mặc định 90); 10 email còn lại dành cho mail hệ thống. Mail đặt lại mật khẩu được phép dùng phần dự phòng đó (tới 100/ngày, `EMAIL_PROVIDER_DAILY_LIMIT`). Việc đếm là **đặt chỗ nguyên tử trước khi gửi** (khóa hàng của ngày trong một transaction), nên nhiều người mời song song không bao giờ vượt hạn mức; lô lớn được đặt chỗ một phần. Slot đã đặt mà mail chưa tới Resend thì hoàn lại; mail đã gửi (hoặc lỗi không rõ) thì giữ slot. Các nơi mời hiện "Còn X/90 email hôm nay, làm mới lúc 7h sáng ngày mai (giờ Việt Nam)".
 - **Link mời dự phòng.** Hết hạn mức hoặc gửi mail lỗi không làm hỏng việc mời: lời mời vẫn được tạo (`PENDING`) với `delivery_method = LINK` ("Chưa gửi mail, lấy link mời"). Người có quyền mời đúng đơn vị bấm "Link mời <email>" để tạo link mới (đổi token, link cũ hết hiệu lực, giữ hạn 24 giờ, dùng một lần, đúng email) và sao chép vào clipboard; link không hiển thị và không ghi log, mỗi lần lấy có audit log và bị giới hạn tần suất. Lời mời giao bằng link dùng "Đổi link" thay cho "Gửi lại" (lời mời qua email vẫn "Gửi lại"); "Hủy" dùng chung. Nếu "Gửi lại" bằng email thành công cho lời mời đang LINK thì nó trở về `EMAIL`. Mail đặt lại mật khẩu không có đường link dự phòng (tránh lộ link khôi phục tài khoản); hết hạn mức thì không gửi.
 - Admin mời quản lý bằng luồng Admin; quản lý đơn vị mời thành viên theo scope. Không dùng luồng member để vượt quyền.
@@ -73,7 +74,7 @@ Thêm `k` bài vào khóa bắt buộc đã hoàn thành có thời gian bổ su
 
 Dữ liệu cũ có sao thiếu month/cycle provenance giữ đường đọc lịch sử. Mô hình deadline chung luôn chạy; mapping và season áp dụng ngay khi cấu hình, không có bước kích hoạt. Release1: người chưa có cycle nhận `NATIVE` từ `now`, nhập video progress, `imported_due_at` và giữ đường đọc lộ trình lịch sử như trước. Cycle `LEGACY` đã tồn tại vẫn đọc attempt null; không tự nhập attempt null cũ vào cycle `NATIVE` mới. Giữ các trường provenance, không sửa ledger/history.
 
-Tháng runtime dùng ranh giới tự nhiên `[00:00 đầu tháng, 00:00 đầu tháng kế tiếp)` UTC+7, không viết lại month rows/snapshots đã có. Mùa DNA xét `[reward_boundary_at, dnaSeasonEnd(season.reward_boundary_at))`, không có mốc cấu hình làm sàn. Mùa đã kết thúc không có ledger `NATIVE` trong cửa sổ **và không có đúng snapshot** `ranking:DNA:<season.id>` là lịch sử không khả dụng, không dựng snapshot ngược. Có `NATIVE` và chưa có snapshot thì đủ điều kiện cho scheduler chốt; snapshot đã có được giữ nguyên kể cả không có `NATIVE`.
+Tháng runtime dùng ranh giới tự nhiên `[00:00 đầu tháng, 00:00 đầu tháng kế tiếp)` UTC+7, không viết lại month rows/snapshots đã có. Mùa DNA xét `[reward_boundary_at, dnaSeasonEnd(season.reward_boundary_at))`, không có mốc cấu hình làm sàn. Mùa đã kết thúc không có ledger `NATIVE` trong cửa sổ **và không có đúng snapshot** `ranking:DNA:<season.id>` là lịch sử không khả dụng, không dựng snapshot ngược. Có `NATIVE` và chưa có snapshot thì đủ điều kiện cho scheduler chốt; snapshot đã có được giữ nguyên kể cả không có `NATIVE`. Bảng nhiệm kỳ Thành viên/LT toàn hệ thống (không lọc Chapter) xét đúng nhiệm kỳ thi đua `[reward_boundary_at, dnaSeasonEnd(season.reward_boundary_at))` (`01/04→01/10`, `01/10→01/04`) như DNA; khung chuyển giao `01/01–30/06`, `01/07–31/12` chỉ quyết định Chapter chuyển giao một lần và chuẩn hóa về mốc, không phải khung tính bảng. Mọi người được tính trọn nhiệm kỳ cố định, không theo ngày apply chuyển giao của Chapter (công tắc `SYSTEM_WIDE_TERM_COUNTS_FROM_CHAPTER_HANDOVER`). Khi nhiệm kỳ kết thúc scheduler chốt `ranking:MEMBER:<season.id>` và `ranking:LT:<season.id>` đúng như bảng đang mở tại thời điểm kết thúc, theo cùng quy tắc `NATIVE`/snapshot như mùa DNA.
 
 ## Chapter và bảng xếp hạng
 
@@ -90,7 +91,7 @@ Tháng runtime dùng ranh giới tự nhiên `[00:00 đầu tháng, 00:00 đầu
 
 Không dùng trọng số 30/30/20/20 cũ. Roster hiện tại khác quân số bình quân thi đua; không lấy learner count quản lý làm mẫu số. Mẫu số core dựa trên publication/version hợp lệ. Thiếu core/KPI/snapshot có reason, không giả thành 0.
 
-Nhóm gồm Thành viên, LT, DNA, Chapter. President thuộc LT; DNA TT không lên BXH DNA. Sang DNA giữa tháng loại toàn bộ sao/quân số người ấy khỏi Chapter tháng chuyển; tháng đã chốt trước đó giữ nguyên. DNA tính cả sao trước gia nhập trong cùng kỳ; không di chuyển ledger. Đổi tên không đổi ID/sao.
+Nhóm gồm Thành viên, LT, DNA, Chapter. BXH kỳ là một bảng dùng chung: khách chưa đăng nhập và mọi vai đã đăng nhập đều xem được cả bốn nhóm và lọc theo bất kỳ Chapter nào; hàng xếp hạng không có email (email chỉ có trong hồ sơ thành viên mà Admin/Lead mở). President thuộc LT; DNA TT không lên BXH DNA. Sang DNA giữa tháng loại toàn bộ sao/quân số người ấy khỏi Chapter tháng chuyển; tháng đã chốt trước đó giữ nguyên. DNA tính cả sao trước gia nhập trong cùng kỳ; không di chuyển ledger. Đổi tên không đổi ID/sao.
 
 Bảng đóng đọc snapshot, không dựng lại bằng roles/affiliation hôm nay. Thiếu history phải báo thiếu evidence. Bổ sung KPI không mở lại reward budget hoặc tính lại facts đã chốt. `ACTUAL_TERM` là thống kê Chapter, không tự có thứ hạng chính thức. Legacy chưa phân bổ báo riêng tránh đếm lặp.
 

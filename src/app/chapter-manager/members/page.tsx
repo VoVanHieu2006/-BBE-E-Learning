@@ -13,6 +13,8 @@ export default function ChapterManagerMembersPage() {
   const [user, setUser] = useState<any>(null);
   const [members, setMembers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [hasLoaded, setHasLoaded] = useState(false);
   const [search, setSearch] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
@@ -88,6 +90,7 @@ export default function ChapterManagerMembersPage() {
         if (cached.totalItems !== undefined) {
           setPagination({ totalItems: cached.totalItems, totalPages: cached.totalPages || 1 });
         }
+        setHasLoaded(true);
         setLoading(false);
       }
     }
@@ -125,6 +128,7 @@ export default function ChapterManagerMembersPage() {
       if (cached.totalItems !== undefined) {
         setPagination({ totalItems: cached.totalItems, totalPages: cached.totalPages || 1 });
       }
+      setHasLoaded(true);
       setLoading(false);
     }
 
@@ -135,9 +139,16 @@ export default function ChapterManagerMembersPage() {
         setSummary(res.data.summary);
       }
       setPagination({ totalItems: res.data.totalItems || 0, totalPages: res.data.totalPages || 1 });
+      setHasLoaded(true);
     }
+    setLoadError(res.ok ? '' : 'Không tải được danh sách thành viên. Vui lòng thử lại.');
     setLoading(false);
   }
+
+  const handleRetryLoad = () => {
+    setLoading(true);
+    loadMembers(user?.chapterId, search, true, page, departmentFilter, roleFilter, limit);
+  };
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -246,6 +257,12 @@ export default function ChapterManagerMembersPage() {
 
   // Chỉ hiển thị thành viên (MEMBER) — không hiện tài khoản Lead Chapter/Admin trong danh sách
   const memberRows = members.filter((m) => m.role === 'MEMBER');
+  // Tải lỗi mà chưa có dữ liệu nào: không được hiện số 0 hay "chưa có thành viên" như dữ liệu thật.
+  const loadFailedWithoutData = Boolean(loadError) && members.length === 0;
+  // Lần tải đầu chưa xong: số 0 mặc định cũng không phải dữ liệu thật.
+  const firstLoadPending = loading && !hasLoaded;
+  const summaryValue = (value: React.ReactNode) =>
+    firstLoadPending ? <span className="text-sm font-semibold text-[#737686]">Đang tải…</span> : loadFailedWithoutData ? '—' : value;
   const activeCount = memberRows.filter((m) => m.status === 'ACTIVE').length;
   const avgChapterProgress =
     memberRows.length > 0
@@ -264,7 +281,7 @@ export default function ChapterManagerMembersPage() {
             <h1 className="text-3xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
               Thành viên & Tiến trình Chapter
             </h1>
-            <p className="text-[#737686] mt-1 text-sm">
+            <p className="text-[#6c6f7f] mt-1 text-sm">
               Chapter: <span suppressHydrationWarning className="font-semibold text-[#172554]">{mounted && user?.chapterName ? user.chapterName : 'Chapter của bạn'}</span> • Quản lý học viên và theo dõi kết quả học tập
             </p>
           </div>
@@ -285,26 +302,26 @@ export default function ChapterManagerMembersPage() {
         {/* Stats Row */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           <Card shadow="md" className="p-4 border border-[#eff4ff]">
-            <div className="text-xs font-semibold text-[#737686]">Tổng thành viên</div>
-            <div className="text-2xl font-bold text-[#172554] mt-1">{summary.totalMembers}</div>
-            <div className="text-[11px] text-[#737686] mt-0.5">Toàn bộ Chapter</div>
+            <div className="text-xs font-semibold text-[#6c6f7f]">Tổng thành viên</div>
+            <div className="text-2xl font-bold text-[#172554] mt-1">{summaryValue(summary.totalMembers)}</div>
+            <div className="text-[11px] text-[#6c6f7f] mt-0.5">Toàn bộ Chapter</div>
           </Card>
           <Card shadow="md" className="p-4 border border-[#eff4ff]">
             <div className="text-xs font-semibold text-green-700">Đang hoạt động (Active)</div>
-            <div className="text-2xl font-bold text-green-700 mt-1">{summary.activeMembers}</div>
-            <div className="text-[11px] text-[#737686] mt-0.5">Có quyền đăng nhập học</div>
+            <div className="text-2xl font-bold text-green-700 mt-1">{summaryValue(summary.activeMembers)}</div>
+            <div className="text-[11px] text-[#6c6f7f] mt-0.5">Có quyền đăng nhập học</div>
           </Card>
           <Card shadow="md" className="p-4 border border-[#eff4ff]">
             <div className="text-xs font-semibold text-blue-700">Tiến độ TB Chapter</div>
-            <div className="text-2xl font-bold text-[#2563EB] mt-1">{summary.avgChapterProgress}%</div>
-            <div className="text-[11px] text-[#737686] mt-0.5">Tất cả khóa học</div>
+            <div className="text-2xl font-bold text-[#2563EB] mt-1">{summaryValue(`${summary.avgChapterProgress}%`)}</div>
+            <div className="text-[11px] text-[#6c6f7f] mt-0.5">Tất cả khóa học</div>
           </Card>
         </div>
 
         {/* Search & Filter Bar */}
         <Card className="p-4 mb-4 border border-[#eff4ff] shadow-sm">
           <form onSubmit={handleSearch} className="flex flex-col md:flex-row gap-3">
-            <input
+            <input aria-label="Tìm kiếm thành viên theo tên hoặc email"
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -313,7 +330,7 @@ export default function ChapterManagerMembersPage() {
             />
 
             {/* Bộ lọc theo Ban (Chỉ chọn, bấm nút Tìm kiếm mới lọc) */}
-            <select
+            <select aria-label="Lọc theo Ban"
               value={departmentFilter}
               onChange={(e) => setDepartmentFilter(e.target.value)}
               className="px-3.5 py-2.5 border border-[#cbdbf5] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB] bg-white text-[#172554] font-medium"
@@ -330,7 +347,7 @@ export default function ChapterManagerMembersPage() {
             </select>
 
             {/* Bộ lọc theo Chức vụ (Chỉ chọn, bấm nút Tìm kiếm mới lọc) */}
-            <select
+            <select aria-label="Lọc theo chức vụ"
               value={roleFilter}
               onChange={(e) => setRoleFilter(e.target.value)}
               className="px-3.5 py-2.5 border border-[#cbdbf5] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB] bg-white text-[#172554] font-medium"
@@ -351,15 +368,17 @@ export default function ChapterManagerMembersPage() {
         </Card>
 
         {/* Filter Result Summary & Page Size Controls */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-1 mb-3 text-xs text-[#737686]">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-1 mb-3 text-xs text-[#6c6f7f]">
           <div className="font-medium flex items-center gap-2">
-            <span>
-              Đang hiển thị <span className="text-[#2563EB] font-bold">{memberRows.length}</span> trên tổng số{' '}
-              <span className="text-[#172554] font-bold">{summary.totalMembers}</span> tài khoản
-              {(search || departmentFilter || roleFilter) && (
-                <span> (kết quả lọc: <strong className="text-[#172554]">{pagination.totalItems}</strong> tài khoản)</span>
-              )}
-            </span>
+            {!loadFailedWithoutData && !firstLoadPending && (
+              <span>
+                Đang hiển thị <span className="text-[#2563EB] font-bold">{memberRows.length}</span> trên tổng số{' '}
+                <span className="text-[#172554] font-bold">{summary.totalMembers}</span> tài khoản
+                {(search || departmentFilter || roleFilter) && (
+                  <span> (kết quả lọc: <strong className="text-[#172554]">{pagination.totalItems}</strong> tài khoản)</span>
+                )}
+              </span>
+            )}
             {loading && (
               <span className="inline-flex items-center gap-1 text-[#2563EB] font-semibold animate-pulse">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#2563EB]"></span> Đang tải...
@@ -369,7 +388,7 @@ export default function ChapterManagerMembersPage() {
 
           <div className="flex items-center gap-2">
             <span>Hiển thị mỗi trang:</span>
-            <select
+            <select aria-label="Số dòng mỗi trang"
               value={limit}
               disabled={loading}
               onChange={(e) => {
@@ -400,14 +419,29 @@ export default function ChapterManagerMembersPage() {
             </div>
           )}
 
+          {loadError && !loading && members.length > 0 && (
+            <div role="alert" className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-red-50 border-b border-red-100 text-sm text-red-700">
+              <span>{loadError} Danh sách bên dưới có thể chưa phải dữ liệu mới nhất.</span>
+              <Button size="sm" variant="outline" onClick={handleRetryLoad}>Thử lại</Button>
+            </div>
+          )}
+
           {loading && members.length === 0 ? (
             <div className="p-8 space-y-4 animate-pulse">
               {[1, 2, 3].map((n) => (
                 <div key={n} className="h-14 bg-slate-100 rounded-xl"></div>
               ))}
             </div>
+          ) : loadFailedWithoutData ? (
+            <div role="alert" className="text-center py-16 text-[#737686]">
+              <p className="text-lg font-semibold text-red-700 mb-1">Không tải được danh sách thành viên</p>
+              <p className="text-sm">Đã có lỗi khi tải dữ liệu, nên chưa thể biết Chapter có bao nhiêu thành viên. Vui lòng thử lại.</p>
+              <Button size="sm" onClick={handleRetryLoad} className="mt-4">
+                Thử lại
+              </Button>
+            </div>
           ) : memberRows.length === 0 ? (
-            <div className="text-center py-16 text-[#737686]">
+            <div className="text-center py-16 text-[#6c6f7f]">
               <p className="text-lg font-semibold text-[#172554] mb-1">Chưa có thành viên nào</p>
               <p className="text-sm">{canManageMembers ? 'Hãy gửi lời mời thành viên đầu tiên tham gia Chapter của bạn.' : 'Chapter hiện chưa có thành viên để hiển thị.'}</p>
               {canManageMembers && (
@@ -448,17 +482,17 @@ export default function ChapterManagerMembersPage() {
                             <span className="font-semibold text-[#172554] group-hover:text-[#2563EB] transition-colors block">
                               {m.displayName || 'Chưa cập nhật tên'}
                             </span>
-                            <span className="mt-0.5 text-xs text-[#737686] group-hover:text-[#2563EB] transition-colors block">
+                            <span className="mt-0.5 text-xs text-[#6c6f7f] group-hover:text-[#2563EB] transition-colors block">
                               {m.email}
                             </span>
                           </button>
                           <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
                             {m.department?.name === 'Chủ Tịch' ? (
-                              <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-amber-200/80 text-amber-900 shadow-2xs">
+                              <span className="text-[11px] font-black px-2 py-0.5 rounded-md bg-amber-200/80 text-amber-900 shadow-2xs">
                                 ⭐ Chủ tịch Chapter
                               </span>
                             ) : m.isLead ? (
-                              <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-200">
+                              <span className="text-[11px] font-extrabold px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-200">
                                 👑 Trưởng ban
                               </span>
                             ) : null}
@@ -473,7 +507,7 @@ export default function ChapterManagerMembersPage() {
                         <td className="px-6 py-4 text-center">
                           <div className="flex flex-col items-center justify-center">
                             <span className="font-bold text-[#2563EB]">{m.avgProgress || 0}%</span>
-                            <span className="text-[11px] text-[#737686] mt-0.5">
+                            <span className="text-[11px] text-[#6c6f7f] mt-0.5">
                               Đã học {m.completedLessons || 0} / {m.totalLessons || 0} bài
                             </span>
                           </div>
@@ -490,7 +524,7 @@ export default function ChapterManagerMembersPage() {
                               <span className="whitespace-nowrap inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full bg-rose-100 text-rose-800 border border-rose-300">
                                 <span>🔒</span> Tạm khóa hệ thống
                               </span>
-                              <div className="text-[10px] text-slate-500 mt-0.5">Chỉ Admin mới mở được</div>
+                              <div className="text-[11px] text-slate-500 mt-0.5">Chỉ Admin mới mở được</div>
                             </div>
                           ) : isActive ? (
                             <span className="whitespace-nowrap inline-flex items-center text-xs font-bold px-2.5 py-1 rounded-full bg-green-100 text-green-700">
@@ -502,14 +536,14 @@ export default function ChapterManagerMembersPage() {
                                 <span>⛔</span> Đã vô hiệu hóa
                               </span>
                               {m.cascadeLeadId ? (
-                                <div className="text-[10px] text-red-500 mt-0.5">Theo Lead Chapter</div>
+                                <div className="text-[11px] text-red-500 mt-0.5">Theo Lead Chapter</div>
                               ) : (
-                                <div className="text-[10px] text-slate-500 mt-0.5">Chỉ Admin mở lại</div>
+                                <div className="text-[11px] text-slate-500 mt-0.5">Chỉ Admin mở lại</div>
                               )}
                             </div>
                           )}
                         </td>
-                        <td className="px-6 py-4 text-center text-xs text-[#737686]" suppressHydrationWarning>
+                        <td className="px-6 py-4 text-center text-xs text-[#6c6f7f]" suppressHydrationWarning>
                           {m.joinedAt ? new Date(m.joinedAt).toLocaleDateString('vi-VN') : '—'}
                         </td>
                         <td className="px-6 py-4 text-right">
@@ -552,7 +586,7 @@ export default function ChapterManagerMembersPage() {
           {/* Pagination Controls */}
           {pagination.totalPages > 1 && (
             <div className="p-4 border-t border-[#eff4ff] bg-[#f8f9ff] flex flex-col sm:flex-row items-center justify-between gap-3">
-              <div className="text-xs text-[#737686]">
+              <div className="text-xs text-[#6c6f7f]">
                 Trang <span className="font-bold text-[#172554]">{page}</span> / {pagination.totalPages} (Tổng {pagination.totalItems} thành viên)
               </div>
 
@@ -573,7 +607,7 @@ export default function ChapterManagerMembersPage() {
                     const prevP = arr[idx - 1];
                     return (
                       <span key={p} className="flex items-center">
-                        {prevP && p - prevP > 1 && <span className="px-1 text-[#737686]">...</span>}
+                        {prevP && p - prevP > 1 && <span className="px-1 text-[#6c6f7f]">...</span>}
                         <button
                           disabled={loading || isPageChanging}
                           onClick={() => handlePageChange(p)}
@@ -613,7 +647,7 @@ export default function ChapterManagerMembersPage() {
             <h3 className="text-xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
               Mời thành viên tham gia Chapter
             </h3>
-            <p className="text-xs text-[#737686]">
+            <p className="text-xs text-[#6c6f7f]">
               Gửi lời mời tham gia Chapter <span suppressHydrationWarning>{mounted && user?.chapterName ? user.chapterName : ''}</span> qua email.
             </p>
             <form onSubmit={handleInvite} className="space-y-4">
@@ -626,8 +660,8 @@ export default function ChapterManagerMembersPage() {
                 {departmentsError ? <p role="alert" className="text-sm text-red-700">{departmentsError}</p> : !departments.length && <p className="text-sm text-[#434655]">Chưa có ban có quyền mời thành viên. Vui lòng liên hệ quản trị viên nếu danh sách không tải được.</p>}
               </div>
               <div>
-                <label className="block text-sm font-semibold text-[#172554] mb-1">Email học viên *</label>
-                <input
+                <label htmlFor="member-invite-email" className="block text-sm font-semibold text-[#172554] mb-1">Email học viên *</label>
+                <input id="member-invite-email"
                   type="email"
                   required
                   value={inviteEmail}
@@ -663,7 +697,7 @@ export default function ChapterManagerMembersPage() {
             <h3 className="text-xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
               {confirmToggle?.nextStatus === 'INACTIVE' ? 'Vô hiệu hóa tài khoản?' : 'Kích hoạt lại tài khoản?'}
             </h3>
-            <p className="text-sm text-[#737686]">
+            <p className="text-sm text-[#6c6f7f]">
               {confirmToggle?.nextStatus === 'INACTIVE'
                 ? `Thành viên ${confirmToggle?.email} sẽ không thể đăng nhập và ngừng toàn bộ quyền truy cập học tập. Bạn hoặc Quản trị viên (Admin) có thể kích hoạt lại sau này.`
                 : `Thành viên ${confirmToggle?.email} sẽ được kích hoạt lại và có thể tiếp tục học tập bình thường.`}
@@ -674,7 +708,7 @@ export default function ChapterManagerMembersPage() {
                 <label className="block text-xs font-semibold text-red-950">
                   Để xác nhận, vui lòng nhập chính xác chữ <strong className="text-red-600 underline font-extrabold">&ldquo;vô hiệu hóa&rdquo;</strong> vào ô bên dưới:
                 </label>
-                <input
+                <input aria-label="Nhập “vô hiệu hóa” để xác nhận"
                   type="text"
                   value={deactivateInputText}
                   onChange={(e) => setDeactivateInputText(e.target.value)}

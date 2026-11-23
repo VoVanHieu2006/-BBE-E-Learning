@@ -19,6 +19,8 @@ export async function PATCH(request: NextRequest, { params }: { params: { userId
     if (!membership) return NextResponse.json({ error: { code: 'AccessDenied', message: 'Thành viên không thuộc Chapter được quản lý.' } }, { status: 403 })
   }
   const user = await prisma.user.update({ where: { id: params.userId }, data: { display_name: displayName }, select: { id: true, email: true, display_name: true } })
+    .catch((error) => { if (error?.code === 'P2025') return null; throw error })
+  if (!user) return NextResponse.json({ error: { code: 'UserNotFound', message: 'Người dùng không tồn tại' } }, { status: 404 })
   await prisma.auditLog.create({ data: { actor_user_id: auth.context!.userId, action: 'UPDATE_MEMBER_PROFILE', entity_type: 'USER', entity_id: user.id, metadata: JSON.stringify({ displayName }) } })
   return NextResponse.json({ id: user.id, email: user.email, displayName: user.display_name })
 }

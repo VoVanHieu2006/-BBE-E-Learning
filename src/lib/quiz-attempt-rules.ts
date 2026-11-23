@@ -83,6 +83,14 @@ export function gradeQuizAttempt(
 }
 
 /**
+ * Whole percent of a score ratio, rounded the way the attempt.score column stores it,
+ * so 23/40 is 58 (not 57 from 57.49999999999999) both when submitted and when read back.
+ */
+export function scoreRatioToPercent(scoreRatio: number): number {
+  return Math.round(Number((scoreRatio * 100).toFixed(8)))
+}
+
+/**
  * A submit sent when the countdown hits zero reaches the server slightly after
  * expires_at (latency, a modal waiting for the learner). Inside this window the
  * answers in the request are still graded; after it only answers already saved

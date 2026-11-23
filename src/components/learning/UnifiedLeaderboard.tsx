@@ -1,5 +1,4 @@
 'use client'
-import { isLeadRole } from '@/lib/roles'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import Link from 'next/link'
@@ -95,6 +94,9 @@ export default function UnifiedLeaderboard({
   const [loadingProfile, setLoadingProfile] = useState(false)
 
   const canViewProfile = Boolean(currentUser && ['ADMIN', 'LEAD'].includes(currentUser.role))
+  // The shared board lists every Chapter; a Lead may only open profiles of their own Chapter.
+  const canOpenProfile = (row: { chapterId?: string | null }) => canViewProfile
+    && (currentUser?.role === 'ADMIN' || !row.chapterId || !currentUser?.chapterId || row.chapterId === currentUser.chapterId)
 
   const handleOpenProfile = async (memberId: string, chapId?: string) => {
     if (!canViewProfile) return
@@ -139,15 +141,6 @@ export default function UnifiedLeaderboard({
       if (c) setSelectedChapterId(c)
     }
 
-    const storedUser = (() => {
-      try { return JSON.parse(localStorage.getItem('user') || 'null') } catch { return null }
-    })()
-
-    if (isLeadRole(storedUser?.role) && storedUser.chapterId) {
-      setChapterList([{ id: storedUser.chapterId, name: storedUser.chapterName || 'Chapter của tôi' }])
-      setSelectedChapterId((current) => current || storedUser.chapterId)
-    }
-
     apiFetch<any>('/api/v1/learning/periods').then((res) => {
       if (res.ok && res.data) {
         const scope = res.data.scope
@@ -171,11 +164,7 @@ export default function UnifiedLeaderboard({
           if (t.chapter_id && t.chapterName) uniqueChapters.set(t.chapter_id, t.chapterName)
         })
         const list = Array.from(uniqueChapters.entries()).map(([id, name]) => ({ id, name }))
-        if (isLeadRole(storedUser?.role) && storedUser.chapterId) {
-          setChapterList(list.filter((chapter) => chapter.id === storedUser.chapterId))
-        } else {
-          setChapterList(list)
-        }
+        setChapterList(list)
       }
     }).catch(() => {})
   }, [refreshCurrentUser])
@@ -203,7 +192,7 @@ export default function UnifiedLeaderboard({
       // Bảng tổng toàn hệ thống không âm thầm gán chapterId từ user
       const activeChapId = isGlobal ? (selectedChapterId || '') : (selectedChapterId || currentUser?.chapterId || propChapterId || '')
       const params = new URLSearchParams({ group, periodType })
-      if ((group === 'MEMBER' || group === 'LT' || periodType === 'ACTUAL_TERM') && activeChapId) {
+      if ((group === 'MEMBER' || group === 'LT') && activeChapId) {
         params.set('chapterId', activeChapId)
       }
       if (periodId) {
@@ -297,7 +286,7 @@ export default function UnifiedLeaderboard({
           <h1 className="text-2xl sm:text-3xl font-extrabold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
             Bảng Xếp Hạng Thi Đua
           </h1>
-          <p className="text-xs sm:text-sm text-[#737686] mt-1">
+          <p className="text-xs sm:text-sm text-[#6c6f7f] mt-1">
             {group === 'CHAPTER'
               ? 'Xếp hạng chất lượng đào tạo giữa các Chapter theo chuẩn BBE'
               : group === 'DNA'
@@ -420,7 +409,7 @@ export default function UnifiedLeaderboard({
         <div className="flex flex-col gap-2 pt-2 border-t border-slate-100 text-xs">
           <div className="flex flex-wrap items-center gap-3">
             <span className="font-semibold text-slate-600 shrink-0">Kỳ xếp hạng:</span>
-            <select
+            <select aria-label="Kỳ xếp hạng"
               value={periodId}
               onChange={(event) => setPeriodId(event.target.value)}
               className="max-w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 font-semibold text-slate-800 outline-none focus:border-blue-500 sm:max-w-xs"
@@ -485,12 +474,12 @@ export default function UnifiedLeaderboard({
 
         {/* Lọc theo Chapter nếu xem Thành viên hoặc LT (Khối DNA không dùng Chapter) */}
         {(group === 'MEMBER' || group === 'LT') && showChapterSelector && chapterList.length > 0 && (
-          <div className="flex items-center gap-3 pt-2 border-t border-slate-100 text-xs">
+          <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-slate-100 text-xs">
             <span className="font-semibold text-slate-600 shrink-0">Lọc theo Chapter:</span>
-            <select
+            <select aria-label="Lọc theo Chapter"
               value={selectedChapterId}
               onChange={(e) => setSelectedChapterId(e.target.value)}
-              className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 font-semibold text-slate-800 outline-none focus:border-blue-500 max-w-xs"
+              className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 font-semibold text-slate-800 outline-none focus:border-blue-500 min-w-0 max-w-full sm:max-w-xs"
             >
               <option value="">{isGlobal ? 'Tất cả Chapter (Toàn hệ thống)' : 'Chapter của bạn'}</option>
               {chapterList.map((ch) => (
@@ -532,7 +521,7 @@ export default function UnifiedLeaderboard({
           <p className="text-xs text-slate-500">Tháng đã kết thúc, đang chờ tổng hợp dữ liệu KPI chính thức từ Chapter.</p>
         </Card>
       ) : loading ? (
-        <Card className="p-16 text-center text-[#737686] rounded-3xl">
+        <Card className="p-16 text-center text-[#6c6f7f] rounded-3xl">
           <div className="w-10 h-10 border-4 border-[#2563EB] border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
           <p className="text-xs font-medium">Đang tải bảng xếp hạng…</p>
         </Card>
@@ -550,7 +539,7 @@ export default function UnifiedLeaderboard({
           </div>)}
         </Card>
       ) : items.length === 0 && excludedChapters.length === 0 ? (
-        <Card className="p-16 text-center text-[#737686] space-y-2 rounded-3xl">
+        <Card className="p-16 text-center text-[#6c6f7f] space-y-2 rounded-3xl">
           <div className="text-5xl">⭐</div>
           <h3 className="text-base font-bold text-[#172554]">Chưa có dữ liệu xếp hạng</h3>
           <p className="text-xs max-w-md mx-auto">
@@ -575,7 +564,7 @@ export default function UnifiedLeaderboard({
                     Hạng 2 • Á quân
                   </div>
                   <div className="font-extrabold text-[#172554] text-base truncate mb-0.5">
-                    {group !== 'CHAPTER' && canViewProfile && (topThree[1].userId || topThree[1].id) ? (
+                    {group !== 'CHAPTER' && canOpenProfile(topThree[1]) && (topThree[1].userId || topThree[1].id) ? (
                       <button
                         type="button"
                         onClick={() => handleOpenProfile((topThree[1].userId || topThree[1].id)!, topThree[1].chapterId)}
@@ -587,12 +576,12 @@ export default function UnifiedLeaderboard({
                       <span>{topThree[1].displayName}</span>
                     )}
                     {isCurrentUserItem(topThree[1]) && (
-                      <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-black bg-[#2563EB] text-white">
+                      <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-black bg-[#2563EB] text-white">
                         Bạn
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-[#737686] truncate mb-3">
+                  <p className="text-xs text-[#6c6f7f] truncate mb-3">
                     {group === 'CHAPTER'
                       ? `${topThree[1].memberCount || 0} học viên • Đạt ≥70%: ${topThree[1].atLeast70Percent !== null && topThree[1].atLeast70Percent !== undefined ? `${topThree[1].atLeast70Percent}%` : '—'}`
                       : `${topThree[1].positionName || 'Thành viên'} • ${topThree[1].departmentName || (group === 'DNA' ? 'Khối DNA' : '—')}${isGlobal && topThree[1].chapterName ? ` • ${topThree[1].chapterName}` : ''}`}
@@ -616,7 +605,7 @@ export default function UnifiedLeaderboard({
                   </div>
                   <div className="text-5xl mb-1">🥇</div>
                   <div className="font-black text-lg text-[#172554] truncate mb-0.5">
-                    {group !== 'CHAPTER' && canViewProfile && (topThree[0].userId || topThree[0].id) ? (
+                    {group !== 'CHAPTER' && canOpenProfile(topThree[0]) && (topThree[0].userId || topThree[0].id) ? (
                       <button
                         type="button"
                         onClick={() => handleOpenProfile((topThree[0].userId || topThree[0].id)!, topThree[0].chapterId)}
@@ -628,12 +617,12 @@ export default function UnifiedLeaderboard({
                       <span>{topThree[0].displayName}</span>
                     )}
                     {isCurrentUserItem(topThree[0]) && (
-                      <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-black bg-[#2563EB] text-white">
+                      <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-black bg-[#2563EB] text-white">
                         Bạn
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-[#737686] truncate mb-3">
+                  <p className="text-xs text-[#6c6f7f] truncate mb-3">
                     {group === 'CHAPTER'
                       ? `${topThree[0].memberCount || 0} học viên • Đạt ≥70%: ${topThree[0].atLeast70Percent !== null && topThree[0].atLeast70Percent !== undefined ? `${topThree[0].atLeast70Percent}%` : '—'}`
                       : `${topThree[0].positionName || 'Thành viên'} • ${topThree[0].departmentName || (group === 'DNA' ? 'Khối DNA' : '—')}${isGlobal && topThree[0].chapterName ? ` • ${topThree[0].chapterName}` : ''}`}
@@ -655,7 +644,7 @@ export default function UnifiedLeaderboard({
                     Hạng 3 • Quý quân
                   </div>
                   <div className="font-extrabold text-[#172554] text-base truncate mb-0.5">
-                    {group !== 'CHAPTER' && canViewProfile && (topThree[2].userId || topThree[2].id) ? (
+                    {group !== 'CHAPTER' && canOpenProfile(topThree[2]) && (topThree[2].userId || topThree[2].id) ? (
                       <button
                         type="button"
                         onClick={() => handleOpenProfile((topThree[2].userId || topThree[2].id)!, topThree[2].chapterId)}
@@ -667,12 +656,12 @@ export default function UnifiedLeaderboard({
                       <span>{topThree[2].displayName}</span>
                     )}
                     {isCurrentUserItem(topThree[2]) && (
-                      <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-black bg-[#2563EB] text-white">
+                      <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-black bg-[#2563EB] text-white">
                         Bạn
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-[#737686] truncate mb-3">
+                  <p className="text-xs text-[#6c6f7f] truncate mb-3">
                     {group === 'CHAPTER'
                       ? `${topThree[2].memberCount || 0} học viên • Đạt ≥70%: ${topThree[2].atLeast70Percent !== null && topThree[2].atLeast70Percent !== undefined ? `${topThree[2].atLeast70Percent}%` : '—'}`
                       : `${topThree[2].positionName || 'Thành viên'} • ${topThree[2].departmentName || (group === 'DNA' ? 'Khối DNA' : '—')}${isGlobal && topThree[2].chapterName ? ` • ${topThree[2].chapterName}` : ''}`}
@@ -696,7 +685,7 @@ export default function UnifiedLeaderboard({
               <h2 className="text-sm font-bold text-[#172554]">
                 Toàn bộ danh sách ({items.length} {group === 'CHAPTER' ? 'Chapter' : 'thành viên'})
               </h2>
-              <span className="text-xs text-[#737686]">
+              <span className="text-xs text-[#6c6f7f]">
                 Sắp xếp theo {group === 'CHAPTER' ? 'Điểm BXH' : 'Tổng ⭐ Star tích lũy'}
               </span>
             </div>
@@ -704,7 +693,7 @@ export default function UnifiedLeaderboard({
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead>
-                  <tr className="border-b border-[#eff4ff] bg-slate-50/80 text-[11px] font-bold text-[#737686] uppercase tracking-wider">
+                  <tr className="border-b border-[#eff4ff] bg-slate-50/80 text-[11px] font-bold text-[#6c6f7f] uppercase tracking-wider">
                     <th className="py-3.5 px-6 text-center w-20">Hạng</th>
                     <th className="py-3.5 px-6">{group === 'CHAPTER' ? 'Chapter' : 'Họ và tên'}</th>
                     <th className="py-3.5 px-6">{group === 'CHAPTER' ? 'Quy mô' : 'Ban / Đơn vị'}</th>
@@ -756,7 +745,7 @@ export default function UnifiedLeaderboard({
                               {(item.displayName || item.name || 'U').charAt(0).toUpperCase()}
                             </div>
                             <div className="min-w-0">
-                              {group !== 'CHAPTER' && canViewProfile && (item.userId || item.id) ? (
+                              {group !== 'CHAPTER' && canOpenProfile(item) && (item.userId || item.id) ? (
                                 <button
                                   type="button"
                                   onClick={() => handleOpenProfile((item.userId || item.id)!, item.chapterId)}
@@ -765,7 +754,7 @@ export default function UnifiedLeaderboard({
                                   <p className="font-bold text-[#172554] group-hover:text-[#2563EB] transition-colors truncate flex items-center gap-2">
                                     <span>{item.displayName || item.name}</span>
                                     {isYou && (
-                                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black bg-[#2563EB] text-white shadow-2xs">
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-black bg-[#2563EB] text-white shadow-2xs">
                                         Bạn
                                       </span>
                                     )}
@@ -781,7 +770,7 @@ export default function UnifiedLeaderboard({
                                   <p className="font-bold text-[#172554] truncate flex items-center gap-2">
                                     <span>{item.displayName || item.name}</span>
                                     {isYou && (
-                                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black bg-[#2563EB] text-white shadow-2xs">
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-black bg-[#2563EB] text-white shadow-2xs">
                                         Bạn
                                       </span>
                                     )}
@@ -883,7 +872,7 @@ export default function UnifiedLeaderboard({
               <h3 className="font-bold text-[#172554] text-sm">
                 🏛️ Chapter chưa đủ điều kiện tham gia xếp hạng ({excludedChapters.length})
               </h3>
-              <p className="text-xs text-[#737686]">
+              <p className="text-xs text-[#6c6f7f]">
                 Theo thể lệ BBE, Chapter cần <strong>trên 20</strong> thành viên, tỷ lệ đạt ≥70% bài lõi tối thiểu 50% và KPI Vàng hoặc Xanh.
               </p>
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 pt-1">
@@ -913,11 +902,11 @@ export default function UnifiedLeaderboard({
               <h3 className="text-xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
                 ℹ️ Thể Lệ Tính Điểm & Xếp Hạng BBE
               </h3>
-              <p className="text-xs text-[#737686] mt-0.5">Quy chuẩn thi đua và vinh danh học tập chính thức</p>
+              <p className="text-xs text-[#6c6f7f] mt-0.5">Quy chuẩn thi đua và vinh danh học tập chính thức</p>
             </div>
             <button
               onClick={() => setShowRulesModal(false)}
-              className="text-[#737686] hover:text-[#172554] text-xl font-bold p-1 rounded-lg hover:bg-slate-100 transition"
+              className="text-[#6c6f7f] hover:text-[#172554] text-xl font-bold p-1 rounded-lg hover:bg-slate-100 transition"
             >
               ✕
             </button>

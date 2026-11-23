@@ -107,7 +107,7 @@ export default function MonthPicker({
         {disabled ? (
           <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-[#2563EB] border-t-transparent ml-0.5" />
         ) : (
-          <span className="text-[10px] text-[#737686] transition-transform select-none">
+          <span className="text-[11px] text-[#6c6f7f] transition-transform select-none">
             {isOpen ? '▲' : '▼'}
           </span>
         )}
@@ -163,7 +163,7 @@ export default function MonthPicker({
                   <span>{name}</span>
                   {hasData && (
                     <span
-                      className={`mt-0.5 inline-flex items-center gap-1 text-[9px] font-medium leading-none ${
+                      className={`mt-0.5 inline-flex items-center gap-1 text-[11px] font-medium leading-none ${
                         isSelected ? 'text-blue-100' : 'text-emerald-700'
                       }`}
                     >
@@ -181,7 +181,7 @@ export default function MonthPicker({
           </div>
 
           {/* Popover Footer Legend */}
-          <div className="flex items-center justify-between border-t border-[#eff4ff] pt-2.5 text-[11px] text-[#737686]">
+          <div className="flex items-center justify-between border-t border-[#eff4ff] pt-2.5 text-[11px] text-[#6c6f7f]">
             <div className="flex items-center gap-1.5">
               <span className="h-2 w-2 rounded-full bg-emerald-500" />
               <span>Có dữ liệu xếp hạng</span>

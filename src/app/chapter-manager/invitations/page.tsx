@@ -193,7 +193,7 @@ export default function ChapterManagerInvitationsPage() {
             <h1 className="text-3xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
               Quản lý lời mời thành viên
             </h1>
-            <p className="text-[#737686] mt-1 text-sm">
+            <p className="text-[#6c6f7f] mt-1 text-sm">
               Chapter: <span suppressHydrationWarning className="font-semibold text-[#172554]">{mounted && user?.chapterName ? user.chapterName : 'Chapter của bạn'}</span> • Mời thành viên mới và theo dõi trạng thái kích hoạt
             </p>
           </div>
@@ -234,7 +234,7 @@ export default function ChapterManagerInvitationsPage() {
               ))}
             </div>
           ) : filteredItems.length === 0 ? (
-            <div className="text-center py-16 text-[#737686]">
+            <div className="text-center py-16 text-[#6c6f7f]">
               <p className="text-lg font-semibold text-[#172554] mb-1">Chưa có lời mời nào</p>
               <p className="text-sm">Bấm &quot;Mời thành viên mới&quot; để gửi lời mời qua email.</p>
             </div>
@@ -255,10 +255,10 @@ export default function ChapterManagerInvitationsPage() {
                     <tr key={inv.id} className="hover:bg-[#f8f9ff] transition">
                       <td className="px-6 py-4 font-semibold text-[#172554]">{inv.email}</td>
                       <td className="px-6 py-4 text-center">{getStatusBadge(inv.status)}<DeliveryNote status={inv.status} deliveryMethod={inv.deliveryMethod} /></td>
-                      <td className="px-6 py-4 text-xs text-[#737686]" suppressHydrationWarning>
+                      <td className="px-6 py-4 text-xs text-[#6c6f7f]" suppressHydrationWarning>
                         {inv.createdAt ? new Date(inv.createdAt).toLocaleString('vi-VN') : '—'}
                       </td>
-                      <td className="px-6 py-4 text-xs text-[#737686]" suppressHydrationWarning>
+                      <td className="px-6 py-4 text-xs text-[#6c6f7f]" suppressHydrationWarning>
                         {inv.expiresAt ? new Date(inv.expiresAt).toLocaleDateString('vi-VN') : '—'}
                       </td>
                       <td className="px-6 py-4 text-right">
@@ -290,7 +290,7 @@ export default function ChapterManagerInvitationsPage() {
                             </button>
                           </div>
                         )}
-                        {inv.status === 'PENDING' && inv.invitedBy !== user?.id && <span className="text-xs text-[#737686]">Chỉ người gửi mới sửa được</span>}
+                        {inv.status === 'PENDING' && inv.invitedBy !== user?.id && <span className="text-xs text-[#6c6f7f]">Chỉ người gửi mới sửa được</span>}
                       </td>
                     </tr>
                   ))}
@@ -310,7 +310,7 @@ export default function ChapterManagerInvitationsPage() {
             <h3 className="text-xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
               Mời thành viên mới
             </h3>
-            <p className="text-xs text-[#737686]">
+            <p className="text-xs text-[#6c6f7f]">
               Gửi email lời mời tham gia Chapter <span suppressHydrationWarning>{mounted && user?.chapterName ? user.chapterName : ''}</span>. Lời mời có hiệu lực trong 24 giờ.
             </p>
             {inviteMode === 'single' && <EmailQuotaNotice quota={quota} />}
@@ -351,8 +351,8 @@ export default function ChapterManagerInvitationsPage() {
             ) : (
             <form onSubmit={handleSendInvite} className="space-y-4">
               <div>
-                <label className="block text-sm font-semibold text-[#172554] mb-1">Email học viên *</label>
-                <input
+                <label htmlFor="invite-email" className="block text-sm font-semibold text-[#172554] mb-1">Email học viên *</label>
+                <input id="invite-email"
                   type="email"
                   required
                   value={inviteEmail}

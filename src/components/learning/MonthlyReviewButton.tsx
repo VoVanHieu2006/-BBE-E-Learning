@@ -65,7 +65,7 @@ export default function MonthlyReviewButton({ scope, monthLabel, label, compact,
         type="button"
         onClick={() => { setNotice(null); setOpen(true) }}
         disabled={busy || state !== 'AVAILABLE'}
-        className={`inline-flex shrink-0 items-center justify-center rounded-full bg-[#2563EB] px-2.5 font-bold text-white transition hover:bg-[#1d4ed8] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:bg-slate-100 disabled:text-slate-600 disabled:cursor-not-allowed ${compact ? 'max-w-[58%] py-1 text-[10px] leading-tight' : 'py-2 text-xs'}`}
+        className={`inline-flex shrink-0 items-center justify-center rounded-full bg-[#2563EB] px-2.5 font-bold text-white transition hover:bg-[#1d4ed8] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:bg-slate-100 disabled:text-slate-600 disabled:cursor-not-allowed ${compact ? 'max-w-[58%] py-1 text-[11px] leading-tight' : 'py-2 text-xs'}`}
       >
         {busy ? 'Đang mở...' : state === 'AWARDED' ? 'Tháng sau mới xem lại được' : state === 'STARTED' ? 'Đã bấm xem lại tháng này' : label || 'Xem lại tháng này'}
       </button>

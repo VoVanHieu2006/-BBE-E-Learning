@@ -177,12 +177,12 @@ export async function sendInvitationEmail(params: SendInvitationEmailParams): Pr
                 </tr>
               </table>
 
-              <p style="color: #737686; font-size: 13px; line-height: 1.5; margin: 28px 0 0 0; text-align: center;">
+              <p style="color: #6c6f7f; font-size: 13px; line-height: 1.5; margin: 28px 0 0 0; text-align: center;">
                 Liên kết này sẽ hết hạn vào <strong>${expiresAt.toLocaleString('vi-VN')}</strong> (trong vòng 24 giờ).
               </p>
 
               <div style="margin-top: 24px; padding-top: 20px; border-top: 1px solid #eff4ff; word-break: break-all;">
-                <p style="color: #737686; font-size: 12px; margin: 0 0 6px 0;">Nếu nút trên không hoạt động, vui lòng copy đường link sau vào trình duyệt:</p>
+                <p style="color: #6c6f7f; font-size: 12px; margin: 0 0 6px 0;">Nếu nút trên không hoạt động, vui lòng copy đường link sau vào trình duyệt:</p>
                 <a href="${inviteUrl}" style="color: #2563EB; font-size: 12px;">${inviteUrl}</a>
               </div>
             </td>
@@ -191,7 +191,7 @@ export async function sendInvitationEmail(params: SendInvitationEmailParams): Pr
           <!-- Footer -->
           <tr>
             <td style="background-color: #f8f9ff; padding: 20px 32px; text-align: center; border-top: 1px solid #eff4ff;">
-              <p style="color: #737686; font-size: 12px; margin: 0;">
+              <p style="color: #6c6f7f; font-size: 12px; margin: 0;">
                 © BBE E-Learning Platform • Nếu bạn không yêu cầu email này, vui lòng bỏ qua.
               </p>
             </td>
@@ -262,7 +262,7 @@ export async function sendPasswordResetEmail(params: SendPasswordResetEmailParam
                 </tr>
               </table>
 
-              <p style="color: #737686; font-size: 13px; line-height: 1.5; margin: 28px 0 0 0; text-align: center;">
+              <p style="color: #6c6f7f; font-size: 13px; line-height: 1.5; margin: 28px 0 0 0; text-align: center;">
                 Liên kết này có hiệu lực trong vòng <strong>15 phút</strong> (hết hạn lúc ${expiresAt.toLocaleTimeString('vi-VN')}).
               </p>
             </td>
@@ -271,7 +271,7 @@ export async function sendPasswordResetEmail(params: SendPasswordResetEmailParam
           <!-- Footer -->
           <tr>
             <td style="background-color: #f8f9ff; padding: 20px 32px; text-align: center; border-top: 1px solid #eff4ff;">
-              <p style="color: #737686; font-size: 12px; margin: 0;">
+              <p style="color: #6c6f7f; font-size: 12px; margin: 0;">
                 Nếu bạn không gửi yêu cầu đặt lại mật khẩu, vui lòng bỏ qua email này.
               </p>
             </td>

@@ -219,58 +219,58 @@ export default function LessonQuizPage({ params }: { params: { lessonId: string 
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#f8f9ff] flex items-center justify-center">
+      <main className="min-h-screen bg-[#f8f9ff] flex items-center justify-center">
         <div className="flex flex-col items-center gap-3 text-slate-400">
           <div className="w-10 h-10 border-4 border-[#2563EB] border-t-transparent rounded-full animate-spin"></div>
           <p className="text-xs font-medium">Đang nạp bài kiểm tra...</p>
         </div>
-      </div>
+      </main>
     );
   }
 
   if (loadError || !lesson) {
     return (
-      <div className="min-h-screen bg-[#f8f9ff] flex items-center justify-center p-6">
+      <main className="min-h-screen bg-[#f8f9ff] flex items-center justify-center p-6">
         <Card className="p-8 text-center max-w-md w-full space-y-4">
-          <p className="text-base font-bold text-[#172554]">⚠️ {loadError || 'Không tìm thấy bài học'}</p>
+          <h1 className="text-base font-bold text-[#172554]">⚠️ {loadError || 'Không tìm thấy bài học'}</h1>
           <Link href="/student/courses">
             <Button variant="outline" className="w-full">
               ← Về danh sách khóa học
             </Button>
           </Link>
         </Card>
-      </div>
+      </main>
     );
   }
 
   if (!assessment || !assessmentId) {
     return (
-      <div className="min-h-screen bg-[#f8f9ff] flex items-center justify-center p-6">
+      <main className="min-h-screen bg-[#f8f9ff] flex items-center justify-center p-6">
         <Card className="p-8 text-center max-w-md w-full space-y-4">
-          <p className="text-base font-bold text-[#172554]">Bài học này không có bài kiểm tra.</p>
+          <h1 className="text-base font-bold text-[#172554]">Bài học này không có bài kiểm tra.</h1>
           <Link href={`/student/learning/${params.lessonId}`}>
             <Button variant="outline" className="w-full">
               ← Quay lại bài học
             </Button>
           </Link>
         </Card>
-      </div>
+      </main>
     );
   }
 
   // Chặn ngay nếu chưa hoàn thành xem 100% video bài học
   if (!canAccessQuiz) {
     return (
-      <div className="min-h-screen bg-[#f8f9ff] flex items-center justify-center p-6">
+      <main className="min-h-screen bg-[#f8f9ff] flex items-center justify-center p-6">
         <Card className="p-8 text-center max-w-md w-full space-y-5 border border-amber-200 shadow-md">
           <div className="w-16 h-16 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center text-3xl mx-auto shadow-inner">
             🔒
           </div>
           <div className="space-y-2">
-            <h2 className="text-lg font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
+            <h1 className="text-lg font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
               Bài kiểm tra đang bị khóa
-            </h2>
-            <p className="text-xs text-[#737686] leading-relaxed">
+            </h1>
+            <p className="text-xs text-[#6c6f7f] leading-relaxed">
               Bạn cần xem đủ <strong>100%</strong> thời lượng video bài giảng trước khi được phép làm bài kiểm tra.
             </p>
             <div className="p-3 bg-[#eff4ff] rounded-xl text-xs font-semibold text-[#172554]">
@@ -283,7 +283,7 @@ export default function LessonQuizPage({ params }: { params: { lessonId: string 
             </Button>
           </Link>
         </Card>
-      </div>
+      </main>
     );
   }
 
@@ -297,7 +297,7 @@ export default function LessonQuizPage({ params }: { params: { lessonId: string 
           <h1 className="text-sm md:text-base font-bold text-[#172554] truncate" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
             📝 {assessment.title || 'Bài kiểm tra bài học'} <NewContentChip show={progress?.quizIsNew && !quizCompleted} />
           </h1>
-          <p className="text-[11px] text-[#737686] truncate">
+          <p className="text-[11px] text-[#6c6f7f] truncate">
             {lesson.session?.courseTitle ? `${lesson.session.courseTitle} • ` : ''}
             <span className="text-[#2563EB] font-bold">{lesson.title} <NewContentChip show={progress?.isNew} /></span>
           </p>
@@ -327,7 +327,7 @@ export default function LessonQuizPage({ params }: { params: { lessonId: string 
         )}
       </header>
 
-      <div className={`${started ? 'max-w-5xl' : 'max-w-3xl'} mx-auto p-4 md:p-8`}>
+      <main className={`${started ? 'max-w-5xl' : 'max-w-3xl'} mx-auto p-4 md:p-8`}>
         {started ? (
           <div className="space-y-4">
             {rewardNote?.passed && (
@@ -497,7 +497,7 @@ export default function LessonQuizPage({ params }: { params: { lessonId: string 
                           : 'bg-white border-[#e5eeff] text-[#172554]'
                       }`}
                     >
-                      <p className="text-[11px] text-[#737686]"><MonthPartLabel kind="quiz" /> tháng này</p>
+                      <p className="text-[11px] text-[#6c6f7f]"><MonthPartLabel kind="quiz" /> tháng này</p>
                       <p className="text-sm font-extrabold mt-0.5">
                         {thisMonthQuizLabel({
                           quiz: quizThisMonth, locked: quizLock, monthlyPending,
@@ -505,23 +505,23 @@ export default function LessonQuizPage({ params }: { params: { lessonId: string 
                         })}
                       </p>
                       {(quizThisMonth?.attempted || 0) > 0 && (
-                        <p className="text-[10px] text-[#737686] mt-1">
+                        <p className="text-[11px] text-[#6c6f7f] mt-1">
                           {quizThisMonth.attempted} lượt nộp trong tháng · điểm cao nhất {quizThisMonth.bestScorePercent}%
                         </p>
                       )}
                     </div>
                   </div>
                   {latestSubmitted && (
-                    <p className="text-[10px] text-[#737686]">
+                    <p className="text-[11px] text-[#6c6f7f]">
                       Lần nộp gần nhất: {Math.round(latestSubmitted.score || 0)}% — {latestSubmitted.passed ? 'đạt' : 'chưa đạt'} · {formatDate(latestSubmitted.submittedAt)}
                     </p>
                   )}
                 </div>
 
                 <div className="pt-2 border-t border-dashed border-[#e5eeff] space-y-1.5">
-                  <h3 className="text-[10px] font-bold text-[#737686] uppercase tracking-wide">Những tháng trước</h3>
+                  <h3 className="text-[11px] font-bold text-[#6c6f7f] uppercase tracking-wide">Những tháng trước</h3>
                   {monthHistory.length === 0 ? (
-                    <p className="text-xs text-[#737686]">Chưa có tháng nào trước đó.</p>
+                    <p className="text-xs text-[#6c6f7f]">Chưa có tháng nào trước đó.</p>
                   ) : (
                     <ul className="space-y-1">
                       {monthHistory.map((row: any) => (
@@ -529,7 +529,7 @@ export default function LessonQuizPage({ params }: { params: { lessonId: string 
                           <span className="font-bold text-[#172554]">{formatMonthKey(row.competitionMonth)}</span>
                           <span className="text-[#434655]" title={monthHistoryLabel(row)}><MonthStarParts {...monthHistoryParts(row)} /></span>
                           {row.quiz?.attempted > 0 && (
-                            <span className="w-full text-[10px] text-[#737686]">{row.quiz.attempted} lượt nộp · điểm cao nhất {row.quiz.bestScorePercent}%</span>
+                            <span className="w-full text-[11px] text-[#6c6f7f]">{row.quiz.attempted} lượt nộp · điểm cao nhất {row.quiz.bestScorePercent}%</span>
                           )}
                         </li>
                       ))}
@@ -592,7 +592,7 @@ export default function LessonQuizPage({ params }: { params: { lessonId: string 
             </div>
           </Card>
         )}
-      </div>
+      </main>
       {starReward !== null && <StarRewardCelebration amount={starReward} message="Quiz đạt yêu cầu — phần thưởng của bạn!" />}
 
       {/* Modal Xác nhận trước khi vào làm bài — portal, căn giữa viewport */}

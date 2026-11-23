@@ -49,7 +49,7 @@ export default function InviteDna() {
     <div className="mx-auto max-w-3xl space-y-6">
       <header>
         <h1 className="text-3xl font-bold text-[#172554]">Mời thành viên DNA</h1>
-        <p className="mt-1 text-sm text-[#737686]">Mỗi thành viên mới phải được gắn vào một nhóm DNA: LDC, SGDC hoặc TT.</p>
+        <p className="mt-1 text-sm text-[#6c6f7f]">Mỗi thành viên mới phải được gắn vào một nhóm DNA: LDC, SGDC hoặc TT.</p>
       </header>
       <Card className="space-y-4">
         <EmailQuotaNotice quota={quota} />

@@ -134,17 +134,17 @@ export default function CourseBulkLessonModal({
           <button
             onClick={closeBulkLessonModal}
             disabled={bulkLessonSaving}
-            className="text-[#737686] hover:text-[#172554] text-xl font-bold p-1 rounded-lg hover:bg-slate-100 transition disabled:opacity-50"
+            className="text-[#6c6f7f] hover:text-[#172554] text-xl font-bold p-1 rounded-lg hover:bg-slate-100 transition disabled:opacity-50"
           >
             ✕
           </button>
         </div>
 
         <div>
-          <label className="block text-sm font-semibold text-[#172554] mb-1">
+          <label htmlFor="bulk-lesson-links" className="block text-sm font-semibold text-[#172554] mb-1">
             Dán các link YouTube — mỗi link một dòng
           </label>
-          <textarea
+          <textarea id="bulk-lesson-links"
             rows={7}
             value={text}
             disabled={bulkLessonSaving}
@@ -152,7 +152,7 @@ export default function CourseBulkLessonModal({
             placeholder={'https://www.youtube.com/watch?v=...\nhttps://youtu.be/...\ndQw4w9WgXcQ'}
             className="w-full px-4 py-2.5 border border-[#cbdbf5] rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
           />
-          <p className="text-xs text-[#737686] mt-1">
+          <p className="text-xs text-[#6c6f7f] mt-1">
             Bài học được tạo theo đúng thứ tự dòng, tên bài lấy từ tên video, nối tiếp cuối buổi học. Tối đa {MAX_BULK_LESSONS} link mỗi lần.
           </p>
           {inputError && <p className="text-xs text-red-600 mt-1.5 font-medium">⚠️ {inputError}</p>}

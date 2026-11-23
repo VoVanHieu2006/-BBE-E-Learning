@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import PageTransition from "@/components/layout/PageTransition";
+import { PAGE_TITLE_TEMPLATE, SITE_NAME } from "@/lib/page-title";
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -9,7 +10,7 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "BBE E-Learning",
+  title: { default: SITE_NAME, template: PAGE_TITLE_TEMPLATE },
   description: "BBE E-Learning Club Platform — Nền tảng học tập và phát triển kỹ năng BBE",
   manifest: "/manifest.webmanifest",
   icons: {

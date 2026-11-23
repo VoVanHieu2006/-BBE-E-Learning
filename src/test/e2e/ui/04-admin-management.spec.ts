@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { tryLogin } from '../support/api'
-import { createCourse, createLearner, enforceDeadlines, makeOverdue, setMandatory, uiDefect, unique, uniqueEmail } from '../support/fixtures'
+import { createCourse, createLearner, enforceDeadlines, makeOverdue, setMandatory, unique, uniqueEmail } from '../support/fixtures'
 import { settle, signIn, signInAs, watchProblems } from '../support/ui'
 
 // Intent: docs/business-rules.md "Khóa học", "Khóa quá hạn", "Vô hiệu hóa", docs/KHBB.md. The Admin does the whole
@@ -170,7 +170,7 @@ test.describe('Admin: tài khoản', () => {
     expect((await tryLogin(request, learner.email, learner.password)).status).toBe(200)
   })
 
-  uiDefect('BUG-INVITE-LEAD-500', 'Admin mời Lead cho một Chapter mới từ giao diện phải thành công và hiện lời mời trong danh sách', async ({ page }) => {
+  test('Admin mời Lead cho một Chapter mới từ giao diện phải thành công và hiện lời mời trong danh sách', async ({ page }) => {
     const email = uniqueEmail('ui-lead')
     await signInAs(page, 'admin')
     await page.goto('/admin/invitations')

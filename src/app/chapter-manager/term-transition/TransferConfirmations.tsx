@@ -104,7 +104,7 @@ export default function TransferConfirmations({
                     setSelectedDeptId('');
                     setMakeLead(false);
                   }}
-                  className="text-[#737686] hover:text-[#172554] text-base font-bold px-2 py-1"
+                  className="text-[#6c6f7f] hover:text-[#172554] text-base font-bold px-2 py-1"
                 >
                   ✕
                 </button>
@@ -118,10 +118,10 @@ export default function TransferConfirmations({
               </p>
 
               <div>
-                <label className="block text-xs font-bold text-[#172554] mb-1">
+                <label htmlFor="transfer-new-department" className="block text-xs font-bold text-[#172554] mb-1">
                   Chọn Ban mới:
                 </label>
-                <select
+                <select id="transfer-new-department"
                   disabled={savingDept}
                   value={selectedDeptId}
                   onChange={(e) => {
@@ -219,7 +219,7 @@ export default function TransferConfirmations({
                   setShowConfirmDeactivate(false);
                   setDeactivateText('');
                 }}
-                className="text-[#737686] hover:text-[#172554] text-base font-bold px-2 py-1"
+                className="text-[#6c6f7f] hover:text-[#172554] text-base font-bold px-2 py-1"
               >
                 ✕
               </button>
@@ -237,7 +237,7 @@ export default function TransferConfirmations({
               <label className="block text-xs font-semibold text-red-950">
                 Để xác nhận, vui lòng nhập chính xác chữ <strong className="text-red-600 underline font-extrabold">&ldquo;vô hiệu hóa&rdquo;</strong> vào ô bên dưới:
               </label>
-              <input
+              <input aria-label="Nhập “vô hiệu hóa” để xác nhận"
                 type="text"
                 value={deactivateText}
                 onChange={(e) => setDeactivateText(e.target.value)}
@@ -298,7 +298,7 @@ export default function TransferConfirmations({
                   setSingleDeactivateModal(null);
                   setDeactivateText('');
                 }}
-                className="text-[#737686] hover:text-[#172554] text-base font-bold px-2 py-1"
+                className="text-[#6c6f7f] hover:text-[#172554] text-base font-bold px-2 py-1"
               >
                 ✕
               </button>
@@ -317,7 +317,7 @@ export default function TransferConfirmations({
               <label className="block text-xs font-semibold text-red-950">
                 Để xác nhận, vui lòng nhập chính xác chữ <strong className="text-red-600 underline font-extrabold">&ldquo;vô hiệu hóa&rdquo;</strong> vào ô bên dưới:
               </label>
-              <input
+              <input aria-label="Nhập “vô hiệu hóa” để xác nhận"
                 type="text"
                 value={deactivateText}
                 onChange={(e) => setDeactivateText(e.target.value)}
@@ -383,7 +383,7 @@ export default function TransferConfirmations({
                   setShowBulkUnassignedModal(false);
                   setDeactivateText('');
                 }}
-                className="text-[#737686] hover:text-[#172554] text-base font-bold px-2 py-1"
+                className="text-[#6c6f7f] hover:text-[#172554] text-base font-bold px-2 py-1"
               >
                 ✕
               </button>
@@ -402,7 +402,7 @@ export default function TransferConfirmations({
               <label className="block text-xs font-semibold text-red-950">
                 Để xác nhận, vui lòng nhập chính xác chữ <strong className="text-red-600 underline font-extrabold">&ldquo;vô hiệu hóa&rdquo;</strong> vào ô bên dưới:
               </label>
-              <input
+              <input aria-label="Nhập “vô hiệu hóa” để xác nhận"
                 type="text"
                 value={deactivateText}
                 onChange={(e) => setDeactivateText(e.target.value)}
@@ -457,7 +457,7 @@ export default function TransferConfirmations({
               <button
                 type="button"
                 onClick={() => setShowApplyBatchModal(false)}
-                className="text-[#737686] hover:text-[#172554] text-base font-bold px-2 py-1"
+                className="text-[#6c6f7f] hover:text-[#172554] text-base font-bold px-2 py-1"
               >
                 ✕
               </button>
@@ -513,7 +513,7 @@ export default function TransferConfirmations({
               <button
                 type="button"
                 onClick={() => setShowCancelBatchModal(false)}
-                className="text-[#737686] hover:text-[#172554] text-base font-bold px-2 py-1"
+                className="text-[#6c6f7f] hover:text-[#172554] text-base font-bold px-2 py-1"
               >
                 ✕
               </button>

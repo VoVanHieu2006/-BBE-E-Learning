@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { as, errorCode } from '../support/api'
 import { sql } from '../support/db'
-import { ageLastHeartbeat, createCourse, createLearner, defect, starBalance, unique, watchWholeVideo, type Learner } from '../support/fixtures'
+import { ageLastHeartbeat, createCourse, createLearner, starBalance, unique, watchWholeVideo, type Learner } from '../support/fixtures'
 
 // Intent: docs/business-rules.md "Nội dung và video" — phải xem hết, server xác nhận thời gian xem liên tục,
 // tối đa 2×, chống tua trước; client tự khai completed hoặc tua tới cuối là không đủ.
@@ -132,8 +132,7 @@ test.describe('Chống gian lận video', () => {
     expect(stale.body.furthestWatchedPositionSeconds).toBeLessThanOrEqual(10)
   })
 
-  // Mỗi request được cộng "grace" 2–6 giây bất kể thời gian thật, nên gửi dồn request là xong video.
-  defect('BUG-VIDEO-SPAM', 'gửi dồn heartbeat không được hoàn thành video 10 phút trong vài giây', async ({ request }) => {
+  for (const event of ['HEARTBEAT', 'ENDED']) test(`gửi dồn ${event} không được hoàn thành video 10 phút trong vài giây`, async ({ request }) => {
     const course = await createCourse(request, { lessons: [{ durationSeconds: 600 }] })
     const learner = await createLearner(request)
     const lessonId = course.lessons[0].lessonId
@@ -141,7 +140,7 @@ test.describe('Chống gian lận video', () => {
     const started = Date.now()
     let last = await beat(learner, lessonId, { positionSeconds: 0, event: 'PLAY', viewSessionId: view, playbackRate: 2 })
     for (let index = 0; index < 160 && !last.body.videoCompleted; index += 1) {
-      last = await beat(learner, lessonId, { positionSeconds: (last.body.furthestWatchedPositionSeconds ?? 0) + 6, viewSessionId: view, playbackRate: 2 })
+      last = await beat(learner, lessonId, { positionSeconds: (last.body.furthestWatchedPositionSeconds ?? 0) + 6, event, viewSessionId: view, playbackRate: 2 })
     }
     const realSeconds = (Date.now() - started) / 1000
     expect(last.body.furthestWatchedPositionSeconds, `chỉ ${realSeconds.toFixed(1)} giây thật đã trôi qua`).toBeLessThanOrEqual(realSeconds * 2 + 12)

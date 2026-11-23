@@ -31,7 +31,7 @@ type LessonDocumentListProps = Pick<CourseEditorState, 'editorLocked' | 'handleD
 export function LessonDocumentList({ editorLocked, handleDeleteDocument, sId, lId, lesson }: LessonDocumentListProps) {
   return (lesson.documents?.length > 0 && (
                                     <div className="pt-2 border-t border-[#cbdbf5]/50 space-y-1.5">
-                                      <span className="text-[11px] font-bold text-[#737686] uppercase tracking-wider">
+                                      <span className="text-[11px] font-bold text-[#6c6f7f] uppercase tracking-wider">
                                         Tài liệu học tập ({lesson.documents.length}):
                                       </span>
                                       <div className="flex flex-wrap gap-2">

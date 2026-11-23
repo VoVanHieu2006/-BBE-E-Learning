@@ -33,8 +33,8 @@ export default function CourseSessionModal({
               {sessionModalMode === 'create' ? 'Thêm buổi học mới' : 'Chỉnh sửa buổi học'}
             </h3>
             <div>
-              <label className="block text-sm font-semibold text-[#172554] mb-1.5">Tiêu đề buổi học *</label>
-              <input
+              <label htmlFor="session-title" className="block text-sm font-semibold text-[#172554] mb-1.5">Tiêu đề buổi học *</label>
+              <input id="session-title"
                 type="text"
                 required
                 value={sessionForm.title}
@@ -44,8 +44,8 @@ export default function CourseSessionModal({
               />
             </div>
             <div>
-              <label className="block text-sm font-semibold text-[#172554] mb-1.5">Mô tả buổi học</label>
-              <textarea
+              <label htmlFor="session-description" className="block text-sm font-semibold text-[#172554] mb-1.5">Mô tả buổi học</label>
+              <textarea id="session-description"
                 rows={3}
                 value={sessionForm.description}
                 onChange={(e) => setSessionForm({ ...sessionForm, description: e.target.value })}

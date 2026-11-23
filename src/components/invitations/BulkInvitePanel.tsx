@@ -179,7 +179,7 @@ export default function BulkInvitePanel({ organizationUnitId, missingScopeMessag
               placeholder={'a@bbe.vn\nb@bbe.vn, c@bbe.vn; d@bbe.vn'}
               className="w-full px-4 py-2.5 border border-[#cbdbf5] rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
             />
-            <p className="text-[11px] text-[#737686] mt-1">
+            <p className="text-[11px] text-[#6c6f7f] mt-1">
               Dán từ Excel hoặc Google Sheets đều được (mỗi dòng một email), hoặc phân tách bằng dấu phẩy, dấu chấm phẩy, khoảng trắng. Tối đa {BULK_INVITE_MAX_EMAILS} email mỗi lần. Tất cả sẽ vào cùng ban hoặc nhóm đã chọn ở trên.
             </p>
             <EmailQuotaNotice quota={quota} className="mt-1" />
@@ -217,7 +217,7 @@ export default function BulkInvitePanel({ organizationUnitId, missingScopeMessag
             </p>
           )}
           <ul className="max-h-72 overflow-y-auto border border-[#eff4ff] rounded-xl divide-y divide-[#eff4ff]" data-testid="bulk-invite-rows">
-            {rows.length === 0 && <li className="px-3 py-4 text-xs text-[#737686] text-center">Danh sách trống. Quay lại để dán thêm email.</li>}
+            {rows.length === 0 && <li className="px-3 py-4 text-xs text-[#6c6f7f] text-center">Danh sách trống. Quay lại để dán thêm email.</li>}
             {rows.map((row) => (
               <li key={row.id} className="flex flex-wrap items-center gap-2 px-3 py-2">
                 <input
@@ -260,7 +260,7 @@ export default function BulkInvitePanel({ organizationUnitId, missingScopeMessag
                 <span title={row.email} className="min-w-0 overflow-x-auto whitespace-nowrap font-semibold text-[#172554] sm:overflow-visible sm:whitespace-normal sm:break-all">{row.email}</span>
                 <span className="sm:shrink-0 sm:text-right">
                   <span className={`inline-block whitespace-nowrap px-2 py-0.5 rounded-full font-bold ${STATUS_STYLES[row.status]}`}>{BULK_INVITE_STATUS_LABELS[row.status]}</span>
-                  {row.message && row.status !== 'ALREADY_MEMBER' && <span className="block text-[10px] text-[#737686] mt-0.5">{row.message}</span>}
+                  {row.message && row.status !== 'ALREADY_MEMBER' && <span className="block text-[11px] text-[#6c6f7f] mt-0.5">{row.message}</span>}
                   {row.status === 'LINK_NEEDED' && row.invitationId && (
                     <span className="mt-1 block">
                       <InviteLinkButton invitationId={row.invitationId} email={row.email} disabled={locked} onMessage={(type, text) => setLinkNotice({ type, text })} />

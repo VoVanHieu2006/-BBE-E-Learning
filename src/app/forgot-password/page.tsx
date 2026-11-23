@@ -40,7 +40,7 @@ export default function ForgotPasswordPage() {
         <div className="text-center mb-8">
           <div className="w-16 h-16 bg-[#2563EB] rounded-2xl flex items-center justify-center text-white font-bold text-2xl mx-auto mb-4 shadow-lg">B</div>
           <h1 className="text-3xl font-bold text-[#172554]" style={{ fontFamily: "'Be Vietnam Pro', 'Inter', sans-serif" }}>Quên mật khẩu</h1>
-          <p className="text-[#737686] mt-1">Nhập email để nhận liên kết đặt lại</p>
+          <p className="text-[#6c6f7f] mt-1">Nhập email để nhận liên kết đặt lại</p>
         </div>
         <div className="bg-white rounded-3xl p-8 border border-[#eff4ff] shadow-lg">
           {submitted ? (
@@ -52,8 +52,8 @@ export default function ForgotPasswordPage() {
           ) : (
             <form onSubmit={handleSubmit} className="space-y-5">
               <div>
-                <label className="block text-sm font-semibold text-[#172554] mb-1.5">Email</label>
-                <input
+                <label htmlFor="forgot-password-email" className="block text-sm font-semibold text-[#172554] mb-1.5">Email</label>
+                <input id="forgot-password-email"
                   type="email"
                   required
                   value={email}
@@ -73,7 +73,7 @@ export default function ForgotPasswordPage() {
             </form>
           )}
           <div className="mt-6 text-center">
-            <Link href="/login" className="text-sm text-[#2563EB] hover:underline font-medium">← Quay lại đăng nhập</Link>
+            <Link href="/login" className="inline-flex min-h-6 items-center text-sm text-[#2563EB] hover:underline font-medium">← Quay lại đăng nhập</Link>
           </div>
         </div>
       </div>

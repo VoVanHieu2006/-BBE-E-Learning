@@ -47,9 +47,9 @@ export default function LeaderboardPage() {
               </Link>
             </div>
           </header>
-          <div className="max-w-6xl mx-auto p-6 flex-1 w-full">
+          <main className="max-w-6xl mx-auto p-6 flex-1 w-full">
             <UnifiedLeaderboard showChapterSelector={true} />
-          </div>
+          </main>
         </div>
       )}
     </div>

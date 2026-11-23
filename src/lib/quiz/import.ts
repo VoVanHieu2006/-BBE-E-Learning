@@ -174,6 +174,17 @@ export function parseQuizRows(rows: string[][]): ImportedQuiz {
       return
     }
 
+    // Cột trống đứng trước một cột có nội dung sẽ làm lệch chữ đáp án, nên từ chối cả dòng.
+    const lastFilled = optionTexts.reduce((last, text, i) => (text !== '' ? i : last), -1)
+    const gapLetters = LETTERS.filter((_, i) => i < lastFilled && optionTexts[i] === '')
+    if (gapLetters.length > 0) {
+      errors.push({
+        row: rowNumber,
+        message: `Lựa chọn ${gapLetters.join(', ')} bị bỏ trống: không được để trống lựa chọn đứng trước một lựa chọn khác`,
+      })
+      return
+    }
+
     const answerLetters = (answerRaw || '')
       .toUpperCase()
       .split(/[,;/\s]+/)

@@ -49,9 +49,11 @@ export async function authenticate(request: NextRequest): Promise<AuthResult> {
   const user = await prisma.user.findUnique({ where: { id: userId }, select: {
     id: true, role: true, status: true, auth_version: true, chapter_members: { select: { chapter_id: true } },
   } })
-  if (!user || !sessionMatchesAccount(payload, user) || user.status !== 'ACTIVE' || !await hasActiveAffiliation(user.id, user.role)) {
+  if (!user || user.status !== 'ACTIVE' || !await hasActiveAffiliation(user.id, user.role)) {
     return { ok: false, error: { code: 'AccountInactive', message: 'Account is inactive or has no active affiliation' } }
   }
+  // The account is fine but its role or position changed after this session was issued.
+  if (!sessionMatchesAccount(payload, user)) return { ok: false, error: { code: 'UNAUTHORIZED', message: 'Phiên đã hết hiệu lực. Vui lòng đăng nhập lại.' } }
   const lead = await chapterLeadScope(user.id)
   const chapterId = lead.isLead ? lead.chapterId || undefined : user.chapter_members[0]?.chapter_id
   return { ok: true, context: { userId: user.id, role: user.role, chapterId } }

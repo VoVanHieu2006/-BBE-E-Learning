@@ -78,10 +78,18 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    if (!user || !sessionMatchesAccount(payload, user) || user.status !== 'ACTIVE' || !await hasActiveAffiliation(user.id, user.role)) {
+    if (!user || user.status !== 'ACTIVE' || !await hasActiveAffiliation(user.id, user.role)) {
       return NextResponse.json(
         { error: { code: 'AccountInactive', message: 'Tài khoản không hoạt động hoặc đã bị vô hiệu hóa' } },
         { status: 403 }
+      )
+    }
+
+    // The account is fine but its role or position changed after this session was issued.
+    if (!sessionMatchesAccount(payload, user)) {
+      return NextResponse.json(
+        { error: { code: 'InvalidToken', message: 'Phiên đã hết hiệu lực. Vui lòng đăng nhập lại.' } },
+        { status: 401 }
       )
     }
 

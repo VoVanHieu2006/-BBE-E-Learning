@@ -104,11 +104,11 @@ export default function StudentDashboard() {
   return (
     <div>
       <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h1 className="text-4xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
+        <div className="min-w-0">
+          <h1 className="break-words text-4xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
             Chào mừng, <span suppressHydrationWarning>{mounted ? greetingName(user?.id, profileName ?? user?.displayName) ?? 'bạn' : 'bạn'}</span>
           </h1>
-          <p className="text-[#737686] mt-1">
+          <p className="text-[#6c6f7f] mt-1">
             Chapter: <span suppressHydrationWarning className="font-semibold text-[#172554]">{mounted && user?.chapterName ? user.chapterName : 'BBE Core'}</span> • Tiếp tục học nhé!
           </p>
         </div>
@@ -135,26 +135,26 @@ export default function StudentDashboard() {
           <Card shadow="md">
             <div className="text-sm font-semibold text-amber-700 mb-1">⭐ Star của bạn</div>
             <div className="text-3xl font-bold text-amber-500 mb-1">{stars}</div>
-            <div className="text-xs text-[#737686]">Nhận khi hoàn thành video và quiz</div>
+            <div className="text-xs text-[#6c6f7f]">Nhận khi hoàn thành video và quiz</div>
           </Card>
           <Card shadow="md">
-            <div className="text-sm font-semibold text-[#737686] mb-1">Khóa học của bạn</div>
+            <div className="text-sm font-semibold text-[#6c6f7f] mb-1">Khóa học của bạn</div>
             <div className="text-3xl font-bold text-[#172554] mb-1">
               {completedCourses} / {totalCourses}
             </div>
-            <div className="text-xs text-[#737686]">Khóa đã hoàn thành 100%</div>
+            <div className="text-xs text-[#6c6f7f]">Khóa đã hoàn thành 100%</div>
           </Card>
           <Card shadow="md">
-            <div className="text-sm font-semibold text-[#737686] mb-1">Tiến độ trung bình</div>
+            <div className="text-sm font-semibold text-[#6c6f7f] mb-1">Tiến độ trung bình</div>
             <div className="text-3xl font-bold text-[#2563EB] mb-1">{avgProgress}%</div>
-            <div className="text-xs text-[#737686]">Trên tất cả các khóa học</div>
+            <div className="text-xs text-[#6c6f7f]">Trên tất cả các khóa học</div>
           </Card>
           <Card shadow="md">
-            <div className="text-sm font-semibold text-[#737686] mb-1">🔥 Chuỗi học tập (Streak)</div>
+            <div className="text-sm font-semibold text-[#6c6f7f] mb-1">🔥 Chuỗi học tập (Streak)</div>
             <div className="text-3xl font-bold text-[#F97316] mb-1">
               {streak?.currentStreak || 0} ngày
             </div>
-            <div className="text-xs text-[#737686]">Kỷ lục cao nhất: {streak?.longestStreak || 0} ngày</div>
+            <div className="text-xs text-[#6c6f7f]">Kỷ lục cao nhất: {streak?.longestStreak || 0} ngày</div>
           </Card>
         </div>
 
@@ -163,17 +163,17 @@ export default function StudentDashboard() {
           <h2 className="text-2xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
             Khóa học đang học
           </h2>
-          <Link href="/student/courses" className="text-sm text-[#2563EB] hover:underline font-semibold">
+          <Link href="/student/courses" className="inline-flex min-h-6 items-center text-sm text-[#2563EB] hover:underline font-semibold">
             Xem tất cả →
           </Link>
         </div>
 
         {loading ? (
-          <div className="text-center py-10 text-[#737686]">Đang tải danh sách khóa học...</div>
+          <div className="text-center py-10 text-[#6c6f7f]">Đang tải danh sách khóa học...</div>
         ) : courses.length === 0 ? (
           <Card className="text-center py-10">
             <p className="text-lg font-semibold text-[#172554] mb-2">Chưa có khóa học nào</p>
-            <p className="text-sm text-[#737686] mb-4">Hãy chọn khóa học trong danh mục để bắt đầu.</p>
+            <p className="text-sm text-[#6c6f7f] mb-4">Hãy chọn khóa học trong danh mục để bắt đầu.</p>
             <Link href="/student/courses">
               <Button>Khám phá khóa học ngay</Button>
             </Link>
@@ -195,7 +195,7 @@ export default function StudentDashboard() {
                     {c.description || 'Chương trình đào tạo nội bộ BBE.'}
                   </p>
                   <div className="space-y-1.5">
-                    <div className="flex justify-between text-xs text-[#737686]">
+                    <div className="flex justify-between text-xs text-[#6c6f7f]">
                       <span>Đã học {c.completedLessons || 0} / {c.totalLessons || 0} bài</span>
                       <span className="font-medium">
                         {c.hasAssessment

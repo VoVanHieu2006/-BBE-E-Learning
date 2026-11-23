@@ -311,7 +311,7 @@ export default function MandatoryCourseMatrixPage() {
           <h1 className="text-3xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
             Ma trận khóa học bắt buộc
           </h1>
-          <p className="mt-1 text-sm text-[#737686]">
+          <p className="mt-1 text-sm text-[#6c6f7f]">
             Cấu hình đối tượng bắt buộc và thời hạn hoàn thành (ngày) cho 18 đối tượng thuộc 4 nhóm: Thành viên, Chủ tịch, LT và DNA. Số ngày ở đầu hàng áp dụng cho tất cả đối tượng được tick trong hàng; bấm <strong>Lưu thay đổi</strong> để cập nhật.
           </p>
         </div>
@@ -353,11 +353,11 @@ export default function MandatoryCourseMatrixPage() {
           <details key={course.id} className="rounded-2xl border bg-white p-4.5 shadow-xs">
             <summary className="cursor-pointer font-bold text-slate-900 text-sm">
               {course.title}
-              {isDraftCourse(course) && <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800">Khóa chưa xuất bản</span>}
+              {isDraftCourse(course) && <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-800">Khóa chưa xuất bản</span>}
             </summary>
             <div className="mt-3.5 pt-3 border-t border-slate-100 flex items-center gap-2">
               <span className="text-xs font-semibold text-slate-600">Thời hạn hoàn thành:</span>
-              <input
+              <input aria-label={`Số ngày hoàn thành ${course.title}`}
                 type="number"
                 min={1}
                 max={3650}
@@ -436,7 +436,7 @@ export default function MandatoryCourseMatrixPage() {
                 >
                   <div className="inline-flex items-center gap-1.5">
                     <span>{group.name}</span>
-                    <span className="text-[10px] opacity-80 font-normal">
+                    <span className="text-[11px] opacity-80 font-normal">
                       ({group.targets.length} đối tượng)
                     </span>
                   </div>
@@ -466,7 +466,7 @@ export default function MandatoryCourseMatrixPage() {
                       type="button"
                       disabled={unavailable || catalogBroken}
                       onClick={() => setColumnEnabled(target.key, !allEnabled)}
-                      className={`mt-1.5 w-full whitespace-nowrap rounded-lg px-1.5 py-0.5 text-[10px] font-bold transition shadow-2xs border ${
+                      className={`mt-1.5 w-full whitespace-nowrap rounded-lg px-1.5 py-0.5 text-[11px] font-bold transition shadow-2xs border ${
                         unavailable || catalogBroken
                           ? 'bg-slate-800 text-slate-500 border-slate-700 cursor-not-allowed'
                           : allEnabled
@@ -502,13 +502,13 @@ export default function MandatoryCourseMatrixPage() {
                       {course.title}
                     </p>
                     {isDraftCourse(course) && (
-                      <p className="mt-1 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800">
+                      <p className="mt-1 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-800">
                         Khóa chưa xuất bản: chưa thể tick
                       </p>
                     )}
                     <div className="mt-2 flex items-center gap-2 flex-wrap">
                       <div className="inline-flex items-center gap-1 bg-slate-100 px-2 py-1 rounded-xl border border-slate-200">
-                        <input
+                        <input aria-label={`Số ngày hoàn thành ${course.title}`}
                           type="number"
                           min={1}
                           max={3650}

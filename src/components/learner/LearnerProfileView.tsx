@@ -131,39 +131,39 @@ export default function LearnerProfileView({
                 {user.displayName || user.email?.split('@')[0]}
               </h2>
               {isLead ? (
-                <span className="text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
+                <span className="text-[11px] font-extrabold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
                   👑 Lãnh đạo / LT
                 </span>
               ) : (
-                <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200">
+                <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200">
                   👤 Thành viên
                 </span>
               )}
               {user.status === 'ACTIVE' ? (
-                <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
                   ✓ Hoạt động
                 </span>
               ) : user.accountState === 'OVERDUE_LOCK' ? (
-                <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-red-100 text-red-800 border border-red-200">
+                <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-red-100 text-red-800 border border-red-200">
                   🔒 Khóa quá hạn
                 </span>
               ) : user.accountState === 'PASSWORD_LOCK' ? (
-                <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
+                <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
                   🔒 Khóa mật khẩu
                 </span>
               ) : (
-                <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-slate-200 text-slate-800 border border-slate-300">
+                <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-slate-200 text-slate-800 border border-slate-300">
                   ⛔ Vô hiệu hóa
                 </span>
               )}
             </div>
 
-            <p className="text-xs text-[#737686] truncate mt-0.5">{user.email}</p>
+            <p className="text-xs text-[#6c6f7f] truncate mt-0.5">{user.email}</p>
 
             <div className="flex items-center gap-3 text-xs text-slate-500 mt-2 flex-wrap">
               <span>🏛️ <strong>{chapterDisplay}</strong></span>
               <span>•</span>
-              <span>🏢 <strong>Ban {deptDisplay}</strong></span>
+              <span>🏢 <strong>{/^Ban\s/i.test(deptDisplay) ? deptDisplay : `Ban ${deptDisplay}`}</strong></span>
               {user.createdAt && (
                 <>
                   <span>•</span>
@@ -193,27 +193,27 @@ export default function LearnerProfileView({
       {/* 2. KPI Summary Cards */}
       <div className={`grid grid-cols-2 ${starsCount !== null ? 'lg:grid-cols-5' : 'lg:grid-cols-4'} gap-4`}>
         <Card className="p-4.5 border border-slate-200 bg-white rounded-2xl shadow-2xs">
-          <span className="text-[11px] font-bold text-[#737686] uppercase tracking-wider block mb-1">
+          <span className="text-[11px] font-bold text-[#6c6f7f] uppercase tracking-wider block mb-1">
             Khóa hoàn thành
           </span>
           <div className="text-xl font-extrabold text-[#172554]">
             {completedCoursesCount} / {totalCourses}
           </div>
-          <span className="text-[11px] text-[#737686]">khóa học</span>
+          <span className="text-[11px] text-[#6c6f7f]">khóa học</span>
         </Card>
 
         <Card className="p-4.5 border border-slate-200 bg-white rounded-2xl shadow-2xs">
-          <span className="text-[11px] font-bold text-[#737686] uppercase tracking-wider block mb-1">
+          <span className="text-[11px] font-bold text-[#6c6f7f] uppercase tracking-wider block mb-1">
             Bài học đã học
           </span>
           <div className="text-xl font-extrabold text-[#2563EB]">
             {completedLessons} / {totalLessons}
           </div>
-          <span className="text-[11px] text-[#737686]">bài hoàn thành</span>
+          <span className="text-[11px] text-[#6c6f7f]">bài hoàn thành</span>
         </Card>
 
         <Card className="p-4.5 border border-slate-200 bg-white rounded-2xl shadow-2xs">
-          <span className="text-[11px] font-bold text-[#737686] uppercase tracking-wider block mb-1">
+          <span className="text-[11px] font-bold text-[#6c6f7f] uppercase tracking-wider block mb-1">
             Tiến độ trung bình
           </span>
           <div className="text-xl font-extrabold text-indigo-600">
@@ -225,13 +225,13 @@ export default function LearnerProfileView({
         </Card>
 
         <Card className="p-4.5 border border-slate-200 bg-white rounded-2xl shadow-2xs">
-          <span className="text-[11px] font-bold text-[#737686] uppercase tracking-wider block mb-1">
+          <span className="text-[11px] font-bold text-[#6c6f7f] uppercase tracking-wider block mb-1">
             Điểm kiểm tra TB
           </span>
           <div className="text-xl font-extrabold text-emerald-600">
             {avgScore !== null ? `${avgScore}%` : 'Chưa thi'}
           </div>
-          <span className="text-[11px] text-[#737686]">ngưỡng đạt: ≥85%</span>
+          <span className="text-[11px] text-[#6c6f7f]">ngưỡng đạt: ≥85%</span>
         </Card>
 
         {starsCount !== null && (
@@ -321,18 +321,18 @@ export default function LearnerProfileView({
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="font-bold text-sm text-[#172554] truncate">{c.title}</p>
                         {isDone ? (
-                          <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                          <span className="text-[11px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
                             ✓ Hoàn thành khóa
                           </span>
                         ) : (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+                          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
                             Đang học
                           </span>
                         )}
                       </div>
 
                       {/* Thông tin video & quiz */}
-                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#737686] mt-1.5">
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#6c6f7f] mt-1.5">
                         <span>
                           📚 Bài học:{' '}
                           <strong className="text-[#172554]">

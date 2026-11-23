@@ -97,7 +97,7 @@ export default function MemberDetailPage({ params }: { params: { userId: string 
   return (
     <div className="min-h-screen bg-[#f8f9ff]">
       <Toast toast={toast} onClose={() => setToast(null)} />
-      <main className="px-6 sm:px-8 py-8 w-full min-w-0 max-w-6xl mx-auto">
+      <div className="px-6 sm:px-8 py-8 w-full min-w-0 max-w-6xl mx-auto">
         {/* Navigation Breadcrumb */}
         <div className="mb-6 flex items-center justify-between">
           <Link
@@ -107,6 +107,10 @@ export default function MemberDetailPage({ params }: { params: { userId: string 
             ← Quay lại danh sách thành viên
           </Link>
         </div>
+
+        <h1 className="text-3xl font-bold text-[#172554] mb-6" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
+          Hồ sơ thành viên
+        </h1>
 
         {/* Unified Learner Profile View */}
         <LearnerProfileView
@@ -192,7 +196,7 @@ export default function MemberDetailPage({ params }: { params: { userId: string 
                   <button
                     type="button"
                     onClick={() => setShowConfirmModal(false)}
-                    className="text-[#737686] hover:text-[#172554] text-base font-bold px-2 py-1"
+                    className="text-[#6c6f7f] hover:text-[#172554] text-base font-bold px-2 py-1"
                   >
                     ✕
                   </button>
@@ -210,7 +214,7 @@ export default function MemberDetailPage({ params }: { params: { userId: string 
                       <strong className="text-red-600 underline font-extrabold">&ldquo;vô hiệu hóa&rdquo;</strong>{' '}
                       vào ô bên dưới:
                     </label>
-                    <input
+                    <input aria-label="Nhập “vô hiệu hóa” để xác nhận"
                       type="text"
                       value={deactivateInputText}
                       onChange={(e) => setDeactivateInputText(e.target.value)}
@@ -255,7 +259,7 @@ export default function MemberDetailPage({ params }: { params: { userId: string 
             </Modal>
           )}
         </LearnerProfileView>
-      </main>
+      </div>
     </div>
   );
 }

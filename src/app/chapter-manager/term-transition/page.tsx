@@ -37,7 +37,7 @@ export default function ChapterManagerTermTransitionPage() {
           <h1 className="text-3xl font-extrabold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
             Chuyển Giao Nhiệm Kỳ Chapter
           </h1>
-          <p className="text-sm text-[#737686] mt-0.5">
+          <p className="text-sm text-[#6c6f7f] mt-0.5">
             Chapter: <span className="font-semibold text-[#172554]">{mounted && user?.chapterName ? user.chapterName : 'Chapter Demo'}</span> • Cơ cấu 7 Ban chuẩn và sơ đồ lãnh đạo LT
           </p>
         </div>

@@ -55,7 +55,7 @@ export default function TransferHistory({
           <div className="flex items-center justify-between border-b border-[#eff4ff] pb-4">
             <div>
               <h2 className="text-lg font-bold text-[#172554]">Lịch sử các đợt chuyển giao nhiệm kỳ</h2>
-              <p className="text-xs text-[#737686] mt-0.5">
+              <p className="text-xs text-[#6c6f7f] mt-0.5">
                 Xem lại danh sách nhân sự và cơ cấu Ban của các nhiệm kỳ trước
               </p>
             </div>
@@ -77,9 +77,9 @@ export default function TransferHistory({
           </div>
 
           {historyLoading ? (
-            <div className="text-center py-12 text-[#737686]">Đang tải lịch sử nhiệm kỳ...</div>
+            <div className="text-center py-12 text-[#6c6f7f]">Đang tải lịch sử nhiệm kỳ...</div>
           ) : historyList.length === 0 ? (
-            <div className="text-center py-12 text-[#737686] italic">
+            <div className="text-center py-12 text-[#6c6f7f] italic">
               Chưa có lịch sử đợt chuyển giao nhiệm kỳ nào được lưu lại.
             </div>
           ) : (
@@ -103,7 +103,7 @@ export default function TransferHistory({
                           {termTitle}
                         </span>
                         <span
-                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                          className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
                             isApplied
                               ? 'bg-emerald-100 text-emerald-800'
                               : 'bg-blue-100 text-blue-800'
@@ -113,7 +113,7 @@ export default function TransferHistory({
                         </span>
                       </div>
                       {term.last_error && <p role="alert" className="mt-2 text-xs text-red-700">Chưa áp dụng được (lần {term.apply_attempts}): {term.last_error}. Hệ thống sẽ retry; có thể bấm áp dụng lại.</p>}
-                      <div className="text-xs text-[#737686] mt-1 space-y-0.5">
+                      <div className="text-xs text-[#6c6f7f] mt-1 space-y-0.5">
                         <p>
                           <span className="font-medium text-slate-700">
                             {isApplied ? 'Thời gian chuyển giao thực tế:' : 'Có hiệu lực:'}
@@ -174,14 +174,14 @@ export default function TransferHistory({
                     ? ` (${termMoment(selectedHistoryTerm).shownAt!.toLocaleDateString('vi-VN')})`
                     : ''}
                 </h3>
-                <p className="text-xs text-[#737686]">
+                <p className="text-xs text-[#6c6f7f]">
                   Tổng {selectedHistoryTerm.itemCount ?? selectedHistoryTerm.items?.length ?? 0} thành viên được phân bổ
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setSelectedHistoryTerm(null)}
-                className="text-[#737686] hover:text-[#172554] text-lg font-bold px-2 py-1"
+                className="text-[#6c6f7f] hover:text-[#172554] text-lg font-bold px-2 py-1"
               >
                 ✕
               </button>
@@ -214,7 +214,7 @@ export default function TransferHistory({
                             }`}
                           >
                             {item.isLead && !isPresidentBan && (
-                              <div className="text-[9px] font-bold text-amber-800 uppercase">👑 Trưởng ban</div>
+                              <div className="text-[11px] font-bold text-amber-800 uppercase">👑 Trưởng ban</div>
                             )}
                             {item.userId ? (
                               <Link
@@ -226,7 +226,7 @@ export default function TransferHistory({
                             ) : (
                               <div className="truncate text-[#172554]">{item.displayName}</div>
                             )}
-                            <div className="truncate text-[10px] text-[#737686]">{item.email}</div>
+                            <div className="truncate text-[11px] text-[#6c6f7f]">{item.email}</div>
                           </div>
                         ))}
                         {banItems.length === 0 && (

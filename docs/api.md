@@ -9,7 +9,7 @@ Danh mục đọc từ 96 file route trong `src/app/api`. Đường dẫn độn
 - Lỗi thường có dạng `{error:{code,message?}}`. Không phải route nào cũng phân biệt 401/403 giống nhau: helper Admin có thể trả 403 cả khi chưa xác thực. Đọc handler để lấy status chính xác.
 - `authenticate` là xác thực; quyền chức vụ/đơn vị phải đọc cùng `authorization`, `organization-auth`, `chapter-lead` và service của route. Tên guard trong bảng cho biết nhánh kiểm soát thực tế, không cấp thêm quyền.
 - `/api/internal/organization/reorganizations/apply` yêu cầu Bearer `CRON_SECRET`; auto-submit/deadline còn hỗ trợ cron header hoặc Admin theo handler. Các endpoint này ghi dữ liệu kể cả một số GET, không dùng làm health probe. `GET /api/v1/health` là endpoint sức khỏe riêng.
-- Khách có thể đọc danh mục/khóa/bài/tài liệu công khai, và một số bảng xếp hạng. Authentication xuất hiện trong handler công khai có thể là optional; xem nhãn dưới đây và điều kiện visibility trong source.
+- Khách có thể đọc danh mục/khóa/bài/tài liệu công khai, và bảng xếp hạng kỳ (đủ bốn nhóm, không có email). Authentication xuất hiện trong handler công khai có thể là optional; xem nhãn dưới đây và điều kiện visibility trong source.
 - Pagination, tên ID, response alias (ví dụ `id` và `courseId`) được giữ theo từng route; không chuẩn hóa payload trong đợt dọn repo.
 
 ## Hợp đồng luồng quan trọng
@@ -21,7 +21,7 @@ Danh mục đọc từ 96 file route trong `src/app/api`. Đường dẫn độn
 | Attempt | Tạo attempt từ assessment; lưu đáp án theo question thuộc attempt; submit/cancel; GET để resume/kết quả | Ownership, course publication, video/progression gate, server expiry, snapshot câu hỏi/grading và idempotency; không sửa payload cũ |
 | Course authoring | Draft → session/lesson/video/document → assessment/bank → publish; draft snapshot/publish riêng | Admin; used bank/version và content publishing có guard; không tự reset attempt |
 | Chuyển giao | Đọc roster, parse sheet, preview/POST batch, apply/cancel theo batch | Scope Chapter thực tế; GET danh sách/roster hiện có thể apply đợt đến hạn (xem known-issues); scheduling chưa reset; successful apply mới reset và tạo outbox |
-| BXH kỳ | `group=MEMBER/LT/DNA/CHAPTER`, `periodType=MONTH/TERM/ACTUAL_TERM`; thêm periodId/chapterId theo source | ACTUAL_TERM chỉ CHAPTER, statisticsOnly; bảng đóng đọc snapshot, thiếu dữ liệu trả reason; thành viên/manager bị giới hạn đơn vị |
+| BXH kỳ | `group=MEMBER/LT/DNA/CHAPTER`, `periodType=MONTH/TERM/ACTUAL_TERM`; thêm periodId/chapterId theo source | ACTUAL_TERM chỉ CHAPTER, statisticsOnly; bảng đóng đọc snapshot, thiếu dữ liệu trả reason; PUBLIC: khách và mọi vai xem cùng một bảng, cả bốn nhóm và `chapterId` bất kỳ, không 401/403 theo vai; `/api/v1/learning/periods` trả cùng danh mục kỳ cho mọi người |
 | Cấu hình học tập | Admin GET cấu hình; PUT catalog/mapping/season/normalization/outbox | Không đổi quyền hay quy tắc cấu hình; mapping đề xuất chưa được tự duyệt; season không chồng lấn, boundary April/October UTC+7, và phải phủ cửa sổ `01/01–30/06` / `01/07–31/12` |
 
 ## Danh mục route
@@ -183,7 +183,7 @@ PUT giữ nguyên catalog, mapping khóa/chương trình/target, seasons, chuẩ
 
 | Method | Truy cập / guard | Đầu vào đọc trực tiếp | Response thành công | Mã lỗi thấy trong handler |
 |---|---|---|---|---|
-| [POST](../src/app/api/v1/attempts/[attemptId]/submit/route.ts#L5) | `authenticate` | `body.answers` | `attemptId, score, totalPoints, scorePercent, passed, starReward, answers` | `ValidationError` |
+| [POST](../src/app/api/v1/attempts/[attemptId]/submit/route.ts#L5) | `authenticate` | `body.answers` | `attemptId, score, earnedPoints, totalPoints, scorePercent, passed, starReward, answers` | `ValidationError` |
 
 ### `/api/v1/attempts/auto-submit`
 
@@ -473,7 +473,7 @@ Hạn mức email của ngày lịch UTC hiện tại (mặc định `limit = 90
 
 | Method | Truy cập / guard | Đầu vào đọc trực tiếp | Response thành công | Mã lỗi thấy trong handler |
 |---|---|---|---|---|
-| [POST](../src/app/api/v1/invitations/member/route.ts#L18) | `authenticate`, `canAccessChapterPermission`, `canAccessOrganizationUnitPermission`, `role ADMIN`, `role LEAD` | `body.chapterId`, `body.email`, `body.organizationUnitId` | `invitationId, id, chapterId, organizationUnitId, status, expiresAt, emailSent, emailError, delivery` | `AccessDenied`, `OrganizationUnitNotFound`, `ValidationError` |
+| [POST](../src/app/api/v1/invitations/member/route.ts#L18) | `authenticate`, `canAccessChapterPermission`, `canAccessOrganizationUnitPermission`, `role ADMIN`, `role LEAD` | `body.chapterId`, `body.email`, `body.organizationUnitId` | `invitationId, id, chapterId, organizationUnitId, status, expiresAt, emailSent, emailError, delivery` | `AccessDenied`, `OrganizationUnitNotFound`, `PendingInvitationOutOfScope` (409: email đang có lời mời còn hiệu lực ngoài phạm vi người mời, lời mời cũ giữ nguyên), `ValidationError` |
 
 ### `/api/v1/invitations`
 
@@ -533,7 +533,7 @@ GET và heartbeat `/api/v1/lessons/[lessonId]/progress` trả `reviewState` (c�
 
 Release1: `readiness` gồm `ready, reasonCode, message, asOf, periods`, không có `policy`; response không có `policy` ở cấp ngoài. Readiness cơ sở là `READY`, nhưng API vẫn báo lý do thiếu tháng/nhiệm kỳ/mùa phù hợp như trước. Đây không phải chứng nhận mapping/mùa hay đủ dữ liệu lịch sử. Tháng runtime dùng ranh giới tự nhiên `[đầu tháng, đầu tháng kế tiếp)` UTC+7; bản ghi tháng/snapshot đã có không bị viết lại.
 
-Với `GET /api/v1/leaderboard?group=DNA&periodType=TERM`, cửa sổ xếp hạng DNA là `[season.reward_boundary_at, dnaSeasonEnd(season.reward_boundary_at))`, không có mốc cấu hình làm sàn. Mùa đã kết thúc không có ledger `NATIVE` trong cửa sổ **và không có đúng** snapshot `ranking:DNA:<season.id>` trả lịch sử không khả dụng, không giả thành 0. Có `NATIVE` và chưa có snapshot thì scheduler được phép chốt; snapshot đã tồn tại được đọc và giữ nguyên, kể cả không có ledger `NATIVE`.
+Với `GET /api/v1/leaderboard?group=DNA&periodType=TERM`, cửa sổ xếp hạng DNA là `[season.reward_boundary_at, dnaSeasonEnd(season.reward_boundary_at))`, không có mốc cấu hình làm sàn. Mùa đã kết thúc không có ledger `NATIVE` trong cửa sổ **và không có đúng** snapshot `ranking:DNA:<season.id>` trả lịch sử không khả dụng, không giả thành 0. Có `NATIVE` và chưa có snapshot thì scheduler được phép chốt; snapshot đã tồn tại được đọc và giữ nguyên, kể cả không có ledger `NATIVE`. `group=MEMBER|LT&periodType=TERM` không có `chapterId` xét cùng nhiệm kỳ thi đua `[season.reward_boundary_at, dnaSeasonEnd(season.reward_boundary_at))` (`01/04→01/10`, `01/10→01/04`), **không** phải khung chuyển giao `[season.starts_at, season.ends_at)`; mọi người được tính trọn nhiệm kỳ, không theo ngày chuyển giao của Chapter. Chọn mùa mà mốc `reward_boundary_at` chưa tới trả `PERIOD_UNAVAILABLE`/`TERM_NOT_STARTED`. Nhiệm kỳ đã kết thúc trả snapshot `ranking:<group>:<season.id>` (`state: FINALIZED`) do scheduler chốt, `AWAITING_SNAPSHOT` khi có `NATIVE` nhưng scheduler chưa chạy, và `PERIOD_UNAVAILABLE`/`HISTORICAL_SEASON_UNAVAILABLE` khi không có `NATIVE` lẫn snapshot.
 
 ### `/api/v1/lessons/[lessonId]/assessment`
 
@@ -682,7 +682,7 @@ Tạo link đặt lại mật khẩu mới (`/reset-password?token=...`) khi ema
 
 | Method | Truy cập / guard | Đầu vào đọc trực tiếp | Response thành công | Mã lỗi thấy trong handler |
 |---|---|---|---|---|
-| [PATCH](../src/app/api/v1/users/[userId]/profile/route.ts#L6) | `authenticate`, `canAccessChapterPermission`, `role ADMIN` | `body.chapterId`, `body.displayName` | `id, email, displayName` | `AccessDenied`, `ValidationError` |
+| [PATCH](../src/app/api/v1/users/[userId]/profile/route.ts#L6) | `authenticate`, `canAccessChapterPermission`, `role ADMIN` | `body.chapterId`, `body.displayName` | `id, email, displayName` | `AccessDenied`, `UserNotFound`, `ValidationError` |
 
 ### `/api/v1/users/[userId]`
 

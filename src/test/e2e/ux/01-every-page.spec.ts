@@ -90,33 +90,33 @@ test.describe('Mọi trang', () => {
     expect(offenders(await rowsFor(browser, request), (row) => row.imagesWithoutAlt)).toEqual([])
   })
 
-  uiDefect('BUG-A11Y-LABELS', 'mọi ô nhập và ô chọn đều gắn nhãn (không chỉ có placeholder)', async ({ page, request }) => {
-    expect(offenders(await rowsFor(page.context().browser()!, request), (row) => row.unlabeledFields)).toEqual([])
+  test('mọi ô nhập và ô chọn đều gắn nhãn (không chỉ có placeholder)', async ({ browser, request }) => {
+    expect(offenders(await rowsFor(browser, request), (row) => row.unlabeledFields)).toEqual([])
   })
 
-  uiDefect('BUG-A11Y-LANDMARK', 'mỗi trang có đúng một vùng nội dung chính (main)', async ({ page, request }) => {
-    expect(offenders(await rowsFor(page.context().browser()!, request), (row) => row.mains !== 1 && `${row.mains} vùng main`)).toEqual([])
+  test('mỗi trang có đúng một vùng nội dung chính (main)', async ({ browser, request }) => {
+    expect(offenders(await rowsFor(browser, request), (row) => row.mains !== 1 && `${row.mains} vùng main`)).toEqual([])
   })
 
-  uiDefect('BUG-A11Y-H1', 'mỗi trang có đúng một tiêu đề chính (h1) cho biết đang ở đâu', async ({ page, request }) => {
-    expect(offenders(await rowsFor(page.context().browser()!, request), (row) => row.h1 !== 1 && `${row.h1} thẻ h1`)).toEqual([])
+  test('mỗi trang có đúng một tiêu đề chính (h1) cho biết đang ở đâu', async ({ browser, request }) => {
+    expect(offenders(await rowsFor(browser, request), (row) => row.h1 !== 1 && `${row.h1} thẻ h1`)).toEqual([])
   })
 
-  uiDefect('BUG-UX-PAGE-TITLE', 'tên tab trình duyệt cho biết đang ở trang nào, không phải mọi trang cùng một tên', async ({ page, request }) => {
-    const rows = await rowsFor(page.context().browser()!, request)
+  test('tên tab trình duyệt cho biết đang ở trang nào, không phải mọi trang cùng một tên', async ({ browser, request }) => {
+    const rows = await rowsFor(browser, request)
     expect(new Set(rows.map((row) => row.title)).size).toBeGreaterThan(rows.length / 2)
   })
 
-  uiDefect('BUG-UX-TINY-TEXT', 'không có chữ nhỏ hơn 11px', async ({ page, request }) => {
+  test('không có chữ nhỏ hơn 11px', async ({ page, request }) => {
     expect(offenders(await rowsFor(page.context().browser()!, request), (row) => row.tinyText)).toEqual([])
   })
 
-  uiDefect('BUG-UX-TOUCH-TARGET', 'trên điện thoại, mọi nút đều đủ lớn để chạm (tối thiểu 24px theo WCAG 2.2)', async ({ page, request }) => {
+  test('trên điện thoại, mọi nút đều đủ lớn để chạm (tối thiểu 24px theo WCAG 2.2)', async ({ page, request }) => {
     test.skip(test.info().project.name !== 'mobile', 'chỉ đo trên điện thoại')
     expect(offenders(await rowsFor(page.context().browser()!, request), (row) => row.smallTargets)).toEqual([])
   })
 
-  uiDefect('BUG-UI-HYDRATION-TRANSFER', 'mở lại trang mùa chuyển giao trong cùng tab không sinh lỗi React', async ({ page }) => {
+  test('mở lại trang mùa chuyển giao trong cùng tab không sinh lỗi React', async ({ page }) => {
     const problems = watchProblems(page)
     await signInAs(page, 'admin')
     for (let visit = 0; visit < 2; visit += 1) {

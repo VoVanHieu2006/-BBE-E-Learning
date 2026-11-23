@@ -31,7 +31,21 @@ export interface SendInvitationOptions {
   organizationUnitId?: string
   invitedBy: string
   mail?: InvitationMailPlan
+  /**
+   * Người mời có quyền quản lý (hủy) lời mời đang chờ này không. Lời mời đang chờ vào đúng đơn vị đang mời
+   * luôn được thay; lời mời khác đơn vị chỉ được thay khi hàm này trả true, không truyền thì coi như ngoài phạm vi.
+   */
+  canManagePending?: (pending: PendingInvitationScope) => Promise<boolean>
 }
+
+export interface PendingInvitationScope {
+  id: string
+  role: string
+  chapter_id: string | null
+  organization_unit_id: string | null
+}
+
+export const PENDING_INVITATION_OUT_OF_SCOPE_MESSAGE = 'Email này đang có một lời mời còn hiệu lực ngoài phạm vi quản lý của bạn. Không thể gửi lời mời mới; vui lòng liên hệ Admin.'
 
 export interface SendInvitationResult {
   ok: true
@@ -126,6 +140,15 @@ export async function sendMemberInvitation(
     where: { email: opts.email, status: 'PENDING' },
   })
   if (existingPending) {
+    // Lời mời đang chờ ngoài phạm vi của người mời (ví dụ Admin mời Lead Chapter mới) được giữ nguyên: từ chối lời mời mới.
+    // Lời mời đã quá hạn không còn hiệu lực nên vẫn được thay.
+    const live = existingPending.expires_at > new Date()
+    const sameScope = opts.organizationUnitId
+      ? existingPending.organization_unit_id === opts.organizationUnitId
+      : !existingPending.organization_unit_id && existingPending.chapter_id === opts.chapterId
+    if (live && !sameScope && !(opts.canManagePending && await opts.canManagePending(existingPending))) {
+      return { ok: false, code: 'PendingInvitationOutOfScope', message: PENDING_INVITATION_OUT_OF_SCOPE_MESSAGE }
+    }
     // Invalidate existing pending invitation
     await prisma.invitation.update({
       where: { id: existingPending.id },
@@ -257,7 +280,8 @@ export async function sendDnaLeaderInvitation(email: string, invitedBy: string) 
   if (activeLead) return { ok: false as const, code: 'DnaLeadExists', message: 'Hệ thống đã có một Lead DNA đang hoạt động.' }
   const existingUser = await prisma.user.findUnique({ where: { email: email.trim().toLowerCase() } })
   if (existingUser) return { ok: false as const, code: 'LeadInvitationRequiresNewAccount', message: 'LEAD phải là tài khoản mới được mời làm LEAD; không đổi vai trò tài khoản hiện có.' }
-  return sendMemberInvitation({ email, role: 'DNA_LEAD', organizationUnitId: dnaUnit.id, invitedBy })
+  // Chỉ Admin gọi được hàm này; mọi lời mời đều trong phạm vi của Admin.
+  return sendMemberInvitation({ email, role: 'DNA_LEAD', organizationUnitId: dnaUnit.id, invitedBy, canManagePending: async () => true })
 }
 
 /** Resend invitation — invalidates old token if PENDING, creates new token */
@@ -541,7 +565,7 @@ export async function acceptInvitation(
         },
       })
       await ensureChapterStandardDepartments(unit.id, tx)
-      await tx.invitation.update({ where: { id: invitation.id }, data: { chapter_id: chapter.id, organization_unit_id: unit.id } })
+      await tx.invitation.update({ where: { id: invitation.id }, data: { chapter_id: chapter.id } })
     }
     if (chapterId) {
       const chapter = await tx.chapter.findUnique({ where: { id: chapterId }, select: { id: true, name: true, organization_unit_id: true } })
