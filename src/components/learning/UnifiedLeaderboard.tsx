@@ -690,6 +690,11 @@ export default function UnifiedLeaderboard({
               </span>
             </div>
 
+            {items.length === 0 ? (
+              <p className="px-6 py-8 text-center text-xs text-[#6c6f7f]">
+                {group === 'CHAPTER' ? 'Chưa có Chapter nào đủ điều kiện xếp hạng trong kỳ này.' : 'Chưa có dữ liệu xếp hạng trong kỳ này.'}
+              </p>
+            ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead>
@@ -864,6 +869,7 @@ export default function UnifiedLeaderboard({
                 </tbody>
               </table>
             </div>
+            )}
           </Card>
 
           {/* Chapter chưa đủ điều kiện (nếu đang ở tab Chapter) */}
@@ -879,8 +885,7 @@ export default function UnifiedLeaderboard({
                 {excludedChapters.map((ch: any) => (
                   <div key={ch.chapterId || ch.id} className="p-3 bg-white border border-amber-200 rounded-2xl text-xs space-y-1">
                     <p className="font-bold text-[#172554]">{ch.name}</p>
-                    <p>{ch.totalStars ?? 0} sao · Điểm đã chốt: {formatChapterScore(ch.score)}</p>
-                    {(ch.exclusionReasons || []).length > 0 && <p>{ch.exclusionReasons.join(', ')}</p>}
+                    <p>{(ch.totalStars ?? 0).toLocaleString('vi-VN')} sao · Điểm BXH: {formatChapterScore(ch.score)}</p>
                     <ChapterConditions chapter={ch} />
                   </div>
                 ))}
