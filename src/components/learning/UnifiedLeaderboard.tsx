@@ -80,7 +80,13 @@ export default function UnifiedLeaderboard({
   const [refreshing, setRefreshing] = useState(false)
   const [showRulesModal, setShowRulesModal] = useState(false)
 
-  const formatChapterScore = (val: number | null | undefined) => {
+  // One decimal, but an average just above the 20-member cutoff never shows as 20.
+const shownMemberCount = (average: number) => {
+  const rounded = Math.round(average * 10) / 10
+  return average > 20 && rounded <= 20 ? 20.1 : rounded
+}
+
+const formatChapterScore = (val: number | null | undefined) => {
     if (val === null || val === undefined) return '—'
     return Number(val).toLocaleString('vi-VN', {
       minimumFractionDigits: 3,
@@ -223,7 +229,7 @@ export default function UnifiedLeaderboard({
         name: item.name || item.displayName,
         score: item.score ?? null,
         stars: item.stars ?? item.totalStars ?? 0,
-        memberCount: item.memberCount ?? (Number.isFinite(item.averageMemberCount) ? Math.round(item.averageMemberCount * 10) / 10 : 0),
+        memberCount: Number.isFinite(item.averageMemberCount) ? shownMemberCount(item.averageMemberCount) : item.memberCount ?? 0,
         atLeast70Percent: item.atLeast70Percent ?? (Number.isFinite(item.at70Rate) ? Math.round(item.at70Rate * 1000) / 10 : null),
         kpiStatus: item.kpiStatus || item.kpi?.status || null,
         departmentName: item.departmentName || item.groupName || (group === 'DNA' ? (item.dnaUnitName || 'Khối DNA') : '—'),
