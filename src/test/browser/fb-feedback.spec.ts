@@ -50,11 +50,20 @@ test('FB03 all three conditions remain visible when every Chapter is excluded', 
       { kind: 'MEMBER_COUNT', value: 21, threshold: 20, state: 'PASS' },
       { kind: 'CORE_COMPLETION', value: null, threshold: 0.5, state: 'MISSING_DATA', reasonCode: 'CORE_LESSONS_ZERO' },
       { kind: 'KPI', value: null, threshold: ['YELLOW', 'GREEN'], state: 'MISSING_DATA', reasonCode: 'WAITING_KPI' },
+    ] }, { chapterId: 'ch2', name: 'Chapter Codes', totalStars: 1637, score: 181.889, currentRosterCount: 9, dataAsOf: '2026-10-25T00:00:00Z',
+      exclusionReasons: ['MEMBER_COUNT_NOT_ABOVE_20', 'CORE_COMPLETION_BELOW_50_PERCENT'], conditions: [
+      { kind: 'MEMBER_COUNT', value: 9, threshold: 20, state: 'FAIL', reasonCode: 'MEMBER_COUNT_NOT_ABOVE_20' },
+      { kind: 'CORE_COMPLETION', value: 0.07, threshold: 0.5, state: 'FAIL', reasonCode: 'CORE_COMPLETION_BELOW_50_PERCENT' },
+      { kind: 'KPI', value: 'GREEN', threshold: ['YELLOW', 'GREEN'], state: 'PASS', reasonCode: null },
     ] }] }
   })
   await page.goto('/leaderboard?group=CHAPTER&periodType=MONTH')
   await expect(page.getByText('Chapter FB', { exact: true })).toBeVisible()
-  await expect(page.getByText('Quân số bình quân kỳ:', { exact: false })).toBeVisible()
+  await expect(page.getByText('Chưa có Chapter nào đủ điều kiện xếp hạng trong kỳ này.')).toBeVisible()
+  await expect(page.getByText(/[A-Z]+_[A-Z_0-9]+|GREEN/)).toHaveCount(0)
+  await expect(page.getByText('KPI: Xanh', { exact: true })).toBeVisible()
+  await expect(page.getByText('Thành viên đạt ≥70% bài lõi: 7% (cần ít nhất 50%)', { exact: true })).toBeVisible()
+  await expect(page.getByText('Quân số bình quân kỳ: 21', { exact: true })).toBeVisible()
   await expect(page.getByText('Chưa có mẫu số bài lõi đã xuất bản', { exact: false })).toBeVisible()
   await expect(page.getByText('Chưa có KPI', { exact: false })).toBeVisible()
   await expect(page.getByText('Học viên hiện tại: 2', { exact: false })).toBeVisible()

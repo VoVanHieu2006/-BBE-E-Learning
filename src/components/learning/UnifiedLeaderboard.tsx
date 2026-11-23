@@ -80,7 +80,13 @@ export default function UnifiedLeaderboard({
   const [refreshing, setRefreshing] = useState(false)
   const [showRulesModal, setShowRulesModal] = useState(false)
 
-  const formatChapterScore = (val: number | null | undefined) => {
+  // One decimal, but an average just above the 20-member cutoff never shows as 20.
+const shownMemberCount = (average: number) => {
+  const rounded = Math.round(average * 10) / 10
+  return average > 20 && rounded <= 20 ? 20.1 : rounded
+}
+
+const formatChapterScore = (val: number | null | undefined) => {
     if (val === null || val === undefined) return '—'
     return Number(val).toLocaleString('vi-VN', {
       minimumFractionDigits: 3,
@@ -223,8 +229,8 @@ export default function UnifiedLeaderboard({
         name: item.name || item.displayName,
         score: item.score ?? null,
         stars: item.stars ?? item.totalStars ?? 0,
-        memberCount: item.memberCount ?? 0,
-        atLeast70Percent: item.atLeast70Percent ?? null,
+        memberCount: Number.isFinite(item.averageMemberCount) ? shownMemberCount(item.averageMemberCount) : item.memberCount ?? 0,
+        atLeast70Percent: item.atLeast70Percent ?? (Number.isFinite(item.at70Rate) ? Math.round(item.at70Rate * 1000) / 10 : null),
         kpiStatus: item.kpiStatus || item.kpi?.status || null,
         departmentName: item.departmentName || item.groupName || (group === 'DNA' ? (item.dnaUnitName || 'Khối DNA') : '—'),
         positionName: item.positionName || (group === 'LT' ? 'Ban Lãnh Đạo (LT)' : group === 'DNA' ? 'Thành viên DNA' : 'Thành viên'),
@@ -583,7 +589,7 @@ export default function UnifiedLeaderboard({
                   </div>
                   <p className="text-xs text-[#6c6f7f] truncate mb-3">
                     {group === 'CHAPTER'
-                      ? `${topThree[1].memberCount || 0} học viên • Đạt ≥70%: ${topThree[1].atLeast70Percent !== null && topThree[1].atLeast70Percent !== undefined ? `${topThree[1].atLeast70Percent}%` : '—'}`
+                      ? `${(topThree[1].memberCount || 0).toLocaleString('vi-VN')} học viên • Đạt ≥70%: ${topThree[1].atLeast70Percent !== null && topThree[1].atLeast70Percent !== undefined ? `${topThree[1].atLeast70Percent.toLocaleString('vi-VN')}%` : '—'}`
                       : `${topThree[1].positionName || 'Thành viên'} • ${topThree[1].departmentName || (group === 'DNA' ? 'Khối DNA' : '—')}${isGlobal && topThree[1].chapterName ? ` • ${topThree[1].chapterName}` : ''}`}
                   </p>
                   <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-100 text-slate-800 rounded-full text-sm font-black border border-slate-200">
@@ -624,7 +630,7 @@ export default function UnifiedLeaderboard({
                   </div>
                   <p className="text-xs text-[#6c6f7f] truncate mb-3">
                     {group === 'CHAPTER'
-                      ? `${topThree[0].memberCount || 0} học viên • Đạt ≥70%: ${topThree[0].atLeast70Percent !== null && topThree[0].atLeast70Percent !== undefined ? `${topThree[0].atLeast70Percent}%` : '—'}`
+                      ? `${(topThree[0].memberCount || 0).toLocaleString('vi-VN')} học viên • Đạt ≥70%: ${topThree[0].atLeast70Percent !== null && topThree[0].atLeast70Percent !== undefined ? `${topThree[0].atLeast70Percent.toLocaleString('vi-VN')}%` : '—'}`
                       : `${topThree[0].positionName || 'Thành viên'} • ${topThree[0].departmentName || (group === 'DNA' ? 'Khối DNA' : '—')}${isGlobal && topThree[0].chapterName ? ` • ${topThree[0].chapterName}` : ''}`}
                   </p>
                   <div className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-amber-100 text-amber-900 rounded-full text-base font-black border border-amber-300 shadow-inner">
@@ -663,7 +669,7 @@ export default function UnifiedLeaderboard({
                   </div>
                   <p className="text-xs text-[#6c6f7f] truncate mb-3">
                     {group === 'CHAPTER'
-                      ? `${topThree[2].memberCount || 0} học viên • Đạt ≥70%: ${topThree[2].atLeast70Percent !== null && topThree[2].atLeast70Percent !== undefined ? `${topThree[2].atLeast70Percent}%` : '—'}`
+                      ? `${(topThree[2].memberCount || 0).toLocaleString('vi-VN')} học viên • Đạt ≥70%: ${topThree[2].atLeast70Percent !== null && topThree[2].atLeast70Percent !== undefined ? `${topThree[2].atLeast70Percent.toLocaleString('vi-VN')}%` : '—'}`
                       : `${topThree[2].positionName || 'Thành viên'} • ${topThree[2].departmentName || (group === 'DNA' ? 'Khối DNA' : '—')}${isGlobal && topThree[2].chapterName ? ` • ${topThree[2].chapterName}` : ''}`}
                   </p>
                   <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-900 rounded-full text-sm font-black border border-amber-200">
@@ -690,6 +696,11 @@ export default function UnifiedLeaderboard({
               </span>
             </div>
 
+            {items.length === 0 ? (
+              <p className="px-6 py-8 text-center text-xs text-[#6c6f7f]">
+                {group === 'CHAPTER' ? 'Chưa có Chapter nào đủ điều kiện xếp hạng trong kỳ này.' : 'Chưa có dữ liệu xếp hạng trong kỳ này.'}
+              </p>
+            ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead>
@@ -864,6 +875,7 @@ export default function UnifiedLeaderboard({
                 </tbody>
               </table>
             </div>
+            )}
           </Card>
 
           {/* Chapter chưa đủ điều kiện (nếu đang ở tab Chapter) */}
@@ -878,9 +890,8 @@ export default function UnifiedLeaderboard({
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 pt-1">
                 {excludedChapters.map((ch: any) => (
                   <div key={ch.chapterId || ch.id} className="p-3 bg-white border border-amber-200 rounded-2xl text-xs space-y-1">
-                    <p className="font-bold text-[#172554]">{ch.name}</p>
-                    <p>{ch.totalStars ?? 0} sao · Điểm đã chốt: {formatChapterScore(ch.score)}</p>
-                    {(ch.exclusionReasons || []).length > 0 && <p>{ch.exclusionReasons.join(', ')}</p>}
+                    <p className="font-bold text-[#172554]">{ch.name || ch.chapterName}</p>
+                    <p>{(ch.totalStars ?? 0).toLocaleString('vi-VN')} sao · Điểm BXH: {formatChapterScore(ch.score)}</p>
                     <ChapterConditions chapter={ch} />
                   </div>
                 ))}
