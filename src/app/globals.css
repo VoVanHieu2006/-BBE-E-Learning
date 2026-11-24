@@ -15,10 +15,16 @@
 body {
   color: var(--foreground);
   background: var(--background);
+  /* Caret Browsing can draw a caret in static text. */
+  caret-color: transparent;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   margin: 0;
   padding: 0;
   -webkit-font-smoothing: antialiased;
+}
+
+:read-write {
+  caret-color: auto;
 }
 
 h1, h2, h3, h4, h5, h6 {
