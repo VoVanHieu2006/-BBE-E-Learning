@@ -79,14 +79,16 @@ describe('bulk invite route keeps the single-invite permission rules', () => {
     assert.match(source, /export const maxDuration/)
   })
 
-  it('both Chapter invite screens submit the selected department for single and bulk invites', () => {
+  it('both Chapter invite screens submit the selected department (or the President position) for single and bulk invites', () => {
     for (const file of ['src/app/chapter-manager/invitations/page.tsx', 'src/app/chapter-manager/members/page.tsx']) {
       const source = read(file)
-      assert.match(source, /organizationUnitId: departmentUnitId/, file)
+      assert.match(source, /invitePayload\(invitePosition, departmentUnitId\)/, file)
       assert.doesNotMatch(source, /JSON\.stringify\(\{ (?:email: inviteEmail\.trim\(\)|emails: bulkText), chapterId:/, file)
-      assert.match(source, /if \(!departmentUnitId\)/, file)
-      assert.match(source, /<select[^>]*value=\{departmentUnitId\}/, file)
+      assert.match(source, /if \(!inviteTargetReady\(invitePosition, departmentUnitId\)\)/, file)
+      assert.match(source, /<InvitePositionFields[\s\S]*?departmentUnitId=\{departmentUnitId\}/, file)
     }
+    const fields = read('src/components/invitations/InvitePositionFields.tsx')
+    assert.match(fields, /<select[^>]*value=\{departmentUnitId\}/)
   })
 
   it('LEAD and DNA invite pages share the bulk panel, which needs the unit before sending', () => {
@@ -94,9 +96,10 @@ describe('bulk invite route keeps the single-invite permission rules', () => {
       assert.match(read(file), /<BulkInvitePanel[\s\S]*?organizationUnitId=\{/, file)
     }
     const panel = read('src/components/invitations/BulkInvitePanel.tsx')
-    assert.match(panel, /!organizationUnitId/)
+    assert.match(panel, /inviteTargetReady\(position, organizationUnitId\)/)
+    assert.match(panel, /!targetReady/)
     assert.match(panel, /\/api\/v1\/invitations\/member\/bulk/)
-    assert.match(panel, /JSON\.stringify\(\{ emails, organizationUnitId \}\)/)
+    assert.match(panel, /\{ emails, \.\.\.invitePayload\(position, organizationUnitId\) \}/)
   })
 })
 

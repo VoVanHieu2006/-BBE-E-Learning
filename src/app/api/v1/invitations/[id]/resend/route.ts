@@ -29,12 +29,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: { code: 'AccessDenied' } }, { status: 403 })
     }
   }
-  const result = await resendInvitation(invitationId, context.userId, context.role, context.role !== 'ADMIN')
+  const body = await request.json().catch(() => ({}))
+  const confirmReplacePresident = body && typeof body === 'object' ? (body as Record<string, unknown>).confirmReplacePresident : undefined
+  const result = await resendInvitation(invitationId, context.userId, context.role, context.role !== 'ADMIN', { confirmReplacePresident })
 
   if (!result.ok) {
     return NextResponse.json(
       { error: { code: (result as any).code, message: (result as any).message } },
-      { status: (result as any).code === 'AccessDenied' ? 403 : 400 }
+      { status: (result as any).code === 'AccessDenied' ? 403 : (result as any).code === 'PresidentReplaceConfirmRequired' ? 409 : 400 }
     )
   }
 

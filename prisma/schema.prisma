@@ -295,6 +295,8 @@ model Invitation {
   role          InvitationRole
   chapter_id    String?           @db.Uuid
   organization_unit_id String?     @db.Uuid
+  /// NULL = thành viên của đơn vị; DEPARTMENT_LEAD = Trưởng ban; PRESIDENT = Chủ tịch (đơn vị là Chapter)
+  position_code String?           @db.VarChar(40)
   invited_by    String            @db.Uuid
   token_hash    String            @unique @db.VarChar(255)
   status        InvitationStatus  @default(PENDING)

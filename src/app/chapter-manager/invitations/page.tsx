@@ -9,6 +9,8 @@ import BulkInvitePanel from '@/components/invitations/BulkInvitePanel';
 import EmailQuotaNotice, { useEmailQuota } from '@/components/invitations/EmailQuotaNotice';
 import InviteLinkButton from '@/components/invitations/InviteLinkButton';
 import DeliveryNote from '@/components/invitations/DeliveryNote';
+import InvitePositionFields, { postInviteWithPresidentConfirm, usePresidentStatus } from '@/components/invitations/InvitePositionFields';
+import { INVITE_POSITION_LABELS, invitationTargetLabel, invitePayload, inviteTargetReady, type InvitePosition } from '@/lib/member-invite-position';
 
 export default function ChapterManagerInvitationsPage() {
   const [user, setUser] = useState<any>(null);
@@ -19,6 +21,8 @@ export default function ChapterManagerInvitationsPage() {
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [departmentUnitId, setDepartmentUnitId] = useState('');
+  const [invitePosition, setInvitePosition] = useState<InvitePosition>('MEMBER');
+  const presidentStatus = usePresidentStatus();
   const [departments, setDepartments] = useState<Array<{ id: string; name: string }>>([]);
   const [departmentsError, setDepartmentsError] = useState('');
   const [inviteMode, setInviteMode] = useState<'single' | 'bulk'>('single');
@@ -75,21 +79,20 @@ export default function ChapterManagerInvitationsPage() {
   async function handleSendInvite(e: React.FormEvent) {
     e.preventDefault();
     if (!inviteEmail.trim()) return;
-    if (!departmentUnitId) { showToast('error', 'Vui lòng chọn ban cho thành viên.'); return; }
+    if (!inviteTargetReady(invitePosition, departmentUnitId)) { showToast('error', 'Vui lòng chọn ban cho thành viên.'); return; }
 
     setSending(true);
     clearApiCache('/api/v1/invitations');
 
-    const res = await apiFetch('/api/v1/invitations/member', {
-      method: 'POST',
-      body: JSON.stringify({ email: inviteEmail.trim(), organizationUnitId: departmentUnitId }),
-    });
+    const res = await postInviteWithPresidentConfirm('/api/v1/invitations/member', { email: inviteEmail.trim(), ...invitePayload(invitePosition, departmentUnitId) });
+    if (!res) { setSending(false); showToast('info', 'Chưa gửi lời mời Chủ tịch vì bạn chưa xác nhận thay thế.'); return; }
 
     if (res.ok) {
+      presidentStatus.refresh();
       if (res.data?.emailSent === false) {
         showToast('info', `Đã tạo lời mời cho ${inviteEmail} nhưng chưa gửi được mail (${res.data.emailError || 'không rõ lý do'}). Bấm "Link mời ${inviteEmail}" ở bảng để lấy link gửi cho họ.`);
       } else {
-        showToast('success', `Đã gửi lời mời tham gia thành công đến ${inviteEmail}!`);
+        showToast('success', `Đã gửi lời mời ${INVITE_POSITION_LABELS[invitePosition]} thành công đến ${inviteEmail}!`);
       }
       setShowInviteModal(false);
       setInviteEmail('');
@@ -103,6 +106,9 @@ export default function ChapterManagerInvitationsPage() {
 
   function openInviteModal() {
     setInviteMode('single');
+    // Mỗi lần mở lại modal về mặc định Thành viên ban, tránh vô tình mời thêm một Chủ tịch.
+    setInvitePosition('MEMBER');
+    presidentStatus.refresh();
     setShowInviteModal(true);
   }
 
@@ -110,8 +116,10 @@ export default function ChapterManagerInvitationsPage() {
     setBusyAction(`${invitationId}:resend`);
     clearApiCache('/api/v1/invitations');
     try {
-      const res = await apiFetch(`/api/v1/invitations/${invitationId}/resend`, { method: 'POST' });
+      const res = await postInviteWithPresidentConfirm(`/api/v1/invitations/${invitationId}/resend`, {});
+      if (!res) { showToast('info', 'Chưa gửi lại lời mời Chủ tịch vì bạn chưa xác nhận thay thế.'); return; }
       if (res.ok) {
+        presidentStatus.refresh();
         if (res.data?.emailSent === false) {
           showToast('info', `Lời mời đã được làm mới nhưng chưa gửi được mail (${res.data.emailError || 'không rõ lý do'}). Dùng nút "Link mời" của dòng này để lấy link.`);
         } else {
@@ -253,7 +261,10 @@ export default function ChapterManagerInvitationsPage() {
                 <tbody className="divide-y divide-[#eff4ff]">
                   {filteredItems.map((inv) => (
                     <tr key={inv.id} className="hover:bg-[#f8f9ff] transition">
-                      <td className="px-6 py-4 font-semibold text-[#172554]">{inv.email}</td>
+                      <td className="px-6 py-4 font-semibold text-[#172554]">
+                        {inv.email}
+                        <InvitationTarget inv={inv} />
+                      </td>
                       <td className="px-6 py-4 text-center">{getStatusBadge(inv.status)}<DeliveryNote status={inv.status} deliveryMethod={inv.deliveryMethod} /></td>
                       <td className="px-6 py-4 text-xs text-[#6c6f7f]" suppressHydrationWarning>
                         {inv.createdAt ? new Date(inv.createdAt).toLocaleString('vi-VN') : '—'}
@@ -314,12 +325,18 @@ export default function ChapterManagerInvitationsPage() {
               Gửi email lời mời tham gia Chapter <span suppressHydrationWarning>{mounted && user?.chapterName ? user.chapterName : ''}</span>. Lời mời có hiệu lực trong 24 giờ.
             </p>
             {inviteMode === 'single' && <EmailQuotaNotice quota={quota} />}
-            <label className="block text-sm font-semibold" htmlFor="invite-department">Ban của thành viên *</label>
-            <select id="invite-department" value={departmentUnitId} onChange={(event) => setDepartmentUnitId(event.target.value)} disabled={sending} className="w-full rounded-lg border px-3 py-2">
-              <option value="">Chọn ban</option>
-              {departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
-            </select>
-            {departmentsError ? <p role="alert" className="text-sm text-red-700">{departmentsError}</p> : !departments.length && <p className="text-sm text-[#434655]">Chưa có ban có quyền mời thành viên. Vui lòng liên hệ quản trị viên nếu danh sách không tải được.</p>}
+            <InvitePositionFields
+              idPrefix="invite"
+              position={invitePosition}
+              onPositionChange={setInvitePosition}
+              departmentUnitId={departmentUnitId}
+              onDepartmentChange={setDepartmentUnitId}
+              departments={departments}
+              departmentsError={departmentsError}
+              canInviteLeadership={presidentStatus.canInviteLeadership}
+              presidentWarning={presidentStatus.warning}
+              disabled={sending}
+            />
             <div className="flex gap-2" role="tablist" aria-label="Cách mời">
               {([
                 { key: 'single', label: 'Một email' },
@@ -343,8 +360,9 @@ export default function ChapterManagerInvitationsPage() {
             {inviteMode === 'bulk' ? (
             <BulkInvitePanel
               organizationUnitId={departmentUnitId}
+              position={invitePosition}
               missingScopeMessage="Chọn ban của thành viên ở trên trước khi mời."
-              onSent={() => { setQuotaTick((n) => n + 1); loadInvitations(undefined, true); }}
+              onSent={() => { setQuotaTick((n) => n + 1); loadInvitations(undefined, true); presidentStatus.refresh(); }}
               onClose={() => setShowInviteModal(false)}
               disabled={sending}
             />
@@ -370,7 +388,7 @@ export default function ChapterManagerInvitationsPage() {
                 >
                   Hủy
                 </Button>
-                <Button type="submit" loading={sending} loadingText="Đang gửi..." disabled={!departmentUnitId}>
+                <Button type="submit" loading={sending} loadingText="Đang gửi..." disabled={!inviteTargetReady(invitePosition, departmentUnitId)}>
                   Gửi lời mời
                 </Button>
               </div>
@@ -379,5 +397,17 @@ export default function ChapterManagerInvitationsPage() {
           </div>
         </Modal>
     </div>
+  );
+}
+
+/** Chức vụ đích của lời mời (Chủ tịch / Trưởng ban · ban / Thành viên ban · ban). */
+function InvitationTarget({ inv }: { inv: any }) {
+  const label = invitationTargetLabel({ role: inv.role, positionCode: inv.positionCode, unitType: inv.organizationUnitType, unitName: inv.organizationUnitName });
+  if (!label) return null;
+  const president = inv.positionCode === 'PRESIDENT';
+  return (
+    <span data-testid="invitation-target" className={`mt-0.5 block text-xs font-medium ${president ? 'text-amber-800' : 'text-[#6c6f7f]'}`}>
+      {president ? '⭐ ' : ''}{label}
+    </span>
   );
 }

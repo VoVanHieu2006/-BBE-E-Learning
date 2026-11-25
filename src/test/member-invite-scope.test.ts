@@ -18,7 +18,7 @@ const { resolveMemberInviteScope } = require('../lib/member-invite-scope')
 it('resolves DNA_GROUP with DNA management permission and rejects parent DNA', async () => {
   const actor = { userId: 'lead', role: 'LEAD' }
   type = 'DNA_GROUP'
-  assert.deepEqual(await resolveMemberInviteScope(actor, { organizationUnitId: unitId }), { ok: true, organizationUnitId: unitId })
+  assert.deepEqual(await resolveMemberInviteScope(actor, { organizationUnitId: unitId }), { ok: true, organizationUnitId: unitId, positionCode: null })
   type = 'DNA'
   assert.equal((await resolveMemberInviteScope(actor, { organizationUnitId: unitId })).ok, false)
 })

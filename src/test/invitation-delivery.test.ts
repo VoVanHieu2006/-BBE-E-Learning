@@ -62,7 +62,7 @@ const prisma: any = {
   },
 }
 stub('../lib/prisma', { prisma })
-stub('../lib/position-replacement', { assignMembershipPosition: async () => {} })
+stub('../lib/position-replacement', { assignMembershipPosition: async () => {}, assignInvitedPosition: async () => {} })
 stub('../lib/email', {
   sendInvitationEmail: async (params: any) => {
     emailCalls.push(params)

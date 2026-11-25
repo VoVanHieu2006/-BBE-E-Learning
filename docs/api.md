@@ -417,7 +417,7 @@ PUT giữ nguyên catalog, mapping khóa/chương trình/target, seasons, chuẩ
 
 | Method | Truy cập / guard | Đầu vào đọc trực tiếp | Response thành công | Mã lỗi thấy trong handler |
 |---|---|---|---|---|
-| [POST](../src/app/api/v1/invitations/[id]/resend/route.ts#L9) | `authenticate`, `canAccessOrganizationUnitPermission`, `role ADMIN` | — | `invitationId, status, expiresAt, emailSent, emailError, delivery` | `AccessDenied`, `InvitationNotFound`, `ValidationError` |
+| [POST](../src/app/api/v1/invitations/[id]/resend/route.ts#L9) | `authenticate`, `canAccessOrganizationUnitPermission`, `role ADMIN` | `body.confirmReplacePresident` | `invitationId, status, expiresAt, emailSent, emailError, delivery` | `AccessDenied`, `InvitationNotFound`, `ValidationError`, `PresidentReplaceConfirmRequired` (409: lời mời Chủ tịch, Chapter đã có Chủ tịch hoặc lời mời Chủ tịch khác; gửi lại với `confirmReplacePresident: true`) |
 
 Gửi lại tính vào hạn mức email ngày. Hết hạn mức hoặc gửi lỗi thì không báo lỗi: lời mời vẫn `PENDING`, `delivery = LINK`, `emailSent = false`.
 
@@ -441,7 +441,7 @@ Hạn mức email của ngày lịch UTC hiện tại (mặc định `limit = 90
 
 | Method | Truy cập / guard | Đầu vào đọc trực tiếp | Response thành công | Mã lỗi thấy trong handler |
 |---|---|---|---|---|
-| [POST](../src/app/api/v1/invitations/member/bulk/route.ts) | như `/api/v1/invitations/member` (`resolveMemberInviteScope`) | `body.emails`, `body.chapterId`, `body.organizationUnitId` | `results[]` (`email, status, message, invitationId`), `summary` | `AccessDenied`, `ValidationError`, `TooManyEmails` |
+| [POST](../src/app/api/v1/invitations/member/bulk/route.ts) | như `/api/v1/invitations/member` (`resolveMemberInviteScope`) | `body.emails`, `body.chapterId`, `body.organizationUnitId`, `body.position`, `body.confirmReplacePresident` | `results[]` (`email, status, message, invitationId`), `summary` | `AccessDenied`, `ValidationError`, `TooManyEmails`, `InvalidInvitePosition`, `PresidentSingleEmail` (400: mời Chủ tịch mà danh sách có từ 2 dòng trở lên; không gửi lời mời nào), `PresidentReplaceConfirmRequired` (409) |
 
 Đặt chỗ hạn mức email nguyên tử trước khi gửi (một phần nếu lô lớn hơn số slot còn lại). `status` mỗi dòng: `SENT` (đã gửi email), `LINK_NEEDED` (đã tạo lời mời nhưng chưa gửi mail: hết hạn mức hoặc mail lỗi; lấy link bằng `/api/v1/invitations/[id]/link`), `INVALID`, `DUPLICATE`, `ALREADY_MEMBER`, `ALREADY_INVITED`, `DENIED`, `FAILED`.
 
@@ -469,11 +469,17 @@ Hạn mức email của ngày lịch UTC hiện tại (mặc định `limit = 90
 |---|---|---|---|---|
 | [POST](../src/app/api/v1/invitations/dna-leader/route.ts#L7) | `authenticate`, `role ADMIN` | `body.email` | `invitationId, status, expiresAt, emailSent, emailError, delivery` (không còn trả token) | `AccessDenied`, `ValidationError` |
 
+### `/api/v1/invitations/member/president-status`
+
+| Method | Truy cập / guard | Đầu vào đọc trực tiếp | Response thành công | Mã lỗi thấy trong handler |
+|---|---|---|---|---|
+| [GET](../src/app/api/v1/invitations/member/president-status/route.ts) | `authenticate`, `resolveMemberInviteScope` với `position: PRESIDENT` | `email` (query, tùy chọn: bỏ qua lời mời của chính email này) | `canInviteLeadership` (được mời Chủ tịch/Trưởng ban), `situation` (`currentPresident`, `pendingInvitations[]`), `warning` | — (không có quyền: `canInviteLeadership: false`) |
+
 ### `/api/v1/invitations/member`
 
 | Method | Truy cập / guard | Đầu vào đọc trực tiếp | Response thành công | Mã lỗi thấy trong handler |
 |---|---|---|---|---|
-| [POST](../src/app/api/v1/invitations/member/route.ts#L18) | `authenticate`, `canAccessChapterPermission`, `canAccessOrganizationUnitPermission`, `role ADMIN`, `role LEAD` | `body.chapterId`, `body.email`, `body.organizationUnitId` | `invitationId, id, chapterId, organizationUnitId, status, expiresAt, emailSent, emailError, delivery` | `AccessDenied`, `OrganizationUnitNotFound`, `PendingInvitationOutOfScope` (409: email đang có lời mời còn hiệu lực ngoài phạm vi người mời, lời mời cũ giữ nguyên), `ValidationError` |
+| [POST](../src/app/api/v1/invitations/member/route.ts#L18) | `authenticate`, `canAccessChapterPermission`, `canAccessOrganizationUnitPermission`, `role ADMIN`, `role LEAD` | `body.chapterId`, `body.email`, `body.organizationUnitId`, `body.position` (`MEMBER` mặc định \| `DEPARTMENT_LEAD` \| `PRESIDENT`), `body.confirmReplacePresident` | `invitationId, id, chapterId, organizationUnitId, positionCode, status, expiresAt, emailSent, emailError, delivery` | `AccessDenied`, `OrganizationUnitNotFound`, `PendingInvitationOutOfScope` (409: email đang có lời mời còn hiệu lực ngoài phạm vi người mời, lời mời cũ giữ nguyên), `ValidationError`, `InvalidInvitePosition` (400), `ChapterNotFound`, `PresidentReplaceConfirmRequired` (409: Chapter đã có Chủ tịch hoặc lời mời Chủ tịch khác; body lỗi có `message` cảnh báo và `situation`) |
 
 ### `/api/v1/invitations`
 

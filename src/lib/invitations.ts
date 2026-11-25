@@ -1,4 +1,6 @@
-import { assignMembershipPosition } from './position-replacement'
+import { assignInvitedPosition } from './position-replacement'
+import { invitedUnitMatchesPosition } from './member-invite-position'
+import { checkPresidentInvite } from './president-invite'
 import { isLeadRole } from '@/lib/roles'
 import { invalidateOrganizationViews } from './organization-view-cache'
 import { prepareOrganizationTransition } from './organization-transition'
@@ -29,6 +31,8 @@ export interface SendInvitationOptions {
   role: InvitationRole
   chapterId?: string
   organizationUnitId?: string
+  /** Chức vụ đích (chỉ lời mời MEMBER): null/undefined = thành viên của đơn vị. */
+  positionCode?: 'DEPARTMENT_LEAD' | 'PRESIDENT' | null
   invitedBy: string
   mail?: InvitationMailPlan
   /**
@@ -114,6 +118,21 @@ async function deliverInvitationMail(
   return { emailSent: delivery === 'EMAIL', emailError, delivery }
 }
 
+type InvitationTx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
+
+/** Khóa Chapter (theo đơn vị CHAPTER) rồi hủy mọi lời mời Chủ tịch đang chờ của Chapter, trừ email/lời mời được giữ lại. */
+async function cancelOtherPresidentInvitations(tx: InvitationTx, chapterUnitId: string, keep: { email?: string; id?: string }) {
+  await tx.$queryRaw`SELECT id FROM chapters WHERE organization_unit_id = ${chapterUnitId}::uuid FOR UPDATE`
+  await tx.invitation.updateMany({
+    where: {
+      organization_unit_id: chapterUnitId, position_code: 'PRESIDENT', status: 'PENDING',
+      ...(keep.email ? { email: { not: keep.email } } : {}),
+      ...(keep.id ? { id: { not: keep.id } } : {}),
+    },
+    data: { status: 'CANCELLED', cancelled_at: new Date() },
+  })
+}
+
 /** Send an invitation to a member (BĐHU or Admin) */
 export async function sendMemberInvitation(
   opts: SendInvitationOptions
@@ -121,9 +140,11 @@ export async function sendMemberInvitation(
   if (Boolean(opts.chapterId) === Boolean(opts.organizationUnitId)) {
     return { ok: false, code: 'ValidationError', message: 'Choose exactly one Chapter or Organization Unit scope.' }
   }
+  const positionCode = opts.positionCode ?? null
+  if (positionCode && opts.role !== 'MEMBER') return { ok: false, code: 'ValidationError', message: 'Chỉ lời mời thành viên mới chọn được chức vụ.' }
   if (opts.role === 'MEMBER') {
     const unit = opts.organizationUnitId ? await prisma.organizationUnit.findUnique({ where: { id: opts.organizationUnitId }, select: { type: true, status: true } }) : null
-    if (!unit || unit.status !== 'ACTIVE' || !['DEPARTMENT', 'DNA_GROUP'].includes(unit.type)) return { ok: false, code: 'MemberPositionRequired', message: 'Vui lòng chọn một ban hoặc nhóm DNA cho thành viên.' }
+    if (!unit || unit.status !== 'ACTIVE' || !invitedUnitMatchesPosition(unit.type, positionCode)) return { ok: false, code: 'MemberPositionRequired', message: positionCode === 'PRESIDENT' ? 'Lời mời Chủ tịch phải trỏ vào đơn vị Chapter đang hoạt động.' : positionCode === 'DEPARTMENT_LEAD' ? 'Trưởng ban phải được mời vào một ban đang hoạt động.' : 'Vui lòng chọn một ban hoặc nhóm DNA cho thành viên.' }
   }
   // BR-02 (issue #10): no invitation if email already belongs to ANY account (Active or Inactive)
   if (await emailHasAnyAccount(opts.email)) {
@@ -160,17 +181,24 @@ export async function sendMemberInvitation(
   const tokenHash = hashToken(token)
   const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
 
-  const invitation = await prisma.invitation.create({
+  // Mỗi Chapter chỉ một lời mời Chủ tịch đang chờ: lời mời mới thay mọi lời mời Chủ tịch khác của Chapter đó
+  // (người mời đã được cảnh báo và xác nhận ở checkPresidentInvite). Khóa dòng Chapter để hai lượt gửi
+  // cùng lúc chạy lần lượt: lượt sau hủy lời mời của lượt trước, không bao giờ còn hai lời mời Chủ tịch chờ.
+  const invitation = await prisma.$transaction(async (tx) => {
+    if (positionCode === 'PRESIDENT') await cancelOtherPresidentInvitations(tx, opts.organizationUnitId!, { email: opts.email })
+    return tx.invitation.create({
     data: {
       email: opts.email,
       role: opts.role,
       chapter_id: opts.chapterId || null,
       organization_unit_id: opts.organizationUnitId || null,
+      position_code: positionCode,
       invited_by: opts.invitedBy,
       token_hash: tokenHash,
       status: 'PENDING',
       expires_at: expiresAt,
     },
+    })
   })
 
   // Send invitation email via Resend (hạn mức ngày được tính trong email.ts); lỗi → giao bằng link
@@ -290,6 +318,7 @@ export async function resendInvitation(
   actorId: string,
   actorRole: UserRole,
   hasScopedManagePermission = false,
+  options: { confirmReplacePresident?: unknown } = {},
 ): Promise<{ ok: true; invitationId: string; status: InvitationStatus; expiresAt: Date; token: string; emailSent: boolean; emailError?: string; delivery: InvitationDeliveryMethod } | SendInvitationError> {
   const invitation = await prisma.invitation.findUnique({ where: { id: invitationId } })
 
@@ -307,12 +336,22 @@ export async function resendInvitation(
     return { ok: false, code: 'InvalidState', message: 'Invitation đã được chấp nhận' }
   }
 
+  // Gửi lại lời mời Chủ tịch theo đúng luật như gửi mới: Chapter đã có Chủ tịch hoặc lời mời Chủ tịch khác
+  // thì phải cảnh báo và chờ xác nhận; đã xác nhận thì các lời mời Chủ tịch khác bị hủy khi làm mới.
+  const isPresident = invitation.position_code === 'PRESIDENT' && Boolean(invitation.organization_unit_id)
+  if (isPresident) {
+    const check = await checkPresidentInvite(invitation.organization_unit_id!, invitation.email, options.confirmReplacePresident)
+    if (check.ok === false) return { ok: false, code: check.error.code, message: check.error.message }
+  }
+
   const token = generateToken()
   const tokenHash = hashToken(token)
   const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000)
 
   // Điều kiện nằm trong câu UPDATE: nếu lời mời vừa được kích hoạt (ACCEPTED) thì không làm sống lại.
-  const renewed = await prisma.invitation.updateMany({
+  const renewed = await prisma.$transaction(async (tx) => {
+    if (isPresident) await cancelOtherPresidentInvitations(tx, invitation.organization_unit_id!, { id: invitationId })
+    return tx.invitation.updateMany({
     where: { id: invitationId, status: { not: 'ACCEPTED' } },
     data: {
       token_hash: tokenHash,
@@ -321,6 +360,7 @@ export async function resendInvitation(
       accepted_at: null,
       cancelled_at: null,
     },
+    })
   })
   if (renewed.count !== 1) {
     return { ok: false, code: 'InvalidState', message: 'Invitation đã được chấp nhận' }
@@ -419,7 +459,7 @@ export async function cancelInvitation(
 export async function validateInvitationToken(
   token: string
 ): Promise<
-  | { ok: true; email: string; role: InvitationRole; chapterName: string; organizationUnitId?: string; expiresAt: Date }
+  | { ok: true; email: string; role: InvitationRole; chapterName: string; organizationUnitId?: string; positionCode: string | null; expiresAt: Date }
   | SendInvitationError
 > {
   const tokenHash = hashToken(token)
@@ -447,6 +487,7 @@ export async function validateInvitationToken(
     role: invitation.role as InvitationRole,
     chapterName: invitation.chapter_name || invitation.chapter?.name || invitation.organization_unit?.name || 'BBE',
     organizationUnitId: invitation.organization_unit_id || undefined,
+    positionCode: invitation.position_code ?? null,
     expiresAt: invitation.expires_at,
   }
 }
@@ -512,7 +553,7 @@ export async function acceptInvitation(
 
   if (invitation.role === 'MEMBER') {
     const unit = invitation.organization_unit_id ? await prisma.organizationUnit.findUnique({ where: { id: invitation.organization_unit_id }, select: { type: true, status: true } }) : null
-    if (!unit || unit.status !== 'ACTIVE' || !['DEPARTMENT', 'DNA_GROUP'].includes(unit.type)) return { ok: false, code: 'MemberPositionRequired', message: 'Lời mời cần được gửi lại với một ban hoặc nhóm DNA cụ thể.' }
+    if (!unit || unit.status !== 'ACTIVE' || !invitedUnitMatchesPosition(unit.type, invitation.position_code ?? null)) return { ok: false, code: 'MemberPositionRequired', message: invitation.position_code === 'PRESIDENT' ? 'Chapter của lời mời Chủ tịch không còn hoạt động. Vui lòng liên hệ người mời.' : 'Lời mời cần được gửi lại với một ban hoặc nhóm DNA cụ thể.' }
   }
 
   // Hash password with bcrypt
@@ -531,6 +572,10 @@ export async function acceptInvitation(
       data: { status: 'ACCEPTED', accepted_at: claimedAt },
     })
     if (claimed.count !== 1) throw createInvitationNoLongerValidError()
+    // Chủ tịch vừa được chọn: mọi lời mời Chủ tịch khác của Chapter còn sót lại hết hiệu lực, không thể thay ngầm sau này.
+    if (invitation.role === 'MEMBER' && invitation.position_code === 'PRESIDENT' && invitation.organization_unit_id) {
+      await cancelOtherPresidentInvitations(tx, invitation.organization_unit_id, { id: invitation.id })
+    }
 
     const user = await tx.user.create({
       data: {
@@ -641,7 +686,7 @@ export async function acceptInvitation(
         await tx.positionPermission.upsert({ where: { position_id_permission_id: { position_id: position.id, permission_id: permission.id } }, update: {}, create: { position_id: position.id, permission_id: permission.id } })
       }
     }
-    if (invitation.role === 'MEMBER') await assignMembershipPosition(tx, user.id, organizationUnitId, invitation.invited_by)
+    if (invitation.role === 'MEMBER') await assignInvitedPosition(tx, user.id, organizationUnitId, invitation.position_code ?? null, invitation.invited_by)
 
     console.log(`[ACCOUNT] User created (${user.role})`)
 
@@ -746,6 +791,8 @@ export async function getInvitations(params: {
       chapterId: inv.chapter_id,
       organizationUnitId: inv.organization_unit_id,
       organizationUnitType: inv.organization_unit?.type || null,
+      organizationUnitName: inv.organization_unit?.name || null,
+      positionCode: inv.position_code ?? null,
       chapterName: inv.chapter_name || inv.chapter?.name || inv.organization_unit?.name || 'N/A',
       invitedBy: inv.invited_by,
       invitedByEmail: inv.invited_by_user?.email || 'N/A',

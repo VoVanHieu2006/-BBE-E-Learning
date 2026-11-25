@@ -1,7 +1,7 @@
 'use client'
 import { useState } from 'react'
 import Button from '@/components/ui/Button'
-import { apiFetch, clearApiCache } from '@/lib/api/client'
+import { clearApiCache } from '@/lib/api/client'
 import {
   BULK_INVITE_MAX_EMAILS,
   BULK_INVITE_RETRY_NO_CHANGE_MESSAGE,
@@ -19,6 +19,8 @@ import {
 import { formatBatchQuotaNotice } from '@/lib/email-quota-core'
 import EmailQuotaNotice, { useEmailQuota } from '@/components/invitations/EmailQuotaNotice'
 import InviteLinkButton from '@/components/invitations/InviteLinkButton'
+import { postInviteWithPresidentConfirm } from '@/components/invitations/InvitePositionFields'
+import { INVITE_POSITION_LABELS, invitePayload, inviteTargetReady, presidentEmailCountError, type InvitePosition } from '@/lib/member-invite-position'
 
 const STATUS_STYLES: Record<BulkInviteStatus, string> = {
   SENT: 'bg-green-100 text-green-800',
@@ -42,6 +44,8 @@ type Phase = 'input' | 'preview' | 'results'
 interface Props {
   /** Ban hoặc nhóm DNA đã chọn; áp cho cả lô, giống mời đơn. Rỗng thì chưa cho gửi. */
   organizationUnitId: string
+  /** Chức vụ áp cho cả lô (mặc định thành viên). Chủ tịch: không cần ban, chỉ đúng 1 email. */
+  position?: InvitePosition
   /** Hiện trên nút khi chưa chọn được ban/nhóm. */
   missingScopeMessage: string
   /** Gọi sau khi có ít nhất một lời mời được tạo, để trang tải lại danh sách. */
@@ -56,7 +60,7 @@ interface Props {
  * xem trước/sửa/bỏ, rồi xem kết quả từng email và thử lại riêng email lỗi.
  * Mọi kiểm tra quyền và nghiệp vụ nằm ở /api/v1/invitations/member/bulk.
  */
-export default function BulkInvitePanel({ organizationUnitId, missingScopeMessage, onSent, onClose, disabled }: Props) {
+export default function BulkInvitePanel({ organizationUnitId, position = 'MEMBER', missingScopeMessage, onSent, onClose, disabled }: Props) {
   const [phase, setPhase] = useState<Phase>('input')
   const [text, setText] = useState('')
   const [rows, setRows] = useState<BulkInviteRow[]>([])
@@ -73,6 +77,10 @@ export default function BulkInvitePanel({ organizationUnitId, missingScopeMessag
   const resultSummary = summarizeBulkResults(results)
   const retryable = results.filter((row) => isRetryableBulkStatus(row.status))
   const locked = busy || disabled
+  const targetReady = inviteTargetReady(position, organizationUnitId)
+  // Mời Chủ tịch: đếm mọi dòng sẽ gửi lên (hợp lệ + sai định dạng); email trùng chỉ tính một lần.
+  const inputPresidentError = presidentEmailCountError(position, inputSummary.valid + inputSummary.invalid)
+  const presidentError = presidentEmailCountError(position, summary.valid + summary.invalid)
 
   function toPreview() {
     setError('')
@@ -91,11 +99,8 @@ export default function BulkInvitePanel({ organizationUnitId, missingScopeMessag
   /** Gọi API hàng loạt cho một danh sách email; trả về kết quả theo từng email. */
   async function sendBulk(emails: string[]): Promise<BulkInviteResultItem[] | null> {
     clearApiCache('/api/v1/invitations')
-    const res = await apiFetch('/api/v1/invitations/member/bulk', {
-      method: 'POST',
-      body: JSON.stringify({ emails, organizationUnitId }),
-      noCache: true,
-    })
+    const res = await postInviteWithPresidentConfirm('/api/v1/invitations/member/bulk', { emails, ...invitePayload(position, organizationUnitId) })
+    if (!res) { setError('Đã dừng: bạn chưa xác nhận thay Chủ tịch. Chưa có lời mời nào được gửi.'); return null }
     if (res.ok && Array.isArray(res.data?.results)) return res.data.results as BulkInviteResultItem[]
     setError(res.error?.code === 'AccessDenied' || res.status === 403
       ? 'Bạn không có quyền mời thành viên vào ban hoặc nhóm này. Chưa có lời mời nào được gửi.'
@@ -104,7 +109,8 @@ export default function BulkInvitePanel({ organizationUnitId, missingScopeMessag
   }
 
   async function submit() {
-    if (!organizationUnitId) { setError(missingScopeMessage); return }
+    if (!targetReady) { setError(missingScopeMessage); return }
+    if (presidentError) { setError(presidentError); return }
     if (!summary.valid) { setError('Danh sách chưa có email hợp lệ nào.'); return }
     if (summary.overLimit) { setError(`Mỗi lần chỉ mời tối đa ${BULK_INVITE_MAX_EMAILS} email. Hãy bỏ bớt email.`); return }
     setBusy(true)
@@ -180,7 +186,7 @@ export default function BulkInvitePanel({ organizationUnitId, missingScopeMessag
               className="w-full px-4 py-2.5 border border-[#cbdbf5] rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
             />
             <p className="text-[11px] text-[#6c6f7f] mt-1">
-              Dán từ Excel hoặc Google Sheets đều được (mỗi dòng một email), hoặc phân tách bằng dấu phẩy, dấu chấm phẩy, khoảng trắng. Tối đa {BULK_INVITE_MAX_EMAILS} email mỗi lần. Tất cả sẽ vào cùng ban hoặc nhóm đã chọn ở trên.
+              Dán từ Excel hoặc Google Sheets đều được (mỗi dòng một email), hoặc phân tách bằng dấu phẩy, dấu chấm phẩy, khoảng trắng. Tối đa {BULK_INVITE_MAX_EMAILS} email mỗi lần. Tất cả sẽ vào cùng {position === 'PRESIDENT' ? 'chức vụ Chủ tịch Chapter (chỉ 1 email)' : position === 'DEPARTMENT_LEAD' ? 'chức vụ Trưởng ban của ban đã chọn ở trên' : 'ban hoặc nhóm đã chọn ở trên'}.
             </p>
             <EmailQuotaNotice quota={quota} className="mt-1" />
             {text.trim() && (
@@ -191,14 +197,15 @@ export default function BulkInvitePanel({ organizationUnitId, missingScopeMessag
                 {inputSummary.overLimit && <span className="text-red-700"> · vượt quá {BULK_INVITE_MAX_EMAILS} email</span>}
               </p>
             )}
+            {inputPresidentError && <p role="alert" data-testid="bulk-invite-president-error" className="mt-1 rounded-xl bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">{inputPresidentError}</p>}
           </div>
           <div className="flex justify-end gap-3">
             {onClose && <Button variant="outline" type="button" onClick={onClose} disabled={locked}>Hủy</Button>}
-            <Button type="button" onClick={toPreview} disabled={locked || !organizationUnitId || !text.trim() || inputSummary.overLimit}>
+            <Button type="button" onClick={toPreview} disabled={locked || !targetReady || !text.trim() || inputSummary.overLimit || Boolean(inputPresidentError)}>
               Xem trước
             </Button>
           </div>
-          {!organizationUnitId && <p className="text-xs text-[#434655] text-right">{missingScopeMessage}</p>}
+          {!targetReady && <p className="text-xs text-[#434655] text-right">{missingScopeMessage}</p>}
         </div>
       )}
 
@@ -209,7 +216,9 @@ export default function BulkInvitePanel({ organizationUnitId, missingScopeMessag
             {summary.invalid > 0 && <> · <strong className="text-red-700">{summary.invalid}</strong> sai định dạng (sửa hoặc bỏ)</>}
             {summary.duplicate > 0 && <> · <strong>{summary.duplicate}</strong> trùng (bỏ qua)</>}
             {summary.overLimit && <span className="text-red-700"> · vượt quá {BULK_INVITE_MAX_EMAILS} email, hãy bỏ bớt</span>}
+            {position !== 'MEMBER' && <> · chức vụ: <strong>{INVITE_POSITION_LABELS[position]}</strong></>}
           </p>
+          {presidentError && <p role="alert" data-testid="bulk-invite-president-error" className="rounded-xl bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">{presidentError}</p>}
           <EmailQuotaNotice quota={quota} />
           {quota && formatBatchQuotaNotice(summary.valid, quota.remaining) && (
             <p role="status" data-testid="bulk-invite-quota-split" className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">
@@ -235,7 +244,7 @@ export default function BulkInvitePanel({ organizationUnitId, missingScopeMessag
           {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
           <div className="flex justify-end gap-3">
             <Button variant="outline" type="button" disabled={locked} onClick={() => { setError(''); setPhase('input') }}>Quay lại</Button>
-            <Button type="button" loading={busy} loadingText="Đang gửi..." onClick={submit} disabled={disabled || !organizationUnitId || !summary.valid || summary.overLimit}>
+            <Button type="button" loading={busy} loadingText="Đang gửi..." onClick={submit} disabled={disabled || !targetReady || !summary.valid || summary.overLimit || Boolean(presidentError)}>
               Gửi {summary.valid || ''} lời mời
             </Button>
           </div>

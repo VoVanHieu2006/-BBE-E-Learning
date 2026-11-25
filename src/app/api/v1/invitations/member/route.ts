@@ -5,12 +5,16 @@ import { invalidateInvitationsServerCache } from '@/lib/server-cache'
 import { resolveMemberInviteScope } from '@/lib/member-invite-scope'
 import { isValidInviteEmail } from '@/lib/bulk-invite'
 import { canManageInvitation } from '@/lib/invitation-management'
+import { checkPresidentInvite } from '@/lib/president-invite'
 
 /**
  * POST /api/v1/invitations/member
  * Send invitation to a member.
  * Scoped organization managers may invite ordinary members into their unit.
  * Admin member invitations continue to use the separate Admin invitation flow.
+ * Body: { email, organizationUnitId?, position?: MEMBER|DEPARTMENT_LEAD|PRESIDENT, confirmReplacePresident?: boolean }
+ * Mời Chủ tịch khi Chapter đã có Chủ tịch/lời mời Chủ tịch khác → 409 PresidentReplaceConfirmRequired
+ * (kèm cảnh báo) cho tới khi gửi lại với confirmReplacePresident: true.
  */
 export async function POST(request: NextRequest) {
   const auth = await authenticate(request)
@@ -23,7 +27,7 @@ export async function POST(request: NextRequest) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) return NextResponse.json({ error: { code: 'ValidationError' } }, { status: 400 })
   const scope = await resolveMemberInviteScope(context, body)
   if (scope.ok === false) return NextResponse.json({ error: scope.error }, { status: scope.status })
-  const { chapterId, organizationUnitId } = scope
+  const { chapterId, organizationUnitId, positionCode } = scope
 
   const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : ''
 
@@ -34,11 +38,17 @@ export async function POST(request: NextRequest) {
     )
   }
 
+  if (positionCode === 'PRESIDENT') {
+    const check = await checkPresidentInvite(organizationUnitId!, email, body.confirmReplacePresident)
+    if (check.ok === false) return NextResponse.json({ error: check.error }, { status: check.status })
+  }
+
   const result = await sendMemberInvitation({
     email,
     role: 'MEMBER',
     chapterId,
     organizationUnitId,
+    positionCode,
     invitedBy: (auth as any).context!.userId,
     canManagePending: (pending) => canManageInvitation(context, pending),
   })
@@ -64,6 +74,7 @@ export async function POST(request: NextRequest) {
       id: result.invitationId,
       chapterId: result.chapterId || null,
       organizationUnitId: result.organizationUnitId || null,
+      positionCode: positionCode ?? null,
       status: result.status,
       expiresAt: result.expiresAt.toISOString(),
       emailSent: result.emailSent,

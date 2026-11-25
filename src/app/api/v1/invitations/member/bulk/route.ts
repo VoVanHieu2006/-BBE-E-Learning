@@ -5,6 +5,8 @@ import { sendMemberInvitation } from '@/lib/invitations'
 import { invalidateInvitationsServerCache } from '@/lib/server-cache'
 import { resolveMemberInviteScope } from '@/lib/member-invite-scope'
 import { canManageInvitation } from '@/lib/invitation-management'
+import { checkPresidentInvite } from '@/lib/president-invite'
+import { presidentEmailCountError } from '@/lib/member-invite-position'
 import { releaseEmailSlots, reserveEmailSlots } from '@/lib/email-quota'
 import { splitBatchByQuota, unusedSlots } from '@/lib/email-quota-core'
 import { BULK_INVITE_MAX_EMAILS, BULK_INVITE_TIME_BUDGET_MS, parseBulkInviteEmails, runBulkInvites, summarizeBulkResults } from '@/lib/bulk-invite'
@@ -14,7 +16,9 @@ export const maxDuration = 60
 
 /**
  * POST /api/v1/invitations/member/bulk
- * Body: { emails: string | string[], chapterId?, organizationUnitId? }
+ * Body: { emails: string | string[], chapterId?, organizationUnitId?, position?, confirmReplacePresident? }
+ * Mời Chủ tịch: danh sách phải có đúng 1 email (2 email trở lên → 400 PresidentSingleEmail, không gửi gì),
+ * và cần xác nhận thay thế giống mời đơn khi Chapter đã có Chủ tịch.
  * Invites many members at once with the same scope and permission rules as
  * /api/v1/invitations/member. Unlike a single re-invite, an email that already
  * has a live pending invitation is reported as ALREADY_INVITED and left untouched.
@@ -39,6 +43,15 @@ export async function POST(request: NextRequest) {
   }
   if (valid.length + invalid.length > BULK_INVITE_MAX_EMAILS) {
     return NextResponse.json({ error: { code: 'TooManyEmails', message: `Mỗi lần chỉ mời tối đa ${BULK_INVITE_MAX_EMAILS} email.` } }, { status: 400 })
+  }
+  if (scope.positionCode === 'PRESIDENT') {
+    // Kiểm tra trên toàn bộ danh sách (kể cả email sai định dạng) trước khi gửi bất kỳ lời mời nào.
+    const tooMany = presidentEmailCountError('PRESIDENT', valid.length + invalid.length)
+    if (tooMany) return NextResponse.json({ error: { code: 'PresidentSingleEmail', message: tooMany } }, { status: 400 })
+    if (valid.length === 1) {
+      const check = await checkPresidentInvite(scope.organizationUnitId!, valid[0], body.confirmReplacePresident)
+      if (check.ok === false) return NextResponse.json({ error: check.error }, { status: check.status })
+    }
   }
 
   const now = new Date()
@@ -66,7 +79,7 @@ export async function POST(request: NextRequest) {
       deadline: Date.now() + BULK_INVITE_TIME_BUDGET_MS,
       send: async (email) => {
         const result = await sendMemberInvitation({
-          email, role: 'MEMBER', chapterId: scope.chapterId, organizationUnitId: scope.organizationUnitId, invitedBy: context.userId,
+          email, role: 'MEMBER', chapterId: scope.chapterId, organizationUnitId: scope.organizationUnitId, positionCode: scope.positionCode, invitedBy: context.userId,
           canManagePending: (pending) => canManageInvitation(context, pending),
           mail: mailSet.has(email) ? { kind: 'reserved', day: reservation.day } : { kind: 'link' },
         })

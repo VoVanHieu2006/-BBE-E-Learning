@@ -73,3 +73,24 @@ export async function assignMembershipPosition(tx: Prisma.TransactionClient, use
   const position = await tx.position.upsert({ where: { code }, update: {}, create: { code, name: code === 'DNA_MEMBER' ? 'Thành viên DNA' : 'Thành viên ban', scope: unit.type === 'DEPARTMENT' ? 'DEPARTMENT' : 'DNA' } })
   await replaceUserPosition(tx, { userId, unitId, positionId: position.id, actorId })
 }
+
+/**
+ * Chức vụ cho người vừa kích hoạt lời mời thành viên. Không có position_code: như cũ (thành viên ban/DNA).
+ * PRESIDENT trỏ vào đơn vị CHAPTER; replaceUserPosition tự kết thúc Chủ tịch cũ (thành thành viên chưa phân Ban).
+ * DEPARTMENT_LEAD trỏ vào một ban.
+ */
+export async function assignInvitedPosition(tx: Prisma.TransactionClient, userId: string, unitId: string, positionCode: string | null, actorId?: string) {
+  if (!positionCode) return assignMembershipPosition(tx, userId, unitId, actorId)
+  const unit = await tx.organizationUnit.findUniqueOrThrow({ where: { id: unitId } })
+  if (positionCode === 'PRESIDENT') {
+    if (unit.type !== 'CHAPTER') throw new OrganizationConflict('PositionScopeMismatch', 'Lời mời Chủ tịch phải trỏ vào đơn vị Chapter.')
+    const position = await tx.position.upsert({ where: { code: 'PRESIDENT' }, update: {}, create: { code: 'PRESIDENT', name: 'Chủ tịch Chapter', scope: 'CHAPTER', is_manager: false } })
+    return replaceUserPosition(tx, { userId, unitId, positionId: position.id, actorId })
+  }
+  if (positionCode === 'DEPARTMENT_LEAD') {
+    if (unit.type !== 'DEPARTMENT') throw new OrganizationConflict('PositionScopeMismatch', 'Lời mời Trưởng ban phải trỏ vào một ban.')
+    const position = await tx.position.upsert({ where: { code: 'DEPARTMENT_LEAD' }, update: {}, create: { code: 'DEPARTMENT_LEAD', name: 'Trưởng ban', scope: 'DEPARTMENT', is_manager: false } })
+    return replaceUserPosition(tx, { userId, unitId, positionId: position.id, actorId })
+  }
+  throw new OrganizationConflict('PositionRoleMismatch', 'Chức vụ trong lời mời không hợp lệ.')
+}

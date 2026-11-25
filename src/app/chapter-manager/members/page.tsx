@@ -8,6 +8,8 @@ import Toast, { ToastMessage } from '@/components/ui/Toast';
 import Modal from '@/components/ui/Modal';
 import LearnerProfileView from '@/components/learner/LearnerProfileView';
 import { apiFetch, getCachedApiData, clearApiCache } from '@/lib/api/client';
+import InvitePositionFields, { postInviteWithPresidentConfirm, usePresidentStatus } from '@/components/invitations/InvitePositionFields';
+import { INVITE_POSITION_LABELS, invitePayload, inviteTargetReady, type InvitePosition } from '@/lib/member-invite-position';
 
 export default function ChapterManagerMembersPage() {
   const [user, setUser] = useState<any>(null);
@@ -27,6 +29,8 @@ export default function ChapterManagerMembersPage() {
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [departmentUnitId, setDepartmentUnitId] = useState('');
+  const [invitePosition, setInvitePosition] = useState<InvitePosition>('MEMBER');
+  const presidentStatus = usePresidentStatus();
   const [departments, setDepartments] = useState<Array<{ id: string; name: string }>>([]);
   const [departmentsError, setDepartmentsError] = useState('');
   const [sendingInvite, setSendingInvite] = useState(false);
@@ -174,23 +178,29 @@ export default function ChapterManagerMembersPage() {
     setIsPageChanging(false);
   };
 
+  // Mỗi lần mở modal về mặc định Thành viên ban và tải lại tình trạng Chủ tịch, tránh cảnh báo cũ.
+  const openInviteModal = () => {
+    setInvitePosition('MEMBER');
+    presidentStatus.refresh();
+    setShowInviteModal(true);
+  };
+
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inviteEmail.trim()) return;
-    if (!departmentUnitId) { showToast('error', 'Vui lòng chọn ban cho thành viên.'); return; }
+    if (!inviteTargetReady(invitePosition, departmentUnitId)) { showToast('error', 'Vui lòng chọn ban cho thành viên.'); return; }
 
     setSendingInvite(true);
     clearApiCache('/api/v1/chapters');
     clearApiCache('/api/v1/invitations');
 
-    const res = await apiFetch('/api/v1/invitations/member', {
-      method: 'POST',
-      body: JSON.stringify({ email: inviteEmail.trim(), organizationUnitId: departmentUnitId }),
-    });
+    const res = await postInviteWithPresidentConfirm('/api/v1/invitations/member', { email: inviteEmail.trim(), ...invitePayload(invitePosition, departmentUnitId) });
+    if (!res) { setSendingInvite(false); showToast('info', 'Chưa gửi lời mời Chủ tịch vì bạn chưa xác nhận thay thế.'); return; }
 
     if (res.ok) {
+      presidentStatus.refresh();
       if (res.data?.emailSent === false) showToast('info', `Đã tạo lời mời cho ${inviteEmail} nhưng chưa gửi được mail (${res.data.emailError || 'không rõ lý do'}). Vào trang Lời mời, bấm "Link mời ${inviteEmail}" để lấy link gửi cho họ.`);
-      else showToast('success', `Đã gửi lời mời tham gia đến ${inviteEmail}!`);
+      else showToast('success', `Đã gửi lời mời ${INVITE_POSITION_LABELS[invitePosition]} đến ${inviteEmail}!`);
       setShowInviteModal(false);
       setInviteEmail('');
       loadMembers();
@@ -291,7 +301,7 @@ export default function ChapterManagerMembersPage() {
                 <Link href="/chapter-manager/invitations">
                   <Button variant="secondary">✉️ Danh sách lời mời</Button>
                 </Link>
-                <Button onClick={() => setShowInviteModal(true)}>
+                <Button onClick={openInviteModal}>
                   ＋ Mời thành viên mới
                 </Button>
               </>
@@ -445,7 +455,7 @@ export default function ChapterManagerMembersPage() {
               <p className="text-lg font-semibold text-[#172554] mb-1">Chưa có thành viên nào</p>
               <p className="text-sm">{canManageMembers ? 'Hãy gửi lời mời thành viên đầu tiên tham gia Chapter của bạn.' : 'Chapter hiện chưa có thành viên để hiển thị.'}</p>
               {canManageMembers && (
-                <Button size="sm" onClick={() => setShowInviteModal(true)} className="mt-4">
+                <Button size="sm" onClick={openInviteModal} className="mt-4">
                   ＋ Mời thành viên ngay
                 </Button>
               )}
@@ -651,14 +661,18 @@ export default function ChapterManagerMembersPage() {
               Gửi lời mời tham gia Chapter <span suppressHydrationWarning>{mounted && user?.chapterName ? user.chapterName : ''}</span> qua email.
             </p>
             <form onSubmit={handleInvite} className="space-y-4">
-              <div>
-                <label htmlFor="member-invite-department" className="block text-sm font-semibold text-[#172554] mb-1">Ban của thành viên *</label>
-                <select id="member-invite-department" required value={departmentUnitId} onChange={(event) => setDepartmentUnitId(event.target.value)} disabled={sendingInvite} className="w-full px-4 py-2.5 border border-[#cbdbf5] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]">
-                  <option value="">Chọn ban</option>
-                  {departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
-                </select>
-                {departmentsError ? <p role="alert" className="text-sm text-red-700">{departmentsError}</p> : !departments.length && <p className="text-sm text-[#434655]">Chưa có ban có quyền mời thành viên. Vui lòng liên hệ quản trị viên nếu danh sách không tải được.</p>}
-              </div>
+              <InvitePositionFields
+                idPrefix="member-invite"
+                position={invitePosition}
+                onPositionChange={setInvitePosition}
+                departmentUnitId={departmentUnitId}
+                onDepartmentChange={setDepartmentUnitId}
+                departments={departments}
+                departmentsError={departmentsError}
+                canInviteLeadership={presidentStatus.canInviteLeadership}
+                presidentWarning={presidentStatus.warning}
+                disabled={sendingInvite}
+              />
               <div>
                 <label htmlFor="member-invite-email" className="block text-sm font-semibold text-[#172554] mb-1">Email học viên *</label>
                 <input id="member-invite-email"
@@ -679,7 +693,7 @@ export default function ChapterManagerMembersPage() {
                 >
                   Hủy
                 </Button>
-                <Button type="submit" loading={sendingInvite} loadingText="Đang gửi..." disabled={!departmentUnitId}>
+                <Button type="submit" loading={sendingInvite} loadingText="Đang gửi..." disabled={!inviteTargetReady(invitePosition, departmentUnitId)}>
                   Gửi lời mời
                 </Button>
               </div>
