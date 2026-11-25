@@ -130,7 +130,7 @@ function singleHolderCodeOf(invitation: { role: string; position_code: string | 
  * Khóa Chapter chứa đơn vị (Chapter cha nếu là ban) rồi hủy mọi lời mời đang chờ vào cùng chức vụ, cùng đơn vị,
  * trừ email/lời mời được giữ lại. Mỗi Chapter 1 lời mời Chủ tịch chờ, mỗi ban 1 lời mời Trưởng ban chờ.
  */
-async function cancelOtherSingleHolderInvitations(tx: InvitationTx, unitId: string, positionCode: SingleHolderCode, keep: { email?: string; id?: string }) {
+export async function cancelOtherSingleHolderInvitations(tx: InvitationTx, unitId: string, positionCode: SingleHolderCode, keep: { email?: string; id?: string }) {
   await lockUnitChapter(tx, unitId)
   await tx.invitation.updateMany({
     where: {

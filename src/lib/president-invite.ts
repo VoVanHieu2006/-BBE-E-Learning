@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client'
 import { prisma } from './prisma'
 import {
   REPLACE_CONFIRM_CODES, singleHolderWarning,
@@ -8,12 +9,13 @@ import {
  * Tình trạng một chức vụ "chỉ một người giữ" trong đơn vị của nó: Chủ tịch (đơn vị CHAPTER) hoặc
  * Trưởng ban (đơn vị DEPARTMENT). Trả người đang giữ và các lời mời khác vào cùng chức vụ còn hiệu lực.
  * `excludeEmail` bỏ qua lời mời của chính email đang được mời (lại).
+ * `db`: truyền transaction để đọc trong cùng giao dịch, sau khi đã khóa Chapter (bổ nhiệm tức thì).
  */
-export async function getSingleHolderSituation(unitId: string, positionCode: SingleHolderCode, excludeEmail?: string): Promise<SingleHolderSituation> {
+export async function getSingleHolderSituation(unitId: string, positionCode: SingleHolderCode, excludeEmail?: string, db: Prisma.TransactionClient = prisma): Promise<SingleHolderSituation> {
   const now = new Date()
   const [unit, assignment, pending] = await Promise.all([
-    prisma.organizationUnit.findUnique({ where: { id: unitId }, select: { name: true } }),
-    prisma.positionAssignment.findFirst({
+    db.organizationUnit.findUnique({ where: { id: unitId }, select: { name: true } }),
+    db.positionAssignment.findFirst({
       where: {
         unit_id: unitId,
         position: { code: positionCode },
@@ -24,7 +26,7 @@ export async function getSingleHolderSituation(unitId: string, positionCode: Sin
       orderBy: { starts_at: 'desc' },
       select: { user: { select: { id: true, email: true, display_name: true } } },
     }),
-    prisma.invitation.findMany({
+    db.invitation.findMany({
       where: {
         organization_unit_id: unitId,
         position_code: positionCode,

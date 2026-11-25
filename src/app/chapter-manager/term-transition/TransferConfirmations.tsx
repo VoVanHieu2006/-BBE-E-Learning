@@ -164,7 +164,7 @@ export default function TransferConfirmations({
                   )}
                   {availableDepartments.find((d: any) => d.id === selectedDeptId)?.name !== 'Chủ Tịch' && (
                     <p className="text-[11px] text-slate-500 mt-1 pl-6">
-                      (Nếu được chọn, thành viên sẽ trở thành Trưởng ban mới, thay thế Trưởng ban cũ của ban đó)
+                      (Nếu được chọn, thành viên sẽ trở thành Trưởng ban mới. Mỗi ban chỉ có 1 Trưởng ban: Trưởng ban cũ của ban đó, nếu có, sẽ xuống Thành viên ban sau khi bạn xác nhận.)
                     </p>
                   )}
                 </div>
