@@ -60,8 +60,12 @@ const db = {
   invitations: [] as Row[],
   users: [] as Row[],
   presidents: [] as Array<{ unit_id: string; user: { id: string; email: string; display_name: string | null } }>,
+  deptLeads: [] as Array<{ unit_id: string; user: { id: string; email: string; display_name: string | null } }>,
   assigned: [] as Array<{ userId: string; unitId: string; positionCode: string | null }>,
   memberships: [] as Row[],
+  lockedUnits: [] as string[],
+  /** Thứ tự 'lock:<unit>' / 'claim:<id>' để kiểm khóa Chapter trước khi chiếm lời mời. */
+  events: [] as string[],
   locks: 0,
 }
 const emailCalls: Row[] = []
@@ -89,7 +93,7 @@ const prisma: any = {
     update: async () => ({}),
   },
   positionAssignment: {
-    findFirst: async ({ where }: any) => db.presidents.find((p) => p.unit_id === where.unit_id) ?? null,
+    findFirst: async ({ where }: any) => (where.position?.code === 'DEPARTMENT_LEAD' ? db.deptLeads : where.position?.code === 'PRESIDENT' ? db.presidents : []).find((p) => p.unit_id === where.unit_id) ?? null,
   },
   user: {
     findUnique: async ({ where }: any) => db.users.find((u) => u.email === where.email) ?? null,
@@ -102,7 +106,7 @@ const prisma: any = {
     findUnique: async ({ where }: any) => db.invitations.find((row) => (where.id ? row.id === where.id : row.token_hash === where.token_hash)) ?? null,
     create: async ({ data }: any) => { const row = { id: `inv-${db.invitations.length + 1}`, delivery_method: 'EMAIL', created_at: new Date(), ...data }; db.invitations.push(row); return row },
     update: async ({ where, data }: any) => { const row = db.invitations.find((r) => r.id === where.id)!; Object.assign(row, data); return row },
-    updateMany: async ({ where, data }: any) => { const rows = db.invitations.filter((row) => matches(row, where)); rows.forEach((row) => Object.assign(row, data)); return { count: rows.length } },
+    updateMany: async ({ where, data }: any) => { const rows = db.invitations.filter((row) => matches(row, where)); rows.forEach((row) => Object.assign(row, data)); if (data.status === 'ACCEPTED') db.events.push(...rows.map((row) => `claim:${row.id}`)); return { count: rows.length } },
   },
   chapterMember: { upsert: async () => ({}) },
   organizationMembership: { create: async ({ data }: any) => { db.memberships.push(data) } },
@@ -139,6 +143,8 @@ stub('../lib/learning-assignments', { reconcileLearningAssignmentsForUser: async
 stub('../lib/position-replacement', {
   assignMembershipPosition: async () => { throw new Error('acceptInvitation must call assignInvitedPosition') },
   assignInvitedPosition: async (_tx: unknown, userId: string, unitId: string, positionCode: string | null) => { db.assigned.push({ userId, unitId, positionCode }) },
+  // SQL thật khóa Chapter chứa đơn vị; ở đây ghi lại đơn vị được khóa và đếm số lần khóa.
+  lockUnitChapter: async (tx: any, unitId: string) => { db.lockedUnits.push(unitId); db.events.push(`lock:${unitId}`); return tx.$queryRaw() },
 })
 
 const { resolveMemberInviteScope } = require('../lib/member-invite-scope')
@@ -164,9 +170,12 @@ beforeEach(() => {
   db.invitations.length = 0
   db.users.length = 0
   db.presidents.length = 0
+  db.deptLeads.length = 0
   db.assigned.length = 0
   db.memberships.length = 0
   db.locks = 0
+  db.lockedUnits.length = 0
+  db.events.length = 0
   emailCalls.length = 0
 })
 
@@ -267,7 +276,7 @@ describe('cảnh báo Chủ tịch (checkPresidentInvite / president-status)', (
     assert.equal(leadBody.canInviteLeadership, true)
     assert.match(leadBody.warning, /Nguyễn Văn Cũ/)
     const deptBody = await (await statusRoute.GET(request('deptManager', undefined, 'http://localhost/api/v1/invitations/member/president-status'))).json()
-    assert.deepEqual(deptBody, { canInviteLeadership: false, situation: null, warning: null })
+    assert.deepEqual(deptBody, { canInviteLeadership: false, situation: null, warning: null, departmentLead: null })
   })
 })
 
@@ -408,10 +417,13 @@ describe('API mời nhiều email', () => {
     assert.equal(second.body.results[0].status, 'SENT')
   })
 
-  it('Trưởng ban nhiều email (cùng một ban) → được, tất cả là DEPARTMENT_LEAD', async () => {
-    const res = await call(bulkRoute, 'lead', { emails: 'x@bbe.vn\ny@bbe.vn', position: 'DEPARTMENT_LEAD', organizationUnitId: U.bnd })
-    assert.equal(res.status, 200)
-    assert.deepEqual(db.invitations.map((r) => [r.email, r.position_code, r.organization_unit_id]), [['x@bbe.vn', 'DEPARTMENT_LEAD', U.bnd], ['y@bbe.vn', 'DEPARTMENT_LEAD', U.bnd]])
+  it('Trưởng ban nhiều email (cùng một ban) → 400 DepartmentLeadSingleEmail (mỗi ban 1 LT), không gửi gì', async () => {
+    const res = await call(bulkRoute, 'lead', { emails: ['x@bbe.vn', 'y@bbe.vn'], position: 'DEPARTMENT_LEAD', organizationUnitId: U.bnd })
+    assert.equal(res.status, 400)
+    assert.equal(res.body.error.code, 'DepartmentLeadSingleEmail')
+    assert.match(res.body.error.message, /2 email/)
+    assert.equal(db.invitations.length, 0)
+    assert.equal(emailCalls.length, 0)
   })
 
   it('thành viên thường nhiều email: không bị giới hạn 1 email (hành vi cũ)', async () => {
@@ -582,5 +594,331 @@ describe('getChapterPresidentSituation', () => {
     const situation = await getChapterPresidentSituation(U.chapter, 'cho2@bbe.vn')
     assert.equal(situation.currentPresident.email, 'cu@bbe.vn')
     assert.deepEqual(situation.pendingInvitations.map((r: any) => r.email), ['cho1@bbe.vn'])
+  })
+})
+
+// ======================= Trưởng ban (LT): mỗi ban tối đa 1 LT =======================
+const { checkSingleHolderInvite, getSingleHolderSituation } = require('../lib/president-invite')
+const { inviteSelection, replaceConfirmed, departmentLeadReplacementWarning, PRESIDENT_TARGET } = require('../lib/member-invite-position')
+const seatLead = (unit = U.bnd, email = 'lt-cu@bbe.vn', name: string | null = 'Trần Thị Cũ') => db.deptLeads.push({ unit_id: unit, user: { id: `lt-${email}`, email, display_name: name } })
+const pendingLead = (email: string, unit = U.bnd) => db.invitations.push({ id: `lead-${email}`, email, role: 'MEMBER', organization_unit_id: unit, position_code: 'DEPARTMENT_LEAD', status: 'PENDING', expires_at: future(), invited_by: 'lead', token_hash: `hl-${email}`, created_at: new Date(), delivery_method: 'EMAIL' })
+const pendingLeadCount = (unit = U.bnd) => db.invitations.filter((r) => r.position_code === 'DEPARTMENT_LEAD' && r.organization_unit_id === unit && r.status === 'PENDING').length
+const statusUrl = (query = '') => `http://localhost/api/v1/invitations/member/president-status${query}`
+
+describe('LT: lựa chọn trong modal (inviteSelection) và cờ xác nhận (replaceConfirmed)', () => {
+  it('chọn ban, không tick → thành viên; tick → Trưởng ban; chọn Chủ tịch → bỏ ban, bỏ tick', () => {
+    assert.deepEqual(inviteSelection(U.bnd, false), { position: 'MEMBER', departmentUnitId: U.bnd })
+    assert.deepEqual(inviteSelection(U.bnd, true), { position: 'DEPARTMENT_LEAD', departmentUnitId: U.bnd })
+    assert.deepEqual(inviteSelection(PRESIDENT_TARGET, true), { position: 'PRESIDENT', departmentUnitId: '' })
+    assert.deepEqual(inviteSelection('', true), { position: 'MEMBER', departmentUnitId: '' }, 'chưa chọn ban thì tick LT không có tác dụng')
+  })
+
+  it('confirmReplace chỉ nhận đúng true; confirmReplacePresident (tên cũ) chỉ có tác dụng với Chủ tịch', () => {
+    assert.equal(replaceConfirmed({ confirmReplace: true }, 'DEPARTMENT_LEAD'), true)
+    assert.equal(replaceConfirmed({ confirmReplace: true }, 'PRESIDENT'), true)
+    assert.equal(replaceConfirmed({ confirmReplacePresident: true }, 'PRESIDENT'), true)
+    assert.equal(replaceConfirmed({ confirmReplacePresident: true }, 'DEPARTMENT_LEAD'), false)
+    for (const value of ['true', 1, 'yes', {}, null]) assert.equal(replaceConfirmed({ confirmReplace: value }, 'DEPARTMENT_LEAD'), false, String(value))
+    assert.equal(replaceConfirmed(null, 'PRESIDENT'), false)
+  })
+
+  it('câu cảnh báo LT: nêu tên, email, LT cũ xuống Thành viên của chính ban; LT chưa đặt tên → dùng email', () => {
+    const text = departmentLeadReplacementWarning({ unitName: 'Ban Nội Dung', currentHolder: { userId: 'x', name: 'Trần Thị Cũ', email: 'lt-cu@bbe.vn' }, pendingInvitations: [] })
+    assert.match(text, /Ban Nội Dung đang có Trưởng ban Trần Thị Cũ \(lt-cu@bbe\.vn\)/)
+    assert.match(text, /Trần Thị Cũ sẽ xuống Thành viên Ban Nội Dung/)
+    assert.match(departmentLeadReplacementWarning({ unitName: 'Ban Nội Dung', currentHolder: { userId: 'x', name: '', email: 'khongten@bbe.vn' }, pendingInvitations: [] }), /Trưởng ban khongten@bbe\.vn/)
+    assert.equal(departmentLeadReplacementWarning({ unitName: 'Ban Nội Dung', currentHolder: null, pendingInvitations: [] }), null)
+  })
+})
+
+describe('LT: cảnh báo (checkSingleHolderInvite / president-status ?departmentUnitId=)', () => {
+  it('ban trống LT, không lời mời LT nào → cho gửi, không cảnh báo', async () => {
+    assert.equal((await checkSingleHolderInvite(U.bnd, 'DEPARTMENT_LEAD', 'moi@bbe.vn', undefined)).ok, true)
+  })
+
+  it('ban đã có LT, chưa xác nhận → 409 DepartmentLeadReplaceConfirmRequired nêu tên + email LT + tên ban', async () => {
+    seatLead()
+    const check = await checkSingleHolderInvite(U.bnd, 'DEPARTMENT_LEAD', 'moi@bbe.vn', undefined)
+    assert.equal(check.ok, false)
+    assert.equal(check.status, 409)
+    assert.equal(check.error.code, 'DepartmentLeadReplaceConfirmRequired')
+    assert.match(check.error.message, /Trần Thị Cũ/)
+    assert.match(check.error.message, /lt-cu@bbe\.vn/)
+    assert.match(check.error.message, /xuống Thành viên Ban Nội Dung/)
+    assert.equal(check.error.situation.currentHolder.email, 'lt-cu@bbe.vn')
+  })
+
+  it('xác nhận phải đúng true', async () => {
+    seatLead()
+    for (const value of ['true', 1, 'yes', {}]) assert.equal((await checkSingleHolderInvite(U.bnd, 'DEPARTMENT_LEAD', 'moi@bbe.vn', value)).ok, false, String(value))
+    assert.equal((await checkSingleHolderInvite(U.bnd, 'DEPARTMENT_LEAD', 'moi@bbe.vn', true)).ok, true)
+  })
+
+  it('lời mời LT khác của ban còn hiệu lực → cảnh báo "sẽ bị hủy"; lời mời của chính email đó không tính', async () => {
+    pendingLead('cho-lt@bbe.vn')
+    const other = await checkSingleHolderInvite(U.bnd, 'DEPARTMENT_LEAD', 'moi@bbe.vn', undefined)
+    assert.equal(other.ok, false)
+    assert.match(other.error.message, /cho-lt@bbe\.vn/)
+    assert.match(other.error.message, /sẽ bị hủy/)
+    assert.equal((await checkSingleHolderInvite(U.bnd, 'DEPARTMENT_LEAD', 'cho-lt@bbe.vn', undefined)).ok, true)
+  })
+
+  it('LT / lời mời LT ở ban khác, Chapter khác, Chủ tịch của Chapter, lời mời LT hết hạn/đã hủy → không cảnh báo cho ban này', async () => {
+    seatLead(U.btv)
+    seatLead(U.bnd2, 'lt-khac@bbe.vn')
+    seatPresident()
+    pendingLead('ban-khac@bbe.vn', U.btv)
+    pendingLead('chapter-khac@bbe.vn', U.bnd2)
+    pendingLead('het-han@bbe.vn'); db.invitations.at(-1)!.expires_at = new Date(Date.now() - 1000)
+    pendingLead('da-huy@bbe.vn'); db.invitations.at(-1)!.status = 'CANCELLED'
+    pendingPresident('ct-cho@bbe.vn')
+    assert.equal((await checkSingleHolderInvite(U.bnd, 'DEPARTMENT_LEAD', 'moi@bbe.vn', undefined)).ok, true)
+  })
+
+  it('Chủ tịch vẫn kiểm theo Chapter: LT của ban không làm phát sinh cảnh báo Chủ tịch', async () => {
+    seatLead()
+    pendingLead('cho-lt@bbe.vn')
+    assert.equal((await checkPresidentInvite(U.chapter, 'moi@bbe.vn', undefined)).ok, true)
+  })
+
+  it('getSingleHolderSituation trả tên ban, LT hiện tại, lời mời chờ (bỏ email đang mời)', async () => {
+    seatLead()
+    pendingLead('c1@bbe.vn')
+    pendingLead('c2@bbe.vn')
+    const situation = await getSingleHolderSituation(U.bnd, 'DEPARTMENT_LEAD', 'c2@bbe.vn')
+    assert.equal(situation.unitName, 'Ban Nội Dung')
+    assert.equal(situation.currentHolder.email, 'lt-cu@bbe.vn')
+    assert.deepEqual(situation.pendingInvitations.map((r: any) => r.email), ['c1@bbe.vn'])
+  })
+
+  it('GET president-status?departmentUnitId=: Lead thấy cảnh báo LT của ban mình', async () => {
+    seatLead()
+    const body = await (await statusRoute.GET(request('lead', undefined, statusUrl(`?departmentUnitId=${U.bnd}`)))).json()
+    assert.equal(body.canInviteLeadership, true)
+    assert.match(body.departmentLead.warning, /Trần Thị Cũ/)
+    assert.equal(body.warning, null, 'Chapter chưa có Chủ tịch')
+    const empty = await (await statusRoute.GET(request('lead', undefined, statusUrl(`?departmentUnitId=${U.btv}`)))).json()
+    assert.equal(empty.departmentLead.warning, null)
+    assert.equal(empty.departmentLead.situation.unitName, 'Ban Thành Viên')
+  })
+
+  it('GET president-status: ban Chapter khác / ban ngừng hoạt động / nhóm DNA / id sai / không gửi → departmentLead null; người quản lý ban không thấy gì', async () => {
+    seatLead(U.bnd2, 'lt-khac@bbe.vn')
+    for (const query of [`?departmentUnitId=${U.bnd2}`, `?departmentUnitId=${U.inactiveDept}`, `?departmentUnitId=${U.dna}`, `?departmentUnitId=${U.chapter}`, '?departmentUnitId=khong-phai-uuid', '']) {
+      const body = await (await statusRoute.GET(request('lead', undefined, statusUrl(query)))).json()
+      assert.equal(body.departmentLead, null, query)
+    }
+    seatLead()
+    const dept = await (await statusRoute.GET(request('deptManager', undefined, statusUrl(`?departmentUnitId=${U.bnd}`)))).json()
+    assert.deepEqual(dept, { canInviteLeadership: false, situation: null, warning: null, departmentLead: null })
+  })
+})
+
+describe('LT: API mời một email', () => {
+  it('tick LT + ban trống LT → 201 lời mời DEPARTMENT_LEAD, không hỏi gì, có khóa Chapter theo ban', async () => {
+    const res = await call(singleRoute, 'lead', { email: 'LT-Moi@BBE.vn', position: 'DEPARTMENT_LEAD', organizationUnitId: U.bnd })
+    assert.equal(res.status, 201)
+    assert.equal(res.body.positionCode, 'DEPARTMENT_LEAD')
+    const [row] = live('lt-moi@bbe.vn')
+    assert.deepEqual([row.organization_unit_id, row.position_code], [U.bnd, 'DEPARTMENT_LEAD'])
+    assert.deepEqual(db.lockedUnits, [U.bnd])
+  })
+
+  it('ban đã có LT: 409 + cảnh báo, KHÔNG tạo lời mời, KHÔNG gửi mail; confirmReplace: true → 201', async () => {
+    seatLead()
+    const first = await call(singleRoute, 'lead', { email: 'moi@bbe.vn', position: 'DEPARTMENT_LEAD', organizationUnitId: U.bnd })
+    assert.equal(first.status, 409)
+    assert.equal(first.body.error.code, 'DepartmentLeadReplaceConfirmRequired')
+    assert.match(first.body.error.message, /Trần Thị Cũ/)
+    assert.equal(db.invitations.length, 0)
+    assert.equal(emailCalls.length, 0)
+    const confirmed = await call(singleRoute, 'lead', { email: 'moi@bbe.vn', position: 'DEPARTMENT_LEAD', organizationUnitId: U.bnd, confirmReplace: true })
+    assert.equal(confirmed.status, 201)
+    assert.equal(live('moi@bbe.vn')[0].position_code, 'DEPARTMENT_LEAD')
+  })
+
+  it('xác nhận sai kiểu ("true", 1) hoặc dùng tên cũ confirmReplacePresident → vẫn 409', async () => {
+    seatLead()
+    for (const extra of [{ confirmReplace: 'true' }, { confirmReplace: 1 }, { confirmReplacePresident: true }]) {
+      const res = await call(singleRoute, 'lead', { email: 'moi@bbe.vn', position: 'DEPARTMENT_LEAD', organizationUnitId: U.bnd, ...extra })
+      assert.equal(res.status, 409, JSON.stringify(extra))
+    }
+    assert.equal(db.invitations.length, 0)
+  })
+
+  it('đang có lời mời LT cho người khác cùng ban: 409; xác nhận → lời mời đó bị hủy, còn đúng 1 lời mời LT chờ; ban khác / Chapter khác / Chủ tịch / thành viên không bị đụng', async () => {
+    pendingLead('cho-lt@bbe.vn')
+    pendingLead('ban-khac@bbe.vn', U.btv)
+    pendingLead('chapter-khac@bbe.vn', U.bnd2)
+    pendingPresident('ct-cho@bbe.vn')
+    db.invitations.push({ id: 'tv-bnd', email: 'tv-bnd@bbe.vn', role: 'MEMBER', organization_unit_id: U.bnd, position_code: null, status: 'PENDING', expires_at: future(), invited_by: 'lead', token_hash: 'tvb' })
+    assert.equal((await call(singleRoute, 'lead', { email: 'moi@bbe.vn', position: 'DEPARTMENT_LEAD', organizationUnitId: U.bnd })).status, 409)
+    assert.equal(live('cho-lt@bbe.vn').length, 1, 'chưa xác nhận thì không đụng lời mời cũ')
+    assert.equal((await call(singleRoute, 'lead', { email: 'moi@bbe.vn', position: 'DEPARTMENT_LEAD', organizationUnitId: U.bnd, confirmReplace: true })).status, 201)
+    assert.equal(db.invitations.find((r) => r.email === 'cho-lt@bbe.vn')!.status, 'CANCELLED')
+    assert.equal(pendingLeadCount(), 1)
+    for (const email of ['ban-khac@bbe.vn', 'chapter-khac@bbe.vn', 'ct-cho@bbe.vn', 'tv-bnd@bbe.vn']) assert.equal(live(email).length, 1, email)
+  })
+
+  it('mời thành viên thường vào ban đã có LT: 201, không hỏi, không hủy lời mời LT chờ', async () => {
+    seatLead()
+    pendingLead('cho-lt@bbe.vn')
+    const res = await call(singleRoute, 'lead', { email: 'tv@bbe.vn', organizationUnitId: U.bnd })
+    assert.equal(res.status, 201)
+    assert.equal(live('tv@bbe.vn')[0].position_code, null)
+    assert.equal(live('cho-lt@bbe.vn').length, 1)
+    assert.equal(db.locks, 0, 'thành viên thường không khóa Chapter')
+  })
+
+  it('Chủ tịch: tên xác nhận chung confirmReplace cũng dùng được (bên cạnh tên cũ)', async () => {
+    seatPresident()
+    assert.equal((await call(singleRoute, 'lead', { email: 'ct-moi@bbe.vn', position: 'PRESIDENT', confirmReplace: true })).status, 201)
+    assert.deepEqual(db.lockedUnits, [U.chapter])
+  })
+
+  it('quyền: người quản lý một ban, Admin, Lead Chapter khác không mời được LT; không tạo lời mời nào', async () => {
+    for (const [actor, unit, status] of [['deptManager', U.bnd, 403], ['admin', U.bnd, 400], ['lead2', U.bnd, 403], ['lead', U.bnd2, 403], ['dnaManager', U.dna, 400]] as const) {
+      const res = await call(singleRoute, actor, { email: 'moi@bbe.vn', position: 'DEPARTMENT_LEAD', organizationUnitId: unit, confirmReplace: true })
+      assert.equal(res.status, status, `${actor}/${unit}`)
+    }
+    assert.equal(db.invitations.length, 0)
+  })
+
+  it('người quản lý một ban vẫn mời thành viên thường vào ban của mình (không đổi)', async () => {
+    seatLead()
+    assert.equal((await call(singleRoute, 'deptManager', { email: 'tv2@bbe.vn', organizationUnitId: U.bnd })).status, 201)
+  })
+})
+
+describe('LT: API mời nhiều email (tạm thời ở ticket 01)', () => {
+  it('position DEPARTMENT_LEAD + 1 email đúng + 1 email sai định dạng → vẫn chặn (2 dòng)', async () => {
+    const res = await call(bulkRoute, 'lead', { emails: 'a@bbe.vn, sai', position: 'DEPARTMENT_LEAD', organizationUnitId: U.bnd })
+    assert.equal(res.status, 400)
+    assert.equal(res.body.error.code, 'DepartmentLeadSingleEmail')
+    assert.equal(db.invitations.length, 0)
+  })
+
+  it('position DEPARTMENT_LEAD + 1 email, ban đã có LT → 409, chưa gửi; confirmReplace → gửi', async () => {
+    seatLead()
+    const first = await call(bulkRoute, 'lead', { emails: ['moi@bbe.vn'], position: 'DEPARTMENT_LEAD', organizationUnitId: U.bnd })
+    assert.equal(first.status, 409)
+    assert.equal(first.body.error.code, 'DepartmentLeadReplaceConfirmRequired')
+    assert.equal(db.invitations.length, 0)
+    assert.equal(emailCalls.length, 0)
+    const second = await call(bulkRoute, 'lead', { emails: ['moi@bbe.vn'], position: 'DEPARTMENT_LEAD', organizationUnitId: U.bnd, confirmReplace: true })
+    assert.equal(second.status, 200)
+    assert.equal(second.body.results[0].status, 'SENT')
+  })
+
+  it('chọn ban ở tab Nhiều email = mọi email là thành viên (không hỏi dù ban đã có LT)', async () => {
+    seatLead()
+    const res = await call(bulkRoute, 'lead', { emails: ['m1@bbe.vn', 'm2@bbe.vn'], organizationUnitId: U.bnd })
+    assert.equal(res.status, 200)
+    assert.deepEqual(db.invitations.map((r) => r.position_code), [null, null])
+  })
+
+  it('Chủ tịch trong tab Nhiều email với tên xác nhận chung confirmReplace', async () => {
+    seatPresident()
+    const res = await call(bulkRoute, 'lead', { emails: ['ct@bbe.vn'], position: 'PRESIDENT', confirmReplace: true })
+    assert.equal(res.status, 200)
+  })
+})
+
+describe('LT: gửi lại lời mời (cùng luật cảnh báo như gửi mới)', () => {
+  const RESEND_ID = '88888888-8888-4888-8888-888888888888'
+  const oldLeadInvite = (status = 'CANCELLED', unit = U.bnd) => db.invitations.push({ id: RESEND_ID, email: 'lt-gui-lai@bbe.vn', role: 'MEMBER', organization_unit_id: unit, position_code: 'DEPARTMENT_LEAD', status, expires_at: future(), invited_by: 'lead', token_hash: 'r', delivery_method: 'EMAIL' })
+  const resendRoute = require('../app/api/v1/invitations/[id]/resend/route')
+  const resend = async (actor: string, body: unknown = {}) => {
+    const res = await resendRoute.POST(request(actor, body, `http://localhost/api/v1/invitations/${RESEND_ID}/resend`))
+    return { status: res.status, body: await res.json() }
+  }
+
+  it('ban đã có LT: gửi lại không xác nhận → 409, lời mời vẫn CANCELLED, không gửi mail; confirmReplace → 200 PENDING', async () => {
+    seatLead()
+    oldLeadInvite()
+    const res = await resend('lead')
+    assert.equal(res.status, 409)
+    assert.equal(res.body.error.code, 'DepartmentLeadReplaceConfirmRequired')
+    assert.match(res.body.error.message, /Trần Thị Cũ/)
+    assert.equal(db.invitations[0].status, 'CANCELLED')
+    assert.equal(emailCalls.length, 0)
+    assert.equal((await resend('lead', { confirmReplacePresident: true })).status, 409, 'tên cũ chỉ dành cho Chủ tịch')
+    const ok = await resend('lead', { confirmReplace: true })
+    assert.equal(ok.status, 200)
+    assert.equal(db.invitations[0].status, 'PENDING')
+  })
+
+  it('đang có lời mời LT khác cùng ban: 409; xác nhận → lời mời kia bị hủy, còn đúng 1 lời mời LT chờ; ban khác không bị đụng', async () => {
+    oldLeadInvite()
+    pendingLead('dang-cho@bbe.vn')
+    pendingLead('ban-khac@bbe.vn', U.btv)
+    assert.equal((await resend('lead')).status, 409)
+    assert.equal(live('dang-cho@bbe.vn').length, 1)
+    assert.equal((await resend('lead', { confirmReplace: true })).status, 200)
+    assert.equal(live('dang-cho@bbe.vn').length, 0)
+    assert.equal(pendingLeadCount(), 1)
+    assert.equal(live('ban-khac@bbe.vn').length, 1)
+    assert.deepEqual(db.lockedUnits, [U.bnd])
+  })
+
+  it('ban trống LT, không lời mời khác → gửi lại thẳng', async () => {
+    oldLeadInvite('EXPIRED')
+    assert.equal((await resend('lead')).status, 200)
+  })
+
+  it('người chỉ quản lý ban đó không gửi lại được lời mời LT (cần quyền cấp Chapter); Lead Chapter khác cũng không', async () => {
+    oldLeadInvite('PENDING')
+    const dept = await resend('deptManager', { confirmReplace: true })
+    assert.equal(dept.status, 403)
+    assert.equal((await resend('lead2', { confirmReplace: true })).status, 403)
+    assert.equal(emailCalls.length, 0)
+  })
+
+  it('người quản lý ban vẫn gửi lại được lời mời thành viên thường của ban mình', async () => {
+    db.invitations.push({ id: RESEND_ID, email: 'tv@bbe.vn', role: 'MEMBER', organization_unit_id: U.bnd, position_code: null, status: 'EXPIRED', expires_at: future(), invited_by: 'lead', token_hash: 't', delivery_method: 'EMAIL' })
+    assert.equal((await resend('deptManager')).status, 200)
+  })
+})
+
+describe('LT: kích hoạt lời mời', () => {
+  const seed = (id: string, unit: string, positionCode: string | null) => {
+    const token = `token-${id}`
+    db.invitations.push({ id, email: `${id}@bbe.vn`, role: 'MEMBER', organization_unit_id: unit, chapter_id: null, position_code: positionCode, status: 'PENDING', expires_at: future(), invited_by: 'lead', token_hash: hashToken(token), delivery_method: 'EMAIL' })
+    return token
+  }
+  const realFindUnique = prisma.organizationUnit.findUnique
+  beforeEach(() => {
+    prisma.organizationUnit.findUnique = async (args: any) => {
+      const unit = await realFindUnique(args)
+      if (!unit) return null
+      const chapter = chapters.find((c) => c.organization_unit_id === unit.id)
+      return { ...unit, chapter: chapter ? { id: chapter.id } : null }
+    }
+  })
+
+  it('kích hoạt LT: khóa Chapter trước khi chiếm lời mời, hủy mọi lời mời LT khác của ban, gán DEPARTMENT_LEAD', async () => {
+    pendingLead('sot@bbe.vn')
+    pendingLead('ban-khac@bbe.vn', U.btv)
+    pendingLead('chapter-khac@bbe.vn', U.bnd2)
+    pendingPresident('ct-cho@bbe.vn')
+    const result = await acceptInvitation(seed('ltnew', U.bnd, 'DEPARTMENT_LEAD'), 'Mat-khau-1', 'ltnew@bbe.vn')
+    assert.equal(result.ok, true)
+    assert.equal(live('sot@bbe.vn').length, 0)
+    for (const email of ['ban-khac@bbe.vn', 'chapter-khac@bbe.vn', 'ct-cho@bbe.vn']) assert.equal(live(email).length, 1, email)
+    assert.deepEqual(db.assigned, [{ userId: result.userId, unitId: U.bnd, positionCode: 'DEPARTMENT_LEAD' }])
+    assert.deepEqual(db.events.slice(0, 2), [`lock:${U.bnd}`, 'claim:ltnew'], 'khóa Chapter trước khi chiếm lời mời (cùng thứ tự với lượt gửi)')
+  })
+
+  it('kích hoạt thành viên thường không khóa Chapter, không hủy lời mời LT', async () => {
+    pendingLead('cho-lt@bbe.vn')
+    assert.equal((await acceptInvitation(seed('tvnew', U.bnd, null), 'Mat-khau-1', 'tvnew@bbe.vn')).ok, true)
+    assert.equal(db.locks, 0)
+    assert.equal(live('cho-lt@bbe.vn').length, 1)
+  })
+
+  it('kích hoạt Chủ tịch không hủy lời mời LT nào', async () => {
+    pendingLead('cho-lt@bbe.vn')
+    assert.equal((await acceptInvitation(seed('ctnew', U.chapter, 'PRESIDENT'), 'Mat-khau-1', 'ctnew@bbe.vn')).ok, true)
+    assert.equal(live('cho-lt@bbe.vn').length, 1)
   })
 })

@@ -5,16 +5,18 @@ import { invalidateInvitationsServerCache } from '@/lib/server-cache'
 import { resolveMemberInviteScope } from '@/lib/member-invite-scope'
 import { isValidInviteEmail } from '@/lib/bulk-invite'
 import { canManageInvitation } from '@/lib/invitation-management'
-import { checkPresidentInvite } from '@/lib/president-invite'
+import { checkSingleHolderInvite } from '@/lib/president-invite'
+import { replaceConfirmed } from '@/lib/member-invite-position'
 
 /**
  * POST /api/v1/invitations/member
  * Send invitation to a member.
  * Scoped organization managers may invite ordinary members into their unit.
  * Admin member invitations continue to use the separate Admin invitation flow.
- * Body: { email, organizationUnitId?, position?: MEMBER|DEPARTMENT_LEAD|PRESIDENT, confirmReplacePresident?: boolean }
- * Mời Chủ tịch khi Chapter đã có Chủ tịch/lời mời Chủ tịch khác → 409 PresidentReplaceConfirmRequired
- * (kèm cảnh báo) cho tới khi gửi lại với confirmReplacePresident: true.
+ * Body: { email, organizationUnitId?, position?: MEMBER|DEPARTMENT_LEAD|PRESIDENT, confirmReplace?: boolean }
+ * Mời Chủ tịch khi Chapter đã có Chủ tịch/lời mời Chủ tịch khác → 409 PresidentReplaceConfirmRequired;
+ * mời Trưởng ban khi ban đã có Trưởng ban/lời mời Trưởng ban khác → 409 DepartmentLeadReplaceConfirmRequired
+ * (kèm cảnh báo) cho tới khi gửi lại với confirmReplace: true (tên cũ confirmReplacePresident vẫn nhận cho Chủ tịch).
  */
 export async function POST(request: NextRequest) {
   const auth = await authenticate(request)
@@ -38,8 +40,8 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  if (positionCode === 'PRESIDENT') {
-    const check = await checkPresidentInvite(organizationUnitId!, email, body.confirmReplacePresident)
+  if (positionCode) {
+    const check = await checkSingleHolderInvite(organizationUnitId!, positionCode, email, replaceConfirmed(body, positionCode))
     if (check.ok === false) return NextResponse.json({ error: check.error }, { status: check.status })
   }
 

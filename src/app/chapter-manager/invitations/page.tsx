@@ -10,7 +10,7 @@ import EmailQuotaNotice, { useEmailQuota } from '@/components/invitations/EmailQ
 import InviteLinkButton from '@/components/invitations/InviteLinkButton';
 import DeliveryNote from '@/components/invitations/DeliveryNote';
 import InvitePositionFields, { postInviteWithPresidentConfirm, usePresidentStatus } from '@/components/invitations/InvitePositionFields';
-import { INVITE_POSITION_LABELS, invitationTargetLabel, invitePayload, inviteTargetReady, type InvitePosition } from '@/lib/member-invite-position';
+import { INVITE_POSITION_LABELS, PRESIDENT_TARGET, invitationTargetLabel, invitePayload, inviteSelection, inviteTargetReady } from '@/lib/member-invite-position';
 
 export default function ChapterManagerInvitationsPage() {
   const [user, setUser] = useState<any>(null);
@@ -20,12 +20,17 @@ export default function ChapterManagerInvitationsPage() {
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
-  const [departmentUnitId, setDepartmentUnitId] = useState('');
-  const [invitePosition, setInvitePosition] = useState<InvitePosition>('MEMBER');
-  const presidentStatus = usePresidentStatus();
+  // Ô Ban: id ban, PRESIDENT_TARGET (Chủ tịch Chapter) hoặc rỗng; ô tick LT chỉ áp ở tab Một email.
+  const [inviteTarget, setInviteTarget] = useState('');
+  const [makeLead, setMakeLead] = useState(false);
+  const presidentStatus = usePresidentStatus(true, inviteTarget);
   const [departments, setDepartments] = useState<Array<{ id: string; name: string }>>([]);
   const [departmentsError, setDepartmentsError] = useState('');
   const [inviteMode, setInviteMode] = useState<'single' | 'bulk'>('single');
+  const { position: invitePosition, departmentUnitId } = inviteSelection(
+    presidentStatus.canInviteLeadership || inviteTarget !== PRESIDENT_TARGET ? inviteTarget : '',
+    inviteMode === 'single' && makeLead && presidentStatus.canInviteLeadership,
+  );
   const [sending, setSending] = useState(false);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
@@ -85,7 +90,7 @@ export default function ChapterManagerInvitationsPage() {
     clearApiCache('/api/v1/invitations');
 
     const res = await postInviteWithPresidentConfirm('/api/v1/invitations/member', { email: inviteEmail.trim(), ...invitePayload(invitePosition, departmentUnitId) });
-    if (!res) { setSending(false); showToast('info', 'Chưa gửi lời mời Chủ tịch vì bạn chưa xác nhận thay thế.'); return; }
+    if (!res) { setSending(false); showToast('info', `Chưa gửi lời mời ${INVITE_POSITION_LABELS[invitePosition]} vì bạn chưa xác nhận thay thế.`); return; }
 
     if (res.ok) {
       presidentStatus.refresh();
@@ -106,8 +111,9 @@ export default function ChapterManagerInvitationsPage() {
 
   function openInviteModal() {
     setInviteMode('single');
-    // Mỗi lần mở lại modal về mặc định Thành viên ban, tránh vô tình mời thêm một Chủ tịch.
-    setInvitePosition('MEMBER');
+    // Mỗi lần mở lại modal về mặc định Thành viên ban (bỏ tick LT, bỏ Chủ tịch), tránh vô tình thay Chủ tịch/Trưởng ban.
+    setMakeLead(false);
+    if (inviteTarget === PRESIDENT_TARGET) setInviteTarget('');
     presidentStatus.refresh();
     setShowInviteModal(true);
   }
@@ -117,7 +123,7 @@ export default function ChapterManagerInvitationsPage() {
     clearApiCache('/api/v1/invitations');
     try {
       const res = await postInviteWithPresidentConfirm(`/api/v1/invitations/${invitationId}/resend`, {});
-      if (!res) { showToast('info', 'Chưa gửi lại lời mời Chủ tịch vì bạn chưa xác nhận thay thế.'); return; }
+      if (!res) { showToast('info', 'Chưa gửi lại lời mời vì bạn chưa xác nhận thay thế.'); return; }
       if (res.ok) {
         presidentStatus.refresh();
         if (res.data?.emailSent === false) {
@@ -327,14 +333,16 @@ export default function ChapterManagerInvitationsPage() {
             {inviteMode === 'single' && <EmailQuotaNotice quota={quota} />}
             <InvitePositionFields
               idPrefix="invite"
-              position={invitePosition}
-              onPositionChange={setInvitePosition}
-              departmentUnitId={departmentUnitId}
-              onDepartmentChange={setDepartmentUnitId}
+              target={inviteTarget}
+              onTargetChange={setInviteTarget}
               departments={departments}
               departmentsError={departmentsError}
               canInviteLeadership={presidentStatus.canInviteLeadership}
+              showLeadToggle={inviteMode === 'single'}
+              makeLead={makeLead}
+              onMakeLeadChange={setMakeLead}
               presidentWarning={presidentStatus.warning}
+              departmentLeadWarning={presidentStatus.departmentUnitId === inviteTarget ? presidentStatus.departmentLeadWarning : null}
               disabled={sending}
             />
             <div className="flex gap-2" role="tablist" aria-label="Cách mời">

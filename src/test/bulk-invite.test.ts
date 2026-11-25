@@ -85,10 +85,14 @@ describe('bulk invite route keeps the single-invite permission rules', () => {
       assert.match(source, /invitePayload\(invitePosition, departmentUnitId\)/, file)
       assert.doesNotMatch(source, /JSON\.stringify\(\{ (?:email: inviteEmail\.trim\(\)|emails: bulkText), chapterId:/, file)
       assert.match(source, /if \(!inviteTargetReady\(invitePosition, departmentUnitId\)\)/, file)
-      assert.match(source, /<InvitePositionFields[\s\S]*?departmentUnitId=\{departmentUnitId\}/, file)
+      // Ô Ban (ban / ⭐ Chủ tịch) + ô tick LT được đổi thành chức vụ + ban qua inviteSelection; không còn ô Chức vụ riêng.
+      assert.match(source, /inviteSelection\(/, file)
+      assert.match(source, /<InvitePositionFields[\s\S]*?target=\{inviteTarget\}[\s\S]*?makeLead=\{makeLead\}/, file)
+      assert.doesNotMatch(source, /onPositionChange/, file)
     }
     const fields = read('src/components/invitations/InvitePositionFields.tsx')
-    assert.match(fields, /<select[^>]*value=\{departmentUnitId\}/)
+    assert.match(fields, /<select[^>]*value=\{target\}/)
+    assert.doesNotMatch(fields, /-position`/, 'không còn select Chức vụ')
   })
 
   it('LEAD and DNA invite pages share the bulk panel, which needs the unit before sending', () => {

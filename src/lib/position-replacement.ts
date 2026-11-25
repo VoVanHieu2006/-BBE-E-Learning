@@ -65,6 +65,41 @@ export async function replaceUserPosition(tx: Prisma.TransactionClient, input: {
   return assignment
 }
 
+/**
+ * Khóa dòng Chapter chứa đơn vị: chính nó nếu là đơn vị CHAPTER, Chapter cha nếu là ban.
+ * Mọi thao tác trên chức vụ "chỉ một người giữ" (Chủ tịch, Trưởng ban) và lời mời vào chức vụ đó
+ * khóa Chapter trước tiên, trước bất kỳ người dùng hay lời mời nào, để hai lượt đồng thời chạy lần lượt.
+ */
+export async function lockUnitChapter(tx: Prisma.TransactionClient, unitId: string) {
+  await tx.$queryRaw`SELECT c.id FROM chapters c JOIN organization_units u ON c.organization_unit_id = CASE WHEN u.type = 'CHAPTER' THEN u.id ELSE u.parent_id END WHERE u.id = ${unitId}::uuid FOR UPDATE OF c`
+}
+
+/**
+ * Mỗi ban chỉ 1 Trưởng ban: mọi Trưởng ban khác (đang tại nhiệm hoặc đã lên lịch) của ban, trừ `keepUserId`,
+ * xuống Thành viên của chính ban đó. Lịch sử chức vụ giữ nguyên (chỉ đóng ngày kết thúc qua replaceUserPosition),
+ * phiên được làm mới quyền (auth_version tăng), lộ trình học được đồng bộ lại.
+ * Caller sở hữu transaction. Khóa Chapter trước người dùng (cùng thứ tự với nhánh Chủ tịch của replaceUserPosition).
+ * Trả danh sách userId đã bị hạ.
+ */
+export async function demoteOtherDepartmentLeads(tx: Prisma.TransactionClient, departmentUnitId: string, keepUserId: string, actorId?: string): Promise<string[]> {
+  const unit = await tx.organizationUnit.findUniqueOrThrow({ where: { id: departmentUnitId } })
+  if (unit.type !== 'DEPARTMENT') throw new OrganizationConflict('PositionScopeMismatch', 'Trưởng ban phải thuộc một ban.')
+  await lockUnitChapter(tx, unit.id)
+  const now = new Date()
+  const incumbents = await tx.positionAssignment.findMany({
+    where: { unit_id: unit.id, user_id: { not: keepUserId }, position: { code: 'DEPARTMENT_LEAD' }, OR: [{ ends_at: null }, { ends_at: { gt: now } }] },
+    select: { user_id: true }, orderBy: { user_id: 'asc' },
+  })
+  const userIds = Array.from(new Set(incumbents.map(row => row.user_id)))
+  if (!userIds.length) return []
+  const member = await tx.position.upsert({ where: { code: 'DEPARTMENT_MEMBER' }, update: {}, create: { code: 'DEPARTMENT_MEMBER', name: 'Thành viên ban', scope: 'DEPARTMENT' } })
+  for (const userId of userIds) {
+    await replaceUserPosition(tx, { userId, unitId: unit.id, positionId: member.id, actorId })
+    await enqueueAssignmentSync(tx, userId, `department-lead-replaced:${unit.id}:${userId}:${now.toISOString()}`)
+  }
+  return userIds
+}
+
 /** Adding a learner to a leaf unit also supplies their one canonical position. */
 export async function assignMembershipPosition(tx: Prisma.TransactionClient, userId: string, unitId: string, actorId?: string) {
   const unit = await tx.organizationUnit.findUniqueOrThrow({ where: { id: unitId } })
@@ -77,7 +112,7 @@ export async function assignMembershipPosition(tx: Prisma.TransactionClient, use
 /**
  * Chức vụ cho người vừa kích hoạt lời mời thành viên. Không có position_code: như cũ (thành viên ban/DNA).
  * PRESIDENT trỏ vào đơn vị CHAPTER; replaceUserPosition tự kết thúc Chủ tịch cũ (thành thành viên chưa phân Ban).
- * DEPARTMENT_LEAD trỏ vào một ban.
+ * DEPARTMENT_LEAD trỏ vào một ban; Trưởng ban cũ của ban xuống Thành viên ban (demoteOtherDepartmentLeads).
  */
 export async function assignInvitedPosition(tx: Prisma.TransactionClient, userId: string, unitId: string, positionCode: string | null, actorId?: string) {
   if (!positionCode) return assignMembershipPosition(tx, userId, unitId, actorId)
@@ -90,6 +125,7 @@ export async function assignInvitedPosition(tx: Prisma.TransactionClient, userId
   if (positionCode === 'DEPARTMENT_LEAD') {
     if (unit.type !== 'DEPARTMENT') throw new OrganizationConflict('PositionScopeMismatch', 'Lời mời Trưởng ban phải trỏ vào một ban.')
     const position = await tx.position.upsert({ where: { code: 'DEPARTMENT_LEAD' }, update: {}, create: { code: 'DEPARTMENT_LEAD', name: 'Trưởng ban', scope: 'DEPARTMENT', is_manager: false } })
+    await demoteOtherDepartmentLeads(tx, unit.id, userId, actorId)
     return replaceUserPosition(tx, { userId, unitId, positionId: position.id, actorId })
   }
   throw new OrganizationConflict('PositionRoleMismatch', 'Chức vụ trong lời mời không hợp lệ.')

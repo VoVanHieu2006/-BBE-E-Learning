@@ -100,7 +100,7 @@ export default function BulkInvitePanel({ organizationUnitId, position = 'MEMBER
   async function sendBulk(emails: string[]): Promise<BulkInviteResultItem[] | null> {
     clearApiCache('/api/v1/invitations')
     const res = await postInviteWithPresidentConfirm('/api/v1/invitations/member/bulk', { emails, ...invitePayload(position, organizationUnitId) })
-    if (!res) { setError('Đã dừng: bạn chưa xác nhận thay Chủ tịch. Chưa có lời mời nào được gửi.'); return null }
+    if (!res) { setError('Đã dừng: bạn chưa xác nhận thay người đang giữ chức vụ. Chưa có lời mời nào được gửi.'); return null }
     if (res.ok && Array.isArray(res.data?.results)) return res.data.results as BulkInviteResultItem[]
     setError(res.error?.code === 'AccessDenied' || res.status === 403
       ? 'Bạn không có quyền mời thành viên vào ban hoặc nhóm này. Chưa có lời mời nào được gửi.'

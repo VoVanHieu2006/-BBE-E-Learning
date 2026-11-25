@@ -15,6 +15,7 @@ export const INVITE_POSITION_LABELS: Record<InvitePosition, string> = {
 }
 
 export const PRESIDENT_SINGLE_EMAIL_MESSAGE = 'Mỗi Chapter chỉ có 1 Chủ tịch. Khi mời Chủ tịch, danh sách chỉ được có đúng 1 email.'
+export const DEPARTMENT_LEAD_SINGLE_EMAIL_MESSAGE = 'Mỗi ban chỉ có 1 Trưởng ban. Khi mời Trưởng ban, danh sách chỉ được có đúng 1 email.'
 export const INVALID_INVITE_POSITION_MESSAGE = 'Chức vụ mời không hợp lệ. Chọn Thành viên ban, Trưởng ban hoặc Chủ tịch Chapter.'
 
 /** Không truyền = MEMBER (giữ tương thích client cũ); giá trị lạ = null (từ chối). */
@@ -63,6 +64,73 @@ export function presidentReplacementWarning(situation: PresidentSituation): stri
   return parts.length ? parts.join(' ') : null
 }
 
+/**
+ * Chức vụ "chỉ một người giữ" trong đơn vị của nó: Chủ tịch (mỗi Chapter 1) và Trưởng ban (mỗi ban 1).
+ * Mời người mới vào chức vụ đang có người giữ (hoặc đang có lời mời khác) phải cảnh báo và xác nhận.
+ */
+export type SingleHolderCode = InvitePositionCode
+export const REPLACE_CONFIRM_CODES: Record<SingleHolderCode, 'PresidentReplaceConfirmRequired' | 'DepartmentLeadReplaceConfirmRequired'> = {
+  PRESIDENT: 'PresidentReplaceConfirmRequired',
+  DEPARTMENT_LEAD: 'DepartmentLeadReplaceConfirmRequired',
+}
+export type ReplaceConfirmCode = (typeof REPLACE_CONFIRM_CODES)[SingleHolderCode]
+export const isReplaceConfirmCode = (code: unknown): code is ReplaceConfirmCode => code === REPLACE_CONFIRM_CODES.PRESIDENT || code === REPLACE_CONFIRM_CODES.DEPARTMENT_LEAD
+
+export interface SingleHolderSituation {
+  positionCode: SingleHolderCode
+  /** Tên đơn vị (tên ban với Trưởng ban); dùng trong câu cảnh báo. */
+  unitName: string
+  /** Người đang giữ chức vụ trong đơn vị (nếu có). */
+  currentHolder: { userId: string; name: string; email: string } | null
+  /** Lời mời khác vào cùng chức vụ, cùng đơn vị, còn hiệu lực (không tính email đang mời). */
+  pendingInvitations: Array<{ id: string; email: string; expiresAt: string }>
+  /** Chỉ với Chủ tịch: bản sao `currentHolder` theo tên cũ, giữ tương thích body 409 trước đây. */
+  currentPresident?: SingleHolderSituation['currentHolder']
+}
+
+/** Câu cảnh báo khi mời Trưởng ban mới; null nếu ban chưa có Trưởng ban và không có lời mời Trưởng ban nào khác. */
+export function departmentLeadReplacementWarning(situation: Pick<SingleHolderSituation, 'unitName' | 'currentHolder' | 'pendingInvitations'>): string | null {
+  const unit = situation.unitName || 'Ban này'
+  const parts: string[] = []
+  if (situation.currentHolder) {
+    const who = situation.currentHolder.name || situation.currentHolder.email
+    parts.push(`${unit} đang có Trưởng ban ${who} (${situation.currentHolder.email}). Mỗi ban chỉ có 1 Trưởng ban: khi người được mời kích hoạt tài khoản, ${who} sẽ xuống Thành viên ${unit}.`)
+  }
+  if (situation.pendingInvitations.length) {
+    const emails = situation.pendingInvitations.map((row) => row.email).join(', ')
+    parts.push(`${unit} đang có lời mời Trưởng ban chưa kích hoạt cho ${emails}; lời mời đó sẽ bị hủy khi bạn gửi lời mời này.`)
+  }
+  return parts.length ? parts.join(' ') : null
+}
+
+export function singleHolderWarning(situation: SingleHolderSituation): string | null {
+  return situation.positionCode === 'PRESIDENT'
+    ? presidentReplacementWarning({ currentPresident: situation.currentHolder, pendingInvitations: situation.pendingInvitations })
+    : departmentLeadReplacementWarning(situation)
+}
+
+/**
+ * Người mời đã xác nhận thay người giữ chức vụ chưa. Chỉ nhận đúng `true`.
+ * Tên chung `confirmReplace`; tên cũ `confirmReplacePresident` vẫn được nhận nhưng chỉ cho lời mời Chủ tịch.
+ */
+export function replaceConfirmed(body: unknown, positionCode: SingleHolderCode): boolean {
+  if (!body || typeof body !== 'object') return false
+  const input = body as Record<string, unknown>
+  return input.confirmReplace === true || (positionCode === 'PRESIDENT' && input.confirmReplacePresident === true)
+}
+
+/** Giá trị đặc biệt của ô "Ban của thành viên" cho lựa chọn "⭐ Chủ tịch Chapter" (không trùng được id ban dạng UUID). */
+export const PRESIDENT_TARGET = 'PRESIDENT'
+
+/**
+ * Đổi lựa chọn trong modal mời (ô Ban + ô tick "Là Trưởng ban") thành chức vụ + ban gửi lên server.
+ * Chủ tịch: không có ban. Trưởng ban: chỉ khi đã tick và đã chọn một ban. Còn lại: thành viên của ban đã chọn.
+ */
+export function inviteSelection(target: string, makeLead: boolean): { position: InvitePosition; departmentUnitId: string } {
+  if (target === PRESIDENT_TARGET) return { position: 'PRESIDENT', departmentUnitId: '' }
+  return { position: makeLead && target ? 'DEPARTMENT_LEAD' : 'MEMBER', departmentUnitId: target }
+}
+
 /** Thân request: Chủ tịch không gửi ban (server tự lấy đơn vị Chapter); các chức vụ khác gửi ban đã chọn. */
 export function invitePayload(position: InvitePosition, departmentUnitId: string): { position: InvitePosition; organizationUnitId?: string } {
   return position === 'PRESIDENT' ? { position } : { position, organizationUnitId: departmentUnitId }
@@ -78,6 +146,10 @@ export function presidentEmailCountError(position: InvitePosition, emailCount: n
   return position === 'PRESIDENT' && emailCount > 1 ? `${PRESIDENT_SINGLE_EMAIL_MESSAGE} Danh sách đang có ${emailCount} email.` : null
 }
 
+/** Mời Trưởng ban theo lô (position: DEPARTMENT_LEAD) chỉ được đúng 1 email. */
+export function departmentLeadEmailCountError(emailCount: number): string | null {
+  return emailCount > 1 ? `${DEPARTMENT_LEAD_SINGLE_EMAIL_MESSAGE} Danh sách đang có ${emailCount} email.` : null
+}
 
 /** Đơn vị đích phải khớp chức vụ: Chủ tịch → CHAPTER, Trưởng ban → DEPARTMENT, thành viên → DEPARTMENT/DNA_GROUP. */
 export function invitedUnitMatchesPosition(unitType: string, positionCode: string | null): boolean {

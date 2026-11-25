@@ -9,7 +9,7 @@ import Modal from '@/components/ui/Modal';
 import LearnerProfileView from '@/components/learner/LearnerProfileView';
 import { apiFetch, getCachedApiData, clearApiCache } from '@/lib/api/client';
 import InvitePositionFields, { postInviteWithPresidentConfirm, usePresidentStatus } from '@/components/invitations/InvitePositionFields';
-import { INVITE_POSITION_LABELS, invitePayload, inviteTargetReady, type InvitePosition } from '@/lib/member-invite-position';
+import { INVITE_POSITION_LABELS, PRESIDENT_TARGET, invitePayload, inviteSelection, inviteTargetReady } from '@/lib/member-invite-position';
 
 export default function ChapterManagerMembersPage() {
   const [user, setUser] = useState<any>(null);
@@ -28,9 +28,14 @@ export default function ChapterManagerMembersPage() {
   const [mounted, setMounted] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
-  const [departmentUnitId, setDepartmentUnitId] = useState('');
-  const [invitePosition, setInvitePosition] = useState<InvitePosition>('MEMBER');
-  const presidentStatus = usePresidentStatus();
+  // Ô Ban: id ban, PRESIDENT_TARGET (Chủ tịch Chapter) hoặc rỗng; ô tick LT chọn Trưởng ban.
+  const [inviteTarget, setInviteTarget] = useState('');
+  const [makeLead, setMakeLead] = useState(false);
+  const presidentStatus = usePresidentStatus(true, inviteTarget);
+  const { position: invitePosition, departmentUnitId } = inviteSelection(
+    presidentStatus.canInviteLeadership || inviteTarget !== PRESIDENT_TARGET ? inviteTarget : '',
+    makeLead && presidentStatus.canInviteLeadership,
+  );
   const [departments, setDepartments] = useState<Array<{ id: string; name: string }>>([]);
   const [departmentsError, setDepartmentsError] = useState('');
   const [sendingInvite, setSendingInvite] = useState(false);
@@ -178,9 +183,10 @@ export default function ChapterManagerMembersPage() {
     setIsPageChanging(false);
   };
 
-  // Mỗi lần mở modal về mặc định Thành viên ban và tải lại tình trạng Chủ tịch, tránh cảnh báo cũ.
+  // Mỗi lần mở modal về mặc định Thành viên ban (bỏ tick LT, bỏ Chủ tịch) và tải lại tình trạng chức vụ, tránh cảnh báo cũ.
   const openInviteModal = () => {
-    setInvitePosition('MEMBER');
+    setMakeLead(false);
+    if (inviteTarget === PRESIDENT_TARGET) setInviteTarget('');
     presidentStatus.refresh();
     setShowInviteModal(true);
   };
@@ -195,7 +201,7 @@ export default function ChapterManagerMembersPage() {
     clearApiCache('/api/v1/invitations');
 
     const res = await postInviteWithPresidentConfirm('/api/v1/invitations/member', { email: inviteEmail.trim(), ...invitePayload(invitePosition, departmentUnitId) });
-    if (!res) { setSendingInvite(false); showToast('info', 'Chưa gửi lời mời Chủ tịch vì bạn chưa xác nhận thay thế.'); return; }
+    if (!res) { setSendingInvite(false); showToast('info', `Chưa gửi lời mời ${INVITE_POSITION_LABELS[invitePosition]} vì bạn chưa xác nhận thay thế.`); return; }
 
     if (res.ok) {
       presidentStatus.refresh();
@@ -663,14 +669,16 @@ export default function ChapterManagerMembersPage() {
             <form onSubmit={handleInvite} className="space-y-4">
               <InvitePositionFields
                 idPrefix="member-invite"
-                position={invitePosition}
-                onPositionChange={setInvitePosition}
-                departmentUnitId={departmentUnitId}
-                onDepartmentChange={setDepartmentUnitId}
+                target={inviteTarget}
+                onTargetChange={setInviteTarget}
                 departments={departments}
                 departmentsError={departmentsError}
                 canInviteLeadership={presidentStatus.canInviteLeadership}
+                showLeadToggle
+                makeLead={makeLead}
+                onMakeLeadChange={setMakeLead}
                 presidentWarning={presidentStatus.warning}
+                departmentLeadWarning={presidentStatus.departmentUnitId === inviteTarget ? presidentStatus.departmentLeadWarning : null}
                 disabled={sendingInvite}
               />
               <div>

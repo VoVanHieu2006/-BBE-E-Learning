@@ -24,7 +24,7 @@ const suites = {
   ],
   integration: [
     ...['test-learning-flow-integration.mjs','test-chapter-leaderboard-integration.mjs','test-learning-security.mjs','test-learning-cycles-integration.cjs','test-reward-pause-integration.cjs','test-organization-integrity.cjs','test-organization-repair.mjs','test-chapter-transfer-integration.cjs','test-completed-lessons-integration.cjs','test-star-history-integration.cjs','test-fb-fixes.cjs'].map(file => [`scripts/test/${file}`]),
-    ...['admin-program-and-lead-dept','quiz-and-refresh-integration','chapter-six-month-transfer','president-invite-integration'].map(name => ['-r','./scripts/test/require-test-database.cjs',...ts(`src/test/${name}.test.ts`)]),
+    ...['admin-program-and-lead-dept','quiz-and-refresh-integration','chapter-six-month-transfer','president-invite-integration','department-lead-invite-integration'].map(name => ['-r','./scripts/test/require-test-database.cjs',...ts(`src/test/${name}.test.ts`)]),
   ],
   browser: ['player','tabs','sidebar','fb','refactor','quiz','course-update'].map(name => ['node_modules/@playwright/test/cli.js','test','-c',`playwright.${name}.config.ts`]),
 }

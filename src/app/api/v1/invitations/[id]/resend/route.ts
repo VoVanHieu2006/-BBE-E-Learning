@@ -4,7 +4,9 @@ import { resendInvitation } from '@/lib/invitations'
 import { invalidateInvitationsServerCache } from '@/lib/server-cache'
 import { prisma } from '@/lib/prisma'
 import { canManageInvitationUnit } from '@/lib/invitation-management'
+import { canAccessOrganizationUnitPermission } from '@/lib/authorization'
 import { isOrganizationId } from '@/lib/organization-admin-rules'
+import { isReplaceConfirmCode } from '@/lib/member-invite-position'
 
 export async function POST(request: NextRequest) {
   const auth = await authenticate(request)
@@ -28,15 +30,22 @@ export async function POST(request: NextRequest) {
     if (!scopeUnitId || !await canManageInvitationUnit(context, scopeUnitId)) {
       return NextResponse.json({ error: { code: 'AccessDenied' } }, { status: 403 })
     }
+    // Lời mời Trưởng ban: như khi gửi mới, cần quyền quản lý thành viên cấp Chapter; quản lý một ban là chưa đủ.
+    if (invitation.role === 'MEMBER' && invitation.position_code === 'DEPARTMENT_LEAD' && invitation.organization_unit_id) {
+      const unit = await prisma.organizationUnit.findUnique({ where: { id: invitation.organization_unit_id }, select: { parent_id: true } })
+      if (!unit?.parent_id || !await canAccessOrganizationUnitPermission(context, unit.parent_id, 'MANAGE_CHAPTER_MEMBERS')) {
+        return NextResponse.json({ error: { code: 'AccessDenied', message: 'Chỉ người quản lý thành viên cấp Chapter (Lead Chapter) mới được gửi lại lời mời Trưởng ban.' } }, { status: 403 })
+      }
+    }
   }
   const body = await request.json().catch(() => ({}))
-  const confirmReplacePresident = body && typeof body === 'object' ? (body as Record<string, unknown>).confirmReplacePresident : undefined
-  const result = await resendInvitation(invitationId, context.userId, context.role, context.role !== 'ADMIN', { confirmReplacePresident })
+  const input = body && typeof body === 'object' ? body as Record<string, unknown> : {}
+  const result = await resendInvitation(invitationId, context.userId, context.role, context.role !== 'ADMIN', { confirmReplace: input.confirmReplace, confirmReplacePresident: input.confirmReplacePresident })
 
   if (!result.ok) {
     return NextResponse.json(
       { error: { code: (result as any).code, message: (result as any).message } },
-      { status: (result as any).code === 'AccessDenied' ? 403 : (result as any).code === 'PresidentReplaceConfirmRequired' ? 409 : 400 }
+      { status: (result as any).code === 'AccessDenied' ? 403 : isReplaceConfirmCode((result as any).code) ? 409 : 400 }
     )
   }
 
