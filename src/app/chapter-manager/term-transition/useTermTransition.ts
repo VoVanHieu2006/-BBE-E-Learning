@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, FormEvent, useRef } from 'react';
 import type { ToastMessage } from '@/components/ui/Toast';
 import { apiFetch, clearApiCache, getCachedApiData } from '@/lib/api/client';
 import { formatTermBadge, SAMPLE_SHEET_URL } from './term-format';
+import { appointLeadInMembers, hasOtherLead, sendWithLeadReplaceConfirm, sortRosterMembers } from './lead-appointment';
 
 export default function useTermTransition() {
   const [user, setUser] = useState<any>(null);
@@ -271,17 +272,22 @@ export default function useTermTransition() {
     setSavingDept(true);
     setActionLoading({ type: 'saveDept', id: targetUserId });
 
-    const res = await apiFetch(
-      `/api/v1/chapters/${user.chapterId}/members/${targetUserId}/department`,
-      {
-        method: 'POST',
-        body: JSON.stringify({ departmentUnitId: targetDeptId, makeLead: isAppointLead }),
-      }
+    // Ban đã có Trưởng ban khác: hỏi xác nhận bằng câu của server; hủy thì giữ nguyên hộp thoại, không đổi gì.
+    const res = await sendWithLeadReplaceConfirm(
+      (extra = {}) => apiFetch(
+        `/api/v1/chapters/${user.chapterId}/members/${targetUserId}/department`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ departmentUnitId: targetDeptId, makeLead: isAppointLead, ...extra }),
+        }
+      ),
+      (message) => window.confirm(message)
     );
 
     setSavingDept(false);
     setActionLoading(null);
 
+    if (!res) return;
     if (res.ok) {
       notify(
         'success',
@@ -362,16 +368,9 @@ export default function useTermTransition() {
 
           return withPresidentHandled.map((ban) => {
             if (ban.id === targetDeptId) {
-              const updatedMembers = ban.members.map((m: any) => ({
-                ...m,
-                isLead: isAppointLead ? false : m.isLead,
-              }));
-              updatedMembers.push(newMemberObj);
-              updatedMembers.sort((a: any, b: any) => {
-                if (a.isLead && !b.isLead) return -1;
-                if (!a.isLead && b.isLead) return 1;
-                return a.displayName.localeCompare(b.displayName, 'vi');
-              });
+              // Bổ nhiệm Trưởng ban: Trưởng ban cũ ở lại ban với vai thành viên, nhãn LT chuyển sang người mới.
+              const withNew = [...ban.members, newMemberObj];
+              const updatedMembers = isAppointLead ? appointLeadInMembers(withNew, targetUserId) : sortRosterMembers(withNew);
               return { ...ban, members: updatedMembers, total: updatedMembers.length };
             }
             return ban;
@@ -389,22 +388,28 @@ export default function useTermTransition() {
   // Bổ nhiệm nhanh Trưởng ban
   const handleAppointLead = async (userId: string, displayName: string, deptId: string, deptName: string) => {
     if (!user?.chapterId) return;
-    if (!confirm(`Bạn có chắc chắn muốn bổ nhiệm ${displayName} làm Trưởng ban của ${deptName}?`)) return;
+    // Ban đang có Trưởng ban khác: server trả 409 kèm câu cảnh báo cụ thể, chỉ hỏi một lần bằng câu đó.
+    const banMembers = rosterData.find((ban) => ban.id === deptId)?.members || [];
+    if (!hasOtherLead(banMembers, userId) && !confirm(`Bạn có chắc chắn muốn bổ nhiệm ${displayName} làm Trưởng ban của ${deptName}?`)) return;
 
     setSavingDept(true);
     setActionLoading({ type: 'appoint', id: userId });
 
-    const res = await apiFetch(
-      `/api/v1/chapters/${user.chapterId}/members/${userId}/department`,
-      {
-        method: 'POST',
-        body: JSON.stringify({ departmentUnitId: deptId, makeLead: true }),
-      }
+    const res = await sendWithLeadReplaceConfirm(
+      (extra = {}) => apiFetch(
+        `/api/v1/chapters/${user.chapterId}/members/${userId}/department`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ departmentUnitId: deptId, makeLead: true, ...extra }),
+        }
+      ),
+      (message) => window.confirm(message)
     );
 
     setSavingDept(false);
     setActionLoading(null);
 
+    if (!res) return;
     if (res.ok) {
       notify('success', `Đã bổ nhiệm ${displayName} làm Trưởng ban ${deptName} thành công!`);
 
@@ -412,16 +417,7 @@ export default function useTermTransition() {
       setRosterData((prev) =>
         prev.map((ban) => {
           if (ban.id === deptId) {
-            const updated = ban.members.map((m: any) => ({
-              ...m,
-              isLead: m.userId === userId,
-            }));
-            updated.sort((a: any, b: any) => {
-              if (a.isLead && !b.isLead) return -1;
-              if (!a.isLead && b.isLead) return 1;
-              return a.displayName.localeCompare(b.displayName, 'vi');
-            });
-            return { ...ban, members: updated };
+            return { ...ban, members: appointLeadInMembers(ban.members, userId) };
           }
           return ban;
         })

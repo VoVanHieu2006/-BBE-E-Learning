@@ -14,6 +14,7 @@ const suites = {
     ts('src/test/member-invite-scope.test.ts'),
     ts('src/test/president-invite.test.ts'),
     ts('src/test/invite-position-assignment.test.ts'),
+    ts('src/test/department-lead-appointment.test.ts'),
     ts('src/test/chapter-transfer-history.test.ts'),
     ts('src/test/learning-unlocks.test.ts'),
     ['src/test/admin-chapters-state.test.cjs'],
@@ -25,6 +26,7 @@ const suites = {
   integration: [
     ...['test-learning-flow-integration.mjs','test-chapter-leaderboard-integration.mjs','test-learning-security.mjs','test-learning-cycles-integration.cjs','test-reward-pause-integration.cjs','test-organization-integrity.cjs','test-organization-repair.mjs','test-chapter-transfer-integration.cjs','test-completed-lessons-integration.cjs','test-star-history-integration.cjs','test-fb-fixes.cjs'].map(file => [`scripts/test/${file}`]),
     ...['admin-program-and-lead-dept','quiz-and-refresh-integration','chapter-six-month-transfer','president-invite-integration','department-lead-invite-integration'].map(name => ['-r','./scripts/test/require-test-database.cjs',...ts(`src/test/${name}.test.ts`)]),
+    ['-r','./scripts/test/require-test-database.cjs',...ts('src/test/department-lead-appointment-integration.test.ts')],
   ],
   browser: ['player','tabs','sidebar','fb','refactor','quiz','course-update'].map(name => ['node_modules/@playwright/test/cli.js','test','-c',`playwright.${name}.config.ts`]),
 }

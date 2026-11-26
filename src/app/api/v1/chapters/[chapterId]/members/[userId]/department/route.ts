@@ -1,5 +1,6 @@
 import { OrganizationConflict } from '@/lib/chapter-lead'
 import { updateChapterDepartment } from '@/lib/chapter-department-update'
+import { replaceConfirmed } from '@/lib/member-invite-position'
 import { ensureChapterStandardDepartments } from '@/lib/chapter-departments'
 import { lockLearningUser } from '@/lib/learning-periods'
 import { NextRequest, NextResponse } from 'next/server'
@@ -60,6 +61,8 @@ export async function POST(
       departmentUnitId,
       makeLead,
       actorId: auth.context!.userId,
+      // Ban đã có Trưởng ban khác: 409 DepartmentLeadReplaceConfirmRequired cho tới khi client gửi lại `confirmReplace: true`.
+      confirmReplace: replaceConfirmed(body, 'DEPARTMENT_LEAD'),
     })
     return NextResponse.json({ success: true, ...updated })
   } catch (error: any) {
