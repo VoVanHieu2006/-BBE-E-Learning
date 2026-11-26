@@ -6,13 +6,18 @@ import {
   BULK_INVITE_MAX_EMAILS,
   BULK_INVITE_STATUS_LABELS,
   bulkInviteRowsFromText,
+  bulkLeadEmail,
+  bulkLeadRowAfterChange,
   bulkRetryChangedAnything,
+  bulkRetryLeadEmail,
   classifyBulkInviteRows,
+  tagBulkLeadResult,
   isRetryableBulkStatus,
   isValidInviteEmail,
   mapWithConcurrency,
   normalizeInviteEmail,
   parseBulkInviteEmails,
+  parseBulkLeadEmail,
   runBulkInvites,
   summarizeBulkInviteRows,
   summarizeBulkResults,
@@ -103,7 +108,102 @@ describe('bulk invite route keeps the single-invite permission rules', () => {
     assert.match(panel, /inviteTargetReady\(position, organizationUnitId\)/)
     assert.match(panel, /!targetReady/)
     assert.match(panel, /\/api\/v1\/invitations\/member\/bulk/)
-    assert.match(panel, /\{ emails, \.\.\.invitePayload\(position, organizationUnitId\) \}/)
+    assert.match(panel, /emails,\s*\.\.\.invitePayload\(position, organizationUnitId\),/)
+  })
+
+  it('Nhiều email: ô chọn Trưởng ban (LT) ở bước Xem trước, chỉ khi có quyền cấp Chapter và không mời Chủ tịch', () => {
+    const panel = read('src/components/invitations/BulkInvitePanel.tsx')
+    assert.match(panel, /const leadAllowed = canChooseLead && position === 'MEMBER'/)
+    assert.match(panel, /const leadEmail = leadAllowed \? bulkLeadEmail\(rows, leadRowId\) : null/)
+    assert.match(panel, /\{leadAllowed && \(/, 'ô chọn LT chỉ hiện khi được phép')
+    assert.match(panel, /<option value="">Không chọn ai<\/option>/)
+    assert.match(panel, /validRows\.map\(\(row\) => <option key=\{row\.id\} value=\{String\(row\.id\)\}>/, 'chỉ liệt kê email hợp lệ')
+    // Sửa / bỏ dòng LT → về Không chọn ai.
+    const body = (name: string) => panel.slice(panel.indexOf(`function ${name}(`), panel.indexOf('\n  }\n', panel.indexOf(`function ${name}(`)))
+    assert.match(body('editRow'), /setLeadRowId\(bulkLeadRowAfterChange\(next, leadRowId, id\)\)/)
+    assert.match(body('removeRow'), /setLeadRowId\(bulkLeadRowAfterChange\(next, leadRowId, id\)\)/)
+    // Chỉ gửi leadEmail khi email đó nằm trong lô đang gửi; thử lại giữ vai LT.
+    assert.match(panel, /\.\.\.\(lead && emails\.includes\(lead\) \? \{ leadEmail: lead \} : \{\}\)/)
+    assert.match(panel, /sendBulk\(sendable, leadEmail\)/)
+    assert.match(panel, /const retryLead = bulkRetryLeadEmail\(retryable\)[\s\S]*?sendBulk\(failedEmails, retryLead\)/)
+    // Cảnh báo LT chỉ khi có chọn LT; nhãn LT ở xem trước và kết quả.
+    assert.match(panel, /\{leadEmail && departmentLeadWarning && <p role="alert" data-testid="bulk-invite-lead-warning"/)
+    assert.match(panel, /data-testid="bulk-invite-lead-badge"/)
+    assert.match(panel, /row\.positionCode === 'DEPARTMENT_LEAD' && <span data-testid="bulk-invite-result-lead-badge"/)
+    assert.match(panel, /postInviteWithPresidentConfirm\('\/api\/v1\/invitations\/member\/bulk'/, 'xác nhận bằng câu cảnh báo của server')
+    assert.match(panel, /setLeadRowId\(null\)/, 'Mời thêm xoá lựa chọn LT')
+
+    const lead = read('src/app/chapter-manager/invitations/page.tsx')
+    assert.match(lead, /<BulkInvitePanel[\s\S]*?canChooseLead=\{presidentStatus\.canInviteLeadership\}[\s\S]*?departmentLeadWarning=\{presidentStatus\.departmentUnitId === inviteTarget \? presidentStatus\.departmentLeadWarning : null\}/)
+    // Trang quản lý DNA không có LT.
+    assert.doesNotMatch(read('src/app/organization-manager/invitations/page.tsx'), /canChooseLead/)
+  })
+
+  it('route mời loạt: leadEmail kiểm định dạng, trong danh sách, quyền Trưởng ban và cảnh báo TRƯỚC khi gửi', () => {
+    const source = read('src/app/api/v1/invitations/member/bulk/route.ts')
+    const order = ['parseBulkLeadEmail(body.leadEmail)', "position: 'DEPARTMENT_LEAD' })", "'LeadEmailNotInList'", "checkSingleHolderInvite(scope.organizationUnitId!, 'DEPARTMENT_LEAD', leadEmail", 'reserveEmailSlots(', 'runBulkInvites(']
+    const positions = order.map((needle) => source.indexOf(needle))
+    positions.forEach((at, i) => assert.ok(at > 0, order[i]))
+    assert.deepEqual([...positions].sort((a, b) => a - b), positions, 'thứ tự kiểm tra')
+    assert.match(source, /positionCode: email === leadEmail \? 'DEPARTMENT_LEAD' : scope\.positionCode/)
+  })
+})
+
+describe('bulk invite: chọn Trưởng ban (LT) trong danh sách', () => {
+  it('parseBulkLeadEmail: không gửi / null / rỗng = không chọn ai; chuẩn hoá hoa-thường; sai định dạng hoặc sai kiểu = lỗi', () => {
+    for (const value of [undefined, null, '', '   ']) assert.deepEqual(parseBulkLeadEmail(value), { ok: true, email: null }, String(value))
+    assert.deepEqual(parseBulkLeadEmail('  LT@BBE.vn '), { ok: true, email: 'lt@bbe.vn' })
+    for (const value of ['sai', 'a@b', 'a b@bbe.vn', 42, true, ['a@bbe.vn'], { email: 'a@bbe.vn' }, `${'a'.repeat(250)}@bbe.vn`]) {
+      const result = parseBulkLeadEmail(value)
+      assert.equal(result.ok, false, JSON.stringify(value))
+      if (result.ok === false) assert.equal(result.code, 'InvalidLeadEmail')
+    }
+  })
+
+  it('bulkLeadEmail: trả email của dòng LT khi dòng đó còn hợp lệ', () => {
+    const rows = bulkInviteRowsFromText('a@bbe.vn, sai, a@bbe.vn, b@bbe.vn')
+    assert.equal(bulkLeadEmail(rows, rows[3].id), 'b@bbe.vn')
+    assert.equal(bulkLeadEmail(rows, null), null)
+    assert.equal(bulkLeadEmail(rows, rows[1].id), null, 'dòng sai định dạng')
+    assert.equal(bulkLeadEmail(rows, rows[2].id), null, 'dòng trùng')
+    assert.equal(bulkLeadEmail(rows, 999), null, 'dòng đã bỏ')
+  })
+
+  it('bulkLeadRowAfterChange: sửa / bỏ chính dòng LT → Không chọn ai; sửa / bỏ dòng khác → giữ LT', () => {
+    const rows = bulkInviteRowsFromText('a@bbe.vn, b@bbe.vn, c@bbe.vn')
+    const lead = rows[1].id
+    assert.equal(bulkLeadRowAfterChange(rows, lead, lead), null, 'sửa chính dòng LT (kể cả sửa ra email hợp lệ khác)')
+    const edited = classifyBulkInviteRows(rows.map((r) => (r.id === rows[0].id ? { ...r, email: 'x@bbe.vn' } : r)))
+    assert.equal(bulkLeadRowAfterChange(edited, lead, rows[0].id), lead)
+    const removedOther = classifyBulkInviteRows(rows.filter((r) => r.id !== rows[2].id))
+    assert.equal(bulkLeadRowAfterChange(removedOther, lead, rows[2].id), lead)
+    const removedLead = classifyBulkInviteRows(rows.filter((r) => r.id !== lead))
+    assert.equal(bulkLeadRowAfterChange(removedLead, lead, lead), null)
+    assert.equal(bulkLeadRowAfterChange(rows, null, rows[0].id), null)
+  })
+
+  it('tagBulkLeadResult: chỉ gắn LT cho dòng của leadEmail đã tạo lời mời hoặc cần thử lại', () => {
+    const statuses = ['SENT', 'LINK_NEEDED', 'FAILED', 'DUPLICATE', 'ALREADY_MEMBER', 'ALREADY_INVITED', 'DENIED', 'INVALID'] as const
+    const tagged = tagBulkLeadResult(statuses.map((status) => ({ email: 'lt@bbe.vn', status })), 'lt@bbe.vn')
+    assert.deepEqual(tagged.map((r) => r.positionCode), ['DEPARTMENT_LEAD', 'DEPARTMENT_LEAD', 'DEPARTMENT_LEAD', undefined, undefined, undefined, undefined, undefined])
+    assert.equal(tagBulkLeadResult([{ email: 'm@bbe.vn', status: 'SENT' }], 'lt@bbe.vn')[0].positionCode, undefined, 'email khác không gắn')
+    const rows = [{ email: 'lt@bbe.vn', status: 'SENT' as const }]
+    assert.equal(tagBulkLeadResult(rows, null), rows, 'không chọn LT thì giữ nguyên')
+  })
+
+  it('bulkRetryLeadEmail: chỉ trả email LT khi dòng LT nằm trong số dòng lỗi được thử lại', () => {
+    assert.equal(bulkRetryLeadEmail([{ email: 'm@bbe.vn', status: 'FAILED' }, { email: 'lt@bbe.vn', status: 'FAILED', positionCode: 'DEPARTMENT_LEAD' }]), 'lt@bbe.vn')
+    assert.equal(bulkRetryLeadEmail([{ email: 'm@bbe.vn', status: 'FAILED' }, { email: 'lt@bbe.vn', status: 'SENT', positionCode: 'DEPARTMENT_LEAD' }]), null, 'LT đã gửi được thì không gửi lại')
+    assert.equal(bulkRetryLeadEmail([{ email: 'lt@bbe.vn', status: 'LINK_NEEDED', positionCode: 'DEPARTMENT_LEAD' }]), null)
+    assert.equal(bulkRetryLeadEmail([]), null)
+  })
+
+  it('bulkLeadRowAfterChange: dòng LT thành trùng do sửa một dòng phía trên thành cùng email → Không chọn ai', () => {
+    const rows = bulkInviteRowsFromText('a@bbe.vn, b@bbe.vn')
+    const lead = rows[1].id
+    const edited = classifyBulkInviteRows(rows.map((r) => (r.id === rows[0].id ? { ...r, email: 'B@bbe.vn' } : r)))
+    assert.equal(edited[1].kind, 'duplicate')
+    assert.equal(bulkLeadRowAfterChange(edited, lead, rows[0].id), null)
   })
 })
 

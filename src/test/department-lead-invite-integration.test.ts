@@ -181,3 +181,113 @@ describe('đồng thời trên DB thật (Chi hội Đà Nẵng)', () => {
     assert.deepEqual(await livePositions(email('demote')), [['DEPARTMENT_MEMBER', dept.id]])
   })
 })
+
+describe('mời nhiều email có chọn LT (leadEmail) qua route thật (ticket 02)', () => {
+  // Chỉ giả bước đăng nhập; quyền, khóa dòng, hạn mức email, lời mời, kích hoạt đều chạy trên DB thật. Không có RESEND_API_KEY → mail giả.
+  assert.ok(!process.env.RESEND_API_KEY, 'test tích hợp không được gửi mail thật')
+  const authFile = require.resolve('../lib/auth')
+  let actor: any = null
+  require.cache[authFile] = { id: authFile, filename: authFile, loaded: true, exports: { authenticate: async () => (actor ? { ok: true, context: actor } : { ok: false, error: { code: 'Unauthorized' } }) } } as NodeJS.Module
+  const bulkRoute = require('../app/api/v1/invitations/member/bulk/route')
+  const { NextRequest } = require('next/server')
+  const { hashToken } = require('../lib/tokens')
+  async function bulk(ctx: any, body: Record<string, unknown>) {
+    actor = ctx
+    const res = await bulkRoute.POST(new NextRequest('http://localhost/api/v1/invitations/member/bulk', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }))
+    return { status: res.status as number, body: await res.json() }
+  }
+  /** Route không trả token: đặt token mới cho lời mời đang chờ của email để kích hoạt (như người nhận bấm link). */
+  async function acceptPending(to: string) {
+    const token = `tok-${randomUUID()}`
+    const pending = await prisma.invitation.findFirstOrThrow({ where: { email: to, status: 'PENDING' } })
+    await prisma.invitation.update({ where: { id: pending.id }, data: { token_hash: hashToken(token) } })
+    const accepted = await acceptInvitation(token, 'Mat-khau-123', to)
+    assert.equal(accepted.ok, true, JSON.stringify(accepted))
+  }
+  const invitesOf = (emails: string[]) => prisma.invitation.findMany({ where: { email: { in: emails } }, select: { email: true, status: true, position_code: true, organization_unit_id: true } })
+  /** Các ban của Chapter theo tên, bỏ những ban kịch bản khác đã dùng. */
+  async function unusedDepartments(ctx: any) {
+    const units = await prisma.organizationUnit.findMany({ where: { type: 'DEPARTMENT', status: 'ACTIVE', parent: { chapter: { id: ctx.chapterId } } }, orderBy: { name: 'asc' } })
+    const free = units.filter((u) => !['Ban Nội Dung', 'Ban Thư Ký'].includes(u.name))
+    assert.ok(free.length >= 2, 'cần 2 ban chưa dùng trong các kịch bản khác')
+    return free
+  }
+
+  it('ban đã có LT: 409 không tạo lời mời nào → xác nhận → 1 lời mời LT + thành viên → kích hoạt → LT cũ xuống Thành viên cùng ban, đúng 1 LT', async () => {
+    const ctx = await leadContext('chapter.lead.demo@bbe.vn')
+    const [dept] = await unusedDepartments(ctx)
+    // Chuẩn bị: ban có đúng 1 LT do mình tạo (mời một email + kích hoạt; LT sẵn có của seed, nếu có, bị hạ luôn).
+    const oldLead = email('bulk-old-lt')
+    const seeded = await invite(ctx, { position: 'DEPARTMENT_LEAD', organizationUnitId: dept.id }, oldLead)
+    assert.equal((await acceptInvitation(seeded.token, 'Mat-khau-123', oldLead)).ok, true)
+    assert.deepEqual(await liveLeads(dept.id), [oldLead])
+    const oldBefore = await prisma.user.findUniqueOrThrow({ where: { email: oldLead } })
+
+    const lt = email('bulk-new-lt')
+    const members = [email('bulk-m1'), email('bulk-m2')]
+    const list = [members[0], lt.toUpperCase(), members[1]]
+
+    // 1. Chưa xác nhận → 409 và KHÔNG có lời mời nào cho cả lô (kiểm trước khi gửi).
+    const blocked = await bulk(ctx, { emails: list, organizationUnitId: dept.id, leadEmail: lt })
+    assert.equal(blocked.status, 409, JSON.stringify(blocked.body))
+    assert.equal(blocked.body.error.code, 'DepartmentLeadReplaceConfirmRequired')
+    assert.ok(blocked.body.error.message.includes(oldLead), blocked.body.error.message)
+    assert.deepEqual(await invitesOf([lt, ...members]), [])
+
+    // 2. Xác nhận → đúng 1 lời mời LT, còn lại thành viên cùng ban; kết quả gắn LT.
+    const sent = await bulk(ctx, { emails: list, organizationUnitId: dept.id, leadEmail: lt, confirmReplace: true })
+    assert.equal(sent.status, 200, JSON.stringify(sent.body))
+    assert.equal(sent.body.summary.created, 3)
+    assert.deepEqual(sent.body.results.filter((r: any) => r.positionCode === 'DEPARTMENT_LEAD').map((r: any) => r.email), [lt])
+    const rows = await invitesOf([lt, ...members])
+    assert.deepEqual(rows.map((r) => [r.email, r.status, r.position_code, r.organization_unit_id].join('|')).sort(), [
+      [lt, 'PENDING', 'DEPARTMENT_LEAD', dept.id], [members[0], 'PENDING', null, dept.id], [members[1], 'PENDING', null, dept.id],
+    ].map((r) => r.join('|')).sort())
+    assert.equal(await pendingLeadInvites(dept.id), 1)
+    assert.deepEqual(await liveLeads(dept.id), [oldLead], 'chưa kích hoạt thì LT cũ giữ nguyên')
+
+    // 3. Kích hoạt LT mới + một thành viên → LT cũ xuống Thành viên cùng ban, auth_version tăng; thành viên là DEPARTMENT_MEMBER.
+    await acceptPending(lt)
+    await acceptPending(members[0])
+    assert.deepEqual(await liveLeads(dept.id), [lt])
+    assert.deepEqual(await livePositions(lt), [['DEPARTMENT_LEAD', dept.id]])
+    assert.deepEqual(await livePositions(oldLead), [['DEPARTMENT_MEMBER', dept.id]])
+    assert.deepEqual(await livePositions(members[0]), [['DEPARTMENT_MEMBER', dept.id]])
+    const oldAfter = await prisma.user.findUniqueOrThrow({ where: { email: oldLead } })
+    assert.ok(oldAfter.auth_version > oldBefore.auth_version, 'phiên LT cũ phải bị làm mới quyền')
+    const history = await prisma.positionAssignment.count({ where: { user_id: oldAfter.id, position: { code: 'DEPARTMENT_LEAD' }, unit_id: dept.id } })
+    assert.equal(history, 1, 'lịch sử LT cũ vẫn còn (đã kết thúc)')
+  })
+
+  it('lời mời LT chờ của người khác: leadEmail chưa xác nhận → 409, không tạo lời mời nào, lời mời cũ còn nguyên; xác nhận → lời mời cũ bị hủy', async () => {
+    const ctx = await leadContext('chapter.lead.demo@bbe.vn')
+    const [, dept] = await unusedDepartments(ctx)
+    await prisma.invitation.updateMany({ where: { organization_unit_id: dept.id, position_code: 'DEPARTMENT_LEAD', status: 'PENDING' }, data: { status: 'CANCELLED', cancelled_at: now() } })
+    const waiting = await invite(ctx, { position: 'DEPARTMENT_LEAD', organizationUnitId: dept.id }, email('bulk-cho'))
+    const lt = email('bulk-lt2')
+    const m = email('bulk-m3')
+    const blocked = await bulk(ctx, { emails: [lt, m], organizationUnitId: dept.id, leadEmail: lt })
+    assert.equal(blocked.status, 409)
+    assert.deepEqual(await invitesOf([lt, m]), [])
+    assert.equal((await prisma.invitation.findUniqueOrThrow({ where: { id: waiting.invitationId } })).status, 'PENDING')
+    const sent = await bulk(ctx, { emails: [lt, m], organizationUnitId: dept.id, leadEmail: lt, confirmReplace: true })
+    assert.equal(sent.status, 200)
+    assert.equal((await prisma.invitation.findUniqueOrThrow({ where: { id: waiting.invitationId } })).status, 'CANCELLED')
+    assert.equal(await pendingLeadInvites(dept.id), 1)
+    assert.deepEqual((await invitesOf([lt, m])).map((r) => [r.email, r.position_code].join('|')).sort(), [`${lt}|DEPARTMENT_LEAD`, `${m}|`].sort())
+  })
+
+  it('quyền và dữ liệu sai trên DB thật: người chỉ quản lý một ban không dùng được leadEmail; leadEmail ngoài danh sách → 400; không lời mời nào được tạo', async () => {
+    const hanoi = await leadContext('chapter.lead.demo@bbe.vn')
+    const bnd = await department(hanoi, 'Ban Nội Dung')
+    const deptLead = await prisma.user.findUniqueOrThrow({ where: { email: 'department.lead.demo@bbe.vn' }, include: { chapter_members: true } })
+    const deptCtx = { userId: deptLead.id, role: deptLead.role, chapterId: deptLead.chapter_members[0]?.chapter_id }
+    const x = email('bulk-quyen')
+    const denied = await bulk(deptCtx, { emails: [x], organizationUnitId: bnd.id, leadEmail: x, confirmReplace: true })
+    assert.ok([400, 403].includes(denied.status), JSON.stringify(denied))
+    const notInList = await bulk(hanoi, { emails: [x], organizationUnitId: bnd.id, leadEmail: email('khac'), confirmReplace: true })
+    assert.equal(notInList.status, 400)
+    assert.equal(notInList.body.error.code, 'LeadEmailNotInList')
+    assert.deepEqual(await invitesOf([x]), [])
+  })
+})

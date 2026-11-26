@@ -824,6 +824,190 @@ describe('LT: API mời nhiều email (tạm thời ở ticket 01)', () => {
   })
 })
 
+describe('LT: mời nhiều email có chọn Trưởng ban (leadEmail, ticket 02)', () => {
+  const bulk = (body: Record<string, unknown>, actor = 'lead') => call(bulkRoute, actor, { organizationUnitId: U.bnd, ...body })
+  const positions = () => Object.fromEntries(db.invitations.filter((r) => r.status === 'PENDING').map((r) => [r.email, r.position_code]))
+
+  it('không chọn LT (không gửi / null / chuỗi rỗng / khoảng trắng) → mọi email là thành viên như cũ, không hỏi dù ban đã có LT', async () => {
+    seatLead()
+    const values = [undefined, null, '', '   ']
+    for (let i = 0; i < values.length; i++) {
+      const leadEmail = values[i]
+      const res = await bulk({ emails: [`k${i}a@bbe.vn`, `k${i}b@bbe.vn`], ...(leadEmail === undefined ? {} : { leadEmail }) })
+      assert.equal(res.status, 200, String(leadEmail))
+      assert.ok(res.body.results.every((r: any) => r.positionCode === undefined))
+    }
+    assert.ok(db.invitations.every((r) => r.position_code === null))
+    assert.equal(db.locks, 0, 'không có LT thì không khóa Chapter')
+  })
+
+  it('ban trống LT: đúng 1 lời mời DEPARTMENT_LEAD cho email được chọn, còn lại thành viên cùng ban; dòng kết quả LT gắn positionCode', async () => {
+    const res = await bulk({ emails: 'a@bbe.vn\nlt@bbe.vn\nb@bbe.vn', leadEmail: 'lt@bbe.vn' })
+    assert.equal(res.status, 200)
+    assert.deepEqual(positions(), { 'a@bbe.vn': null, 'lt@bbe.vn': 'DEPARTMENT_LEAD', 'b@bbe.vn': null })
+    assert.ok(db.invitations.every((r) => r.organization_unit_id === U.bnd))
+    assert.deepEqual(res.body.results.map((r: any) => [r.email, r.status, r.positionCode]), [['a@bbe.vn', 'SENT', undefined], ['lt@bbe.vn', 'SENT', 'DEPARTMENT_LEAD'], ['b@bbe.vn', 'SENT', undefined]])
+    assert.equal(emailCalls.length, 3)
+    assert.deepEqual(db.lockedUnits, [U.bnd], 'chỉ lời mời LT khóa Chapter (theo ban)')
+    assert.equal(res.body.summary.created, 3)
+  })
+
+  it('leadEmail khác hoa-thường / có khoảng trắng vẫn khớp email trong danh sách (cũng viết hoa)', async () => {
+    const res = await bulk({ emails: ['x@bbe.vn', 'LT@Bbe.VN'], leadEmail: '  lt@BBE.vn ' })
+    assert.equal(res.status, 200)
+    assert.deepEqual(positions(), { 'x@bbe.vn': null, 'lt@bbe.vn': 'DEPARTMENT_LEAD' })
+    assert.equal(res.body.results.find((r: any) => r.email === 'lt@bbe.vn').positionCode, 'DEPARTMENT_LEAD')
+  })
+
+  it('email LT xuất hiện 2 lần trong danh sách (khác hoa-thường) → 1 lời mời LT, dòng lặp báo DUPLICATE và không gắn nhãn LT', async () => {
+    const res = await bulk({ emails: 'lt@bbe.vn\nLT@bbe.vn\nm@bbe.vn', leadEmail: 'lt@bbe.vn' })
+    assert.equal(res.status, 200)
+    assert.equal(db.invitations.filter((r) => r.position_code === 'DEPARTMENT_LEAD').length, 1)
+    assert.deepEqual(res.body.results.map((r: any) => [r.status, r.positionCode]), [['DUPLICATE', undefined], ['SENT', 'DEPARTMENT_LEAD'], ['SENT', undefined]])
+  })
+
+  it('leadEmail không có trong danh sách → 400 LeadEmailNotInList, không tạo lời mời, không gửi mail', async () => {
+    seatLead()
+    const res = await bulk({ emails: ['a@bbe.vn', 'b@bbe.vn'], leadEmail: 'khac@bbe.vn', confirmReplace: true })
+    assert.equal(res.status, 400)
+    assert.equal(res.body.error.code, 'LeadEmailNotInList')
+    assert.equal(db.invitations.length, 0)
+    assert.equal(emailCalls.length, 0)
+  })
+
+  it('leadEmail sai định dạng hoặc sai kiểu → 400 InvalidLeadEmail; trùng một dòng sai định dạng của danh sách cũng 400', async () => {
+    for (const leadEmail of ['sai-dinh-dang', 'a@b', 42, ['a@bbe.vn'], { email: 'a@bbe.vn' }, true]) {
+      const res = await bulk({ emails: ['a@bbe.vn', 'sai-dinh-dang'], leadEmail })
+      assert.equal(res.status, 400, JSON.stringify(leadEmail))
+      assert.equal(res.body.error.code, 'InvalidLeadEmail', JSON.stringify(leadEmail))
+    }
+    assert.equal(db.invitations.length, 0)
+    assert.equal(emailCalls.length, 0)
+  })
+
+  it('leadEmail đi cùng Chủ tịch hoặc chức vụ Trưởng ban cho cả lô → 400 LeadEmailWithPosition, không gửi gì', async () => {
+    for (const body of [
+      { emails: ['ct@bbe.vn'], position: 'PRESIDENT', leadEmail: 'ct@bbe.vn' },
+      { emails: ['ct@bbe.vn'], position: 'PRESIDENT', leadEmail: 'ct@bbe.vn', confirmReplace: true },
+      { emails: ['lt@bbe.vn'], position: 'DEPARTMENT_LEAD', leadEmail: 'lt@bbe.vn' },
+      { emails: ['lt@bbe.vn', 'b@bbe.vn'], position: 'DEPARTMENT_LEAD', leadEmail: 'lt@bbe.vn' },
+    ]) {
+      const res = await bulk(body)
+      assert.equal(res.status, 400, JSON.stringify(body))
+      assert.equal(res.body.error.code, 'LeadEmailWithPosition', JSON.stringify(body))
+    }
+    // Chức vụ lạ vẫn báo lỗi chức vụ như cũ, không bị che bởi leadEmail.
+    assert.equal((await bulk({ emails: ['a@bbe.vn'], position: 'BOSS', leadEmail: 'a@bbe.vn' })).body.error.code, 'InvalidInvitePosition')
+    assert.equal(db.invitations.length, 0)
+    assert.equal(emailCalls.length, 0)
+  })
+
+  it('leadEmail khi đích là nhóm DNA → 400, không tạo lời mời (người quản lý DNA vẫn mời loạt DNA được nếu không chọn LT)', async () => {
+    const res = await call(bulkRoute, 'dnaManager', { emails: ['d1@bbe.vn', 'd2@bbe.vn'], organizationUnitId: U.dna, leadEmail: 'd1@bbe.vn' })
+    assert.equal(res.status, 400)
+    assert.equal(res.body.error.code, 'InvalidInvitePosition')
+    assert.equal(db.invitations.length, 0)
+    assert.equal((await call(bulkRoute, 'dnaManager', { emails: ['d1@bbe.vn', 'd2@bbe.vn'], organizationUnitId: U.dna })).status, 200)
+  })
+
+  it('quyền: chỉ người quản lý thành viên cấp Chapter dùng được leadEmail; quản lý một ban / Admin / Lead Chapter khác bị chặn, không tạo gì', async () => {
+    for (const [actor, unit, status] of [['deptManager', U.bnd, 403], ['admin', U.bnd, 400], ['lead2', U.bnd, 403], ['lead', U.bnd2, 403]] as const) {
+      const res = await call(bulkRoute, actor, { emails: ['lt@bbe.vn', 'm@bbe.vn'], organizationUnitId: unit, leadEmail: 'lt@bbe.vn', confirmReplace: true })
+      assert.equal(res.status, status, `${actor}/${unit}`)
+    }
+    const dept = await call(bulkRoute, 'deptManager', { emails: ['lt@bbe.vn'], organizationUnitId: U.bnd, leadEmail: 'lt@bbe.vn' })
+    assert.match(dept.body.error.message, /cấp Chapter/)
+    assert.equal(db.invitations.length, 0)
+    assert.equal(emailCalls.length, 0)
+    // Không chọn LT thì người quản lý ban vẫn mời loạt thành viên vào ban mình (hành vi cũ).
+    assert.equal((await call(bulkRoute, 'deptManager', { emails: ['m1@bbe.vn', 'm2@bbe.vn'], organizationUnitId: U.bnd })).status, 200)
+  })
+
+  it('ban đã có LT, chưa xác nhận → 409 nêu LT hiện tại, KHÔNG tạo lời mời nào, KHÔNG gửi email nào (kể cả email thành viên)', async () => {
+    seatLead()
+    const res = await bulk({ emails: ['a@bbe.vn', 'lt@bbe.vn', 'b@bbe.vn'], leadEmail: 'lt@bbe.vn' })
+    assert.equal(res.status, 409)
+    assert.equal(res.body.error.code, 'DepartmentLeadReplaceConfirmRequired')
+    assert.match(res.body.error.message, /Trần Thị Cũ/)
+    assert.match(res.body.error.message, /xuống Thành viên Ban Nội Dung/)
+    assert.equal(db.invitations.length, 0)
+    assert.equal(emailCalls.length, 0)
+  })
+
+  it('xác nhận sai kiểu ("true", 1) hoặc tên cũ confirmReplacePresident → vẫn 409; confirmReplace: true → 1 lời mời LT, còn lại thành viên', async () => {
+    seatLead()
+    for (const extra of [{ confirmReplace: 'true' }, { confirmReplace: 1 }, { confirmReplacePresident: true }]) {
+      assert.equal((await bulk({ emails: ['a@bbe.vn', 'lt@bbe.vn'], leadEmail: 'lt@bbe.vn', ...extra })).status, 409, JSON.stringify(extra))
+    }
+    assert.equal(db.invitations.length, 0)
+    const res = await bulk({ emails: ['a@bbe.vn', 'lt@bbe.vn'], leadEmail: 'lt@bbe.vn', confirmReplace: true })
+    assert.equal(res.status, 200)
+    assert.deepEqual(positions(), { 'a@bbe.vn': null, 'lt@bbe.vn': 'DEPARTMENT_LEAD' })
+    assert.equal(emailCalls.length, 2)
+  })
+
+  it('lời mời LT chờ của người khác cùng ban: 409; xác nhận → lời mời đó bị hủy, còn đúng 1 lời mời LT; ban khác / Chapter khác / Chủ tịch / thành viên không bị đụng', async () => {
+    pendingLead('cho-lt@bbe.vn')
+    pendingLead('ban-khac@bbe.vn', U.btv)
+    pendingLead('chapter-khac@bbe.vn', U.bnd2)
+    pendingPresident('ct-cho@bbe.vn')
+    db.invitations.push({ id: 'tv-bnd', email: 'tv-bnd@bbe.vn', role: 'MEMBER', organization_unit_id: U.bnd, position_code: null, status: 'PENDING', expires_at: future(), invited_by: 'lead', token_hash: 'tvb' })
+    const first = await bulk({ emails: ['lt@bbe.vn', 'm@bbe.vn'], leadEmail: 'lt@bbe.vn' })
+    assert.equal(first.status, 409)
+    assert.match(first.body.error.message, /cho-lt@bbe\.vn/)
+    assert.equal(live('cho-lt@bbe.vn').length, 1, 'chưa xác nhận thì không đụng lời mời cũ')
+    const second = await bulk({ emails: ['lt@bbe.vn', 'm@bbe.vn'], leadEmail: 'lt@bbe.vn', confirmReplace: true })
+    assert.equal(second.status, 200)
+    assert.equal(db.invitations.find((r) => r.email === 'cho-lt@bbe.vn')!.status, 'CANCELLED')
+    assert.equal(pendingLeadCount(), 1)
+    assert.equal(live('lt@bbe.vn')[0].position_code, 'DEPARTMENT_LEAD')
+    for (const email of ['ban-khac@bbe.vn', 'chapter-khac@bbe.vn', 'ct-cho@bbe.vn', 'tv-bnd@bbe.vn']) assert.equal(live(email).length, 1, email)
+  })
+
+  it('lời mời LT chờ của CHÍNH email được chọn không gây cảnh báo; được làm mới thành lời mời LT mới', async () => {
+    pendingLead('lt@bbe.vn')
+    const res = await bulk({ emails: ['lt@bbe.vn', 'm@bbe.vn'], leadEmail: 'lt@bbe.vn' })
+    assert.equal(res.status, 200)
+    assert.equal(res.body.results.find((r: any) => r.email === 'lt@bbe.vn').status, 'SENT')
+    assert.equal(pendingLeadCount(), 1)
+  })
+
+  it('email LT đang có lời mời thành viên chờ cùng ban → được thay bằng lời mời LT (không báo ALREADY_INVITED); email khác đang chờ vẫn ALREADY_INVITED', async () => {
+    for (const email of ['lt@bbe.vn', 'cho@bbe.vn']) db.invitations.push({ id: `tv-${email}`, email, role: 'MEMBER', organization_unit_id: U.bnd, position_code: null, status: 'PENDING', expires_at: future(), invited_by: 'lead', token_hash: `t-${email}` })
+    const res = await bulk({ emails: ['lt@bbe.vn', 'cho@bbe.vn'], leadEmail: 'lt@bbe.vn' })
+    assert.equal(res.status, 200)
+    assert.deepEqual(res.body.results.map((r: any) => [r.email, r.status]), [['lt@bbe.vn', 'SENT'], ['cho@bbe.vn', 'ALREADY_INVITED']])
+    assert.equal(db.invitations.find((r) => r.id === 'tv-lt@bbe.vn')!.status, 'CANCELLED')
+    assert.equal(live('lt@bbe.vn')[0].position_code, 'DEPARTMENT_LEAD')
+    assert.equal(live('cho@bbe.vn')[0].position_code, null, 'email không chọn LT giữ nguyên lời mời cũ')
+  })
+
+  it('email LT đã có tài khoản → ALREADY_MEMBER (không gắn nhãn LT vì không có lời mời LT), không hỏi xác nhận dù ban có LT, không tạo lời mời LT; email khác vẫn được mời', async () => {
+    seatLead()
+    db.users.push({ id: 'u-co-tk', email: 'co-tk@bbe.vn', status: 'ACTIVE' })
+    const res = await bulk({ emails: ['co-tk@bbe.vn', 'm@bbe.vn'], leadEmail: 'co-tk@bbe.vn' })
+    assert.equal(res.status, 200)
+    assert.deepEqual(res.body.results.map((r: any) => [r.email, r.status, r.positionCode]), [['co-tk@bbe.vn', 'ALREADY_MEMBER', undefined], ['m@bbe.vn', 'SENT', undefined]])
+    assert.equal(pendingLeadCount(), 0)
+  })
+
+  it('"Thử lại email lỗi": gửi lại riêng email LT với leadEmail → vẫn là lời mời LT; gửi lại email thường không kèm leadEmail → thành viên', async () => {
+    const retryLead = await bulk({ emails: ['lt@bbe.vn'], leadEmail: 'lt@bbe.vn' })
+    assert.equal(retryLead.status, 200)
+    assert.equal(retryLead.body.results[0].positionCode, 'DEPARTMENT_LEAD')
+    const retryMember = await bulk({ emails: ['m@bbe.vn'] })
+    assert.equal(retryMember.body.results[0].positionCode, undefined)
+    assert.deepEqual(positions(), { 'lt@bbe.vn': 'DEPARTMENT_LEAD', 'm@bbe.vn': null })
+  })
+
+  it('position DEPARTMENT_LEAD cho cả lô ≥ 2 email vẫn 400 DepartmentLeadSingleEmail (không đổi)', async () => {
+    const res = await bulk({ emails: ['a@bbe.vn', 'b@bbe.vn'], position: 'DEPARTMENT_LEAD' })
+    assert.equal(res.status, 400)
+    assert.equal(res.body.error.code, 'DepartmentLeadSingleEmail')
+    assert.equal(db.invitations.length, 0)
+  })
+})
+
 describe('LT: gửi lại lời mời (cùng luật cảnh báo như gửi mới)', () => {
   const RESEND_ID = '88888888-8888-4888-8888-888888888888'
   const oldLeadInvite = (status = 'CANCELLED', unit = U.bnd) => db.invitations.push({ id: RESEND_ID, email: 'lt-gui-lai@bbe.vn', role: 'MEMBER', organization_unit_id: unit, position_code: 'DEPARTMENT_LEAD', status, expires_at: future(), invited_by: 'lead', token_hash: 'r', delivery_method: 'EMAIL' })

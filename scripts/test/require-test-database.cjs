@@ -9,3 +9,6 @@ if (!['postgres:', 'postgresql:'].includes(url.protocol) || !['127.0.0.1', 'loca
 }
 process.env.DATABASE_URL = target
 process.env.DIRECT_URL = target
+// Prisma client nạp .env của ứng dụng (kể cả .env của repo chính khi node_modules là junction) nhưng không ghi đè
+// biến đã có: đặt rỗng để test DB không bao giờ gửi mail thật (email.ts chạy chế độ giả khi khóa rỗng).
+process.env.RESEND_API_KEY = ''

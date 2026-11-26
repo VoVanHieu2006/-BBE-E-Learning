@@ -373,6 +373,8 @@ export default function ChapterManagerInvitationsPage() {
               onSent={() => { setQuotaTick((n) => n + 1); loadInvitations(undefined, true); presidentStatus.refresh(); }}
               onClose={() => setShowInviteModal(false)}
               disabled={sending}
+              canChooseLead={presidentStatus.canInviteLeadership}
+              departmentLeadWarning={presidentStatus.departmentUnitId === inviteTarget ? presidentStatus.departmentLeadWarning : null}
             />
             ) : (
             <form onSubmit={handleSendInvite} className="space-y-4">

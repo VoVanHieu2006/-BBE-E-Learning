@@ -23,6 +23,8 @@ export interface BulkInviteResultItem {
   message?: string
   /** Set when the invitation was saved but no email went out (daily quota or send error): its link can be fetched with this id. */
   invitationId?: string
+  /** Dòng này là email được chọn làm Trưởng ban (`leadEmail`) của lô. */
+  positionCode?: 'DEPARTMENT_LEAD'
 }
 
 export const BULK_INVITE_RETRY_NO_CHANGE_MESSAGE = 'Đã thử lại nhưng chưa có email nào gửi được. Xem lý do ở từng dòng bên dưới.'
@@ -62,6 +64,52 @@ export function parseBulkInviteEmails(text: string) {
     else invalid.push(email)
   }
   return { valid, invalid, duplicates }
+}
+
+export const LEAD_EMAIL_INVALID_MESSAGE = 'Email Trưởng ban (LT) không hợp lệ.'
+export const LEAD_EMAIL_NOT_IN_LIST_MESSAGE = 'Email Trưởng ban (LT) phải là một email hợp lệ có trong danh sách mời.'
+export const LEAD_EMAIL_WITH_POSITION_MESSAGE = 'Chỉ chọn Trưởng ban (LT) khi mời thành viên vào một ban; không dùng cùng Chủ tịch Chapter hay chức vụ Trưởng ban cho cả lô.'
+
+/**
+ * Đọc `leadEmail` của mời loạt: không gửi / null / chuỗi rỗng = không chọn ai.
+ * Có giá trị thì chuẩn hoá hoa-thường và phải đúng định dạng email; việc nó có trong danh sách do route kiểm sau.
+ */
+export function parseBulkLeadEmail(value: unknown): { ok: true; email: string | null } | { ok: false; code: 'InvalidLeadEmail'; message: string } {
+  if (value === undefined || value === null) return { ok: true, email: null }
+  if (typeof value !== 'string') return { ok: false, code: 'InvalidLeadEmail', message: LEAD_EMAIL_INVALID_MESSAGE }
+  const email = normalizeInviteEmail(value)
+  if (!email) return { ok: true, email: null }
+  return isValidInviteEmail(email) ? { ok: true, email } : { ok: false, code: 'InvalidLeadEmail', message: LEAD_EMAIL_INVALID_MESSAGE }
+}
+
+/**
+ * Dòng LT đang chọn ở bước Xem trước sau một lần sửa/bỏ dòng: về null (Không chọn ai) khi chính dòng đó bị sửa,
+ * hoặc dòng đó không còn là email hợp lệ trong danh sách (bị bỏ, hay thành trùng do sửa dòng khác).
+ */
+export function bulkLeadRowAfterChange(rows: BulkInviteRow[], leadRowId: number | null, changedRowId?: number): number | null {
+  if (leadRowId === null || leadRowId === changedRowId) return null
+  return bulkLeadEmail(rows, leadRowId) === null ? null : leadRowId
+}
+
+/** Email của dòng LT đang chọn (null nếu không chọn ai hoặc dòng không còn hợp lệ). */
+export function bulkLeadEmail(rows: BulkInviteRow[], leadRowId: number | null): string | null {
+  return rows.find((row) => row.id === leadRowId && row.kind === 'valid')?.email ?? null
+}
+
+/**
+ * Gắn nhãn Trưởng ban cho dòng kết quả của `leadEmail`, chỉ khi lời mời Trưởng ban đã được tạo (SENT, LINK_NEEDED)
+ * hoặc cần thử lại (FAILED). Dòng trùng, đã có tài khoản, bị từ chối… không có lời mời LT nào nên không gắn nhãn.
+ */
+export function tagBulkLeadResult(results: BulkInviteResultItem[], leadEmail: string | null): BulkInviteResultItem[] {
+  if (!leadEmail) return results
+  return results.map((row) => (row.email === leadEmail && (row.status === 'SENT' || row.status === 'LINK_NEEDED' || row.status === 'FAILED')
+    ? { ...row, positionCode: 'DEPARTMENT_LEAD' as const }
+    : row))
+}
+
+/** Email LT cần giữ vai Trưởng ban khi "Thử lại email lỗi": dòng LT chỉ được gửi lại khi nó nằm trong số dòng lỗi. */
+export function bulkRetryLeadEmail(results: BulkInviteResultItem[]): string | null {
+  return results.find((item) => isRetryableBulkStatus(item.status) && item.positionCode === 'DEPARTMENT_LEAD')?.email ?? null
 }
 
 /** Statuses the user may retry from the result table. */
