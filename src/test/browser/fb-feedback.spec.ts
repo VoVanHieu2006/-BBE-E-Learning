@@ -43,10 +43,10 @@ test('FB05 history distinguishes CHAPTER, Ban, DNA and DNA_GROUP without droppin
   await page.screenshot({ path: 'scratch/fb-fixes/history.png', fullPage: true })
 })
 
-test('FB03 all three conditions remain visible when every Chapter is excluded', async ({ page, context }) => {
+test('FB03 excluded chapters show Admin-style failing pills only and Admin-only KPI link', async ({ page, context }) => {
   await admin(page, context, url => {
     if (url.pathname.endsWith('/learning/periods')) return { months: [], terms: [], seasons: [], scope: { allowedGroups: ['CHAPTER'], isGlobal: true } }
-    if (url.pathname === '/api/v1/leaderboard') return { state: 'OPEN', items: [], excluded: [{ chapterId: 'ch', name: 'Chapter FB', currentRosterCount: 2, rosterAsOf: '2026-10-26T00:00:00Z', dataAsOf: '2026-10-25T00:00:00Z', conditions: [
+    if (url.pathname === '/api/v1/leaderboard') return { state: 'OPEN', period: { key: '2026-10' }, items: [], excluded: [{ chapterId: 'ch', name: 'Chapter FB', currentRosterCount: 2, rosterAsOf: '2026-10-26T00:00:00Z', dataAsOf: '2026-10-25T00:00:00Z', conditions: [
       { kind: 'MEMBER_COUNT', value: 21, threshold: 20, state: 'PASS' },
       { kind: 'CORE_COMPLETION', value: null, threshold: 0.5, state: 'MISSING_DATA', reasonCode: 'CORE_LESSONS_ZERO' },
       { kind: 'KPI', value: null, threshold: ['YELLOW', 'GREEN'], state: 'MISSING_DATA', reasonCode: 'WAITING_KPI' },
@@ -58,16 +58,67 @@ test('FB03 all three conditions remain visible when every Chapter is excluded', 
     ] }] }
   })
   await page.goto('/leaderboard?group=CHAPTER&periodType=MONTH')
+  await expect(page.getByText('Chưa đủ điều kiện tham gia BXH (2)', { exact: true })).toBeVisible()
   await expect(page.getByText('Chapter FB', { exact: true })).toBeVisible()
+  await expect(page.getByText('Chapter Codes', { exact: true })).toBeVisible()
   await expect(page.getByText('Chưa có Chapter nào đủ điều kiện xếp hạng trong kỳ này.')).toBeVisible()
   await expect(page.getByText(/[A-Z]+_[A-Z_0-9]+|GREEN/)).toHaveCount(0)
-  await expect(page.getByText('KPI: Xanh', { exact: true })).toBeVisible()
-  await expect(page.getByText('Thành viên đạt ≥70% bài lõi: 7% (cần ít nhất 50%)', { exact: true })).toBeVisible()
-  await expect(page.getByText('Quân số bình quân kỳ: 21', { exact: true })).toBeVisible()
-  await expect(page.getByText('Chưa có mẫu số bài lõi đã xuất bản', { exact: false })).toBeVisible()
-  await expect(page.getByText('Chưa có KPI', { exact: false })).toBeVisible()
-  await expect(page.getByText('Học viên hiện tại: 2', { exact: false })).toBeVisible()
+  await expect(page.getByText('Chưa có bài học cốt lõi', { exact: true })).toBeVisible()
+  await expect(page.getByText('Chưa nhập KPI tháng 10/2026', { exact: true })).toBeVisible()
+  await expect(page.getByText('Chưa có trên 20 thành viên (9 học viên)', { exact: true })).toBeVisible()
+  await expect(page.getByText('Chưa đạt 50% thành viên ≥70% (7% đã đạt)', { exact: true })).toBeVisible()
+  await expect(page.getByText('Học viên hiện tại:', { exact: false })).toHaveCount(0)
+  await expect(page.getByText('Số liệu lúc', { exact: false })).toHaveCount(0)
+  await expect(page.getByText('1.637 sao', { exact: false })).toHaveCount(0)
+  await expect(page.getByText('Điểm BXH: 181,889', { exact: false })).toHaveCount(0)
+  const kpiLinks = page.getByRole('link', { name: 'KPI & lịch sử →' })
+  await expect(kpiLinks).toHaveCount(2)
+  await expect(kpiLinks.first()).toHaveAttribute('href', '/admin/chapters')
   await page.screenshot({ path: 'scratch/fb-fixes/chapter-conditions.png', fullPage: true })
+})
+
+test('FB03b guests and non-admin users do not see Admin KPI link on excluded chapters', async ({ page }) => {
+  await page.route('**/api/v1/**', route => {
+    const url = new URL(route.request().url())
+    if (url.pathname.endsWith('/learning/periods')) {
+      return route.fulfill({ json: { months: [], terms: [], seasons: [], scope: { allowedGroups: ['CHAPTER'], isGlobal: true } } })
+    }
+    if (url.pathname === '/api/v1/leaderboard') {
+      return route.fulfill({
+        json: {
+          state: 'OPEN',
+          period: { key: '2026-10' },
+          items: [],
+          excluded: [
+            {
+              chapterId: 'ch',
+              name: 'Chapter Member View',
+              conditions: [
+                { kind: 'MEMBER_COUNT', value: 5, threshold: 20, state: 'FAIL', reasonCode: 'MEMBER_COUNT_NOT_ABOVE_20' },
+                { kind: 'CORE_COMPLETION', value: 0, threshold: 0.5, state: 'FAIL', reasonCode: 'CORE_COMPLETION_BELOW_50_PERCENT' },
+                { kind: 'KPI', value: null, threshold: ['YELLOW', 'GREEN'], state: 'MISSING_DATA', reasonCode: 'WAITING_KPI' },
+              ],
+            },
+          ],
+        },
+      })
+    }
+    return route.fulfill({ json: { items: [] } })
+  })
+  // Guest (unauthenticated)
+  await page.goto('/leaderboard?group=CHAPTER&periodType=MONTH')
+  await expect(page.getByText('Chưa đủ điều kiện tham gia BXH (1)', { exact: true })).toBeVisible()
+  await expect(page.getByText('Chapter Member View', { exact: true })).toBeVisible()
+  await expect(page.getByText('Chưa có trên 20 thành viên (5 học viên)', { exact: true })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'KPI & lịch sử →' })).toHaveCount(0)
+
+  // Signed-in MEMBER
+  await page.evaluate(() => {
+    localStorage.setItem('user', JSON.stringify({ id: '22222222-2222-4222-8222-222222222222', role: 'MEMBER', email: 'member@test.invalid' }))
+  })
+  await page.reload()
+  await expect(page.getByText('Chapter Member View', { exact: true })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'KPI & lịch sử →' })).toHaveCount(0)
 })
 
 test('FB08 UI displays backend readiness reason', async ({ page, context }) => {

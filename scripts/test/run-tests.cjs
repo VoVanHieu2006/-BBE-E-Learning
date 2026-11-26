@@ -17,6 +17,7 @@ const suites = {
     ts('src/test/department-lead-appointment.test.ts'),
     ts('src/test/chapter-transfer-history.test.ts'),
     ts('src/test/learning-unlocks.test.ts'),
+    ts('src/test/chapter-exclusion-pills.test.ts'),
     ['src/test/admin-chapters-state.test.cjs'],
     ...['quiz-import','youtube-duration','duration-calendar-urgency','small-lib-modules','lib-data-access'].map(name => ts(`src/test/${name}.test.ts`)),
     ...['manager-learning-exemption','position-replacement','standardize-migration','role-sessions','business-rules','video-playback-guard','video-progress-session','video-fullscreen-controls','video-controls-youtube-ux','video-switching-leak','video-player-ui','shared-learning-path','quiz-plan-b-selection','p1-rules','prompt1-verification','prompt2-verification','master-verification','video-continuity-security','video-heartbeat-interval','chapter-initial-rewards','transfer-windows','pwa-standalone','viewport-reset','bulk-invite','bulk-lesson-links','email-quota','invitation-delivery','password-reset-link','quiz-timer-navigator','lesson-navigation','monthly-reward-reset','monthly-review','learning-cycles','account-lock-rules','deadline-enforcement','deadline-extension','login-lock','login-rate-limit','password-reset-request-throttle','course-update-rules','lesson-new-label','fun-display-name','course-draft','cover-url','course-draft-publish','course-draft-routes','learning-display','content-deletion','content-management','ranking-departures','course-editor-status'].map(name => ts(`src/test/${name}.test.ts`)),

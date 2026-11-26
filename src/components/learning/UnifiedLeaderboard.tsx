@@ -6,7 +6,14 @@ import Card from '@/components/ui/Card'
 import Modal from '@/components/ui/Modal'
 import LearnerProfileView from '@/components/learner/LearnerProfileView'
 import ChapterConditions from './ChapterConditions'
+import { buildChapterExclusionPills, type ExclusionPillTone } from '@/lib/chapter-exclusion-pills'
 import { apiFetch, clearApiCache, getCachedApiData } from '@/lib/api/client'
+
+const EXCLUSION_PILL_STYLES: Record<ExclusionPillTone, string> = {
+  amber: 'bg-amber-50 text-amber-800',
+  slate: 'bg-slate-100 text-slate-700',
+  red: 'bg-red-50 text-red-700',
+}
 
 export interface UnifiedLeaderboardProps {
   initialGroup?: 'MEMBER' | 'LT' | 'DNA' | 'CHAPTER'
@@ -75,6 +82,7 @@ export default function UnifiedLeaderboard({
   const [readinessMessage, setReadinessMessage] = useState('')
   const [accessError, setAccessError] = useState<string>('')
   const [periodId, setPeriodId] = useState('')
+  const [activeMonthKey, setActiveMonthKey] = useState('')
   const [periodCatalog, setPeriodCatalog] = useState<{ months: any[]; terms: any[]; seasons: any[]; actualTerms: any[] }>({ months: [], terms: [], seasons: [], actualTerms: [] })
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -99,6 +107,7 @@ const formatChapterScore = (val: number | null | undefined) => {
   const [selectedUserData, setSelectedUserData] = useState<any>(null)
   const [loadingProfile, setLoadingProfile] = useState(false)
 
+  const isAdmin = currentUser?.role === 'ADMIN'
   const canViewProfile = Boolean(currentUser && ['ADMIN', 'LEAD'].includes(currentUser.role))
   // The shared board lists every Chapter; a Lead may only open profiles of their own Chapter.
   const canOpenProfile = (row: { chapterId?: string | null }) => canViewProfile
@@ -220,6 +229,7 @@ const formatChapterScore = (val: number | null | undefined) => {
       const data = res.data || {}
       setLeaderboardState(data.state || '')
       setReadinessMessage(data.message || data.readiness?.message || '')
+      setActiveMonthKey(typeof data.period?.key === 'string' ? data.period.key : (periodType === 'MONTH' ? periodId : ''))
       setExcludedChapters(data.excluded || [])
       const list: LeaderboardItem[] = (data.items || []).map((item: any, idx: number) => ({
         ...item,
@@ -286,7 +296,11 @@ const formatChapterScore = (val: number | null | undefined) => {
               🏆 Bảng Vinh Danh BBE E-Learning
             </span>
             <span className="text-xs font-semibold px-2.5 py-0.5 bg-slate-100 text-slate-700 rounded-full">
-              {periodType === 'MONTH' ? '📅 Theo Tháng' : '🎯 Theo Nhiệm kỳ'}
+              {periodType === 'MONTH'
+                ? '📅 Theo Tháng'
+                : periodType === 'ACTUAL_TERM'
+                ? '📊 Thống kê nhiệm kỳ thực tế'
+                : '🎯 Theo Nhiệm kỳ'}
             </span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
@@ -384,7 +398,7 @@ const formatChapterScore = (val: number | null | undefined) => {
           </div>
 
           {/* Hàng 2: Chu kỳ Tháng / Nhiệm kỳ */}
-          <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-2xl">
+          <div className="flex flex-wrap items-center gap-1.5 p-1 bg-slate-100 rounded-2xl">
             <button
               type="button"
               onClick={() => setPeriodType('MONTH')}
@@ -407,7 +421,19 @@ const formatChapterScore = (val: number | null | undefined) => {
             >
               🎯 Theo Nhiệm kỳ
             </button>
-            {group === 'CHAPTER' && <button type="button" onClick={() => setPeriodType('ACTUAL_TERM')} className="px-3.5 py-1.5 rounded-xl text-xs font-bold text-slate-700">Thống kê nhiệm kỳ thực tế</button>}
+            {group === 'CHAPTER' && (
+              <button
+                type="button"
+                onClick={() => setPeriodType('ACTUAL_TERM')}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition ${
+                  periodType === 'ACTUAL_TERM'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                📊 Thống kê nhiệm kỳ thực tế
+              </button>
+            )}
           </div>
         </div>
 
@@ -532,17 +558,74 @@ const formatChapterScore = (val: number | null | undefined) => {
           <p className="text-xs font-medium">Đang tải bảng xếp hạng…</p>
         </Card>
       ) : periodType === 'ACTUAL_TERM' ? (
-        <Card className="p-6 space-y-4">
-          <h2 className="font-bold">Thống kê nhiệm kỳ thực tế</h2>
-          <p className="text-sm text-slate-600">Từ ngày thành lập hoặc chuyển giao thành công gần nhất. Tổng này có thể xuyên đợt thi đua và không dùng để xếp hạng.</p>
-          {items.map((item: any) => <div key={item.chapterId} className="border-t py-3">
-            <strong>{item.name}</strong>
-            <p>{new Date(item.startsAt).toLocaleDateString('vi-VN')} – {item.endsAt ? new Date(item.endsAt).toLocaleDateString('vi-VN') : 'Hiện tại'}</p>
-            {item.state === 'AWAITING_SNAPSHOT'
-              ? <p role="status" className="text-amber-800">Thiếu snapshot thống kê đã chốt. Chưa có số sao xác minh cho nhiệm kỳ này.</p>
-              : <p>{item.totalStars} sao</p>}
-            {item.unallocatedEntryCount > 0 && <p className="text-amber-700">Sao chưa phân bổ được vào tháng: {item.unallocatedLegacyStars} ({item.unallocatedEntryCount} bản ghi).</p>}
-          </div>)}
+        <Card className="border border-[#dbe7ff] bg-slate-50/40 p-6 rounded-3xl shadow-sm space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="space-y-0.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-base font-bold text-[#172554]">
+                  Thống kê nhiệm kỳ thực tế
+                </h2>
+                <span className="inline-flex items-center rounded-full bg-white border border-[#dbe7ff] px-2.5 py-0.5 text-[11px] font-bold text-[#172554]">
+                  {items.length} Chapter
+                </span>
+              </div>
+              <p className="text-xs text-[#6c6f7f]">
+                Từ ngày thành lập hoặc chuyển giao thành công gần nhất. Tổng này có thể xuyên đợt thi đua và không dùng để xếp hạng.
+              </p>
+            </div>
+            <span className="self-start sm:self-auto shrink-0 inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-[11px] font-bold text-slate-600">
+              📊 Chỉ thống kê · Không xếp hạng
+            </span>
+          </div>
+
+          {items.length === 0 ? (
+            <div className="rounded-2xl border border-[#eff4ff] bg-white px-6 py-10 text-center text-xs text-[#6c6f7f]">
+              Chưa có dữ liệu nhiệm kỳ thực tế cho kỳ được chọn.
+            </div>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {items.map((item: any) => (
+                <div
+                  key={item.chapterId || item.id}
+                  className="rounded-2xl border border-[#dbe7ff] bg-white px-4 py-3.5 text-xs text-[#434655] shadow-2xs transition hover:border-blue-300 hover:shadow-sm"
+                >
+                  <p className="font-bold text-[#172554] text-[13px] tracking-tight truncate">
+                    {item.name || item.chapterName}
+                  </p>
+                  <div className="mt-2.5 flex flex-col gap-1.5">
+                    <span className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-2.5 py-1.5 font-semibold text-slate-700">
+                      <span aria-hidden="true" className="shrink-0">📅</span>
+                      <span>
+                        {new Date(item.startsAt).toLocaleDateString('vi-VN')} – {item.endsAt ? new Date(item.endsAt).toLocaleDateString('vi-VN') : 'Hiện tại'}
+                      </span>
+                    </span>
+                    {item.state === 'AWAITING_SNAPSHOT' ? (
+                      <span
+                        role="status"
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 font-semibold text-amber-800 leading-snug"
+                      >
+                        <span aria-hidden="true" className="shrink-0">📸</span>
+                        <span>Thiếu snapshot thống kê đã chốt. Chưa có số sao xác minh cho nhiệm kỳ này.</span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 font-semibold text-amber-800">
+                        <span aria-hidden="true" className="shrink-0">⭐</span>
+                        <span>{(item.totalStars ?? 0).toLocaleString('vi-VN')} sao</span>
+                      </span>
+                    )}
+                    {item.unallocatedEntryCount > 0 && (
+                      <span className="inline-flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 font-semibold text-amber-800 leading-snug">
+                        <span aria-hidden="true" className="shrink-0">⚠️</span>
+                        <span>
+                          Sao chưa phân bổ được vào tháng: {(item.unallocatedLegacyStars ?? 0).toLocaleString('vi-VN')} ({item.unallocatedEntryCount} bản ghi).
+                        </span>
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </Card>
       ) : items.length === 0 && excludedChapters.length === 0 ? (
         <Card className="p-16 text-center text-[#6c6f7f] space-y-2 rounded-3xl">
@@ -555,10 +638,47 @@ const formatChapterScore = (val: number | null | undefined) => {
       ) : (
         <>
           {['AWAITING_SNAPSHOT', 'WAITING_KPI'].includes(leaderboardState) && <p role="status" className="text-amber-800">Kết quả còn thiếu snapshot hoặc KPI. Các số liệu hiện có được giữ để đối chiếu; kỳ thiếu dữ liệu chưa được xếp hạng.</p>}
-          {group === 'CHAPTER' && periodType === 'TERM' && <Card className="p-4 text-sm space-y-2">
-            <strong>Tháng đang mở — tạm tính riêng</strong>
-            {[...items, ...excludedChapters].map((item: any) => <p key={item.chapterId}>{item.name || item.chapterName}: {formatChapterScore(item.provisionalScore ?? 0)} điểm · {item.provisionalStars ?? 0} sao</p>)}
-          </Card>}
+          {group === 'CHAPTER' && periodType === 'TERM' && (items.length > 0 || excludedChapters.length > 0) && (
+            <Card className="border border-blue-200/80 bg-blue-50/40 p-6 rounded-3xl shadow-sm space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="space-y-0.5">
+                  <h3 className="text-base font-bold text-[#172554]">
+                    Tháng đang mở — tạm tính riêng
+                  </h3>
+                  <p className="text-xs text-[#6c6f7f]">
+                    Số liệu tạm tính cho tháng đang diễn ra, chưa cộng vào điểm nhiệm kỳ chính thức cho đến khi chốt tháng.
+                  </p>
+                </div>
+                {leaderboardState !== 'FINALIZED' && (
+                  <span className="self-start sm:self-auto shrink-0 inline-flex items-center gap-1 rounded-full bg-blue-100/80 px-3 py-1 text-[11px] font-bold text-[#2563EB]">
+                    ⏳ Đang diễn ra
+                  </span>
+                )}
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {[...items, ...excludedChapters].map((item: any) => (
+                  <div
+                    key={item.chapterId || item.id}
+                    className="rounded-2xl border border-blue-200/80 bg-white px-4 py-3.5 text-xs shadow-2xs transition hover:border-blue-300 hover:shadow-sm"
+                  >
+                    <p className="font-bold text-[#172554] text-[13px] tracking-tight truncate">
+                      {item.name || item.chapterName}
+                    </p>
+                    <div className="mt-2.5 flex flex-wrap gap-1.5">
+                      <span className="inline-flex items-center gap-1.5 rounded-lg bg-blue-50 px-2.5 py-1.5 font-semibold text-[#2563EB]">
+                        <span aria-hidden="true">🏆</span>
+                        <span>{formatChapterScore(item.provisionalScore ?? 0)} điểm</span>
+                      </span>
+                      <span className="inline-flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 font-semibold text-amber-800">
+                        <span aria-hidden="true">⭐</span>
+                        <span>{(item.provisionalStars ?? 0).toLocaleString('vi-VN')} sao</span>
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
           {/* Top 3 Podium Cards */}
           {topThree.length > 0 && (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-5 pt-3 items-end">
@@ -880,21 +1000,50 @@ const formatChapterScore = (val: number | null | undefined) => {
 
           {/* Chapter chưa đủ điều kiện (nếu đang ở tab Chapter) */}
           {group === 'CHAPTER' && excludedChapters.length > 0 && (
-            <Card className="border border-amber-200 bg-amber-50/50 p-6 rounded-3xl space-y-3">
-              <h3 className="font-bold text-[#172554] text-sm">
-                🏛️ Chapter chưa đủ điều kiện tham gia xếp hạng ({excludedChapters.length})
-              </h3>
-              <p className="text-xs text-[#6c6f7f]">
-                Theo thể lệ BBE, Chapter cần <strong>trên 20</strong> thành viên, tỷ lệ đạt ≥70% bài lõi tối thiểu 50% và KPI Vàng hoặc Xanh.
-              </p>
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 pt-1">
-                {excludedChapters.map((ch: any) => (
-                  <div key={ch.chapterId || ch.id} className="p-3 bg-white border border-amber-200 rounded-2xl text-xs space-y-1">
-                    <p className="font-bold text-[#172554]">{ch.name || ch.chapterName}</p>
-                    <p>{(ch.totalStars ?? 0).toLocaleString('vi-VN')} sao · Điểm BXH: {formatChapterScore(ch.score)}</p>
-                    <ChapterConditions chapter={ch} />
-                  </div>
-                ))}
+            <Card className="border border-amber-200 bg-amber-50/40 p-6 rounded-3xl shadow-sm space-y-4">
+              <div className="space-y-1">
+                <h3 className="text-base font-bold text-[#172554]">
+                  Chưa đủ điều kiện tham gia BXH ({excludedChapters.length})
+                </h3>
+                <p className="text-xs text-[#6c6f7f]">
+                  Theo thể lệ BBE, Chapter cần <strong>trên 20</strong> thành viên, tỷ lệ đạt ≥70% bài lõi tối thiểu 50% và KPI Vàng hoặc Xanh.
+                </p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {excludedChapters.map((ch: any) => {
+                  const pills = buildChapterExclusionPills(ch, { monthKey: activeMonthKey })
+                  return (
+                    <div
+                      key={ch.chapterId || ch.id}
+                      className="flex flex-col justify-between rounded-2xl border border-amber-200/90 bg-white px-4 py-3.5 text-xs text-[#434655] shadow-2xs transition hover:border-amber-300 hover:shadow-sm"
+                    >
+                      <div>
+                        <p className="font-bold text-[#172554] text-[13px] tracking-tight truncate">
+                          {ch.name || ch.chapterName}
+                        </p>
+                        <div className="mt-2.5 flex flex-col gap-1.5">
+                          {pills.map((pill) => (
+                            <span
+                              key={pill.key}
+                              className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 font-semibold leading-snug ${EXCLUSION_PILL_STYLES[pill.tone]}`}
+                            >
+                              <span aria-hidden="true" className="shrink-0">{pill.icon}</span>
+                              <span>{pill.text}</span>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                      {isAdmin && (
+                        <Link
+                          href="/admin/chapters"
+                          className="mt-3 inline-flex items-center gap-1 font-semibold text-[#2563EB] hover:text-[#1d4ed8] hover:underline"
+                        >
+                          KPI &amp; lịch sử →
+                        </Link>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             </Card>
           )}
