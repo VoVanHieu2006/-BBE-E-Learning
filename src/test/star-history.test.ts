@@ -171,8 +171,7 @@ describe('getAdminUserStarHistory', () => {
   it('returns balance, ledger total, filtered total, months, filters and enriched items', async () => {
     const { db } = historyDb({ summary: { total: 2, amount: 18 }, page: history.slice(0, 2), months: ['2026-11', '2026-10'], ledger: 42 })
     const result = await getAdminUserStarHistory(db, USER, query({ month: '2026-11', source: 'all' }), notManager)
-    assert.equal(result.ok, true)
-    if (result.ok === false) return
+    assert.ok(result.ok)
     const { items, ...body } = result.body
     assert.deepEqual(body, {
       user: { id: USER, displayName: 'Lan', email: 'lan@bbe.vn', role: 'LEAD', status: 'ACTIVE' },
