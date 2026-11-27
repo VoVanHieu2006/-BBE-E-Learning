@@ -51,6 +51,7 @@ export default function AdminStarHistoryPanel({
   const [month, setMonth] = useState('');
   const [source, setSource] = useState<AdminStarSourceFilter>('ALL');
   const [data, setData] = useState<AdminStarHistoryData | null>(null);
+  const [dataFilterKey, setDataFilterKey] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [reloadTick, setReloadTick] = useState(0);
@@ -65,6 +66,7 @@ export default function AdminStarHistoryPanel({
     setMonth('');
     setSource('ALL');
     setData(null);
+    setDataFilterKey('');
     setError('');
     setLoading(false);
   }, [userId]);
@@ -87,6 +89,7 @@ export default function AdminStarHistoryPanel({
           return;
         }
         setData(res.data);
+        setDataFilterKey(`${month}|${source}`);
       })
       .catch(() => {
         if (!isStale()) setError('Không thể kết nối để tải lịch sử nhận sao.');
@@ -104,7 +107,8 @@ export default function AdminStarHistoryPanel({
     setPage(1);
   };
 
-  const items = data?.items ?? [];
+  const view = data && dataFilterKey === `${month}|${source}` ? data : null;
+  const items = view?.items ?? [];
   const empty = starHistoryEmptyMessage(hasActiveFilter);
   const refreshing = loading && data !== null;
 
@@ -123,9 +127,9 @@ export default function AdminStarHistoryPanel({
         <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
           <span className="text-[11px] font-bold text-[#6c6f7f] uppercase tracking-wider block">Tổng sao theo bộ lọc</span>
           <div className="text-xl font-extrabold text-[#172554]">
-            {data ? fmt(data.filteredTotal) : '—'} <span className="text-sm font-semibold text-slate-500">sao</span>
+            {view ? fmt(view.filteredTotal) : '—'} <span className="text-sm font-semibold text-slate-500">sao</span>
           </div>
-          {data && <span className="text-[11px] text-slate-500">{fmt(data.totalItems)} lượt nhận</span>}
+          {view && <span className="text-[11px] text-slate-500">{fmt(view.totalItems)} lượt nhận</span>}
         </div>
         <button
           type="button"
@@ -191,7 +195,7 @@ export default function AdminStarHistoryPanel({
             Thử tải lại
           </button>
         </div>
-      ) : loading && !data ? (
+      ) : !view ? (
         <div className="space-y-2" aria-busy="true">
           {[0, 1, 2, 3].map((i) => (
             <div key={i} className="h-16 rounded-2xl bg-slate-100 animate-pulse" />
@@ -234,9 +238,9 @@ export default function AdminStarHistoryPanel({
         </ul>
       )}
 
-      {data && data.totalPages > 1 && !error && (
+      {view && view.totalPages > 1 && !error && (
         <div className="flex items-center justify-between pt-1">
-          <span className="text-xs text-slate-500 font-medium">Trang {data.page} / {data.totalPages}</span>
+          <span className="text-xs text-slate-500 font-medium">Trang {view.page} / {view.totalPages}</span>
           <div className="flex gap-2">
             <button
               type="button"
@@ -248,7 +252,7 @@ export default function AdminStarHistoryPanel({
             </button>
             <button
               type="button"
-              disabled={loading || page >= data.totalPages}
+              disabled={loading || page >= view.totalPages}
               onClick={() => setPage((p) => p + 1)}
               className="px-3 py-1.5 rounded-xl text-xs font-bold bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed"
             >
