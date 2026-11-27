@@ -42,7 +42,12 @@ stub('../lib/server-cache', { invalidateCoursesServerCache: () => {} })
 stub('../lib/progress/calculator', { invalidateSystemDataCache: () => {} })
 stub('../lib/course-status-outbox', { enqueueCourseStatusReconcile: async () => {} })
 stub('../lib/course-edit-guard', { invalidateCourseContentCaches: (id: string) => { assert.equal(id, courseId); events.push('cache') } })
-stub('../lib/apply-course-draft', { applyCourseDraft: async () => { applied++; events.push('apply') } })
+let scheduledUpdates: any[] = [], applyNow: Date | undefined
+stub('../lib/apply-course-draft', { applyCourseDraft: async (...args: any[]) => { applied++; applyNow = args[4]; events.push('apply'); return { scheduledUpdates } } })
+stub('../lib/assessment-schedule', {
+  applyDueAssessmentSchedules: async (client: unknown, options: any) => { events.push(`schedule-${client === tx ? 'tx' : 'prisma'}-${options.courseId}`); return { appliedCount: 0, appliedAssessmentIds: [] } },
+  courseScheduleMeta: async () => ({ COURSE_FINAL: { assessmentId: 'final', hasCurrentMonthAttempts: true, currentQuestionCount: 10, currentDurationMinutes: 30, scheduledConfig: null } }),
+})
 stub('../lib/course-requirements', {
   executePublishCourseRequirements: async () => { publishes++; events.push('requirements'); return course() },
   publishCourseRequirements: async () => { status = 'PUBLISHED'; return course() }, // unchanged requirement fingerprint on republish
@@ -57,7 +62,7 @@ const republish = require('../app/api/v1/courses/[courseId]/publish/route') as t
 const request = (method: string, body: unknown) => new NextRequest(`http://localhost/api/v1/courses/${courseId}/draft`, { method, body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' } })
 const params = { params: { courseId } }
 function reset(withDraft = true) {
-  role = 'ADMIN'; status = 'PUBLISHED'; version = 4; events = []; applied = 0; publishes = 0; queue = Promise.resolve()
+  role = 'ADMIN'; status = 'PUBLISHED'; version = 4; events = []; applied = 0; publishes = 0; queue = Promise.resolve(); scheduledUpdates = []; applyNow = undefined
   visibility = 'PRIVATE'; documents = []
   draft = withDraft ? { id: 'draft-1', course_id: courseId, draft_version: 2, base_content_version: 4, content } : null
 }
@@ -112,6 +117,23 @@ describe('course draft route concurrency and atomic publish', () => {
     assert.equal(events.filter(e => e === 'user-u1').length, 1)
     assert.ok(events.indexOf('requirements') < events.indexOf('delete-draft'))
     assert.ok(events.indexOf('commit') < events.indexOf('cache'))
+  })
+  it('publish activates due schedules under the course lock, applies with the DB clock and reports next-month schedules', async () => {
+    reset()
+    scheduledUpdates = [{ assessmentId: 'quiz', type: 'LESSON', lessonId: 'lesson', currentQuestionCount: 10, currentDurationMinutes: 30, questionCount: 20, durationMinutes: 30, effectiveAt: '2026-11-30T17:00:00.000Z', effectiveMonthKey: '2026-12' }]
+    const response = await publish.POST(request('POST', { expectedDraftId: 'draft-1', expectedDraftVersion: 2 }), params)
+    assert.equal(response.status, 200)
+    assert.deepEqual((await response.json()).scheduledUpdates, scheduledUpdates)
+    assert.ok(events.indexOf('course-lock') < events.indexOf(`schedule-tx-${courseId}`))
+    assert.ok(events.indexOf(`schedule-tx-${courseId}`) < events.indexOf('apply'))
+    assert.equal(applyNow?.getTime(), now.getTime())
+  })
+  it('draft load lazily activates due schedules first and returns schedule meta for the editor', async () => {
+    reset()
+    const loaded = await drafts.GET(request('GET', undefined), params)
+    assert.equal(loaded.status, 200)
+    assert.deepEqual(events, [`schedule-prisma-${courseId}`])
+    assert.equal((await loaded.json()).scheduleMeta.COURSE_FINAL.hasCurrentMonthAttempts, true)
   })
   it('rejects stale versions or replacement drafts before content writes', async () => {
     for (const body of [{ expectedDraftId: 'draft-1', expectedDraftVersion: 1 }, { expectedDraftId: 'old-draft', expectedDraftVersion: 2 }]) {

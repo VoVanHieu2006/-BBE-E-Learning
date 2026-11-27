@@ -26,7 +26,7 @@ function loadLessonDetail(lessonId: string) {
       },
       video: true,
       assessment: {
-        select: { id: true, title: true, description: true, question_count: true, duration_minutes: true, _count: { select: { questions: true } } },
+        select: { id: true, title: true, description: true, question_count: true, duration_minutes: true, _count: { select: { questions: { where: { archived_at: null } } } } },
       },
       documents: {
         select: { id: true, file_name: true, file_size: true, mime_type: true, created_at: true },

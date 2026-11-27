@@ -4,6 +4,9 @@ import { authenticate } from '@/lib/auth'
 import { guardCourseEditableByAssessment, invalidateCourseContentCaches } from '@/lib/course-edit-guard'
 import { prisma } from '@/lib/prisma'
 import { assertFinalExamBankCapacity, finalExamBankError, lockCourseExamBank } from '@/lib/final-exam-bank'
+import { applyDueAssessmentSchedules, hasCurrentMonthLockingAttempts, scheduledConfigOf } from '@/lib/assessment-schedule'
+import { MAX_LESSON_QUIZ_QUESTIONS, validateLessonBankForCounts } from '@/lib/quiz-schedule-rules'
+import { CourseDraftError } from '@/lib/course-draft'
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -30,11 +33,14 @@ export async function GET(request: NextRequest, { params }: { params: { assessme
     )
   }
 
+  const now = new Date()
+  await applyDueAssessmentSchedules(prisma, { assessmentId, now })
   const assessment = await prisma.assessment.findUnique({
     where: { id: assessmentId },
     include: {
       question_pools: { orderBy: { sort_order: 'asc' } },
       questions: {
+        where: { archived_at: null },
         include: { options: { orderBy: { sort_order: 'asc' } } },
         orderBy: { sort_order: 'asc' },
       },
@@ -53,6 +59,9 @@ export async function GET(request: NextRequest, { params }: { params: { assessme
     description: assessment.description,
     durationMinutes: assessment.duration_minutes,
     questionCount: assessment.questions.length,
+    activeQuestionCount: assessment.question_count,
+    hasCurrentMonthAttempts: await hasCurrentMonthLockingAttempts(prisma, assessment.id, now),
+    scheduledConfig: scheduledConfigOf(assessment),
     pools: assessment.question_pools.map((pool) => ({ poolId: pool.id, name: pool.name, sortOrder: pool.sort_order })),
     questions: assessment.questions.map((q) => ({
       questionId: q.id,
@@ -99,18 +108,11 @@ export async function PATCH(request: NextRequest, { params }: { params: { assess
 
   const body = await request.json()
   const { title, description, questions } = body || {}
-
-  if (Array.isArray(questions)) {
-    const historicalAttempts = await prisma.attempt.count({ where: { assessment_id: assessmentId } })
-    if (historicalAttempts) {
-      return NextResponse.json({ error: { code: 'AssessmentVersionRequired', message: 'Cannot replace questions after attempts exist; create a new assessment version to preserve history.' } }, { status: 409 })
-    }
-  }
+  await applyDueAssessmentSchedules(prisma, { assessmentId })
 
   try {
     await prisma.$transaction(async (tx) => {
       await lockCourseExamBank(tx, courseId)
-    if (Array.isArray(questions) && await tx.attempt.count({ where: { assessment_id: assessmentId } })) throw new Error('AssessmentVersionRequired')
     if (title || description !== undefined) {
       await tx.assessment.update({
         where: { id: assessmentId },
@@ -122,7 +124,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { assess
     }
 
     if (Array.isArray(questions)) {
-      if (questions.length === 0 || questions.length > 100) throw new Error('Cần 1-100 câu hỏi')
+      if (questions.length === 0 || questions.length > MAX_LESSON_QUIZ_QUESTIONS) throw new Error(`Cần 1-${MAX_LESSON_QUIZ_QUESTIONS} câu hỏi`)
 
       // Loại câu hỏi Đúng/Sai đã ngừng sử dụng
       if (questions.some((q: any) => (q.questionType || q.type) === 'TRUE_FALSE')) {
@@ -165,9 +167,22 @@ export async function PATCH(request: NextRequest, { params }: { params: { assess
       const allQuestionRows = preparedQuestions.map((p) => p.question)
       const allOptionRows = preparedQuestions.flatMap((p) => p.options)
 
-      // 1. Delete all old questions & options
-      await tx.questionOption.deleteMany({ where: { question: { assessment_id: assessmentId } } })
-      await tx.question.deleteMany({ where: { assessment_id: assessmentId } })
+      // Dual budget: the new bank must serve this month's active count and any scheduled next-month count.
+      const current = await tx.assessment.findUniqueOrThrow({ where: { id: assessmentId }, select: { question_count: true, scheduled_question_count: true, scheduled_effective_at: true, question_pools: { select: { id: true } } } })
+      const bank = validateLessonBankForCounts({
+        questionCount: current.question_count, scheduledQuestionCount: current.scheduled_effective_at ? current.scheduled_question_count : null,
+        poolCounts: current.question_pools.map((pool) => allQuestionRows.filter((q) => q.pool_id === pool.id).length), totalQuestions: allQuestionRows.length,
+      })
+      if (bank.ok === false) throw new CourseDraftError(bank.code, bank.message, 400)
+
+      // 1. Archive questions referenced by attempts (history keeps them); delete the unused ones with their options
+      const now = new Date()
+      const active = await tx.question.findMany({ where: { assessment_id: assessmentId, archived_at: null }, select: { id: true, _count: { select: { attempt_questions: true, attempt_answers: true } } } })
+      const referenced = active.filter((q) => q._count.attempt_questions + q._count.attempt_answers > 0).map((q) => q.id)
+      const unused = active.filter((q) => !referenced.includes(q.id)).map((q) => q.id)
+      if (referenced.length) await tx.question.updateMany({ where: { id: { in: referenced } }, data: { archived_at: now, pool_id: null } })
+      await tx.questionOption.deleteMany({ where: { question_id: { in: unused } } })
+      await tx.question.deleteMany({ where: { id: { in: unused } } })
 
       // 2. Batch insert questions & options (2 batch queries instead of ~25 individual roundtrips)
       await tx.question.createMany({ data: allQuestionRows })
@@ -182,6 +197,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { assess
     if (bankError) return NextResponse.json(bankError, { status: 409 })
     if (error instanceof Error && error.message === 'AssessmentVersionRequired') return NextResponse.json({ error: { code: 'AssessmentVersionRequired', message: 'Quiz đã có lượt làm; không thể thay đổi lịch sử.' } }, { status: 409 })
     if (error instanceof Error && error.message === 'InvalidQuestionOptions') return NextResponse.json({ error: { code: 'ValidationError', message: 'Mỗi câu hỏi cần ít nhất hai đáp án và một đáp án đúng.' } }, { status: 400 })
+    if (error instanceof CourseDraftError) return NextResponse.json({ error: { code: error.code, message: error.message } }, { status: error.status })
     throw error
   }
 

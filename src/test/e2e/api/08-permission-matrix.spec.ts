@@ -65,6 +65,7 @@ const MATRIX: Record<string, Audience> = {
   'GET v1/courses/[courseId]/draft': 'ADMIN', 'PUT v1/courses/[courseId]/draft': 'ADMIN', 'DELETE v1/courses/[courseId]/draft': 'ADMIN',
   'GET v1/courses/[courseId]/final-assessment': 'AUTH', 'POST v1/courses/[courseId]/final-assessment': 'ADMIN', 'DELETE v1/courses/[courseId]/final-assessment': 'ADMIN',
   'GET v1/courses/[courseId]/my-progress': 'AUTH', 'POST v1/courses/[courseId]/publish': 'ADMIN',
+  'GET v1/courses/[courseId]/questions': 'ADMIN',
   'GET v1/courses/[courseId]': 'PUBLIC', 'PATCH v1/courses/[courseId]': 'ADMIN', 'DELETE v1/courses/[courseId]': 'ADMIN',
   'PATCH v1/courses/[courseId]/sessions/reorder': 'ADMIN', 'POST v1/courses/[courseId]/sessions': 'ADMIN',
   'GET v1/courses/[courseId]/students': 'CHAPTER', 'POST v1/courses/[courseId]/unpublish': 'ADMIN',

@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { assertDraftIdentity, assertDraftVersion, CourseDraftError, DRAFT_UUID, validateDraftContent } from '@/lib/course-draft'
 import { courseDraftInclude, courseDraftSnapshot } from '@/lib/course-draft-snapshot'
 import { Prisma } from '@prisma/client'
+import { applyDueAssessmentSchedules, courseScheduleMeta } from '@/lib/assessment-schedule'
 
 const jsonError = (code: string, message: string, status: number) => NextResponse.json({ error: { code, message } }, { status })
 const conflict = (e: unknown) => e instanceof CourseDraftError ? jsonError(e.code, e.message, e.status) : null
@@ -21,8 +22,11 @@ async function authorize(request: NextRequest, courseId: string) {
 export async function GET(request: NextRequest, { params }: { params: { courseId: string } }) {
   const auth = await authorize(request, params.courseId)
   if (auth.response) return auth.response
+  const now = new Date()
+  await applyDueAssessmentSchedules(prisma, { courseId: params.courseId, now })
   const course = await prisma.course.findUnique({ where: { id: params.courseId }, include: { ...courseDraftInclude, draft: true } })
   if (!course) return jsonError('CourseNotFound', 'Khóa học không tồn tại.', 404)
+  const scheduleMeta = await courseScheduleMeta(prisma, course, now)
   let draftError: string | null = null
   const initialContent = courseDraftSnapshot(course)
   if (course.draft) {
@@ -33,6 +37,7 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
     draft: course.draft ? draftResponse(course.draft) : null,
     draftError,
     initialContent,
+    scheduleMeta,
     course: { id: course.id, title: course.title, contentVersion: course.content_version, status: course.status },
   }, { headers: { 'Cache-Control': 'private, no-store' } })
 }

@@ -4,6 +4,7 @@ import { processLearningOutbox } from '@/lib/learning-outbox'
 import { retireInactiveAccounts } from '@/lib/account-retirement'
 import { closeCompetitionMonths, completePendingCompetitionKpis, closeCompetitionTerms } from '@/lib/competition-snapshots'
 import { applyDueDnaCycleResets } from '@/lib/dna-cycle-resets'
+import { applyDueAssessmentSchedules } from '@/lib/assessment-schedule'
 
 export async function GET(request: NextRequest) {
   const secret = process.env.CRON_SECRET
@@ -17,5 +18,6 @@ export async function GET(request: NextRequest) {
   const closedMonths = await closeCompetitionMonths()
   const completedKpis = await completePendingCompetitionKpis()
   const closedTerms = await closeCompetitionTerms()
-  return NextResponse.json({ applied, dnaResets, synchronization, retired, supplementalViolations, closedMonths, completedKpis, closedTerms })
+  const assessmentSchedulesApplied = await applyDueAssessmentSchedules()
+  return NextResponse.json({ applied, dnaResets, synchronization, retired, supplementalViolations, closedMonths, completedKpis, closedTerms, assessmentSchedulesApplied })
 }

@@ -128,13 +128,13 @@ describe('ngân hàng câu hỏi thi cuối khóa', () => {
       Object.setPrototypeOf(error, bank.FinalExamBankTooSmall.prototype)
       assert.deepEqual([error.requested, error.available], [10, 9])
       assert.match(error.message, /cần 10 câu, nhưng sau thay đổi chỉ còn 9 câu/)
-      assert.deepEqual(bank.finalExamBankError(error), { error: { code: 'FinalExamBankTooSmall', message: error.message, requested: 10, available: 9 } })
+      assert.deepEqual(bank.finalExamBankError(error), { error: { code: 'FinalExamBankTooSmall', message: error.message, requested: 10, available: 9, scheduled: false } })
       return true
     })
     assert.equal(bank.finalExamBankError(new Error('khác')), null)
   })
-  it('the bank is the lesson quizzes of that course only', () => {
-    assert.deepEqual(bank.lessonQuestionWhere('course-1'), { assessment: { type: 'LESSON', lesson: { session: { course_id: 'course-1' } } } })
+  it('the bank is the active (non-archived) lesson questions of that course only', () => {
+    assert.deepEqual(bank.lessonQuestionWhere('course-1'), { archived_at: null, assessment: { type: 'LESSON', lesson: { session: { course_id: 'course-1' } } } })
   })
 
   const option = (id: string, correct: boolean) => ({ option_text: id, is_correct: correct, sort_order: 0 })

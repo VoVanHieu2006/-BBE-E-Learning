@@ -8,6 +8,7 @@ import { finalExamBankError } from '@/lib/final-exam-bank'
 import { executePublishCourseRequirements } from '@/lib/course-requirements'
 import { lockLearningUser, lockCompetitionScope } from '@/lib/learning-periods'
 import { courseDraftInclude, courseDraftSnapshot } from '@/lib/course-draft-snapshot'
+import { applyDueAssessmentSchedules } from '@/lib/assessment-schedule'
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -38,6 +39,9 @@ export async function POST(request: NextRequest, { params }: { params: { courseI
         await lockLearningUser(tx, userId)
       }
       await tx.$queryRaw`SELECT id FROM courses WHERE id = ${courseId}::uuid FOR UPDATE`
+      const [clock] = await tx.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`
+      // A schedule due at 00:00 1st VN activates before the draft is compared and applied.
+      await applyDueAssessmentSchedules(tx, { courseId, now: clock.now })
       const course = await tx.course.findUnique({ where: { id: courseId }, include: courseDraftInclude })
       if (!course) throw new CourseDraftError('CourseNotFound', 'Khóa học không tồn tại.', 404)
 
@@ -50,10 +54,9 @@ export async function POST(request: NextRequest, { params }: { params: { courseI
       assertDraftVersion(body.expectedDraftVersion, draft.draft_version, draft.base_content_version, course.content_version)
       if (course.status !== 'PUBLISHED') throw new CourseDraftError('CourseNotPublished', 'Khóa học chưa xuất bản. Hãy tải lại trình chỉnh sửa.', 409)
       const content = validateDraftContent(draft.content, courseDraftSnapshot(course))
-      await applyCourseDraft(tx, courseId, content, auth.context!.userId)
+      const { scheduledUpdates } = await applyCourseDraft(tx, courseId, content, auth.context!.userId, clock.now)
 
       // 6. Execute atomic publish requirements (increments content_version once, extends deadlines)
-      const [clock] = await tx.$queryRaw<{ now: Date }[]>`SELECT clock_timestamp() AS now`
       const scope = await lockCompetitionScope(tx, clock.now)
       const now = scope.now
       const publishedCourse = await executePublishCourseRequirements(tx, courseId, now)
@@ -63,7 +66,8 @@ export async function POST(request: NextRequest, { params }: { params: { courseI
       await tx.auditLog.create({ data: { actor_user_id: auth.context!.userId, action: 'COURSE_DRAFT_PUBLISHED', entity_type: 'Course', entity_id: courseId, metadata: { draftId: draft.id, draftVersion: draft.draft_version, baseContentVersion: draft.base_content_version } } })
 
       // Metadata-only edits must advance OCC too; requirement fingerprints remain idempotent.
-      return tx.course.update({ where: { id: courseId }, data: { content_version: Math.max(course.content_version + 1, publishedCourse.content_version) } })
+      const published = await tx.course.update({ where: { id: courseId }, data: { content_version: Math.max(course.content_version + 1, publishedCourse.content_version) } })
+      return { ...published, scheduledUpdates }
     }, { timeout: 60_000 })
 
     invalidateCourseContentCaches(courseId)
@@ -72,6 +76,7 @@ export async function POST(request: NextRequest, { params }: { params: { courseI
       courseId: updated.id,
       status: updated.status,
       publishedAt: updated.published_at,
+      scheduledUpdates: updated.scheduledUpdates,
     }, { status: 200 })
   } catch (error: any) {
     if (error instanceof CourseDraftError) return NextResponse.json({ error: { code: error.code, message: error.message } }, { status: error.status })

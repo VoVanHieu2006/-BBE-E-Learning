@@ -56,7 +56,7 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
               video: { select: { id: true, youtube_video_id: true, duration_seconds: true } },
               documents: { select: { id: true, file_name: true, file_size: true, mime_type: true } },
               assessment: {
-                select: { id: true, title: true, description: true, question_count: true, duration_minutes: true, _count: { select: { questions: true } } },
+                select: { id: true, title: true, description: true, question_count: true, duration_minutes: true, _count: { select: { questions: { where: { archived_at: null } } } } },
               },
             },
             orderBy: { sort_order: 'asc' },

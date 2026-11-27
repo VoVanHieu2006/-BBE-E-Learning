@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client'
 import type { CourseDraftContent, DraftAssessment, DraftFinal, DraftQuestion } from './course-draft'
 
-export const draftAssessmentInclude = { questions: { include: { options: { orderBy: { sort_order: 'asc' as const } }, _count: { select: { attempt_questions: true, attempt_answers: true } } }, orderBy: { sort_order: 'asc' as const } }, question_pools: { orderBy: { sort_order: 'asc' as const } }, _count: { select: { attempts: true } } } satisfies Prisma.AssessmentInclude
+export const draftAssessmentInclude = { questions: { where: { archived_at: null }, include: { options: { orderBy: { sort_order: 'asc' as const } }, _count: { select: { attempt_questions: true, attempt_answers: true } } }, orderBy: { sort_order: 'asc' as const } }, question_pools: { orderBy: { sort_order: 'asc' as const } }, _count: { select: { attempts: true } } } satisfies Prisma.AssessmentInclude
 export const courseDraftInclude = {
   sessions: { include: { lessons: { include: { video: true, documents: true, assessment: { include: draftAssessmentInclude } }, orderBy: { sort_order: 'asc' as const } } }, orderBy: { sort_order: 'asc' as const } },
   final_assessment: { include: { final_exam_versions: { where: { is_active: true } }, _count: { select: { attempts: true } } } },
@@ -13,8 +13,14 @@ export function questionSnapshot(q: DraftAssessmentRow['questions'][number]): Dr
   return { id: q.id, questionText: q.question_text, questionType: q.question_type, points: q.points, sortOrder: q.sort_order, explanation: q.explanation, poolId: q.pool_id,
     options: q.options.map(o => ({ id: o.id, optionText: o.option_text, isCorrect: o.is_correct, sortOrder: o.sort_order })) }
 }
-export function finalSnapshot(a: { id: string; title: string; description: string | null; question_count: number; duration_minutes: number } | null): DraftFinal | null {
-  return a && { id: a.id, title: a.title, description: a.description, questionCount: a.question_count, durationMinutes: a.duration_minutes }
+type FinalRow = {
+  id: string; title: string; description: string | null; question_count: number; duration_minutes: number
+  scheduled_question_count?: number | null; scheduled_duration_minutes?: number | null; scheduled_effective_at?: Date | null; scheduled_effective_month_key?: string | null
+}
+export function finalSnapshot(a: FinalRow | null): DraftFinal | null {
+  return a && { id: a.id, title: a.title, description: a.description, questionCount: a.question_count, durationMinutes: a.duration_minutes,
+    scheduledQuestionCount: a.scheduled_question_count ?? null, scheduledDurationMinutes: a.scheduled_duration_minutes ?? null,
+    scheduledEffectiveAt: a.scheduled_effective_at?.toISOString() ?? null, scheduledEffectiveMonthKey: a.scheduled_effective_month_key ?? null }
 }
 export function assessmentSnapshot(a: DraftAssessmentRow | null): DraftAssessment | null {
   return a && { ...finalSnapshot(a)!, pools: a.question_pools.map(p => ({ id: p.id, name: p.name })), questions: a.questions.map(questionSnapshot) }

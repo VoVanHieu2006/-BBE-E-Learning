@@ -13,7 +13,11 @@ const ID = '11111111-1111-1111-1111-111111111111'
 const month = { id: 'month', key: '2020-10', starts_at: new Date('2020-10-01'), ends_at: new Date('2020-11-01') }
 let snapshot = null, historyCalls = 0, bankCalls = 0
 const db = global.prisma = {
-  assessment: { findUnique: async () => { bankCalls++; return { id: ID, type: 'LESSON', title: 'Quiz', questions: [{ id: 'q', points: 1, options: [{ id: 'o', is_correct: true }] }], question_pools: [] } } },
+  assessment: {
+    findUnique: async () => { bankCalls++; return { id: ID, type: 'LESSON', title: 'Quiz', questions: [{ id: 'q', points: 1, options: [{ id: 'o', is_correct: true }] }], question_pools: [] } },
+    findMany: async () => [], // no next-month schedule is due
+  },
+  attempt: { count: async () => 0 },
   learningPolicy: { findUnique: async () => ({ cutover_at: new Date('2020-01-01'), mapping_approved_at: new Date('2020-01-01') }) },
   competitionMonth: { findFirst: async () => month, findUnique: async () => month, findMany: async () => [{ key: month.key }] },
   learningSnapshot: { findUnique: async () => snapshot },

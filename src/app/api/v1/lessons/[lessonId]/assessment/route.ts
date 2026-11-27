@@ -4,6 +4,9 @@ import { authenticate } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { guardCourseEditableByLesson, invalidateCourseContentCaches } from '@/lib/course-edit-guard';
 import { assertFinalExamBankCapacity, finalExamBankError, lockCourseExamBank } from '@/lib/final-exam-bank';
+import { applyDueAssessmentSchedules, existingScheduleOf, hasCurrentMonthLockingAttempts, scheduleColumns, scheduledConfigOf } from '@/lib/assessment-schedule';
+import { MAX_LESSON_QUIZ_QUESTIONS, resolveAssessmentConfigUpdate, validateLessonBankForCounts } from '@/lib/quiz-schedule-rules';
+import { CourseDraftError } from '@/lib/course-draft';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -42,11 +45,15 @@ export async function GET(
     );
   }
 
+  const now = new Date();
+  const target = await prisma.assessment.findUnique({ where: { lesson_id: lessonId }, select: { id: true } });
+  if (target) await applyDueAssessmentSchedules(prisma, { assessmentId: target.id, now });
   const assessment = await prisma.assessment.findUnique({
     where: { lesson_id: lessonId },
     include: {
       question_pools: { orderBy: { sort_order: 'asc' } },
       questions: {
+        where: { archived_at: null },
         include: {
           options: { orderBy: { sort_order: 'asc' } },
         },
@@ -61,6 +68,7 @@ export async function GET(
       { status: 404 }
     );
   }
+  const hasCurrentMonthAttempts = await hasCurrentMonthLockingAttempts(prisma, assessment.id, now);
 
   return NextResponse.json(
     {
@@ -71,6 +79,8 @@ export async function GET(
       description: assessment.description,
       questionCount: assessment.question_count,
       durationMinutes: assessment.duration_minutes,
+      hasCurrentMonthAttempts,
+      scheduledConfig: scheduledConfigOf(assessment),
       totalQuestionCount: assessment.questions.length,
       pools: assessment.question_pools.map((pool) => ({
         poolId: pool.id,
@@ -159,11 +169,17 @@ export async function POST(
         { status: 400 }
       );
     }
-    if (!Array.isArray(questions) || questions.length === 0 || questions.length > 100) {
+    if (!Array.isArray(questions) || questions.length === 0 || questions.length > MAX_LESSON_QUIZ_QUESTIONS) {
       return NextResponse.json(
-        { error: { code: 'ValidationError', message: 'Cần ít nhất 1 câu hỏi, tối đa 100 câu' } },
+        { error: { code: 'ValidationError', message: `Cần ít nhất 1 câu hỏi, tối đa ${MAX_LESSON_QUIZ_QUESTIONS} câu` } },
         { status: 400 }
       );
+    }
+    const optionalInteger = (value: unknown, max: number) => value === undefined || value === null ? null : Number.isInteger(value) && Number(value) >= 1 && Number(value) <= max ? Number(value) : NaN;
+    const scheduledQuestionCount = optionalInteger(body?.scheduledQuestionCount, MAX_LESSON_QUIZ_QUESTIONS);
+    const scheduledDurationMinutes = optionalInteger(body?.scheduledDurationMinutes, 240);
+    if (Number.isNaN(scheduledQuestionCount) || Number.isNaN(scheduledDurationMinutes) || (body?.cancelSchedule !== undefined && typeof body.cancelSchedule !== 'boolean')) {
+      return NextResponse.json({ error: { code: 'ValidationError', message: 'Lịch tháng sau không hợp lệ: số câu hoặc thời gian (1–240 phút).' } }, { status: 400 });
     }
     if (questions.some((question: any) => !question || typeof question.questionText !== 'string' || !question.questionText.trim() ||
       !Array.isArray(question.options) || question.options.length < 2 ||
@@ -219,12 +235,11 @@ export async function POST(
       );
     }
 
-    const existingAssessment = await prisma.assessment.findUnique({ where: { lesson_id: lessonId }, select: { id: true, _count: { select: { attempts: true } } } });
-    if (existingAssessment?._count.attempts) {
-      return NextResponse.json({ error: { code: 'AssessmentVersionRequired', message: 'Quiz đã có lượt làm; không thể thay đổi để tránh mất lịch sử.' } }, { status: 409 });
-    }
+    const existingAssessment = await prisma.assessment.findUnique({ where: { lesson_id: lessonId }, select: { id: true } });
+    if (existingAssessment) await applyDueAssessmentSchedules(prisma, { assessmentId: existingAssessment.id });
 
-    const assessmentId = crypto.randomUUID();
+    // The target ID is decided under the exam-bank lock: an attempted quiz keeps its row, others are recreated.
+    const prepare = (assessmentId: string) => {
     const preparedPools = usesPools ? pools.map((name: string, sortOrder: number) => ({ id: crypto.randomUUID(), assessment_id: assessmentId, name: name.trim(), sort_order: sortOrder })) : [];
 
     // Prepare questions and options with pre-generated UUIDs for batch createMany
@@ -269,46 +284,65 @@ export async function POST(
       };
     });
 
-    const allQuestionRows = preparedQuestions.map((p) => p.question);
-    const allOptionRows = preparedQuestions.flatMap((p) => p.options);
+    return { preparedPools, preparedQuestions };
+    };
 
-    await prisma.$transaction(
+    const actor = (auth as any).context!.userId as string;
+    const { assessmentId, preparedPools, preparedQuestions, config } = await prisma.$transaction(
       async (tx) => {
         await lockCourseExamBank(tx, lesson.session.course_id);
-        // Delete existing assessment if present
+        const now = new Date();
         const existing = await tx.assessment.findUnique({
           where: { lesson_id: lessonId },
-          select: { id: true, _count: { select: { attempts: true } } },
+          select: { id: true, question_count: true, duration_minutes: true, scheduled_question_count: true, scheduled_duration_minutes: true, scheduled_effective_at: true, scheduled_effective_month_key: true, _count: { select: { attempts: true } } },
         });
-        if (existing?._count.attempts) throw new Error('AssessmentVersionRequired');
+        const locked = existing?._count.attempts ? await hasCurrentMonthLockingAttempts(tx, existing.id, now) : false;
+        const config = resolveAssessmentConfigUpdate({
+          current: existing?._count.attempts ? { questionCount: existing.question_count, durationMinutes: existing.duration_minutes } : { questionCount, durationMinutes },
+          existingSchedule: existing?._count.attempts ? existingScheduleOf(existing) : null,
+          requested: { questionCount, durationMinutes, scheduledQuestionCount, scheduledDurationMinutes, cancelSchedule: body?.cancelSchedule === true },
+          hasCurrentMonthLockingAttempts: locked, now,
+        });
+        const poolCounts = usesPools ? pools.map((_: unknown, index: number) => questions.filter((q: any) => Number(q.poolIndex) === index).length) : [];
+        const bank = validateLessonBankForCounts({ questionCount: config.questionCount, scheduledQuestionCount: config.schedule?.questionCount ?? null, poolCounts, totalQuestions: questions.length });
+        if (bank.ok === false) throw new CourseDraftError(bank.code, bank.message, 400);
+        const settings = { title: title.trim(), description: description?.trim() || null, question_count: config.questionCount, duration_minutes: config.durationMinutes };
 
-        if (existing) {
-          await tx.questionOption.deleteMany({ where: { question: { assessment_id: existing.id } } });
-          await tx.question.deleteMany({ where: { assessment_id: existing.id } });
+        let assessmentId: string;
+        if (existing?._count.attempts) {
+          // Attempt history references these rows: archive referenced questions, drop only the unused ones.
+          assessmentId = existing.id;
+          const active = await tx.question.findMany({ where: { assessment_id: existing.id, archived_at: null }, select: { id: true, _count: { select: { attempt_questions: true, attempt_answers: true } } } });
+          const referenced = active.filter((q) => q._count.attempt_questions + q._count.attempt_answers > 0).map((q) => q.id);
+          const unused = active.filter((q) => !referenced.includes(q.id)).map((q) => q.id);
+          if (referenced.length) await tx.question.updateMany({ where: { id: { in: referenced } }, data: { archived_at: now, pool_id: null } });
+          if (unused.length) {
+            await tx.questionOption.deleteMany({ where: { question_id: { in: unused } } });
+            await tx.question.deleteMany({ where: { id: { in: unused } } });
+          }
           await tx.questionPool.deleteMany({ where: { assessment_id: existing.id } });
-          await tx.assessment.delete({ where: { id: existing.id } });
+          await tx.assessment.update({ where: { id: existing.id }, data: { ...settings, ...scheduleColumns(config, actor, now) } });
+        } else {
+          assessmentId = crypto.randomUUID();
+          if (existing) {
+            await tx.questionOption.deleteMany({ where: { question: { assessment_id: existing.id } } });
+            await tx.question.deleteMany({ where: { assessment_id: existing.id } });
+            await tx.questionPool.deleteMany({ where: { assessment_id: existing.id } });
+            await tx.assessment.delete({ where: { id: existing.id } });
+          }
+          await tx.assessment.create({ data: { ...settings, id: assessmentId, lesson_id: lessonId, created_by: actor } });
         }
 
-        // Create new assessment
-        await tx.assessment.create({
-          data: {
-            id: assessmentId,
-            lesson_id: lessonId,
-            title: title.trim(),
-            description: description?.trim() || null,
-            question_count: questionCount,
-            duration_minutes: durationMinutes,
-            created_by: (auth as any).context!.userId,
-          },
-        });
-
+        const { preparedPools, preparedQuestions } = prepare(assessmentId);
         if (preparedPools.length) await tx.questionPool.createMany({ data: preparedPools });
         // Batch insert questions & options
-        await tx.question.createMany({ data: allQuestionRows });
+        await tx.question.createMany({ data: preparedQuestions.map((p: any) => p.question) });
+        const allOptionRows = preparedQuestions.flatMap((p: any) => p.options);
         if (allOptionRows.length > 0) {
           await tx.questionOption.createMany({ data: allOptionRows });
         }
         await assertFinalExamBankCapacity(tx, lesson.session.course_id);
+        return { assessmentId, preparedPools, preparedQuestions, config };
       },
       {
         timeout: 15000,
@@ -325,7 +359,10 @@ export async function POST(
         title: title.trim(),
         description: description?.trim() || null,
         questionCount: preparedQuestions.length,
-        durationMinutes,
+        activeQuestionCount: config.questionCount,
+        durationMinutes: config.durationMinutes,
+        scheduled: config.wasScheduled,
+        scheduledConfig: config.schedule ? { questionCount: config.schedule.questionCount, durationMinutes: config.schedule.durationMinutes, effectiveAt: config.schedule.effectiveAt.toISOString(), effectiveMonthKey: config.schedule.effectiveMonthKey } : null,
         pools: preparedPools.map((pool) => ({ poolId: pool.id, name: pool.name, sortOrder: pool.sort_order })),
         questions: preparedQuestions.map(({ question: q, options: opts }) => ({
           questionId: q.id,
@@ -349,7 +386,7 @@ export async function POST(
   } catch (err: any) {
     const bankError = finalExamBankError(err);
     if (bankError) return NextResponse.json(bankError, { status: 409 });
-    if (err instanceof Error && err.message === 'AssessmentVersionRequired') return NextResponse.json({ error: { code: 'AssessmentVersionRequired', message: 'Quiz đã có lượt làm; không thể thay đổi lịch sử.' } }, { status: 409 });
+    if (err instanceof CourseDraftError) return NextResponse.json({ error: { code: err.code, message: err.message } }, { status: err.status });
     console.error('[LESSON_ASSESSMENT_POST_ERROR]:', err);
     return NextResponse.json(
       { error: { code: 'ServerError', message: err.message || 'Lỗi lưu bài kiểm tra' } },

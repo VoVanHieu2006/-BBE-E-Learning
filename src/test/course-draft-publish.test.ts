@@ -35,6 +35,7 @@ function fixture(attempted = true) {
   }
   tx.course.findUniqueOrThrow = async () => row
   tx.assessment.findUnique = async () => null // no final exam configured
+  tx.attempt = { count: async () => 0 } // no attempt locks this month's config
   const content = courseDraftSnapshot(row)
   return { row, content, writes, tx, publish: () => applyCourseDraft(tx as Prisma.TransactionClient, row.id, content, id(10)) }
 }
@@ -75,14 +76,22 @@ describe('applyCourseDraft with in-memory transaction', () => {
   })
   it('swaps existing pools without violating pool order uniqueness', async () => {
     const f = fixture()
-    f.row.sessions[0].lessons[0].assessment.question_pools.push({ id: id(11), name: 'Nhóm hai', sort_order: 1 })
+    const dbAssessment = f.row.sessions[0].lessons[0].assessment
+    dbAssessment.question_pools.push({ id: id(11), name: 'Nhóm hai', sort_order: 1 })
+    dbAssessment.question_count = 2
     const pools = new Map<string, number>([[id(6), 0], [id(11), 1]])
     f.tx.questionPool.update = async ({ where, data }: any) => {
       assert.ok(!Array.from(pools).some(([key, order]) => key !== where.id && order === data.sort_order), 'unique (assessment_id, sort_order)')
       pools.set(where.id, data.sort_order)
       return { id: where.id }
     }
-    f.content.sessions[0].lessons[0].assessment!.pools = [{ id: id(11), name: 'Nhóm hai' }, { id: id(6), name: 'Nhóm gốc' }]
+    const next = f.content.sessions[0].lessons[0].assessment!
+    next.questionCount = 2
+    next.pools = [{ id: id(11), name: 'Nhóm hai' }, { id: id(6), name: 'Nhóm gốc' }]
+    next.questions.push({
+      id: 'temp-q2', questionText: 'Câu nhóm hai', questionType: 'SINGLE_CHOICE', points: 1, poolId: id(11),
+      options: [{ id: 'temp-o1', optionText: 'Đúng', isCorrect: true }, { id: 'temp-o2', optionText: 'Sai', isCorrect: false }],
+    })
     await f.publish()
     assert.equal(pools.get(id(11)), 0)
     assert.equal(pools.get(id(6)), 1)
@@ -123,11 +132,18 @@ describe('applyCourseDraft with in-memory transaction', () => {
       await assert.rejects(f.publish(), (e: unknown) => e instanceof CourseDraftError && e.status === 409 && e.code === (kind === 'lesson' ? 'LessonHasAttempts' : 'SessionHasAttempts'))
     }
   })
-  it('rejects deleting or changing an attempted question instead of cloning it', async () => {
+  it('archives an attempted question whose answers change and inserts a new active copy, leaving old options intact', async () => {
     const f = fixture()
     f.content.sessions[0].lessons[0].assessment!.questions[0].options[0].optionText = 'Đáp án đã đổi'
-    await assert.rejects(f.publish(), (e: unknown) => e instanceof CourseDraftError && e.code === 'QuestionHasAttempts')
-    assert.equal(f.writes.filter(w => w.table === 'question' && w.op === 'create').length, 0)
+    await f.publish()
+    const archived = f.writes.filter(w => w.table === 'question' && w.op === 'update' && w.args.data.archived_at)
+    assert.deepEqual(archived.map(w => [w.args.where.id, w.args.data.pool_id]), [[id(5), null]])
+    const created = f.writes.filter(w => w.table === 'question' && w.op === 'create')
+    assert.equal(created.length, 1)
+    assert.equal(created[0].args.data.archived_at, undefined, 'the copy is active')
+    assert.equal(f.writes.filter(w => w.table === 'questionOption' && w.op === 'create').length, 2)
+    assert.ok(!f.writes.some(w => w.table === 'questionOption' && ['update', 'delete', 'deleteMany'].includes(w.op)), 'old options keep their answer keys')
+    assert.ok(!f.writes.some(w => w.table === 'question' && w.op === 'deleteMany' && w.args.where.id.in.includes(id(5))))
   })
   it('deletes omitted questions, options, documents and sessions when unused', async () => {
     const f = fixture(false)
@@ -138,7 +154,8 @@ describe('applyCourseDraft with in-memory transaction', () => {
     assert.ok(f.writes.some(w => w.table === 'document' && w.op === 'deleteMany' && w.args.where.id.in.includes(id(9))))
     assert.ok(f.writes.some(w => w.table === 'questionOption' && w.op === 'deleteMany' && w.args.where.id.in.includes(id(8))))
     const omitted = fixture(false)
-    omitted.content.sessions[0].lessons[0].assessment!.questions = []
+    omitted.content.sessions[0].lessons[0].assessment!.questions = [{ id: 'temp-question', questionText: 'Câu thay thế', questionType: 'SINGLE_CHOICE', points: 1, poolId: id(6),
+      options: [{ id: 'temp-a', optionText: 'Đúng', isCorrect: true }, { id: 'temp-b', optionText: 'Sai', isCorrect: false }] }]
     await omitted.publish()
     assert.ok(omitted.writes.some(w => w.table === 'question' && w.op === 'deleteMany' && w.args.where.id.in.includes(id(5))))
     const session = fixture(false); session.content.sessions = [{ id: 'temp-session', title: 'Buổi thay thế', lessons: [{ title: 'Bài mới', video: null, documents: [], assessment: null }] }]

@@ -5,8 +5,10 @@ import { checkCourseFinalProgression } from '@/lib/progression'
 import { QUIZ_COOLDOWN_MINUTES, QUIZ_COOLDOWN_MS } from '@/lib/config/quiz'
 import { guardCourseEditable, invalidateCourseContentCaches } from '@/lib/course-edit-guard'
 import { currentCycleAttemptFilter } from '@/lib/learning-periods'
-import { finalExamBankError, lessonQuestionWhere, lockCourseExamBank } from '@/lib/final-exam-bank'
+import { availableFinalQuestions, FinalExamBankTooSmall, finalExamBankError, lessonQuestionWhere, lockCourseExamBank } from '@/lib/final-exam-bank'
 import { createFinalExamVersion } from '@/lib/final-exam-version'
+import { applyDueAssessmentSchedules, CLEARED_ASSESSMENT_SCHEDULE, existingScheduleOf, hasCurrentMonthLockingAttempts, scheduleColumns, scheduledConfigOf } from '@/lib/assessment-schedule'
+import { resolveAssessmentConfigUpdate } from '@/lib/quiz-schedule-rules'
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const jsonError = (code: string, message: string, status: number) =>
@@ -20,6 +22,8 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
   const userId = (auth as any).context!.userId as string
   const role = (auth as any).context!.role as string
 
+  const now = new Date()
+  await applyDueAssessmentSchedules(prisma, { courseId: params.courseId, now })
   const course = await prisma.course.findUnique({
     where: { id: params.courseId },
     select: {
@@ -34,6 +38,10 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
           description: true,
           question_count: true,
           duration_minutes: true,
+          scheduled_question_count: true,
+          scheduled_duration_minutes: true,
+          scheduled_effective_at: true,
+          scheduled_effective_month_key: true,
           _count: { select: { attempts: true, questions: true } },
         },
       },
@@ -42,9 +50,10 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
   if (!course) return jsonError('CourseNotFound', 'Khóa học không tồn tại.', 404)
   if (role === 'ADMIN') {
     const finalAssessment = course.final_assessment
-    const [availableQuestions, activeVersion] = await Promise.all([
+    const [availableQuestions, activeVersion, hasCurrentMonthAttempts] = await Promise.all([
       prisma.question.count({ where: lessonQuestionWhere(course.id) }),
       finalAssessment ? prisma.finalExamVersion.findFirst({ where: { assessment_id: finalAssessment.id, is_active: true }, select: { version_number: true, _count: { select: { questions: true } } } }) : null,
+      finalAssessment ? hasCurrentMonthLockingAttempts(prisma, finalAssessment.id, now) : false,
     ])
     return NextResponse.json({
       courseId: course.id,
@@ -60,6 +69,8 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
         durationMinutes: finalAssessment.duration_minutes,
         totalQuestionCount: activeVersion?._count.questions || 0,
         versionNumber: activeVersion?.version_number || null,
+        hasCurrentMonthAttempts,
+        scheduledConfig: scheduledConfigOf(finalAssessment),
       } : null,
       availableQuestions,
       attemptCount: finalAssessment?._count.attempts || 0,
@@ -152,12 +163,44 @@ export async function POST(request: NextRequest, { params }: { params: { courseI
   if (!Number.isInteger(questionCount) || questionCount < 1 || !Number.isInteger(durationMinutes) || durationMinutes < 1 || durationMinutes > 240) {
     return jsonError('ValidationError', 'Số câu mỗi lượt phải là số nguyên dương; thời gian từ 1 đến 240 phút.', 400)
   }
+  const optionalInteger = (value: unknown, max: number) => value === undefined || value === null ? null : Number.isInteger(value) && Number(value) >= 1 && Number(value) <= max ? Number(value) : NaN
+  const scheduledQuestionCount = optionalInteger(body?.scheduledQuestionCount, 10000)
+  const scheduledDurationMinutes = optionalInteger(body?.scheduledDurationMinutes, 240)
+  if (Number.isNaN(scheduledQuestionCount) || Number.isNaN(scheduledDurationMinutes) || (body?.cancelSchedule !== undefined && typeof body.cancelSchedule !== 'boolean')) {
+    return jsonError('ValidationError', 'Lịch tháng sau không hợp lệ: số câu hoặc thời gian (1–240 phút).', 400)
+  }
+  const actor = (auth as any).context!.userId as string
+  await applyDueAssessmentSchedules(prisma, { courseId: course.id })
   try {
     const result = await prisma.$transaction(async (tx) => {
-      return createFinalExamVersion(tx, course.id, { title, description: description || null, questionCount, durationMinutes }, (auth as any).context!.userId)
+      await lockCourseExamBank(tx, course.id)
+      const now = new Date()
+      const existing = await tx.assessment.findUnique({ where: { course_id: course.id } })
+      if (!existing || !await hasCurrentMonthLockingAttempts(tx, existing.id, now)) {
+        const created = await createFinalExamVersion(tx, course.id, { title, description: description || null, questionCount, durationMinutes }, actor)
+        if (existing?.scheduled_effective_at) await tx.assessment.update({ where: { id: existing.id }, data: { ...CLEARED_ASSESSMENT_SCHEDULE } })
+        return { assessmentId: created.assessment.id, versionNumber: created.version.version_number, availableQuestions: created.availableQuestions, questionCount, durationMinutes, schedule: null, scheduled: false }
+      }
+      // This month already has attempts: the active count/duration stay; the requested change waits for 00:00 1st next month VN.
+      const config = resolveAssessmentConfigUpdate({
+        current: { questionCount: existing.question_count, durationMinutes: existing.duration_minutes }, existingSchedule: existingScheduleOf(existing),
+        requested: { questionCount, durationMinutes, scheduledQuestionCount, scheduledDurationMinutes, cancelSchedule: body?.cancelSchedule === true },
+        hasCurrentMonthLockingAttempts: true, now,
+      })
+      const availableQuestions = await availableFinalQuestions(tx, course.id)
+      if (config.schedule && config.schedule.questionCount > availableQuestions) throw new FinalExamBankTooSmall(config.schedule.questionCount, availableQuestions, true)
+      const republish = config.scheduleAction === 'KEEP' || title !== existing.title || (description || null) !== existing.description
+      const created = republish
+        ? await createFinalExamVersion(tx, course.id, { title, description: description || null, questionCount: config.questionCount, durationMinutes: config.durationMinutes }, actor)
+        : null
+      const columns = scheduleColumns(config, actor, now)
+      if (Object.keys(columns).length) await tx.assessment.update({ where: { id: existing.id }, data: columns })
+      const active = created?.version ?? await tx.finalExamVersion.findFirst({ where: { assessment_id: existing.id, is_active: true }, select: { version_number: true } })
+      return { assessmentId: existing.id, versionNumber: active?.version_number ?? null, availableQuestions, questionCount: config.questionCount, durationMinutes: config.durationMinutes, schedule: config.schedule, scheduled: config.wasScheduled }
     }, { timeout: 30000, maxWait: 5000 })
     invalidateCourseContentCaches(course.id)
-    return NextResponse.json({ assessmentId: result.assessment.id, id: result.assessment.id, assessmentType: 'COURSE_FINAL', courseId: course.id, title, description: description || null, questionCount, availableQuestions: result.availableQuestions, versionNumber: result.version.version_number }, { status: 200 })
+    const scheduledConfig = result.schedule && { questionCount: result.schedule.questionCount, durationMinutes: result.schedule.durationMinutes, effectiveAt: result.schedule.effectiveAt.toISOString(), effectiveMonthKey: result.schedule.effectiveMonthKey }
+    return NextResponse.json({ assessmentId: result.assessmentId, id: result.assessmentId, assessmentType: 'COURSE_FINAL', courseId: course.id, title, description: description || null, questionCount: result.questionCount, durationMinutes: result.durationMinutes, availableQuestions: result.availableQuestions, versionNumber: result.versionNumber, scheduled: result.scheduled, scheduledConfig }, { status: 200 })
   } catch (error) {
     const bankError = finalExamBankError(error)
     if (bankError) return NextResponse.json(bankError, { status: 409 })
