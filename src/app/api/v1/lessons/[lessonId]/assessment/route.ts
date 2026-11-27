@@ -360,7 +360,7 @@ export async function POST(
             await tx.questionOption.deleteMany({ where: { question_id: { in: unused } } });
             await tx.question.deleteMany({ where: { id: { in: unused } } });
           }
-          if (kept.size) await tx.question.updateMany({ where: { id: { in: [...kept.keys()] } }, data: { pool_id: null } });
+          if (kept.size) await tx.question.updateMany({ where: { id: { in: Array.from(kept.keys()) } }, data: { pool_id: null } });
           await tx.questionPool.deleteMany({ where: { assessment_id: existing.id } });
           await tx.assessment.update({ where: { id: existing.id }, data: { ...settings, ...scheduleColumns(config, actor, now) } });
         } else {

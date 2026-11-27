@@ -307,9 +307,11 @@ export function useCourseEditor(params: { courseId: string }) {
       ? courseScheduleMeta[lId] || null
       : assessData ? toScheduleMeta({ ...assessData, currentQuestionCount: assessData.questionCount, currentDurationMinutes: assessData.durationMinutes }) : null;
     resetSchedule(meta, assessData);
-    setQuizImportMode(assessData ? defaultImportMode(assessData.questions?.length || 0) : 'replace');
+    const hasLoadedQuestions = Boolean(assessData && Array.isArray(assessData.questions) && assessData.questions.length > 0);
+    // A brand-new quiz is seeded with one placeholder question, so the form is never empty here.
+    setQuizImportMode(defaultImportMode(hasLoadedQuestions ? assessData.questions.length : 1));
 
-    if (assessData && Array.isArray(assessData.questions) && assessData.questions.length > 0) {
+    if (hasLoadedQuestions) {
       setAssessmentForm({
         title: assessData.title || `Bài kiểm tra: ${lesson.title}`,
         description: assessData.description || '',
