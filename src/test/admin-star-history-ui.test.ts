@@ -46,6 +46,11 @@ describe('starHistoryEmptyMessage', () => {
 
 describe('formatStarAwardedAt', () => {
   it('định dạng ngày hợp lệ', () => assert.match(formatStarAwardedAt('2026-11-27T03:00:00.000Z'), /2026/))
+  it('hiển thị theo giờ Việt Nam tại ranh giới tháng', () => {
+    const text = formatStarAwardedAt('2026-11-30T18:00:00Z')
+    assert.match(text, /01\/12\/2026|1 thg 12, 2026|1 thg 12 2026/)
+    assert.match(text, /01:00|1:00/)
+  })
   it('ngày sai thì có giá trị thay thế', () => assert.equal(formatStarAwardedAt('abc'), 'Thời gian không xác định'))
 })
 

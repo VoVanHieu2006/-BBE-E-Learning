@@ -32,7 +32,7 @@ export function buildAdminStarHistoryUrl(
 export function formatStarAwardedAt(value: string): string {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return 'Thời gian không xác định'
-  return new Intl.DateTimeFormat('vi-VN', { dateStyle: 'medium', timeStyle: 'short' }).format(date)
+  return new Intl.DateTimeFormat('vi-VN', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Ho_Chi_Minh' }).format(date)
 }
 
 export function starHistoryEmptyMessage(hasActiveFilter: boolean): { title: string; subtitle: string } {
