@@ -308,8 +308,8 @@ export function useCourseEditor(params: { courseId: string }) {
       : assessData ? toScheduleMeta({ ...assessData, currentQuestionCount: assessData.questionCount, currentDurationMinutes: assessData.durationMinutes }) : null;
     resetSchedule(meta, assessData);
     const hasLoadedQuestions = Boolean(assessData && Array.isArray(assessData.questions) && assessData.questions.length > 0);
-    // A brand-new quiz is seeded with one placeholder question, so the form is never empty here.
-    setQuizImportMode(defaultImportMode(hasLoadedQuestions ? assessData.questions.length : 1));
+    // A brand-new quiz only seeds a dummy placeholder question, so default to replace until real questions exist.
+    setQuizImportMode(defaultImportMode(hasLoadedQuestions ? assessData.questions.length : 0));
 
     if (hasLoadedQuestions) {
       setAssessmentForm({
@@ -620,6 +620,8 @@ export function useCourseEditor(params: { courseId: string }) {
       if (!res.ok) {
         showToast('error', res.error?.message || 'Lỗi cập nhật buổi học');
         loadCourse();
+      } else {
+        setCourseQuestionBank(null);
       }
     }
 
@@ -630,6 +632,7 @@ export function useCourseEditor(params: { courseId: string }) {
     if (!window.confirm('Xóa buổi học này và tất cả bài học bên trong?')) return;
     if (draftRef.current) { await savePublishedDraft(c => { c.sessions = c.sessions.filter(s => s.id !== sessionId); }); return; }
     clearApiCache('/api/v1/courses');
+    setCourseQuestionBank(null);
 
     setCourse((prev: any) => ({
       ...prev,
@@ -662,6 +665,7 @@ export function useCourseEditor(params: { courseId: string }) {
     if (draftRef.current) { await savePublishedDraft(c => { c.sessions = newSessions.map(s => c.sessions.find(row => row.id === (s.sessionId || s.id))!); }); return; }
     setCourse({ ...course, sessions: newSessions });
     clearApiCache('/api/v1/courses');
+    setCourseQuestionBank(null);
 
     await apiFetch(`/api/v1/courses/${params.courseId}/sessions/reorder`, {
       method: 'PATCH',
@@ -692,6 +696,7 @@ export function useCourseEditor(params: { courseId: string }) {
     }));
 
     clearApiCache('/api/v1/courses');
+    setCourseQuestionBank(null);
 
     await apiFetch(`/api/v1/sessions/${sessionId}/lessons`, {
       method: 'PATCH',
@@ -930,6 +935,7 @@ export function useCourseEditor(params: { courseId: string }) {
       });
 
       if (res.ok && res.data) {
+        setCourseQuestionBank(null);
         setCourse((prev: any) => ({
           ...prev,
           sessions: (prev?.sessions || []).map((s: any) =>
@@ -1091,6 +1097,7 @@ export function useCourseEditor(params: { courseId: string }) {
     if (!window.confirm('Xóa bài học này?')) return;
     if (draftRef.current) { await savePublishedDraft(c => { const session = c.sessions.find(s => s.id === sessionId)!; session.lessons = session.lessons.filter(l => l.id !== lessonId); }); return; }
     clearApiCache('/api/v1/courses');
+    setCourseQuestionBank(null);
 
     setCourse((prev: any) => ({
       ...prev,
