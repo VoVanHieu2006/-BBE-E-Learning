@@ -91,15 +91,23 @@ export function mergeImportedQuizBank<T extends { poolIndex?: number }>(input: {
   const importedNames = input.importedPools.length ? input.importedPools : input.importedQuestions.length || !append ? [DEFAULT_QUIZ_POOL_NAME] : []
   const remap = importedNames.map(name => {
     const key = poolKey(name)
-    if (!indexByKey.has(key)) { indexByKey.set(key, pools.length); pools.push({ name: name.trim() }) }
-    return indexByKey.get(key)
+    const merged = append ? indexByKey.get(key) : undefined
+    if (merged !== undefined) return merged
+    indexByKey.set(key, pools.length)
+    return pools.push({ name: name.trim() }) - 1
   })
-  const imported = input.importedQuestions.map(question => ({
-    ...question,
-    poolIndex: remap[Number.isInteger(question.poolIndex) && question.poolIndex >= 0 && question.poolIndex < remap.length ? question.poolIndex : 0],
-  }))
+  const imported = input.importedQuestions.map((question, index) => {
+    const given = question.poolIndex
+    const importedIndex = given !== undefined && Number.isInteger(given) && given >= 0 && given < remap.length ? given : index % remap.length
+    return { ...question, poolIndex: remap[importedIndex] }
+  })
   const total = kept.length + imported.length
-  if (pools.length > MAX_LESSON_QUIZ_POOLS) return { ok: false, code: 'QuestionPoolLimitExceeded', message: `Ngân hàng chỉ được tối đa ${MAX_LESSON_QUIZ_POOLS} nhóm câu hỏi, nhưng sau khi nhập sẽ có ${pools.length} nhóm. Hãy gộp bớt tab trong file nhập hoặc xóa bớt nhóm hiện có.` }
+  if (pools.length > MAX_LESSON_QUIZ_POOLS) return {
+    ok: false, code: 'QuestionPoolLimitExceeded',
+    message: append
+      ? `Ngân hàng chỉ được tối đa ${MAX_LESSON_QUIZ_POOLS} nhóm câu hỏi, nhưng sau khi nhập sẽ có ${pools.length} nhóm. Hãy gộp bớt tab trong file nhập hoặc xóa bớt nhóm hiện có.`
+      : `File nhập có ${pools.length} nhóm, vượt giới hạn ${MAX_LESSON_QUIZ_POOLS} nhóm câu hỏi của ngân hàng. Hãy gộp bớt tab trong file nhập.`,
+  }
   if (total > MAX_LESSON_QUIZ_QUESTIONS) return {
     ok: false, code: 'QuestionBankLimitExceeded',
     message: append

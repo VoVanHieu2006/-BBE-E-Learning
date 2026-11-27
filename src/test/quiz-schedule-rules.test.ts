@@ -185,6 +185,47 @@ describe('nhập câu hỏi từ Google Sheet/Doc: thay toàn bộ hoặc thêm 
     assert.equal(tooManyPools.code, 'QuestionPoolLimitExceeded')
     assert.match(tooManyPools.message, /20 nhóm/)
   })
+  it('thay toàn bộ: không gộp nhóm trùng tên, giữ nguyên thứ tự nhóm và nhóm của từng câu', () => {
+    assert.deepEqual(merge('replace', [{ id: 'p1', name: 'a' }], [row('cũ', 0, 'q1')], ['A', ' a ', 'B'], [row('x', 0), row('y', 1), row('z', 2)]), {
+      ok: true, pools: [{ name: 'A' }, { name: 'a' }, { name: 'B' }],
+      questions: [{ questionText: 'x', poolIndex: 0 }, { questionText: 'y', poolIndex: 1 }, { questionText: 'z', poolIndex: 2 }],
+    })
+  })
+  it('thay toàn bộ: 21 nhóm trùng tên vẫn bị chặn, 20 nhóm trùng tên được giữ đủ', () => {
+    const names = (count: number) => Array.from({ length: count }, () => 'Tab')
+    assert.equal(merge('replace', [], [], names(20), names(20).map((_, i) => row('x', i))).pools.length, 20)
+    const tooManyPools = failure(merge('replace', [], [], names(21), names(21).map((_, i) => row('x', i))))
+    assert.equal(tooManyPools.code, 'QuestionPoolLimitExceeded')
+    assert.match(tooManyPools.message, /21 nhóm/)
+    assert.match(tooManyPools.message, /20 nhóm/)
+  })
+  it('thay toàn bộ: câu thiếu poolIndex (hoặc sai) được chia vòng tròn giữa các nhóm nhập', () => {
+    const result = merge('replace', [], [], ['A', 'B'], [row('a'), row('b'), row('c'), row('d', 1), row('e', 5), row('f', -1)])
+    assert.deepEqual(result.pools, [{ name: 'A' }, { name: 'B' }])
+    assert.deepEqual(result.questions.map((q: Row) => q.poolIndex), [0, 1, 0, 1, 0, 1])
+  })
+  it('thêm vào: câu thiếu poolIndex được chia vòng tròn theo nhóm nhập rồi mới đổi sang vị trí nhóm trong ngân hàng', () => {
+    const existingPools = [{ id: 'p1', name: 'Giao tiếp' }, { id: 'p2', name: 'Đàm phán' }]
+    const result = merge('append', existingPools, [row('e1', 0, 'q1'), row('e2', 1, 'q2')], ['đàm phán', 'Chốt đơn'], [row('a'), row('b'), row('c'), row('d', 0)])
+    assert.deepEqual(result.pools, [...existingPools, { name: 'Chốt đơn' }])
+    assert.deepEqual(result.questions.map((q: Row) => q.poolIndex), [0, 1, 1, 2, 1, 1])
+  })
+  it('thêm vào: nhóm trùng tên ngay trong file nhập vẫn gộp làm một', () => {
+    assert.deepEqual(merge('append', [], [], ['A', ' a '], [row('x', 0), row('y', 1)]), {
+      ok: true, pools: [{ name: 'A' }], questions: [{ questionText: 'x', poolIndex: 0 }, { questionText: 'y', poolIndex: 0 }],
+    })
+  })
+  it('không sửa mảng đầu vào', () => {
+    const existingPools = [{ id: 'p1', name: 'A' }]
+    const existingQuestions = [row('e1', 0, 'q1')]
+    const importedPools = ['B', 'C']
+    const importedQuestions = [row('i1'), row('i2', 1)]
+    for (const mode of ['append', 'replace'] as const) merge(mode, existingPools, existingQuestions, importedPools, importedQuestions)
+    assert.deepEqual(existingPools, [{ id: 'p1', name: 'A' }])
+    assert.deepEqual(existingQuestions, [{ id: 'q1', questionText: 'e1', poolIndex: 0 }])
+    assert.deepEqual(importedPools, ['B', 'C'])
+    assert.deepEqual(importedQuestions, [{ questionText: 'i1' }, { questionText: 'i2', poolIndex: 1 }])
+  })
   it('thêm vào: giữ nguyên câu và nhóm hiện có (cả ID), gộp nhóm trùng tên không phân biệt hoa thường/khoảng trắng', () => {
     const existingPools = [{ id: 'p1', name: 'Giao tiếp' }, { id: 'p2', name: 'Đàm phán' }]
     const existingQuestions = [row('e1', 0, 'q1'), row('e2', 1, 'q2')]
