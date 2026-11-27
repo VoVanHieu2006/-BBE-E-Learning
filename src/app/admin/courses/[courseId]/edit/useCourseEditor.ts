@@ -1420,7 +1420,7 @@ export function useCourseEditor(params: { courseId: string }) {
     const existingCount = assessmentForm.questions.length;
     if (
       quizImportMode === 'replace' &&
-      needsReplaceConfirm(existingCount, Boolean(activeLessonForAssessment?.assessment)) &&
+      needsReplaceConfirm(existingCount) &&
       !window.confirm(
         `Ngân hàng đang có ${existingCount} câu hỏi. Chế độ "Thay thế toàn bộ ngân hàng" sẽ thay danh sách câu hỏi đang soạn bằng nội dung file; bấm "Lưu bài kiểm tra" để ghi đè bài kiểm tra hiện có. Tiếp tục?`
       )

@@ -70,10 +70,9 @@ describe('nhập Google Sheet/Doc: thêm vào hoặc thay thế', () => {
     assert.equal(defaultImportMode(5), 'append')
   })
   it('chỉ hỏi xác nhận thay thế khi có nội dung thật', () => {
-    assert.equal(needsReplaceConfirm(0, false), false)
-    assert.equal(needsReplaceConfirm(1, false), false)
-    assert.equal(needsReplaceConfirm(1, true), true)
-    assert.equal(needsReplaceConfirm(3, false), true)
+    assert.equal(needsReplaceConfirm(0), false)
+    assert.equal(needsReplaceConfirm(1), true)
+    assert.equal(needsReplaceConfirm(3), true)
   })
   it('thêm vào: giữ nguyên id câu cũ, gộp nhóm theo tên không phân biệt hoa thường, thêm nhóm mới', () => {
     const result = run({ ...base, mode: 'append', importedPools: [' nhóm 2 ', 'Nhóm mới', 'Nhóm 3'], importedQuestions: imported })

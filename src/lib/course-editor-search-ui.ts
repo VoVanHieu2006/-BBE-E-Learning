@@ -49,8 +49,8 @@ export function removeQuestionAt<T>(questions: T[], index: number): T[] {
 
 export type QuizImportMode = 'append' | 'replace'
 export const defaultImportMode = (questionCount: number): QuizImportMode => questionCount > 0 ? 'append' : 'replace'
-/** A fresh quiz holds one placeholder question; replacing that must not nag the admin. */
-export const needsReplaceConfirm = (questionCount: number, hasSavedAssessment: boolean) => questionCount > 1 || (questionCount === 1 && hasSavedAssessment)
+/** Replace discards the drafted list, so any existing question (even one unsaved) needs confirmation. */
+export const needsReplaceConfirm = (questionCount: number) => questionCount > 0
 
 export type QuizImportResult<T> =
   | { ok: true; poolNames: string[]; poolIds: string[]; questions: T[] }
@@ -88,7 +88,7 @@ export function checkScheduledBudget(input: {
     }
   }
   const result = validateLessonBankForCounts({ questionCount: input.activeCount, scheduledQuestionCount: scheduledCount, poolCounts: input.poolCounts, totalQuestions: input.totalQuestions })
-  if (result.ok) return null
+  if (result.ok !== false) return null
   const scheduledProblem = result.code === 'ScheduledQuestionCountExceedsBank' || result.code === 'ScheduledQuestionCountBelowPools' || result.code === 'ScheduledQuestionCountInvalid'
   const reduceTo = scheduledProblem && result.code === 'ScheduledQuestionCountExceedsBank' && result.maxAllowed >= Math.max(1, result.minAllowed) ? result.maxAllowed : null
   const raiseTo = scheduledProblem && result.code === 'ScheduledQuestionCountBelowPools' && result.minAllowed <= result.maxAllowed ? result.minAllowed : null
