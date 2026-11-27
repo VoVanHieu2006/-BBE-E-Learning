@@ -124,18 +124,20 @@ export async function PATCH(request: NextRequest, { params }: { params: { assess
     }
 
     if (Array.isArray(questions)) {
-      if (questions.length === 0 || questions.length > MAX_LESSON_QUIZ_QUESTIONS) throw new Error(`Cần 1-${MAX_LESSON_QUIZ_QUESTIONS} câu hỏi`)
+      if (questions.length === 0 || questions.length > MAX_LESSON_QUIZ_QUESTIONS) {
+        throw new CourseDraftError('ValidationError', `Cần 1-${MAX_LESSON_QUIZ_QUESTIONS} câu hỏi`, 400)
+      }
 
       // Loại câu hỏi Đúng/Sai đã ngừng sử dụng
       if (questions.some((q: any) => (q.questionType || q.type) === 'TRUE_FALSE')) {
-        throw new Error('Loại câu hỏi "Đúng / Sai" đã ngừng sử dụng. Vui lòng dùng trắc nghiệm 1 hoặc nhiều đáp án.')
+        throw new CourseDraftError('ValidationError', 'Loại câu hỏi "Đúng / Sai" đã ngừng sử dụng. Vui lòng dùng trắc nghiệm 1 hoặc nhiều đáp án.', 400)
       }
 
       // Pre-generate UUIDs for batch createMany
       const poolIds = Array.from(new Set(questions.map((q: any) => q.poolId || q.pool_id).filter(Boolean))) as string[]
       if (poolIds.length) {
         const poolCount = await tx.questionPool.count({ where: { id: { in: poolIds }, assessment_id: assessmentId } })
-        if (poolCount !== poolIds.length) throw new Error('Question pool does not belong to this assessment')
+        if (poolCount !== poolIds.length) throw new CourseDraftError('ValidationError', 'Nhóm câu hỏi không thuộc bài kiểm tra này.', 400)
       }
       const preparedQuestions = questions.map((q: any, idx: number) => {
         const qId = crypto.randomUUID()

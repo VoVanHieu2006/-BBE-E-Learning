@@ -169,6 +169,12 @@ export function useCourseEditor(params: { courseId: string }) {
   const [courseQuestionBank, setCourseQuestionBank] = useState<any[] | null>(null);
   const [courseQuestionBankLoading, setCourseQuestionBankLoading] = useState(false);
   const [courseQuestionBankError, setCourseQuestionBankError] = useState('');
+  const courseQuestionBankGenRef = useRef(0);
+  const invalidateCourseQuestionBank = () => {
+    courseQuestionBankGenRef.current += 1;
+    setCourseQuestionBank(null);
+    setCourseQuestionBankLoading(false);
+  };
   const [assessmentForm, setAssessmentForm] = useState({
     title: 'Bài kiểm tra bài học',
     description: 'Đạt từ 85% điểm để hoàn thành bài học',
@@ -225,7 +231,7 @@ export function useCourseEditor(params: { courseId: string }) {
 
   async function loadCourse(reload = false) {
     if (draftConflictRef.current && !reload) return;
-    setCourseQuestionBank(null);
+    invalidateCourseQuestionBank();
     const courseRes = await apiFetch(`/api/v1/courses/${params.courseId}`, { noCache: true });
     if (courseRes.ok && courseRes.data) {
       let c = courseRes.data;
@@ -621,7 +627,7 @@ export function useCourseEditor(params: { courseId: string }) {
         showToast('error', res.error?.message || 'Lỗi cập nhật buổi học');
         loadCourse();
       } else {
-        setCourseQuestionBank(null);
+        invalidateCourseQuestionBank();
       }
     }
 
@@ -632,7 +638,7 @@ export function useCourseEditor(params: { courseId: string }) {
     if (!window.confirm('Xóa buổi học này và tất cả bài học bên trong?')) return;
     if (draftRef.current) { await savePublishedDraft(c => { c.sessions = c.sessions.filter(s => s.id !== sessionId); }); return; }
     clearApiCache('/api/v1/courses');
-    setCourseQuestionBank(null);
+    invalidateCourseQuestionBank();
 
     setCourse((prev: any) => ({
       ...prev,
@@ -665,7 +671,7 @@ export function useCourseEditor(params: { courseId: string }) {
     if (draftRef.current) { await savePublishedDraft(c => { c.sessions = newSessions.map(s => c.sessions.find(row => row.id === (s.sessionId || s.id))!); }); return; }
     setCourse({ ...course, sessions: newSessions });
     clearApiCache('/api/v1/courses');
-    setCourseQuestionBank(null);
+    invalidateCourseQuestionBank();
 
     await apiFetch(`/api/v1/courses/${params.courseId}/sessions/reorder`, {
       method: 'PATCH',
@@ -696,7 +702,7 @@ export function useCourseEditor(params: { courseId: string }) {
     }));
 
     clearApiCache('/api/v1/courses');
-    setCourseQuestionBank(null);
+    invalidateCourseQuestionBank();
 
     await apiFetch(`/api/v1/sessions/${sessionId}/lessons`, {
       method: 'PATCH',
@@ -935,7 +941,7 @@ export function useCourseEditor(params: { courseId: string }) {
       });
 
       if (res.ok && res.data) {
-        setCourseQuestionBank(null);
+        invalidateCourseQuestionBank();
         setCourse((prev: any) => ({
           ...prev,
           sessions: (prev?.sessions || []).map((s: any) =>
@@ -1097,7 +1103,7 @@ export function useCourseEditor(params: { courseId: string }) {
     if (!window.confirm('Xóa bài học này?')) return;
     if (draftRef.current) { await savePublishedDraft(c => { const session = c.sessions.find(s => s.id === sessionId)!; session.lessons = session.lessons.filter(l => l.id !== lessonId); }); return; }
     clearApiCache('/api/v1/courses');
-    setCourseQuestionBank(null);
+    invalidateCourseQuestionBank();
 
     setCourse((prev: any) => ({
       ...prev,
@@ -1624,7 +1630,7 @@ export function useCourseEditor(params: { courseId: string }) {
       showToast('success', scheduledConfig
         ? `${savedMessage} Cấu hình tháng này giữ nguyên (${scheduleMeta?.currentQuestionCount} câu / ${scheduleMeta?.currentDurationMinutes} phút); ${scheduledConfig.questionCount} câu / ${scheduledConfig.durationMinutes} phút sẽ áp dụng từ ${effectiveDateLabel(scheduledConfig.effectiveMonthKey)}.`
         : savedMessage);
-      setCourseQuestionBank(null);
+      invalidateCourseQuestionBank();
       setShowAssessmentModal(false);
       setAssessment(res.data);
 
@@ -1678,7 +1684,7 @@ export function useCourseEditor(params: { courseId: string }) {
     const res = await apiFetch(endpoint, { method: 'DELETE' });
     if (res.ok) {
       showToast('success', 'Đã xóa bài kiểm tra thành công.');
-      setCourseQuestionBank(null);
+      invalidateCourseQuestionBank();
       setShowAssessmentModal(false);
       setAssessment(null);
 
@@ -1740,9 +1746,11 @@ export function useCourseEditor(params: { courseId: string }) {
 
   const loadCourseQuestionBank = async (force = false) => {
     if (course?.status === 'PUBLISHED' || courseQuestionBankLoading || (courseQuestionBank && !force)) return;
+    const gen = ++courseQuestionBankGenRef.current;
     setCourseQuestionBankLoading(true);
     setCourseQuestionBankError('');
     const res = await apiFetch(`/api/v1/courses/${params.courseId}/questions`, { noCache: true });
+    if (gen !== courseQuestionBankGenRef.current) return;
     if (res.ok && Array.isArray(res.data?.sessions)) setCourseQuestionBank(res.data.sessions);
     else setCourseQuestionBankError(res.error?.message || 'Không tải được ngân hàng câu hỏi của khóa học.');
     setCourseQuestionBankLoading(false);

@@ -7,7 +7,7 @@ import { guardCourseEditable, invalidateCourseContentCaches } from '@/lib/course
 import { currentCycleAttemptFilter } from '@/lib/learning-periods'
 import { availableFinalQuestions, FinalExamBankTooSmall, finalExamBankError, lessonQuestionWhere, lockCourseExamBank } from '@/lib/final-exam-bank'
 import { createFinalExamVersion } from '@/lib/final-exam-version'
-import { applyDueAssessmentSchedules, CLEARED_ASSESSMENT_SCHEDULE, existingScheduleOf, hasCurrentMonthLockingAttempts, scheduleColumns, scheduledConfigOf } from '@/lib/assessment-schedule'
+import { applyDueAssessmentSchedules, applyDueCourseAssessmentSchedules, CLEARED_ASSESSMENT_SCHEDULE, existingScheduleOf, hasCurrentMonthLockingAttempts, scheduleColumns, scheduledConfigOf } from '@/lib/assessment-schedule'
 import { resolveAssessmentConfigUpdate } from '@/lib/quiz-schedule-rules'
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -89,7 +89,7 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
   const [attempts, passingAttempt] = await Promise.all([
     prisma.attempt.findMany({
       where: { user_id: userId, assessment_id: course.final_assessment.id, ...cycleFilter },
-      select: { id: true, attempt_number: true, status: true, score: true, passed: true, submitted_at: true, created_at: true, expires_at: true, final_exam_version: { select: { version_number: true, question_count: true } } },
+      select: { id: true, attempt_number: true, status: true, score: true, passed: true, submitted_at: true, created_at: true, expires_at: true, final_exam_version: { select: { version_number: true, question_count: true, duration_minutes: true } } },
       orderBy: { created_at: 'desc' },
       take: 20,
     }),
@@ -116,7 +116,7 @@ export async function GET(request: NextRequest, { params }: { params: { courseId
       title: course.final_assessment.title,
       description: course.final_assessment.description,
       questionCount: resumableAttempt?.final_exam_version?.question_count || course.final_assessment.question_count,
-      durationMinutes: course.final_assessment.duration_minutes,
+      durationMinutes: resumableAttempt?.final_exam_version?.duration_minutes || course.final_assessment.duration_minutes,
       totalQuestionCount: activeVersion?._count.questions || 0,
       versionNumber: resumableAttempt?.final_exam_version?.version_number || activeVersion?.version_number || null,
     },
@@ -170,16 +170,25 @@ export async function POST(request: NextRequest, { params }: { params: { courseI
     return jsonError('ValidationError', 'Lịch tháng sau không hợp lệ: số câu hoặc thời gian (1–240 phút).', 400)
   }
   const actor = (auth as any).context!.userId as string
-  await applyDueAssessmentSchedules(prisma, { courseId: course.id })
   try {
     const result = await prisma.$transaction(async (tx) => {
       await lockCourseExamBank(tx, course.id)
       const now = new Date()
+      const activated = await applyDueCourseAssessmentSchedules(tx, course.id, now)
       const existing = await tx.assessment.findUnique({ where: { course_id: course.id } })
       if (!existing || !await hasCurrentMonthLockingAttempts(tx, existing.id, now)) {
-        const created = await createFinalExamVersion(tx, course.id, { title, description: description || null, questionCount, durationMinutes }, actor)
+        // Guard against a form left open across midnight rollover overwriting the newly activated schedule with stale pre-midnight values.
+        const rollover = existing ? activated.includes(existing.id) : false
+        const cancelSchedule = body?.cancelSchedule === true
+        const targetCount = !cancelSchedule && (scheduledQuestionCount !== null || rollover)
+          ? (scheduledQuestionCount ?? existing?.question_count ?? questionCount)
+          : questionCount
+        const targetDuration = !cancelSchedule && (scheduledDurationMinutes !== null || rollover)
+          ? (scheduledDurationMinutes ?? existing?.duration_minutes ?? durationMinutes)
+          : durationMinutes
+        const created = await createFinalExamVersion(tx, course.id, { title, description: description || null, questionCount: targetCount, durationMinutes: targetDuration }, actor)
         if (existing?.scheduled_effective_at) await tx.assessment.update({ where: { id: existing.id }, data: { ...CLEARED_ASSESSMENT_SCHEDULE } })
-        return { assessmentId: created.assessment.id, versionNumber: created.version.version_number, availableQuestions: created.availableQuestions, questionCount, durationMinutes, schedule: null, scheduled: false }
+        return { assessmentId: created.assessment.id, versionNumber: created.version.version_number, availableQuestions: created.availableQuestions, questionCount: targetCount, durationMinutes: targetDuration, schedule: null, scheduled: false }
       }
       // This month already has attempts: the active count/duration stay; the requested change waits for 00:00 1st next month VN.
       const config = resolveAssessmentConfigUpdate({

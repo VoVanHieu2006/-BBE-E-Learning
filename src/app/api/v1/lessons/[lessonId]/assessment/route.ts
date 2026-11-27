@@ -4,7 +4,7 @@ import { authenticate } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { guardCourseEditableByLesson, invalidateCourseContentCaches } from '@/lib/course-edit-guard';
 import { assertFinalExamBankCapacity, finalExamBankError, lockCourseExamBank } from '@/lib/final-exam-bank';
-import { applyDueAssessmentSchedules, existingScheduleOf, hasCurrentMonthLockingAttempts, scheduleColumns, scheduledConfigOf } from '@/lib/assessment-schedule';
+import { applyDueAssessmentSchedules, applyDueCourseAssessmentSchedules, existingScheduleOf, hasCurrentMonthLockingAttempts, scheduleColumns, scheduledConfigOf } from '@/lib/assessment-schedule';
 import { MAX_LESSON_QUIZ_QUESTIONS, resolveAssessmentConfigUpdate, validateLessonBankForCounts } from '@/lib/quiz-schedule-rules';
 import { CourseDraftError } from '@/lib/course-draft';
 
@@ -235,9 +235,6 @@ export async function POST(
       );
     }
 
-    const existingAssessment = await prisma.assessment.findUnique({ where: { lesson_id: lessonId }, select: { id: true } });
-    if (existingAssessment) await applyDueAssessmentSchedules(prisma, { assessmentId: existingAssessment.id });
-
     const normalizeQuestion = (q: any, i: number) => {
       const rawOptions =
         Array.isArray(q.options) && q.options.length > 0
@@ -320,15 +317,24 @@ export async function POST(
       async (tx) => {
         await lockCourseExamBank(tx, lesson.session.course_id);
         const now = new Date();
+        const activated = await applyDueCourseAssessmentSchedules(tx, lesson.session.course_id, now);
         const existing = await tx.assessment.findUnique({
           where: { lesson_id: lessonId },
           select: { id: true, question_count: true, duration_minutes: true, scheduled_question_count: true, scheduled_duration_minutes: true, scheduled_effective_at: true, scheduled_effective_month_key: true, _count: { select: { attempts: true } } },
         });
         const locked = existing?._count.attempts ? await hasCurrentMonthLockingAttempts(tx, existing.id, now) : false;
+        const rollover = existing ? activated.includes(existing.id) : false;
+        const cancelSchedule = body?.cancelSchedule === true;
+        const requestedCount = !locked && !cancelSchedule && (scheduledQuestionCount !== null || rollover)
+          ? (scheduledQuestionCount ?? existing?.question_count ?? questionCount)
+          : questionCount;
+        const requestedDuration = !locked && !cancelSchedule && (scheduledDurationMinutes !== null || rollover)
+          ? (scheduledDurationMinutes ?? existing?.duration_minutes ?? durationMinutes)
+          : durationMinutes;
         const config = resolveAssessmentConfigUpdate({
-          current: existing?._count.attempts ? { questionCount: existing.question_count, durationMinutes: existing.duration_minutes } : { questionCount, durationMinutes },
+          current: existing?._count.attempts ? { questionCount: existing.question_count, durationMinutes: existing.duration_minutes } : { questionCount: requestedCount, durationMinutes: requestedDuration },
           existingSchedule: existing?._count.attempts ? existingScheduleOf(existing) : null,
-          requested: { questionCount, durationMinutes, scheduledQuestionCount, scheduledDurationMinutes, cancelSchedule: body?.cancelSchedule === true },
+          requested: { questionCount: requestedCount, durationMinutes: requestedDuration, scheduledQuestionCount: locked ? scheduledQuestionCount : null, scheduledDurationMinutes: locked ? scheduledDurationMinutes : null, cancelSchedule },
           hasCurrentMonthLockingAttempts: locked, now,
         });
         const poolCounts = usesPools ? pools.map((_: unknown, index: number) => questions.filter((q: any) => Number(q.poolIndex) === index).length) : [];

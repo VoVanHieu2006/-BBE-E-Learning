@@ -4,6 +4,7 @@ import { competitionMonthBounds } from './learning-cycle-rules'
 import { AssessmentConfigUpdate, AssessmentSchedule, LOCKING_ATTEMPT_STATUSES } from './quiz-schedule-rules'
 import { lockCourseExamBank } from './final-exam-bank'
 import { createFinalExamVersion } from './final-exam-version'
+import { invalidateCourseContentCaches } from './course-edit-guard'
 
 type Tx = Prisma.TransactionClient
 type Client = PrismaClient | Tx
@@ -132,14 +133,23 @@ export async function applyDueAssessmentSchedules(client: Client = prisma, optio
     if (courseId) byCourse.set(courseId, [...(byCourse.get(courseId) || []), c.id])
   }
   const appliedAssessmentIds: string[] = []
+  const invalidatedCourses = new Set<string>()
   for (const [courseId, ids] of Array.from(byCourse)) {
-    if (!('$transaction' in client)) { appliedAssessmentIds.push(...await applyDueCourseAssessmentSchedules(client, courseId, now, ids)); continue }
+    if (!('$transaction' in client)) {
+      const applied = await applyDueCourseAssessmentSchedules(client, courseId, now, ids)
+      if (applied.length) invalidatedCourses.add(courseId)
+      appliedAssessmentIds.push(...applied)
+      continue
+    }
     try {
-      appliedAssessmentIds.push(...await client.$transaction(tx => applyDueCourseAssessmentSchedules(tx, courseId, now, ids), { timeout: 30_000, maxWait: 10_000 }))
+      const applied = await client.$transaction(tx => applyDueCourseAssessmentSchedules(tx, courseId, now, ids), { timeout: 30_000, maxWait: 10_000 })
+      if (applied.length) invalidatedCourses.add(courseId)
+      appliedAssessmentIds.push(...applied)
     } catch (error) {
       // One course's broken bank must not block other courses; the schedule stays pending and is retried next call.
       console.error('[ASSESSMENT_SCHEDULE_APPLY_ERROR]', courseId, error)
     }
   }
+  for (const courseId of Array.from(invalidatedCourses)) invalidateCourseContentCaches(courseId)
   return { appliedCount: appliedAssessmentIds.length, appliedAssessmentIds }
 }
