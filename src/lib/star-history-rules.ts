@@ -1,5 +1,3 @@
-import { competitionMonthBounds } from './learning-cycle-rules'
-
 export function normalizeStarHistoryPagination(
   pageValue: string | null,
   limitValue: string | null,
@@ -62,13 +60,21 @@ export function starReasonsForSource(source: StarHistorySourceFilter): StarHisto
   return source === 'ALL' ? null : [...STAR_HISTORY_SOURCE_REASONS[source]]
 }
 
+const VN_OFFSET_MS = 7 * 3_600_000
+
+/** 00:00 Vietnam on the 1st; `setUTCFullYear` avoids `Date.UTC` mapping years 0–99 to 1900–1999. */
+function vnMonthStart(year: number, monthIndex: number): Date {
+  const date = new Date(0)
+  date.setUTCFullYear(year, monthIndex, 1)
+  return new Date(date.getTime() - VN_OFFSET_MS)
+}
+
 /** Vietnam month `[00:00 1st, 00:00 next 1st)` in UTC instants; UTC+7 has no DST. */
 export function vnMonthBounds(monthKey: string): { startsAt: Date; endsAt: Date } {
   const match = MONTH_KEY.exec(monthKey)
   if (!match) throw new RangeError(`Invalid month key: ${monthKey}`)
-  // 00:00 UTC on the 1st is 07:00 in Vietnam, safely inside the same VN month.
-  const { startsAt, endsAt } = competitionMonthBounds(new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, 1)))
-  return { startsAt, endsAt }
+  const year = Number(match[1]), monthIndex = Number(match[2]) - 1
+  return { startsAt: vnMonthStart(year, monthIndex), endsAt: vnMonthStart(year, monthIndex + 1) }
 }
 
 export function formatStarMonthLabel(monthKey: string): string {

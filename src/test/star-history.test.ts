@@ -44,6 +44,8 @@ describe('star history pure rules', () => {
     assert.deepEqual(iso('2026-02'), ['2026-01-31T17:00:00.000Z', '2026-02-28T17:00:00.000Z'])
     assert.deepEqual(iso('2026-12'), ['2026-11-30T17:00:00.000Z', '2026-12-31T17:00:00.000Z'])
     assert.deepEqual(iso('2027-01'), ['2026-12-31T17:00:00.000Z', '2027-01-31T17:00:00.000Z'])
+    assert.deepEqual(iso('0001-01'), ['0000-12-31T17:00:00.000Z', '0001-01-31T17:00:00.000Z'])
+    assert.deepEqual(iso('0099-12'), ['0099-11-30T17:00:00.000Z', '0099-12-31T17:00:00.000Z'])
     assert.throws(() => vnMonthBounds('2026-13'))
   })
   it('formats month labels and validates user IDs', () => {
