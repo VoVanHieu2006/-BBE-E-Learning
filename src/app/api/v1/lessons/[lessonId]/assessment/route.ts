@@ -238,21 +238,7 @@ export async function POST(
     const existingAssessment = await prisma.assessment.findUnique({ where: { lesson_id: lessonId }, select: { id: true } });
     if (existingAssessment) await applyDueAssessmentSchedules(prisma, { assessmentId: existingAssessment.id });
 
-    // The target ID is decided under the exam-bank lock: an attempted quiz keeps its row, others are recreated.
-    const prepare = (assessmentId: string) => {
-    const preparedPools = usesPools ? pools.map((name: string, sortOrder: number) => ({ id: crypto.randomUUID(), assessment_id: assessmentId, name: name.trim(), sort_order: sortOrder })) : [];
-
-    // Prepare questions and options with pre-generated UUIDs for batch createMany
-    const preparedQuestions = questions.map((q: any, i: number) => {
-      const qId = crypto.randomUUID();
-      const qText = (q.questionText || q.question_text || `Câu hỏi ${i + 1}`).trim();
-      const qType = q.questionType || q.type || 'SINGLE_CHOICE';
-      const qPoints = Math.max(1, parseInt(String(q.points), 10) || 10);
-      const qExplanation =
-        typeof q.explanation === 'string' && q.explanation.trim()
-          ? q.explanation.trim()
-          : null;
-
+    const normalizeQuestion = (q: any, i: number) => {
       const rawOptions =
         Array.isArray(q.options) && q.options.length > 0
           ? q.options
@@ -260,23 +246,65 @@ export async function POST(
               { optionText: 'Đáp án A', isCorrect: true },
               { optionText: 'Đáp án B', isCorrect: false },
             ];
+      return {
+        text: (q.questionText || q.question_text || `Câu hỏi ${i + 1}`).trim() as string,
+        type: (q.questionType || q.type || 'SINGLE_CHOICE') as string,
+        points: Math.max(1, parseInt(String(q.points), 10) || 10),
+        explanation: (typeof q.explanation === 'string' && q.explanation.trim() ? q.explanation.trim() : null) as string | null,
+        options: rawOptions.map((opt: any, j: number) => ({
+          text: (opt.optionText || opt.option_text || `Đáp án ${j + 1}`).trim() as string,
+          isCorrect: Boolean(opt.isCorrect ?? opt.is_correct ?? false),
+        })),
+      };
+    };
+    type ExistingQuestion = { id: string; question_text: string; question_type: string; points: number; explanation: string | null; options: { id: string; option_text: string; is_correct: boolean }[] };
+    const sameContent = (n: ReturnType<typeof normalizeQuestion>, e: ExistingQuestion) =>
+      n.text === e.question_text && n.type === e.question_type && n.points === Number(e.points) && n.explanation === (e.explanation ?? null) &&
+      n.options.length === e.options.length && n.options.every((o, j) => o.text === e.options[j].option_text && o.isCorrect === e.options[j].is_correct);
+    // Incoming questions that keep an existing active row untouched (same id, same grading content).
+    const findKeptQuestions = (existingQuestions: ExistingQuestion[]) => {
+      const byId = new Map(existingQuestions.map((e) => [e.id, e]));
+      const kept = new Map<string, ExistingQuestion>();
+      questions.forEach((q: any, i: number) => {
+        const match = typeof q?.id === 'string' ? byId.get(q.id) : undefined;
+        if (match && !kept.has(match.id) && sameContent(normalizeQuestion(q, i), match)) kept.set(match.id, match);
+      });
+      return kept;
+    };
 
-      const options = rawOptions.map((opt: any, j: number) => ({
-        id: crypto.randomUUID(),
-        question_id: qId,
-        option_text: (opt.optionText || opt.option_text || `Đáp án ${j + 1}`).trim(),
-        is_correct: Boolean(opt.isCorrect ?? opt.is_correct ?? false),
-        sort_order: j,
-      }));
+    // The target ID is decided under the exam-bank lock: an attempted quiz keeps its row, others are recreated.
+    // `kept` rows stay in place; `reusableIds` belong to rows deleted in this transaction, so clients may keep their ids.
+    const prepare = (assessmentId: string, kept: Map<string, ExistingQuestion>, reusableIds: Set<string>) => {
+    const preparedPools = usesPools ? pools.map((name: string, sortOrder: number) => ({ id: crypto.randomUUID(), assessment_id: assessmentId, name: name.trim(), sort_order: sortOrder })) : [];
+    const usedIds = new Set<string>();
+
+    const preparedQuestions = questions.map((q: any, i: number) => {
+      const n = normalizeQuestion(q, i);
+      const candidate = typeof q?.id === 'string' && !usedIds.has(q.id) ? kept.get(q.id) : undefined;
+      const keptRow = candidate && sameContent(n, candidate) ? candidate : undefined;
+      const reuse = !keptRow && typeof q?.id === 'string' && reusableIds.has(q.id) && !usedIds.has(q.id);
+      const qId = keptRow ? keptRow.id : reuse ? q.id : crypto.randomUUID();
+      usedIds.add(qId);
+
+      const options = keptRow
+        ? keptRow.options.map((o, j) => ({ id: o.id, question_id: qId, option_text: o.option_text, is_correct: o.is_correct, sort_order: j }))
+        : n.options.map((opt: { text: string; isCorrect: boolean }, j: number) => ({
+            id: crypto.randomUUID(),
+            question_id: qId,
+            option_text: opt.text,
+            is_correct: opt.isCorrect,
+            sort_order: j,
+          }));
 
       return {
+        keep: Boolean(keptRow),
         question: {
           id: qId,
           assessment_id: assessmentId,
-          question_text: qText,
-          question_type: qType as any,
-          points: qPoints,
-          explanation: qExplanation,
+          question_text: n.text,
+          question_type: n.type as any,
+          points: n.points,
+          explanation: n.explanation,
           sort_order: i,
           pool_id: usesPools ? preparedPools[Number(q.poolIndex)].id : null,
         },
@@ -309,22 +337,36 @@ export async function POST(
         const settings = { title: title.trim(), description: description?.trim() || null, question_count: config.questionCount, duration_minutes: config.durationMinutes };
 
         let assessmentId: string;
+        let kept = new Map<string, ExistingQuestion>();
+        const reusableIds = new Set<string>();
         if (existing?._count.attempts) {
-          // Attempt history references these rows: archive referenced questions, drop only the unused ones.
+          // Attempt history references these rows: unchanged questions stay in place, changed referenced ones are archived, the rest dropped.
           assessmentId = existing.id;
-          const active = await tx.question.findMany({ where: { assessment_id: existing.id, archived_at: null }, select: { id: true, _count: { select: { attempt_questions: true, attempt_answers: true } } } });
-          const referenced = active.filter((q) => q._count.attempt_questions + q._count.attempt_answers > 0).map((q) => q.id);
-          const unused = active.filter((q) => !referenced.includes(q.id)).map((q) => q.id);
+          const active = await tx.question.findMany({
+            where: { assessment_id: existing.id, archived_at: null },
+            select: {
+              id: true, question_text: true, question_type: true, points: true, explanation: true,
+              options: { select: { id: true, option_text: true, is_correct: true }, orderBy: { sort_order: 'asc' } },
+              _count: { select: { attempt_questions: true, attempt_answers: true } },
+            },
+          });
+          kept = findKeptQuestions(active as ExistingQuestion[]);
+          const stale = active.filter((q) => !kept.has(q.id));
+          const referenced = stale.filter((q) => q._count.attempt_questions + q._count.attempt_answers > 0).map((q) => q.id);
+          const unused = stale.filter((q) => !referenced.includes(q.id)).map((q) => q.id);
+          unused.forEach((id) => reusableIds.add(id));
           if (referenced.length) await tx.question.updateMany({ where: { id: { in: referenced } }, data: { archived_at: now, pool_id: null } });
           if (unused.length) {
             await tx.questionOption.deleteMany({ where: { question_id: { in: unused } } });
             await tx.question.deleteMany({ where: { id: { in: unused } } });
           }
+          if (kept.size) await tx.question.updateMany({ where: { id: { in: [...kept.keys()] } }, data: { pool_id: null } });
           await tx.questionPool.deleteMany({ where: { assessment_id: existing.id } });
           await tx.assessment.update({ where: { id: existing.id }, data: { ...settings, ...scheduleColumns(config, actor, now) } });
         } else {
           assessmentId = crypto.randomUUID();
           if (existing) {
+            (await tx.question.findMany({ where: { assessment_id: existing.id }, select: { id: true } })).forEach((q) => reusableIds.add(q.id));
             await tx.questionOption.deleteMany({ where: { question: { assessment_id: existing.id } } });
             await tx.question.deleteMany({ where: { assessment_id: existing.id } });
             await tx.questionPool.deleteMany({ where: { assessment_id: existing.id } });
@@ -333,11 +375,15 @@ export async function POST(
           await tx.assessment.create({ data: { ...settings, id: assessmentId, lesson_id: lessonId, created_by: actor } });
         }
 
-        const { preparedPools, preparedQuestions } = prepare(assessmentId);
+        const { preparedPools, preparedQuestions } = prepare(assessmentId, kept, reusableIds);
         if (preparedPools.length) await tx.questionPool.createMany({ data: preparedPools });
+        const fresh = preparedQuestions.filter((p) => !p.keep);
+        for (const { question } of preparedQuestions.filter((p) => p.keep)) {
+          await tx.question.update({ where: { id: question.id }, data: { sort_order: question.sort_order, pool_id: question.pool_id } });
+        }
         // Batch insert questions & options
-        await tx.question.createMany({ data: preparedQuestions.map((p: any) => p.question) });
-        const allOptionRows = preparedQuestions.flatMap((p: any) => p.options);
+        await tx.question.createMany({ data: fresh.map((p: any) => p.question) });
+        const allOptionRows = fresh.flatMap((p: any) => p.options);
         if (allOptionRows.length > 0) {
           await tx.questionOption.createMany({ data: allOptionRows });
         }

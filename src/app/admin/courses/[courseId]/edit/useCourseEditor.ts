@@ -1589,6 +1589,7 @@ export function useCourseEditor(params: { courseId: string }) {
         ...(activeAssessmentMode === 'LESSON' ? { pools: quizPoolNames } : {}),
         ...configPayload,
         ...(activeAssessmentMode === 'LESSON' ? { questions: assessmentForm.questions.map((q, idx) => ({
+          ...(q.id ? { id: q.id } : {}),
           questionText: q.questionText.trim(),
           questionType: q.type,
           points: q.points,
@@ -1668,6 +1669,7 @@ export function useCourseEditor(params: { courseId: string }) {
     const res = await apiFetch(endpoint, { method: 'DELETE' });
     if (res.ok) {
       showToast('success', 'Đã xóa bài kiểm tra thành công.');
+      setCourseQuestionBank(null);
       setShowAssessmentModal(false);
       setAssessment(null);
 
