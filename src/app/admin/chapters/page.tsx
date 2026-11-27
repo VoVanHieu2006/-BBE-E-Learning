@@ -816,6 +816,7 @@ export default function AdminChaptersProgressPage() {
                   </div>
                 ) : memberProfileData ? (
                   <LearnerProfileView
+                    enableAdminStarHistory={true}
                     user={{
                       userId: memberProfileData.user?.userId || selectedMemberId || '',
                       displayName: memberProfileData.user?.displayName || selectedMemberSummary?.displayName,

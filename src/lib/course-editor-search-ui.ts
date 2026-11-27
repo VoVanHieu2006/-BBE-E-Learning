@@ -167,14 +167,13 @@ export interface ScheduledUpdateLike {
   type: 'LESSON' | 'COURSE_FINAL'; lessonId: string | null; currentQuestionCount: number; currentDurationMinutes: number
   questionCount: number; durationMinutes: number; effectiveMonthKey: string
 }
-export function describeScheduledUpdates(updates: ScheduledUpdateLike[] | null | undefined, lessonTitle: (lessonId: string) => string | null): string | null {
-  if (!updates?.length) return null
-  const lines = updates.map(update => {
-    const name = update.type === 'COURSE_FINAL' ? 'Bài thi cuối khóa' : `Quiz "${(update.lessonId && lessonTitle(update.lessonId)) || 'bài học'}"`
-    return `${name}: ${update.currentQuestionCount} câu / ${update.currentDurationMinutes} phút giữ nguyên tháng này, từ ${effectiveDateLabel(update.effectiveMonthKey)} sẽ là ${update.questionCount} câu / ${update.durationMinutes} phút`
-  })
-  return `Đã cập nhật khóa học. ${updates.length} quiz đã có lượt làm trong tháng nên cấu hình mới được hẹn sang tháng sau: ${lines.join('; ')}.`
+/** Deliberately concise: the per-quiz schedule is visible on each quiz's own badge. */
+export function describeScheduledUpdates(updates: ScheduledUpdateLike[] | null | undefined, _lessonTitle?: (lessonId: string) => string | null): string | null {
+  return updates?.length ? 'Đã cập nhật' : null
 }
+
+export const publishedQuizDraftSavedMessage = (_mode: 'LESSON' | 'COURSE_FINAL'): string =>
+  'Đã lưu vào bản nháp. Bấm "Cập nhật khóa học" để áp dụng.'
 
 export interface CourseSearchTarget { sessionId: string | null; lessonId: string; questionId: string | null; questionIndex: number; questionKey: string }
 

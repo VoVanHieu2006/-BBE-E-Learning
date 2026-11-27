@@ -1155,6 +1155,7 @@ const formatChapterScore = (val: number | null | undefined) => {
         ) : selectedUserData ? (
           <div className="p-4 max-h-[80vh] overflow-y-auto">
             <LearnerProfileView
+              enableAdminStarHistory={isAdmin}
               user={{
                 userId: selectedUserData.user?.userId || selectedUserId || '',
                 displayName: selectedUserData.user?.displayName,

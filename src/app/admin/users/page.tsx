@@ -1098,6 +1098,7 @@ export default function AdminUsersPage() {
               </div>
 
               <LearnerProfileView
+                enableAdminStarHistory={true}
                 user={{
                   userId: selectedUserDetail.userId || selectedUserDetail.id,
                   displayName: selectedUserDetail.displayName || selectedUserDetail.name,

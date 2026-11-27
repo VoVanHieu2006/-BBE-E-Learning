@@ -2,7 +2,7 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   applyQuizImport, buildConfigPayload, checkScheduledBudget, courseSearchTarget, defaultImportMode, describeScheduledUpdates, effectiveDateLabel,
-  filterQuizBank, findLessonForTarget, formatMonthKey, hasPendingSchedule, needsReplaceConfirm, pendingScheduleOf, questionKeyOf, removeQuestionAt,
+  filterQuizBank, findLessonForTarget, formatMonthKey, hasPendingSchedule, needsReplaceConfirm, pendingScheduleOf, publishedQuizDraftSavedMessage, questionKeyOf, removeQuestionAt,
   scheduleFormFrom, toScheduleMeta, toSearchableSessions, updateQuestionAt,
 } from '../lib/course-editor-search-ui'
 import { MAX_LESSON_QUIZ_POOLS, MAX_LESSON_QUIZ_QUESTIONS } from '../lib/quiz-schedule-rules'
@@ -208,17 +208,19 @@ describe('lịch áp dụng tháng sau: dữ liệu gửi đi', () => {
     assert.equal(pendingScheduleOf({ scheduledQuestionCount: 20, cancelSchedule: true }), null)
     assert.equal(pendingScheduleOf(null), null)
   })
-  it('thông báo sau khi cập nhật khóa học nêu rõ quiz nào được hẹn sang tháng sau', () => {
+  it('thông báo sau khi cập nhật khóa học ngắn gọn, không liệt kê từng quiz', () => {
     const message = describeScheduledUpdates([
       { type: 'LESSON', lessonId: 'l1', currentQuestionCount: 10, currentDurationMinutes: 30, questionCount: 20, durationMinutes: 30, effectiveMonthKey: '2026-12' },
       { type: 'COURSE_FINAL', lessonId: null, currentQuestionCount: 15, currentDurationMinutes: 60, questionCount: 15, durationMinutes: 90, effectiveMonthKey: '2026-12' },
-    ], id => id === 'l1' ? 'Bài 1' : null)!
-    assert.match(message, /Quiz "Bài 1"/)
-    assert.match(message, /10 câu \/ 30 phút giữ nguyên tháng này/)
-    assert.match(message, /01\/12\/2026/)
-    assert.match(message, /Bài thi cuối khóa/)
+    ], id => id === 'l1' ? 'Bài 1' : null)
+    assert.equal(message, 'Đã cập nhật')
     assert.equal(describeScheduledUpdates([], () => null), null)
     assert.equal(describeScheduledUpdates(undefined, () => null), null)
+  })
+  it('nhắc Admin bấm "Cập nhật khóa học" sau khi lưu quiz vào bản nháp', () => {
+    for (const mode of ['LESSON', 'COURSE_FINAL'] as const) {
+      assert.equal(publishedQuizDraftSavedMessage(mode), 'Đã lưu vào bản nháp. Bấm "Cập nhật khóa học" để áp dụng.')
+    }
   })
 })
 

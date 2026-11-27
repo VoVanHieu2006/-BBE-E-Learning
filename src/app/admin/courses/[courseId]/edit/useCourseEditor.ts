@@ -8,7 +8,7 @@ import { normalizeDurationSeconds, parseDurationInput } from '@/lib/validation/d
 import { MAX_LESSON_QUIZ_POOLS, MAX_LESSON_QUIZ_QUESTIONS } from '@/lib/quiz-schedule-rules';
 import {
   EMPTY_SCHEDULE_FORM, ScheduleForm, ScheduleMeta, applyQuizImport, buildConfigPayload, checkScheduledBudget, defaultImportMode,
-  describeScheduledUpdates, effectiveDateLabel, effectiveScheduleValues, findLessonForTarget, hasPendingSchedule, needsReplaceConfirm, removeQuestionAt, scheduleFormFrom, toScheduleMeta, updateQuestionAt,
+  effectiveDateLabel, effectiveScheduleValues, findLessonForTarget, hasPendingSchedule, needsReplaceConfirm, publishedQuizDraftSavedMessage, removeQuestionAt, scheduleFormFrom, toScheduleMeta, updateQuestionAt,
   type CourseSearchTarget, type QuizImportMode,
 } from '@/lib/course-editor-search-ui';
 
@@ -480,13 +480,10 @@ export function useCourseEditor(params: { courseId: string }) {
     clearApiCache(`/api/v1/courses/${params.courseId}`);
 
     if (res.ok) {
-      const lessonTitles = new Map<string, string>((course?.sessions || []).flatMap((s: any) => (s.lessons || []).map((l: any) => [l.lessonId || l.id, l.title] as [string, string])));
-      const scheduledMessage = updating ? describeScheduledUpdates(res.data?.scheduledUpdates, (lessonId) => lessonTitles.get(lessonId) || null) : null;
       setForm((prev) => ({ ...prev, status: 'PUBLISHED' }));
       setCourse((prev: any) => ({ ...prev, status: 'PUBLISHED' }));
       await loadCourse(true);
-      if (scheduledMessage) setToast({ type: 'info', title: 'Một số cấu hình được hẹn sang tháng sau', message: scheduledMessage, duration: 20000 });
-      else showToast('success', updating ? 'Đã cập nhật khóa học.' : 'Đã xuất bản khóa học.');
+      showToast('success', updating ? 'Đã cập nhật' : 'Đã xuất bản khóa học.');
     } else if (res.error?.code === 'AlreadyPublished') {
       setForm((prev) => ({ ...prev, status: 'PUBLISHED' }));
       setCourse((prev: any) => ({ ...prev, status: 'PUBLISHED' }));
@@ -1586,7 +1583,7 @@ export function useCourseEditor(params: { courseId: string }) {
           })) };
         }
       });
-      if (ok) setShowAssessmentModal(false);
+      if (ok) { setShowAssessmentModal(false); showToast('info', publishedQuizDraftSavedMessage(activeAssessmentMode)); }
       setAssessmentSaving(false); return;
     }
 
