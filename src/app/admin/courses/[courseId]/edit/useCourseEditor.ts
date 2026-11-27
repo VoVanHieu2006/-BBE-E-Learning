@@ -5,6 +5,12 @@ import { apiFetch, clearApiCache, getCachedApiData } from '@/lib/api/client';
 import type { CourseDraftContent } from '@/lib/course-draft';
 import { draftToEditorCourse, findDraftLesson, draftQuestionBankSize } from '@/lib/course-draft-editor';
 import { normalizeDurationSeconds, parseDurationInput } from '@/lib/validation/duration';
+import { MAX_LESSON_QUIZ_POOLS, MAX_LESSON_QUIZ_QUESTIONS } from '@/lib/quiz-schedule-rules';
+import {
+  EMPTY_SCHEDULE_FORM, ScheduleForm, ScheduleMeta, applyQuizImport, buildConfigPayload, checkScheduledBudget, defaultImportMode,
+  describeScheduledUpdates, effectiveDateLabel, effectiveScheduleValues, findLessonForTarget, hasPendingSchedule, needsReplaceConfirm, removeQuestionAt, scheduleFormFrom, toScheduleMeta, updateQuestionAt,
+  type CourseSearchTarget, type QuizImportMode,
+} from '@/lib/course-editor-search-ui';
 
 interface QuestionOptionForm {
   id?: string;
@@ -155,6 +161,14 @@ export function useCourseEditor(params: { courseId: string }) {
   const [quizImporting, setQuizImporting] = useState(false);
   const [quizImportErrors, setQuizImportErrors] = useState<{ row: number; message: string }[]>([]);
   const [quizPoolNames, setQuizPoolNames] = useState(['Nhóm 1']);
+  const [quizImportMode, setQuizImportMode] = useState<QuizImportMode>('replace');
+  const [courseScheduleMeta, setCourseScheduleMeta] = useState<Record<string, ScheduleMeta>>({});
+  const [scheduleMeta, setScheduleMeta] = useState<ScheduleMeta | null>(null);
+  const [scheduleForm, setScheduleForm] = useState<ScheduleForm>({ ...EMPTY_SCHEDULE_FORM });
+  const [focusedQuestionKey, setFocusedQuestionKey] = useState<string | null>(null);
+  const [courseQuestionBank, setCourseQuestionBank] = useState<any[] | null>(null);
+  const [courseQuestionBankLoading, setCourseQuestionBankLoading] = useState(false);
+  const [courseQuestionBankError, setCourseQuestionBankError] = useState('');
   const [assessmentForm, setAssessmentForm] = useState({
     title: 'Bài kiểm tra bài học',
     description: 'Đạt từ 85% điểm để hoàn thành bài học',
@@ -181,6 +195,12 @@ export function useCourseEditor(params: { courseId: string }) {
     assessmentLoadIdRef.current += 1;
     setAssessmentLoading(false);
     setShowAssessmentModal(false);
+    setFocusedQuestionKey(null);
+  };
+
+  const resetSchedule = (meta: ScheduleMeta | null, source: any) => {
+    setScheduleMeta(meta);
+    setScheduleForm(scheduleFormFrom(source, meta));
   };
 
   useEffect(() => {
@@ -205,6 +225,7 @@ export function useCourseEditor(params: { courseId: string }) {
 
   async function loadCourse(reload = false) {
     if (draftConflictRef.current && !reload) return;
+    setCourseQuestionBank(null);
     const courseRes = await apiFetch(`/api/v1/courses/${params.courseId}`, { noCache: true });
     if (courseRes.ok && courseRes.data) {
       let c = courseRes.data;
@@ -217,6 +238,12 @@ export function useCourseEditor(params: { courseId: string }) {
         draftIdRef.current = result.data.draft?.id || null;
         baseVersionRef.current = result.data.course.contentVersion;
         setHasDraftChanges(Boolean(result.data.draft));
+        const scheduleMetaByKey: Record<string, ScheduleMeta> = {};
+        for (const [key, value] of Object.entries(result.data.scheduleMeta || {})) {
+          const meta = toScheduleMeta(value);
+          if (meta) scheduleMetaByKey[key] = meta;
+        }
+        setCourseScheduleMeta(scheduleMetaByKey);
         c = draftToEditorCourse(draftRef.current!, c);
       } else { draftRef.current = null; setHasDraftChanges(false); setDraftError(null); }
       draftConflictRef.current = false; setDraftConflict(false); setDraftSaveFailed(false);
@@ -227,12 +254,15 @@ export function useCourseEditor(params: { courseId: string }) {
   }
 
   // ─── Open Assessment Modal for a specific Lesson ─────────────────────────────
-  const openAssessmentEditorForLesson = async (sId: string, lesson: any) => {
+  const openAssessmentEditorForLesson = async (sId: string, lesson: any, options?: { focusQuestionKey?: string | null }) => {
     const loadId = ++assessmentLoadIdRef.current;
     setActiveAssessmentMode('LESSON');
     setAssessmentFormError('');
     setQuizImportUrl('');
     setQuizImportErrors([]);
+    setFocusedQuestionKey(options?.focusQuestionKey || null);
+    setScheduleMeta(null);
+    setScheduleForm({ ...EMPTY_SCHEDULE_FORM });
     const lId = lesson.lessonId || lesson.id;
     setActiveLessonForAssessment({
       sessionId: sId,
@@ -273,13 +303,18 @@ export function useCourseEditor(params: { courseId: string }) {
       assessment: assessData,
     });
     setAssessment(assessData);
+    const meta = draftRef.current
+      ? courseScheduleMeta[lId] || null
+      : assessData ? toScheduleMeta({ ...assessData, currentQuestionCount: assessData.questionCount, currentDurationMinutes: assessData.durationMinutes }) : null;
+    resetSchedule(meta, assessData);
+    setQuizImportMode(assessData ? defaultImportMode(assessData.questions?.length || 0) : 'replace');
 
     if (assessData && Array.isArray(assessData.questions) && assessData.questions.length > 0) {
       setAssessmentForm({
         title: assessData.title || `Bài kiểm tra: ${lesson.title}`,
         description: assessData.description || '',
-        questionCount: assessData?.questionCount || 1,
-        durationMinutes: assessData ? (assessData.durationMinutes ?? 0) : 30,
+        questionCount: (meta?.hasCurrentMonthAttempts ? meta.currentQuestionCount : assessData?.questionCount) || 1,
+        durationMinutes: meta?.hasCurrentMonthAttempts ? meta.currentDurationMinutes : assessData ? (assessData.durationMinutes ?? 0) : 30,
         questions: assessData.questions.map((q: any, idx: number) => ({
           id: q.id || q.questionId,
           questionText: q.questionText || q.question_text || `Câu hỏi ${idx + 1}`,
@@ -328,6 +363,9 @@ export function useCourseEditor(params: { courseId: string }) {
     setAssessmentFormError('');
     setQuizImportUrl('');
     setQuizImportErrors([]);
+    setFocusedQuestionKey(null);
+    setScheduleMeta(null);
+    setScheduleForm({ ...EMPTY_SCHEDULE_FORM });
     setActiveLessonForAssessment(null);
     setShowAssessmentModal(true);
     setAssessmentLoading(true);
@@ -345,11 +383,15 @@ export function useCourseEditor(params: { courseId: string }) {
     setFinalAvailableQuestions(Number(result.data?.availableQuestions || 0));
     setQuizPoolNames([]);
     setAssessment(assessData);
+    const meta = draftRef.current
+      ? courseScheduleMeta.COURSE_FINAL || null
+      : assessData ? toScheduleMeta({ ...assessData, currentQuestionCount: assessData.questionCount, currentDurationMinutes: assessData.durationMinutes }) : null;
+    resetSchedule(meta, assessData);
     setAssessmentForm({
         title: assessData?.title || 'Bài thi cuối khóa',
         description: assessData?.description || 'Đạt tối thiểu 85% để hoàn thành khóa học.',
-        questionCount: assessData?.questionCount || 1,
-        durationMinutes: assessData ? (assessData.durationMinutes ?? 0) : 30,
+        questionCount: (meta?.hasCurrentMonthAttempts ? meta.currentQuestionCount : assessData?.questionCount) || 1,
+        durationMinutes: meta?.hasCurrentMonthAttempts ? meta.currentDurationMinutes : assessData ? (assessData.durationMinutes ?? 0) : 30,
         questions: [],
     });
     setAssessmentLoading(false);
@@ -430,10 +472,13 @@ export function useCourseEditor(params: { courseId: string }) {
     clearApiCache(`/api/v1/courses/${params.courseId}`);
 
     if (res.ok) {
+      const lessonTitles = new Map<string, string>((course?.sessions || []).flatMap((s: any) => (s.lessons || []).map((l: any) => [l.lessonId || l.id, l.title] as [string, string])));
+      const scheduledMessage = updating ? describeScheduledUpdates(res.data?.scheduledUpdates, (lessonId) => lessonTitles.get(lessonId) || null) : null;
       setForm((prev) => ({ ...prev, status: 'PUBLISHED' }));
       setCourse((prev: any) => ({ ...prev, status: 'PUBLISHED' }));
       await loadCourse(true);
-      showToast('success', updating ? 'Đã cập nhật khóa học.' : 'Đã xuất bản khóa học.');
+      if (scheduledMessage) setToast({ type: 'info', title: 'Một số cấu hình được hẹn sang tháng sau', message: scheduledMessage, duration: 20000 });
+      else showToast('success', updating ? 'Đã cập nhật khóa học.' : 'Đã xuất bản khóa học.');
     } else if (res.error?.code === 'AlreadyPublished') {
       setForm((prev) => ({ ...prev, status: 'PUBLISHED' }));
       setCourse((prev: any) => ({ ...prev, status: 'PUBLISHED' }));
@@ -1268,6 +1313,7 @@ export function useCourseEditor(params: { courseId: string }) {
 
   // ─── Assessment Builder (Add/Remove/Move Questions & Options) ──────────────────
   const handleAddQuestion = (poolIndex = 0) => {
+    if (assessmentForm.questions.length >= MAX_LESSON_QUIZ_QUESTIONS) return showToast('error', `Ngân hàng chỉ được tối đa ${MAX_LESSON_QUIZ_QUESTIONS} câu hỏi.`);
     setAssessmentForm((prev) => ({
       ...prev,
       questions: [
@@ -1290,7 +1336,7 @@ export function useCourseEditor(params: { courseId: string }) {
     }));
   };
 
-  const handleAddPool = () => { setQuizPoolNames((previous) => [...previous, `Nhóm ${previous.length + 1}`]); setQuizPoolIds(previous => [...previous, tempId()]); };
+  const handleAddPool = () => { if (quizPoolNames.length >= MAX_LESSON_QUIZ_POOLS) return showToast('error', `Quiz chỉ được tối đa ${MAX_LESSON_QUIZ_POOLS} nhóm câu hỏi.`); setQuizPoolNames((previous) => [...previous, `Nhóm ${previous.length + 1}`]); setQuizPoolIds(previous => [...previous, tempId()]); };
   const handleRemovePool = (poolIndex: number) => {
     if (quizPoolNames.length <= 1) return showToast('error', 'Quiz phải có ít nhất một nhóm.');
     if (assessmentForm.questions.some((question) => (question.poolIndex ?? 0) === poolIndex)) return showToast('error', 'Hãy xóa hoặc chuyển các câu hỏi trong nhóm trước.');
@@ -1307,8 +1353,12 @@ export function useCourseEditor(params: { courseId: string }) {
     }
     setAssessmentForm((prev) => ({
       ...prev,
-      questions: prev.questions.filter((_, i) => i !== idx),
+      questions: removeQuestionAt(prev.questions, idx),
     }));
+  };
+
+  const handleUpdateQuestion = (idx: number, update: (question: QuestionForm) => QuestionForm) => {
+    setAssessmentForm((prev) => ({ ...prev, questions: updateQuestionAt(prev.questions, idx, update) }));
   };
 
   const handleMoveQuestion = (idx: number, direction: 'up' | 'down') => {
@@ -1327,45 +1377,37 @@ export function useCourseEditor(params: { courseId: string }) {
     qIdx: number,
     newType: 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE'
   ) => {
-    const updated = [...assessmentForm.questions];
-    const q = updated[qIdx];
-    q.type = newType;
-
-    if (newType === 'SINGLE_CHOICE') {
+    handleUpdateQuestion(qIdx, (q) => {
+      if (newType !== 'SINGLE_CHOICE') return { ...q, type: newType };
       if (q.options.length < 2) {
-        q.options = [
-          { optionText: 'Đáp án A (Đúng)', isCorrect: true },
-          { optionText: 'Đáp án B', isCorrect: false },
-        ];
-      } else {
-        const firstCorrect = q.options.findIndex((o) => o.isCorrect);
-        q.options = q.options.map((o, idx) => ({
-          ...o,
-          isCorrect: idx === (firstCorrect >= 0 ? firstCorrect : 0),
-        }));
+        return {
+          ...q,
+          type: newType,
+          options: [
+            { optionText: 'Đáp án A (Đúng)', isCorrect: true },
+            { optionText: 'Đáp án B', isCorrect: false },
+          ],
+        };
       }
-    }
-    setAssessmentForm({ ...assessmentForm, questions: updated });
+      const firstCorrect = q.options.findIndex((o) => o.isCorrect);
+      return { ...q, type: newType, options: q.options.map((o, idx) => ({ ...o, isCorrect: idx === (firstCorrect >= 0 ? firstCorrect : 0) })) };
+    });
   };
 
   const handleAddOption = (qIdx: number) => {
-    const updated = [...assessmentForm.questions];
-    updated[qIdx].options.push({
-      optionText: `Đáp án ${String.fromCharCode(65 + updated[qIdx].options.length)}`,
-      isCorrect: false,
-    });
-    setAssessmentForm({ ...assessmentForm, questions: updated });
+    handleUpdateQuestion(qIdx, (q) => ({
+      ...q,
+      options: [...q.options, { optionText: `Đáp án ${String.fromCharCode(65 + q.options.length)}`, isCorrect: false }],
+    }));
   };
 
   const handleRemoveOption = (qIdx: number, oIdx: number) => {
-    const updated = [...assessmentForm.questions];
-    if (updated[qIdx].options.length <= 2) {
+    if ((assessmentForm.questions[qIdx]?.options.length ?? 0) <= 2) {
       setAssessmentFormError('Mỗi câu hỏi phải có ít nhất 2 đáp án lựa chọn');
       showToast('error', 'Mỗi câu hỏi phải có ít nhất 2 đáp án lựa chọn');
       return;
     }
-    updated[qIdx].options = updated[qIdx].options.filter((_, i) => i !== oIdx);
-    setAssessmentForm({ ...assessmentForm, questions: updated });
+    handleUpdateQuestion(qIdx, (q) => ({ ...q, options: q.options.filter((_, i) => i !== oIdx) }));
   };
 
   const handleImportQuiz = async () => {
@@ -1377,9 +1419,10 @@ export function useCourseEditor(params: { courseId: string }) {
 
     const existingCount = assessmentForm.questions.length;
     if (
-      existingCount > 0 &&
+      quizImportMode === 'replace' &&
+      needsReplaceConfirm(existingCount, Boolean(activeLessonForAssessment?.assessment)) &&
       !window.confirm(
-        `Form đang có ${existingCount} câu hỏi. Import sẽ THAY THẾ danh sách câu hỏi đang soạn; bấm "Lưu bài kiểm tra" để ghi đè bài kiểm tra hiện có. Tiếp tục?`
+        `Ngân hàng đang có ${existingCount} câu hỏi. Chế độ "Thay thế toàn bộ ngân hàng" sẽ thay danh sách câu hỏi đang soạn bằng nội dung file; bấm "Lưu bài kiểm tra" để ghi đè bài kiểm tra hiện có. Tiếp tục?`
       )
     ) {
       return;
@@ -1399,28 +1442,41 @@ export function useCourseEditor(params: { courseId: string }) {
     }
 
     const imported = res.data.questions || [];
-    setAssessmentForm((prev) => ({
-      ...prev,
-      questions: imported.map((q: any, idx: number) => ({
-        questionText: q.questionText,
-        type: q.questionType as 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE',
-        points: q.points || 1,
-        durationSeconds: prev.questions[0]?.durationSeconds ?? 120,
-        explanation: q.explanation || '',
-        poolIndex: Number.isInteger(q.poolIndex) ? q.poolIndex : idx % Math.max(1, (res.data.pools || quizPoolNames).length),
-        options: (q.options || []).map((o: any) => ({
-          optionText: o.optionText,
-          isCorrect: Boolean(o.isCorrect),
-        })),
+    const importedQuestions: QuestionForm[] = imported.map((q: any) => ({
+      questionText: q.questionText,
+      type: q.questionType as 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE',
+      points: q.points || 1,
+      durationSeconds: assessmentForm.questions[0]?.durationSeconds ?? 120,
+      explanation: q.explanation || '',
+      poolIndex: Number.isInteger(q.poolIndex) ? q.poolIndex : undefined,
+      options: (q.options || []).map((o: any) => ({
+        optionText: o.optionText,
+        isCorrect: Boolean(o.isCorrect),
       })),
     }));
-    if (Array.isArray(res.data.pools) && res.data.pools.length) setQuizPoolNames(res.data.pools);
+    const merged = applyQuizImport<QuestionForm>({
+      mode: quizImportMode,
+      poolNames: quizPoolNames,
+      poolIds: quizPoolIds,
+      questions: assessmentForm.questions,
+      importedPools: Array.isArray(res.data.pools) ? res.data.pools : [],
+      importedQuestions,
+      newId: tempId,
+    });
+    if (merged.ok === false) {
+      setQuizImportErrors([]);
+      showToast('error', merged.message);
+      return;
+    }
+    setAssessmentForm((prev) => ({ ...prev, questions: merged.questions }));
+    setQuizPoolNames(merged.poolNames);
+    setQuizPoolIds(merged.poolIds);
     setQuizImportErrors(res.data.errors || []);
 
     const errorCount = (res.data.errors || []).length;
     showToast(
       'success',
-      `Đã nhập ${imported.length} câu hỏi${errorCount > 0 ? ` (bỏ qua ${errorCount} dòng lỗi)` : ''}`
+      `${quizImportMode === 'append' ? `Đã thêm ${imported.length} câu hỏi vào ngân hàng (tổng ${merged.questions.length} câu)` : `Đã thay thế ngân hàng bằng ${imported.length} câu hỏi`}${errorCount > 0 ? ` (bỏ qua ${errorCount} dòng lỗi)` : ''}`
     );
   };
 
@@ -1490,10 +1546,20 @@ export function useCourseEditor(params: { courseId: string }) {
       }
     }
 
+    if (scheduleBudgetIssue) {
+      setAssessmentFormError(scheduleBudgetIssue.message);
+      showToast('error', scheduleBudgetIssue.message);
+      return;
+    }
+
+    const { scheduledEffectiveAt, scheduledEffectiveMonthKey, ...configPayload } = buildConfigPayload({
+      meta: scheduleMeta, form: scheduleForm, questionCount: assessmentForm.questionCount, durationMinutes: assessmentForm.durationMinutes,
+    });
+
     if (draftRef.current) {
       setAssessmentSaving(true);
       const ok = await savePublishedDraft(c => {
-        const config = { title: assessmentForm.title.trim(), description: assessmentForm.description.trim(), questionCount: assessmentForm.questionCount, durationMinutes: assessmentForm.durationMinutes };
+        const config = { title: assessmentForm.title.trim(), description: assessmentForm.description.trim(), ...configPayload, scheduledEffectiveAt, scheduledEffectiveMonthKey };
         if (activeAssessmentMode === 'COURSE_FINAL') c.finalAssessment = { ...c.finalAssessment, ...config };
         else {
           const l = findDraftLesson(c, activeLessonForAssessment!.lessonId);
@@ -1521,8 +1587,7 @@ export function useCourseEditor(params: { courseId: string }) {
         title: assessmentForm.title.trim(),
         description: assessmentForm.description.trim(),
         ...(activeAssessmentMode === 'LESSON' ? { pools: quizPoolNames } : {}),
-        questionCount: assessmentForm.questionCount,
-        durationMinutes: assessmentForm.durationMinutes,
+        ...configPayload,
         ...(activeAssessmentMode === 'LESSON' ? { questions: assessmentForm.questions.map((q, idx) => ({
           questionText: q.questionText.trim(),
           questionType: q.type,
@@ -1544,7 +1609,12 @@ export function useCourseEditor(params: { courseId: string }) {
       clearApiCache(endpoint);
       clearApiCache(`/api/v1/courses/${params.courseId}`);
       clearApiCache('/api/v1/assessments');
-      showToast('success', activeAssessmentMode === 'COURSE_FINAL' ? 'Đã lưu cấu hình bài thi cuối khóa.' : `Đã lưu thành công bài kiểm tra (${assessmentForm.questions.length} câu hỏi)!`);
+      const scheduledConfig = res.data?.scheduled ? res.data.scheduledConfig : null;
+      const savedMessage = activeAssessmentMode === 'COURSE_FINAL' ? 'Đã lưu cấu hình bài thi cuối khóa.' : `Đã lưu thành công bài kiểm tra (${assessmentForm.questions.length} câu hỏi)!`;
+      showToast('success', scheduledConfig
+        ? `${savedMessage} Cấu hình tháng này giữ nguyên (${scheduleMeta?.currentQuestionCount} câu / ${scheduleMeta?.currentDurationMinutes} phút); ${scheduledConfig.questionCount} câu / ${scheduledConfig.durationMinutes} phút sẽ áp dụng từ ${effectiveDateLabel(scheduledConfig.effectiveMonthKey)}.`
+        : savedMessage);
+      setCourseQuestionBank(null);
       setShowAssessmentModal(false);
       setAssessment(res.data);
 
@@ -1637,13 +1707,43 @@ export function useCourseEditor(params: { courseId: string }) {
     : [];
   const minLessonPoolCount = lessonPoolCounts.length > 0 ? Math.min(...lessonPoolCounts) : 0;
   const maxLessonQuestionsAllowed = quizPoolNames.length * minLessonPoolCount;
-  const isLessonQuizInvalid = activeAssessmentMode === 'LESSON' && quizPoolNames.length > 0 && (
+  const scheduleBudgetIssue = scheduleMeta && hasPendingSchedule(scheduleMeta, scheduleForm) ? checkScheduledBudget({
+    mode: activeAssessmentMode,
+    activeCount: assessmentForm.questionCount,
+    scheduledCount: effectiveScheduleValues(scheduleMeta, scheduleForm).questionCount,
+    poolCounts: lessonPoolCounts,
+    totalQuestions: assessmentForm.questions.length,
+    availableQuestions: finalAvailableQuestions,
+  }) : null;
+  const isLessonQuizInvalid = (activeAssessmentMode === 'LESSON' && quizPoolNames.length > 0 && (
     quizPoolNames.length < 1 ||
-    quizPoolNames.length > 20 ||
+    quizPoolNames.length > MAX_LESSON_QUIZ_POOLS ||
+    assessmentForm.questions.length > MAX_LESSON_QUIZ_QUESTIONS ||
     minLessonPoolCount === 0 ||
     assessmentForm.questionCount < quizPoolNames.length ||
     assessmentForm.questionCount > maxLessonQuestionsAllowed
-  );
+  )) || Boolean(scheduleBudgetIssue);
+
+  const handleCancelSchedule = () => setScheduleForm({ ...EMPTY_SCHEDULE_FORM });
+  const handleApplyScheduledQuestionCount = (count: number) => setScheduleForm((previous) => ({ ...previous, questionCount: count }));
+
+  const loadCourseQuestionBank = async (force = false) => {
+    if (course?.status === 'PUBLISHED' || courseQuestionBankLoading || (courseQuestionBank && !force)) return;
+    setCourseQuestionBankLoading(true);
+    setCourseQuestionBankError('');
+    const res = await apiFetch(`/api/v1/courses/${params.courseId}/questions`, { noCache: true });
+    if (res.ok && Array.isArray(res.data?.sessions)) setCourseQuestionBank(res.data.sessions);
+    else setCourseQuestionBankError(res.error?.message || 'Không tải được ngân hàng câu hỏi của khóa học.');
+    setCourseQuestionBankLoading(false);
+  };
+
+  const openQuestionFromSearch = (target: CourseSearchTarget) => {
+    const found = findLessonForTarget(course?.sessions, target);
+    if (!found) return showToast('error', 'Không tìm thấy bài học chứa câu hỏi này. Hãy tải lại trang.');
+    void openAssessmentEditorForLesson(found.sessionId, found.lesson, { focusQuestionKey: target.questionKey });
+  };
+
+  const courseSearchSessions = course?.status === 'PUBLISHED' ? course?.sessions : courseQuestionBank;
 
   const expectedDistributionText = (() => {
     if (activeAssessmentMode !== 'LESSON' || quizPoolNames.length === 0 || minLessonPoolCount === 0) return null;
@@ -1758,7 +1858,22 @@ export function useCourseEditor(params: { courseId: string }) {
     handleDeleteAssessment,
     assessmentSaving,
     isLessonQuizInvalid,
-    handleSaveAssessment
+    handleSaveAssessment,
+    handleUpdateQuestion,
+    quizImportMode,
+    setQuizImportMode,
+    scheduleMeta,
+    scheduleForm,
+    setScheduleForm,
+    scheduleBudgetIssue,
+    handleCancelSchedule,
+    handleApplyScheduledQuestionCount,
+    focusedQuestionKey,
+    courseSearchSessions,
+    courseQuestionBankLoading,
+    courseQuestionBankError,
+    loadCourseQuestionBank,
+    openQuestionFromSearch,
   };
 }
 

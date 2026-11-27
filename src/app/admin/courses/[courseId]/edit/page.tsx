@@ -13,6 +13,7 @@ import CourseSessionModal from './CourseSessionModal';
 import CourseLessonModal from './CourseLessonModal';
 import CourseBulkLessonModal from './CourseBulkLessonModal';
 import CourseAssessmentEditor from './CourseAssessmentEditor';
+import CourseQuestionSearch from './CourseQuestionSearch';
 import { getCourseEditorStatus, CourseEditorStatusTone } from '@/lib/course-editor-status';
 
 const STATUS_TONE_CLASS: Record<CourseEditorStatusTone, string> = {
@@ -156,6 +157,8 @@ export default function AdminEditCoursePage({ params }: { params: { courseId: st
             <CourseInfo {...editor} />
 
             <FinalAssessmentSummary {...editor} />
+
+            <CourseQuestionSearch {...editor} />
 
             {/* 2. Sessions & Lessons Outline Builder with Up/Down buttons (Request 1) */}
             <CourseOutline {...editor} />

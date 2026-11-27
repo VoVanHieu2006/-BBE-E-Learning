@@ -1,6 +1,12 @@
 'use client';
+import { useEffect, useMemo, useState } from 'react';
 import Button from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
+import { MAX_LESSON_QUIZ_POOLS, MAX_LESSON_QUIZ_QUESTIONS } from '@/lib/quiz-schedule-rules';
+import { getHighlightSegments, type QuizMatchField } from '@/lib/quiz-search';
+import { filterQuizBank, questionDomId, questionKeyOf, type QuizImportMode } from '@/lib/course-editor-search-ui';
+import HighlightedText from './HighlightedText';
+import QuizSchedulePanel from './QuizSchedulePanel';
 import type { CourseEditorState } from './useCourseEditor';
 
 type Props = Pick<CourseEditorState,
@@ -24,11 +30,14 @@ type Props = Pick<CourseEditorState,
   'quizImporting' |
   'handleImportQuiz' |
   'quizImportErrors' |
+  'quizImportMode' |
+  'setQuizImportMode' |
   'setQuizPoolNames' |
   'handleAddQuestion' |
   'handleRemovePool' |
   'handleMoveQuestion' |
   'handleRemoveQuestion' |
+  'handleUpdateQuestion' |
   'handleQuestionTypeChange' |
   'handleRemoveOption' |
   'handleAddOption' |
@@ -36,8 +45,23 @@ type Props = Pick<CourseEditorState,
   'handleDeleteAssessment' |
   'assessmentSaving' |
   'isLessonQuizInvalid' |
-  'handleSaveAssessment'
+  'handleSaveAssessment' |
+  'scheduleMeta' |
+  'scheduleForm' |
+  'setScheduleForm' |
+  'scheduleBudgetIssue' |
+  'handleCancelSchedule' |
+  'handleApplyScheduledQuestionCount' |
+  'focusedQuestionKey'
 >;
+
+const MATCH_LABEL: Record<QuizMatchField, string> = { question: 'Câu hỏi', option: 'Đáp án', explanation: 'Giải thích' };
+const IMPORT_MODES: { value: QuizImportMode; label: string; hint: string }[] = [
+  { value: 'append', label: 'Thêm vào ngân hàng hiện có', hint: `Giữ nguyên các câu hiện có, gộp nhóm trùng tên, tối đa ${MAX_LESSON_QUIZ_QUESTIONS} câu / ${MAX_LESSON_QUIZ_POOLS} nhóm.` },
+  { value: 'replace', label: 'Thay thế toàn bộ ngân hàng', hint: 'Bỏ các câu đang soạn và dùng đúng nội dung trong file.' },
+];
+
+const Highlighted = HighlightedText;
 
 export default function CourseAssessmentEditor({
   showAssessmentModal,
@@ -60,11 +84,14 @@ export default function CourseAssessmentEditor({
   quizImporting,
   handleImportQuiz,
   quizImportErrors,
+  quizImportMode,
+  setQuizImportMode,
   setQuizPoolNames,
   handleAddQuestion,
   handleRemovePool,
   handleMoveQuestion,
   handleRemoveQuestion,
+  handleUpdateQuestion,
   handleQuestionTypeChange,
   handleRemoveOption,
   handleAddOption,
@@ -72,8 +99,54 @@ export default function CourseAssessmentEditor({
   handleDeleteAssessment,
   assessmentSaving,
   isLessonQuizInvalid,
-  handleSaveAssessment
+  handleSaveAssessment,
+  scheduleMeta,
+  scheduleForm,
+  setScheduleForm,
+  scheduleBudgetIssue,
+  handleCancelSchedule,
+  handleApplyScheduledQuestionCount,
+  focusedQuestionKey
 }: Props) {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [poolFilterValue, setPoolFilterValue] = useState<number | null>(null);
+  const lessonId = activeLessonForAssessment?.lessonId;
+
+  useEffect(() => {
+    setSearchQuery('');
+    setPoolFilterValue(null);
+  }, [showAssessmentModal, lessonId]);
+
+  const poolFilter = poolFilterValue !== null && poolFilterValue < quizPoolNames.length ? poolFilterValue : null;
+  const view = useMemo(
+    () => filterQuizBank(assessmentForm.questions, quizPoolNames.length, searchQuery, poolFilter),
+    [assessmentForm.questions, quizPoolNames.length, searchQuery, poolFilter]
+  );
+  const clearFilters = () => { setSearchQuery(''); setPoolFilterValue(null); };
+  const focusedIndex = focusedQuestionKey ? assessmentForm.questions.findIndex((question, index) => questionKeyOf(question, index) === focusedQuestionKey) : -1;
+  const focusedPool = focusedIndex >= 0 ? assessmentForm.questions[focusedIndex].poolIndex ?? 0 : -1;
+  const questionCount = assessmentForm.questions.length;
+  const monthLocked = Boolean(scheduleMeta?.hasCurrentMonthAttempts);
+
+  useEffect(() => {
+    if (!showAssessmentModal || assessmentLoading || !focusedQuestionKey || focusedIndex < 0) return;
+    let attempts = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const focusQuestion = () => {
+      const element = document.getElementById(questionDomId(focusedQuestionKey));
+      if (!element) {
+        if (attempts++ < 15) timer = setTimeout(focusQuestion, 60);
+        return;
+      }
+      if (element instanceof HTMLDetailsElement) element.open = true;
+      const pool = element.parentElement?.closest('details');
+      if (pool) pool.open = true;
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    };
+    focusQuestion();
+    return () => { if (timer) clearTimeout(timer); };
+  }, [showAssessmentModal, assessmentLoading, focusedQuestionKey, focusedIndex >= 0]);
+
   return (
     <Modal
           isOpen={showAssessmentModal}
@@ -86,6 +159,8 @@ export default function CourseAssessmentEditor({
                 {activeAssessmentMode === 'COURSE_FINAL' ? 'Cấu hình bài thi cuối khóa' : activeLessonForAssessment ? `Cấu hình Quiz: ${activeLessonForAssessment.lessonTitle}` : 'Cấu hình bài kiểm tra'}
               </h3>
               <button
+                type="button"
+                aria-label="Đóng cửa sổ cấu hình bài kiểm tra"
                 onClick={closeAssessmentModal}
                 className="text-[#6c6f7f] hover:text-[#172554] font-bold text-xl p-1 rounded-lg hover:bg-slate-100 transition"
               >
@@ -109,7 +184,7 @@ export default function CourseAssessmentEditor({
             ) : <>
 
               {assessmentFormError && (
-                <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 font-semibold flex items-center gap-2">
+                <div role="alert" className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 font-semibold flex items-center gap-2">
                   <span>⚠️</span>
                   <span>{assessmentFormError}</span>
                 </div>
@@ -137,21 +212,33 @@ export default function CourseAssessmentEditor({
                 </div>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-2">
-                <label className="text-sm font-semibold text-[#172554]">Số câu mỗi lượt<input type="number" min={1} max={activeAssessmentMode === 'COURSE_FINAL' ? finalAvailableQuestions : assessmentForm.questions.length} value={assessmentForm.questionCount} onChange={(e) => setAssessmentForm({ ...assessmentForm, questionCount: Number(e.target.value) })} className="mt-1 w-full rounded-xl border border-[#cbdbf5] px-3 py-2 font-normal"/></label>
-                <label className="text-sm font-semibold text-[#172554]">Thời gian (phút)<input type="number" min={1} max={240} value={assessmentForm.durationMinutes} onChange={(e) => setAssessmentForm({ ...assessmentForm, durationMinutes: Number(e.target.value) })} className="mt-1 w-full rounded-xl border border-[#cbdbf5] px-3 py-2 font-normal"/></label>
-              </div>
+              {monthLocked ? (
+                <QuizSchedulePanel
+                  activeAssessmentMode={activeAssessmentMode}
+                  scheduleMeta={scheduleMeta}
+                  scheduleForm={scheduleForm}
+                  setScheduleForm={setScheduleForm}
+                  scheduleBudgetIssue={scheduleBudgetIssue}
+                  handleCancelSchedule={handleCancelSchedule}
+                  handleApplyScheduledQuestionCount={handleApplyScheduledQuestionCount}
+                />
+              ) : (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="text-sm font-semibold text-[#172554]">Số câu mỗi lượt<input type="number" min={1} max={activeAssessmentMode === 'COURSE_FINAL' ? finalAvailableQuestions : questionCount} value={assessmentForm.questionCount} onChange={(e) => setAssessmentForm({ ...assessmentForm, questionCount: Number(e.target.value) })} className="mt-1 w-full rounded-xl border border-[#cbdbf5] px-3 py-2 font-normal"/></label>
+                  <label className="text-sm font-semibold text-[#172554]">Thời gian (phút)<input type="number" min={1} max={240} value={assessmentForm.durationMinutes} onChange={(e) => setAssessmentForm({ ...assessmentForm, durationMinutes: Number(e.target.value) })} className="mt-1 w-full rounded-xl border border-[#cbdbf5] px-3 py-2 font-normal"/></label>
+                </div>
+              )}
 
               {activeAssessmentMode === 'LESSON' && quizPoolNames.length > 0 ? (
                 <div className="rounded-2xl border border-blue-200 bg-blue-50/80 p-4 space-y-2.5 text-sm text-[#172554]">
                   <div className="flex flex-wrap items-center gap-y-1 gap-x-2.5 text-xs font-semibold text-blue-900">
-                    <span>Tổng số nhóm: <strong>{quizPoolNames.length}</strong></span>
+                    <span>Tổng số nhóm: <strong>{quizPoolNames.length}/{MAX_LESSON_QUIZ_POOLS}</strong></span>
                     <span className="text-blue-300">•</span>
                     <span>Số câu từng nhóm: <strong>{quizPoolNames.map((name, idx) => `${name || `Nhóm ${idx + 1}`}: ${lessonPoolCounts[idx]} câu`).join(' | ')}</strong></span>
                     <span className="text-blue-300">•</span>
-                    <span>Tổng ngân hàng: <strong>{assessmentForm.questions.length} câu</strong></span>
+                    <span>Tổng ngân hàng: <strong>{questionCount}/{MAX_LESSON_QUIZ_QUESTIONS} câu</strong></span>
                     <span className="text-blue-300">•</span>
-                    <span>Mỗi lượt: <strong>{assessmentForm.questionCount} câu</strong></span>
+                    <span>Mỗi lượt{monthLocked ? ' (tháng này)' : ''}: <strong>{assessmentForm.questionCount} câu</strong></span>
                     <span className="text-blue-300">•</span>
                     <span>Tối đa cân bằng: <strong>{maxLessonQuestionsAllowed} câu/lượt</strong></span>
                   </div>
@@ -185,11 +272,11 @@ export default function CourseAssessmentEditor({
                 </div>
               ) : (
                 <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-900">
-                  Ngân hàng: {activeAssessmentMode === 'COURSE_FINAL' ? finalAvailableQuestions : assessmentForm.questions.length} câu
+                  Ngân hàng: {activeAssessmentMode === 'COURSE_FINAL' ? finalAvailableQuestions : questionCount} câu
                   <span className="mx-2 text-blue-300">|</span>
-                  Mỗi lần thi: {assessmentForm.questionCount} câu
+                  Mỗi lần thi{monthLocked ? ' (tháng này)' : ''}: {assessmentForm.questionCount} câu
                   <span className="mx-2 text-blue-300">|</span>
-                  Thời gian: {assessmentForm.durationMinutes} phút
+                  Thời gian{monthLocked ? ' (tháng này)' : ''}: {assessmentForm.durationMinutes} phút
                 </div>
               )}
 
@@ -198,13 +285,39 @@ export default function CourseAssessmentEditor({
               {activeAssessmentMode === 'LESSON' && <>
               {/* Dynamic Questions Builder with Up/Down buttons (Request 8) */}
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-bold text-sm text-[#172554]">Ngân hàng câu hỏi ({quizPoolNames.length} nhóm · {assessmentForm.questions.length} câu)</h4>
-                  <Button size="sm" variant="secondary" onClick={handleAddPool}>＋ Tạo nhóm</Button>
+                <div className="flex items-center justify-between gap-3">
+                  <h4 className="font-bold text-sm text-[#172554]">Ngân hàng câu hỏi ({quizPoolNames.length} nhóm · {questionCount} câu)<span className="ml-2 text-xs font-normal text-[#6c6f7f]">Tối đa {MAX_LESSON_QUIZ_QUESTIONS} câu / {MAX_LESSON_QUIZ_POOLS} nhóm</span></h4>
+                  <Button size="sm" variant="secondary" onClick={handleAddPool} disabled={quizPoolNames.length >= MAX_LESSON_QUIZ_POOLS} title={quizPoolNames.length >= MAX_LESSON_QUIZ_POOLS ? `Đã đạt tối đa ${MAX_LESSON_QUIZ_POOLS} nhóm` : undefined}>＋ Tạo nhóm</Button>
                 </div>
 
                 {/* Import câu hỏi từ Google Sheet / Google Doc */}
-                <div className="p-4 bg-white border border-[#cbdbf5] rounded-2xl space-y-2">
+                <div className="p-4 bg-white border border-[#cbdbf5] rounded-2xl space-y-3">
+                  <fieldset className="space-y-1.5">
+                    <legend className="text-xs font-semibold text-[#172554]">Cách nhập câu hỏi</legend>
+                    <div role="radiogroup" aria-label="Chế độ nhập câu hỏi" className="grid gap-2 sm:grid-cols-2">
+                      {IMPORT_MODES.map((mode) => (
+                        <label
+                          key={mode.value}
+                          htmlFor={`quiz-import-mode-${mode.value}`}
+                          className={`flex cursor-pointer items-start gap-2 rounded-xl border p-2.5 text-xs transition ${quizImportMode === mode.value ? 'border-[#2563EB] bg-[#eff4ff]' : 'border-[#cbdbf5] bg-white hover:bg-[#f8f9ff]'}`}
+                        >
+                          <input
+                            id={`quiz-import-mode-${mode.value}`}
+                            type="radio"
+                            name="quiz-import-mode"
+                            value={mode.value}
+                            checked={quizImportMode === mode.value}
+                            onChange={() => setQuizImportMode(mode.value)}
+                            className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer text-[#2563EB]"
+                          />
+                          <span>
+                            <span className="block font-bold text-[#172554]">{mode.label}</span>
+                            <span className="mt-0.5 block text-[11px] leading-snug text-[#6c6f7f]">{mode.hint}</span>
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </fieldset>
                   <label htmlFor="quiz-import-url" className="block text-xs font-semibold text-[#172554]">
                     Nhập câu hỏi từ Google Sheet / Google Doc
                   </label>
@@ -245,36 +358,112 @@ export default function CourseAssessmentEditor({
                   )}
                 </div>
 
-                {quizPoolNames.map((poolName, poolIndex) => (
-                  <details key={`pool-${poolIndex}`} className="rounded-2xl border border-blue-200 bg-white">
-                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 font-bold text-[#172554]"><span>{poolName} · {assessmentForm.questions.filter((question) => (question.poolIndex ?? 0) === poolIndex).length} câu</span><span className="text-xs font-normal text-blue-600">Mở nhóm ▾</span></summary>
+                {/* Tìm kiếm / lọc câu hỏi trong quiz */}
+                <div className="space-y-2 rounded-2xl border border-[#cbdbf5] bg-[#f8f9ff] p-3">
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <div className="relative flex-1">
+                      <input
+                        type="text"
+                        aria-label="Tìm câu hỏi trong quiz"
+                        placeholder="Tìm nội dung câu hỏi, đáp án, giải thích..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full rounded-xl border border-[#cbdbf5] bg-white py-2 pl-3 pr-9 text-xs focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
+                      />
+                      {searchQuery && (
+                        <button
+                          type="button"
+                          aria-label="Xóa từ khóa tìm kiếm"
+                          onClick={() => setSearchQuery('')}
+                          className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-lg px-1.5 py-0.5 text-sm font-bold text-[#6c6f7f] hover:bg-slate-100 hover:text-[#172554]"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                    <select
+                      aria-label="Lọc câu hỏi theo nhóm"
+                      value={poolFilter === null ? '' : String(poolFilter)}
+                      onChange={(e) => setPoolFilterValue(e.target.value === '' ? null : Number(e.target.value))}
+                      className="rounded-xl border border-[#cbdbf5] bg-white px-3 py-2 text-xs sm:w-56"
+                    >
+                      <option value="">Tất cả nhóm</option>
+                      {quizPoolNames.map((name, index) => <option key={index} value={index}>{`${name || `Nhóm ${index + 1}`} (${lessonPoolCounts[index] ?? 0} câu)`}</option>)}
+                    </select>
+                  </div>
+                  {view.active && (
+                    <p role="status" aria-live="polite" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-semibold text-[#172554]">
+                      <span>Hiển thị {view.matchCount} / {view.total} câu hỏi</span>
+                      <span className="font-normal text-[#6c6f7f]">Đang lọc: nút di chuyển câu hỏi tạm tắt để không làm sai thứ tự.</span>
+                      <button type="button" onClick={clearFilters} className="font-semibold text-[#2563EB] hover:underline">Xóa bộ lọc</button>
+                    </p>
+                  )}
+                </div>
+
+                {view.active && view.matchCount === 0 && (
+                  <div role="status" className="rounded-2xl border border-dashed border-[#cbdbf5] bg-white p-6 text-center text-sm text-[#434655]">
+                    <p className="font-semibold text-[#172554]">
+                      {searchQuery.trim() ? `Không tìm thấy câu hỏi nào khớp với "${searchQuery.trim()}"` : 'Nhóm này chưa có câu hỏi nào'}
+                    </p>
+                    <Button size="sm" variant="outline" className="mt-3" onClick={clearFilters}>Xóa bộ lọc</Button>
+                  </div>
+                )}
+
+                {view.visiblePools.map((poolIndex) => {
+                  const poolName = quizPoolNames[poolIndex];
+                  const entries = view.byPool.get(poolIndex) || [];
+                  return (
+                  <details key={`pool-${poolIndex}`} open={view.active || focusedPool === poolIndex} className="rounded-2xl border border-blue-200 bg-white">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 font-bold text-[#172554]"><span>{poolName} · {lessonPoolCounts[poolIndex] ?? 0} câu{view.active ? ` (${entries.length} khớp)` : ''}</span><span className="text-xs font-normal text-blue-600">Mở nhóm ▾</span></summary>
                     <div className="space-y-3 border-t border-blue-100 p-3">
-                      <div className="flex gap-2"><input aria-label={`Tên nhóm câu hỏi ${poolIndex + 1}`} value={poolName} onChange={(e) => setQuizPoolNames((previous) => previous.map((name, index) => index === poolIndex ? e.target.value : name))} className="flex-1 rounded-xl border border-[#cbdbf5] px-3 py-2 text-sm"/><Button size="sm" variant="secondary" onClick={() => handleAddQuestion(poolIndex)}>＋ Tạo câu hỏi</Button><button type="button" onClick={() => handleRemovePool(poolIndex)} className="rounded-lg px-2 text-red-600 hover:bg-red-50">Xóa nhóm</button></div>
-                {assessmentForm.questions.map((q, qIdx) => (q.poolIndex ?? 0) === poolIndex ? (
-                  <details key={qIdx} className="group rounded-2xl border border-[#eff4ff] bg-[#f8f9ff]">
-                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-[#172554]"><span>{quizPoolNames[q.poolIndex ?? 0] || 'Chưa có nhóm'} · Câu {qIdx + 1}</span><span className="max-w-[65%] truncate text-xs font-normal text-[#6c6f7f]">{q.questionText || 'Chưa nhập nội dung'}</span></summary>
+                      <div className="flex gap-2"><input aria-label={`Tên nhóm câu hỏi ${poolIndex + 1}`} value={poolName} onChange={(e) => setQuizPoolNames((previous) => previous.map((name, index) => index === poolIndex ? e.target.value : name))} className="flex-1 rounded-xl border border-[#cbdbf5] px-3 py-2 text-sm"/><Button size="sm" variant="secondary" disabled={questionCount >= MAX_LESSON_QUIZ_QUESTIONS} title={questionCount >= MAX_LESSON_QUIZ_QUESTIONS ? `Đã đạt tối đa ${MAX_LESSON_QUIZ_QUESTIONS} câu` : undefined} onClick={() => handleAddQuestion(poolIndex)}>＋ Tạo câu hỏi</Button><button type="button" onClick={() => handleRemovePool(poolIndex)} className="rounded-lg px-2 text-red-600 hover:bg-red-50">Xóa nhóm</button></div>
+                {entries.map(({ index: qIdx, question: q, match }) => {
+                  const questionKey = questionKeyOf(q, qIdx);
+                  const isFocused = questionKey === focusedQuestionKey;
+                  const matchedOptions = view.active && searchQuery.trim() ? q.options.map((opt, oIdx) => ({ opt, oIdx })).filter(({ opt }) => getHighlightSegments(opt.optionText, searchQuery).some((segment) => segment.match)) : [];
+                  const explanationMatched = view.active && searchQuery.trim() && getHighlightSegments(q.explanation || '', searchQuery).some((segment) => segment.match);
+                  return (
+                  <details key={questionKey} id={questionDomId(questionKey)} open={view.active || isFocused} className={`group rounded-2xl border bg-[#f8f9ff] ${isFocused ? 'border-[#2563EB] ring-2 ring-blue-300' : 'border-[#eff4ff]'}`}>
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-[#172554]">
+                      <span className="shrink-0">{quizPoolNames[q.poolIndex ?? 0] || 'Chưa có nhóm'} · Câu {qIdx + 1}</span>
+                      <span className="flex min-w-0 items-center gap-1.5">
+                        {view.active && searchQuery.trim() && match.matchedIn.map((field) => <span key={field} className="shrink-0 rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-800">{MATCH_LABEL[field]}</span>)}
+                        <span className="max-w-[65%] truncate text-xs font-normal text-[#6c6f7f]">{q.questionText ? <Highlighted text={q.questionText} query={searchQuery} /> : 'Chưa nhập nội dung'}</span>
+                      </span>
+                    </summary>
                   <div className="space-y-3 border-t border-[#eff4ff] p-4">
+                    {(matchedOptions.length > 0 || explanationMatched) && (
+                      <div className="space-y-1 rounded-xl border border-yellow-200 bg-yellow-50 p-2.5 text-xs text-[#434655]">
+                        <p className="font-bold text-[#172554]">Nội dung khớp từ khóa</p>
+                        {matchedOptions.map(({ opt, oIdx }) => <p key={oIdx}><span className="font-semibold">Đáp án {oIdx + 1}:</span> <Highlighted text={opt.optionText} query={searchQuery} /></p>)}
+                        {explanationMatched && <p><span className="font-semibold">Giải thích:</span> <Highlighted text={q.explanation || ''} query={searchQuery} /></p>}
+                      </div>
+                    )}
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-center gap-1.5 shrink-0 mt-1">
                         <span className="font-bold text-sm text-[#2563EB]">Câu {qIdx + 1}</span>
-                        {/* Reorder Up/Down buttons */}
+                        {/* Reorder Up/Down buttons: always act on the original index, disabled while filtering */}
                         <div className="flex flex-col gap-0.5">
                           {qIdx > 0 && (
                             <button
                               type="button"
+                              disabled={view.active}
                               onClick={() => handleMoveQuestion(qIdx, 'up')}
-                              className="text-[11px] text-[#6c6f7f] hover:text-[#2563EB] px-1 bg-white border border-[#cbdbf5] rounded hover:bg-blue-50"
-                              title="Di chuyển câu hỏi lên"
+                              className="text-[11px] text-[#6c6f7f] hover:text-[#2563EB] px-1 bg-white border border-[#cbdbf5] rounded hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-40"
+                              title={view.active ? 'Hãy xóa bộ lọc trước khi di chuyển câu hỏi' : 'Di chuyển câu hỏi lên'}
+                              aria-label={`Di chuyển câu ${qIdx + 1} lên`}
                             >
                               ▲
                             </button>
                           )}
-                          {qIdx < assessmentForm.questions.length - 1 && (
+                          {qIdx < questionCount - 1 && (
                             <button
                               type="button"
+                              disabled={view.active}
                               onClick={() => handleMoveQuestion(qIdx, 'down')}
-                              className="text-[11px] text-[#6c6f7f] hover:text-[#2563EB] px-1 bg-white border border-[#cbdbf5] rounded hover:bg-blue-50"
-                              title="Di chuyển câu hỏi xuống"
+                              className="text-[11px] text-[#6c6f7f] hover:text-[#2563EB] px-1 bg-white border border-[#cbdbf5] rounded hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-40"
+                              title={view.active ? 'Hãy xóa bộ lọc trước khi di chuyển câu hỏi' : 'Di chuyển câu hỏi xuống'}
+                              aria-label={`Di chuyển câu ${qIdx + 1} xuống`}
                             >
                               ▼
                             </button>
@@ -286,22 +475,16 @@ export default function CourseAssessmentEditor({
                         type="text"
                         required
                         value={q.questionText}
-                        onChange={(e) => {
-                          const qs = [...assessmentForm.questions];
-                          qs[qIdx].questionText = e.target.value;
-                          setAssessmentForm({ ...assessmentForm, questions: qs });
-                        }}
+                        onChange={(e) => handleUpdateQuestion(qIdx, (row) => ({ ...row, questionText: e.target.value }))}
                         placeholder="Nhập nội dung câu hỏi..."
                         className="flex-1 px-3 py-2 border border-[#cbdbf5] rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
                       />
-                      <select aria-label={`Nhóm của câu ${qIdx + 1}`} value={q.poolIndex ?? 0} onChange={(e) => {
-                        const qs = [...assessmentForm.questions];
-                        qs[qIdx].poolIndex = Number(e.target.value);
-                        setAssessmentForm({ ...assessmentForm, questions: qs });
-                      }} className="w-28 rounded-xl border border-[#cbdbf5] bg-white px-2 py-2 text-xs">
+                      <select aria-label={`Nhóm của câu ${qIdx + 1}`} value={q.poolIndex ?? 0} onChange={(e) => handleUpdateQuestion(qIdx, (row) => ({ ...row, poolIndex: Number(e.target.value) }))} className="w-28 rounded-xl border border-[#cbdbf5] bg-white px-2 py-2 text-xs">
                         {quizPoolNames.map((name, index) => <option key={index} value={index}>{name || `Pool ${index + 1}`}</option>)}
                       </select>
                       <button
+                        type="button"
+                        aria-label={`Xóa câu ${qIdx + 1}`}
                         onClick={() => handleRemoveQuestion(qIdx)}
                         className="p-1.5 text-[#6c6f7f] hover:text-red-600 rounded-lg hover:bg-red-50 shrink-0"
                         title="Xóa câu hỏi này"
@@ -334,11 +517,7 @@ export default function CourseAssessmentEditor({
                       <textarea aria-label={`Giải thích đáp án câu ${qIdx + 1}`}
                         rows={2}
                         value={q.explanation ?? ''}
-                        onChange={(e) => {
-                          const qs = [...assessmentForm.questions];
-                          qs[qIdx].explanation = e.target.value;
-                          setAssessmentForm({ ...assessmentForm, questions: qs });
-                        }}
+                        onChange={(e) => handleUpdateQuestion(qIdx, (row) => ({ ...row, explanation: e.target.value }))}
                         placeholder="Giải thích tại sao đáp án đúng (tùy chọn)"
                         className="w-full px-3 py-2 border border-[#cbdbf5] rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#2563EB]"
                       />
@@ -360,34 +539,28 @@ export default function CourseAssessmentEditor({
                             type={q.type === 'SINGLE_CHOICE' ? 'radio' : 'checkbox'}
                             name={`correct-${qIdx}`}
                             checked={opt.isCorrect}
-                            onChange={() => {
-                              const qs = [...assessmentForm.questions];
-                              if (q.type === 'SINGLE_CHOICE') {
-                                qs[qIdx].options = qs[qIdx].options.map((o, idx) => ({
-                                  ...o,
-                                  isCorrect: idx === oIdx,
-                                }));
-                              } else {
-                                qs[qIdx].options[oIdx].isCorrect = !qs[qIdx].options[oIdx].isCorrect;
-                              }
-                              setAssessmentForm({ ...assessmentForm, questions: qs });
-                            }}
+                            onChange={() => handleUpdateQuestion(qIdx, (row) => ({
+                              ...row,
+                              options: row.options.map((o, idx) => row.type === 'SINGLE_CHOICE'
+                                ? { ...o, isCorrect: idx === oIdx }
+                                : idx === oIdx ? { ...o, isCorrect: !o.isCorrect } : o),
+                            }))}
                             className="h-4 w-4 text-[#2563EB] shrink-0 cursor-pointer"
                           />
                           <input aria-label={`Nội dung đáp án ${oIdx + 1} của câu ${qIdx + 1}`}
                             type="text"
                             required
                             value={opt.optionText}
-                            onChange={(e) => {
-                              const qs = [...assessmentForm.questions];
-                              qs[qIdx].options[oIdx].optionText = e.target.value;
-                              setAssessmentForm({ ...assessmentForm, questions: qs });
-                            }}
+                            onChange={(e) => handleUpdateQuestion(qIdx, (row) => ({
+                              ...row,
+                              options: row.options.map((o, idx) => idx === oIdx ? { ...o, optionText: e.target.value } : o),
+                            }))}
                             className="flex-1 px-3 py-1.5 border border-[#cbdbf5] rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#2563EB] disabled:bg-slate-100"
                           />
                           {q.options.length > 2 && (
                             <button
                               type="button"
+                              aria-label={`Xóa đáp án ${oIdx + 1} của câu ${qIdx + 1}`}
                               onClick={() => handleRemoveOption(qIdx, oIdx)}
                               className="text-[#6c6f7f] hover:text-red-600 font-bold px-1.5"
                               title="Xóa đáp án này"
@@ -408,10 +581,12 @@ export default function CourseAssessmentEditor({
                     </div>
                   </div>
                   </details>
-                ) : null)}
+                  );
+                })}
                     </div>
                   </details>
-                ))}
+                  );
+                })}
               </div>
               </>}
 

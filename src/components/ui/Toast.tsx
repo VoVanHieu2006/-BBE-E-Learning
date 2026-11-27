@@ -7,6 +7,7 @@ export interface ToastMessage {
   type: 'success' | 'error' | 'info';
   title?: string;
   message: string;
+  duration?: number;
 }
 
 interface ToastProps {
@@ -26,7 +27,7 @@ export default function Toast({ toast, onClose, duration = 4000 }: ToastProps) {
     if (!toast) return;
     const timer = setTimeout(() => {
       onClose();
-    }, duration);
+    }, toast.duration ?? duration);
     return () => clearTimeout(timer);
   }, [toast, onClose, duration]);
 
