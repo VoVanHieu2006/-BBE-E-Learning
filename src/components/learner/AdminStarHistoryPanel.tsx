@@ -72,7 +72,11 @@ export default function AdminStarHistoryPanel({
   }, [userId]);
 
   useEffect(() => {
-    if (!active || !userId) return;
+    if (!active || !userId) {
+      setLoading(false);
+      return;
+    }
+    const controller = new AbortController();
     const seq = ++requestSeqRef.current;
     const requestedUserId = userId;
     const isStale = () => isStaleStarHistoryResponse(seq, requestSeqRef.current, requestedUserId, userIdRef.current);
@@ -80,7 +84,7 @@ export default function AdminStarHistoryPanel({
     setError('');
     apiFetch<AdminStarHistoryData>(
       buildAdminStarHistoryUrl(requestedUserId, { page, limit: PAGE_SIZE, month, source }),
-      { noCache: true },
+      { noCache: true, signal: controller.signal },
     )
       .then((res) => {
         if (isStale()) return;
@@ -97,6 +101,10 @@ export default function AdminStarHistoryPanel({
       .finally(() => {
         if (!isStale()) setLoading(false);
       });
+    return () => {
+      requestSeqRef.current += 1;
+      controller.abort();
+    };
   }, [active, userId, page, month, source, reloadTick]);
 
   const reload = useCallback(() => setReloadTick((t) => t + 1), []);
@@ -244,16 +252,16 @@ export default function AdminStarHistoryPanel({
           <div className="flex gap-2">
             <button
               type="button"
-              disabled={loading || page <= 1}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={loading || view.page <= 1}
+              onClick={() => setPage(Math.max(1, view.page - 1))}
               className="px-3 py-1.5 rounded-xl text-xs font-bold bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               Trước
             </button>
             <button
               type="button"
-              disabled={loading || page >= view.totalPages}
-              onClick={() => setPage((p) => p + 1)}
+              disabled={loading || view.page >= view.totalPages}
+              onClick={() => setPage(view.page + 1)}
               className="px-3 py-1.5 rounded-xl text-xs font-bold bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               Tiếp

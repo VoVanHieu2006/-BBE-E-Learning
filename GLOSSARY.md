@@ -35,3 +35,15 @@ _Avoid_: Tháng dương lịch UTC, chu kỳ học
 **Lượt làm tính khóa tháng** (*Current-Month Locking Attempt*):
 Lượt làm (`Attempt`) có `started_at` thuộc Tháng thi đua hiện tại và trạng thái thuộc `IN_PROGRESS`, `SUBMITTED` hoặc `AUTO_SUBMITTED` (không tính `CANCELLED`). Khi có ít nhất một lượt như vậy, thay đổi `question_count` hoặc `duration_minutes` phải hẹn sang tháng sau.
 _Avoid_: Mọi attempt trong lịch sử
+
+**Lịch sử nhận sao** (*Star History*):
+Danh sách phân trang các sự kiện cộng/trừ sao từ sổ cái `star_ledger`, trong đó mọi dòng thưởng của cùng một lượt làm quiz (`attemptId`) được gom thành một sự kiện duy nhất trước khi phân trang.
+_Avoid_: Log điểm, danh sách giao dịch thô
+
+**Tổng sao theo bộ lọc** (*Filtered Star Total*):
+Tổng giá trị `amount` của các dòng `star_ledger` khớp bộ lọc Tháng thi đua và Nguồn nhận sao đang chọn trên màn Admin, tách biệt với **Số dư hiện tại** (*Star Balance*) toàn cục của học viên.
+_Avoid_: Số dư tháng
+
+**Tổng sổ cái lịch sử** (*Star Ledger Total*):
+Tổng thực tế toàn bộ `amount` trong `star_ledger` của một tài khoản không phụ thuộc vai trò hiện tại (dùng để Admin đối soát các tài khoản từng là Thành viên kiếm sao rồi chuyển sang vai trò Lãnh đạo có Số dư hiện tại hiển thị là 0).
+_Avoid_: Số dư khả dụng

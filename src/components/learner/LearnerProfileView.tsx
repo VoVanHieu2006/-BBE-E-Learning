@@ -1,7 +1,7 @@
 'use client';
 import { isLeadRole } from '@/lib/roles'
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import Card from '@/components/ui/Card';
 import AdminStarHistoryPanel from '@/components/learner/AdminStarHistoryPanel';
 
@@ -78,14 +78,10 @@ export default function LearnerProfileView({
   enableAdminStarHistory = false,
 }: LearnerProfileViewProps) {
   const [tabFilter, setTabFilter] = useState<'ALL' | 'IN_PROGRESS' | 'NOT_STARTED' | 'COMPLETED'>('ALL');
-  const [mainTab, setMainTab] = useState<'PROGRESS' | 'STARS'>('PROGRESS');
+  const [starTabUserId, setStarTabUserId] = useState<string | null>(null);
   const resolvedUserId = user.userId || user.id || '';
   const starHistoryEnabled = enableAdminStarHistory && resolvedUserId !== '';
-  const showStarHistory = starHistoryEnabled && mainTab === 'STARS';
-
-  useEffect(() => {
-    setMainTab('PROGRESS');
-  }, [resolvedUserId]);
+  const showStarHistory = starHistoryEnabled && starTabUserId === resolvedUserId;
 
   const rawCourses = progressData?.courses || [];
   const courses = rawCourses.map((c) => ({
@@ -250,8 +246,8 @@ export default function LearnerProfileView({
           starHistoryEnabled ? (
             <button
               type="button"
-              onClick={() => setMainTab('STARS')}
-              className="text-left p-4.5 border border-amber-200 bg-amber-50/40 rounded-2xl shadow-2xs col-span-2 lg:col-span-1 transition hover:ring-2 hover:ring-amber-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
+              onClick={() => setStarTabUserId(resolvedUserId)}
+              className="cursor-pointer text-left p-4.5 border border-amber-200 bg-amber-50/40 rounded-2xl shadow-2xs col-span-2 lg:col-span-1 transition hover:ring-2 hover:ring-amber-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
             >
               <span className="text-[11px] font-bold text-amber-800 uppercase tracking-wider block mb-1">
                 ⭐ Sao tích lũy
@@ -277,29 +273,37 @@ export default function LearnerProfileView({
       </div>
 
       {starHistoryEnabled && (
-        <div role="tablist" className="inline-flex gap-1 p-1 rounded-2xl bg-slate-100 border border-slate-200">
+        <div role="tablist" aria-label="Chuyển mục hồ sơ học viên" className="inline-flex gap-1 p-1 rounded-2xl bg-slate-100 border border-slate-200">
           {([
             ['PROGRESS', 'Tiến độ học tập'],
             ['STARS', '⭐ Lịch sử nhận sao'],
-          ] as const).map(([key, label]) => (
-            <button
-              key={key}
-              type="button"
-              role="tab"
-              aria-selected={mainTab === key}
-              onClick={() => setMainTab(key)}
-              className={`px-4 py-1.5 rounded-xl text-xs font-bold transition ${
-                mainTab === key ? 'bg-white text-[#172554] shadow-sm' : 'text-slate-500 hover:text-[#172554]'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
+          ] as const).map(([key, label]) => {
+            const selected = key === 'STARS' ? showStarHistory : !showStarHistory;
+            return (
+              <button
+                key={key}
+                type="button"
+                role="tab"
+                aria-selected={selected}
+                aria-controls={key === 'STARS' ? 'admin-star-history-panel' : undefined}
+                onClick={() => setStarTabUserId(key === 'STARS' ? resolvedUserId : null)}
+                className={`px-4 py-1.5 rounded-xl text-xs font-bold transition ${
+                  selected ? 'bg-white text-[#172554] shadow-sm' : 'text-slate-500 hover:text-[#172554]'
+                }`}
+              >
+                {label}
+              </button>
+            );
+          })}
         </div>
       )}
 
       {starHistoryEnabled && (
-        <div className={`border border-slate-200 bg-white rounded-3xl overflow-hidden shadow-xs ${showStarHistory ? '' : 'hidden'}`}>
+        <div
+          id="admin-star-history-panel"
+          role="tabpanel"
+          className={`border border-slate-200 bg-white rounded-3xl overflow-hidden shadow-xs ${showStarHistory ? '' : 'hidden'}`}
+        >
           <AdminStarHistoryPanel
             key={resolvedUserId}
             userId={resolvedUserId}

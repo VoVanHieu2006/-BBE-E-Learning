@@ -105,7 +105,7 @@ const metadataLessonId = (entry: StarHistoryEntry) => {
 export async function enrichStarHistoryEntries(tx: Db, items: StarHistoryEntry[]): Promise<StarHistoryItem[]> {
   const videoIds = items.filter((i) => i.source_type === 'VIDEO' && i.source_id).map((i) => i.source_id)
   const assessmentIds = items.filter((i) => i.source_type === 'ASSESSMENT' && i.source_id).map((i) => i.source_id)
-  const metadataLessonIds = items.map(metadataLessonId).filter((id): id is string => Boolean(id))
+  const metadataLessonIds = items.map(metadataLessonId).filter((id): id is string => Boolean(id && isValidStarUserId(id)))
   const withCourse = { session: { select: { course: { select: { id: true, title: true } } } } } as const
 
   const [videos, lessons, assessments] = await Promise.all([

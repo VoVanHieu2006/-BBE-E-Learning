@@ -1,4 +1,6 @@
-export type AdminStarSourceFilter = 'ALL' | 'VIDEO' | 'LESSON_QUIZ' | 'COURSE_FINAL' | 'ADMIN_ADJUSTMENT'
+import type { StarHistorySourceFilter } from './star-history-rules'
+
+export type AdminStarSourceFilter = StarHistorySourceFilter
 
 export const STAR_SOURCE_FILTER_OPTIONS: ReadonlyArray<{ value: AdminStarSourceFilter; label: string }> = [
   { value: 'ALL', label: 'Tất cả' },
