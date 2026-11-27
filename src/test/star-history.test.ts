@@ -172,7 +172,7 @@ describe('getAdminUserStarHistory', () => {
     const { db } = historyDb({ summary: { total: 2, amount: 18 }, page: history.slice(0, 2), months: ['2026-11', '2026-10'], ledger: 42 })
     const result = await getAdminUserStarHistory(db, USER, query({ month: '2026-11', source: 'all' }), notManager)
     assert.equal(result.ok, true)
-    if (!result.ok) return
+    if (result.ok === false) return
     const { items, ...body } = result.body
     assert.deepEqual(body, {
       user: { id: USER, displayName: 'Lan', email: 'lan@bbe.vn', role: 'LEAD', status: 'ACTIVE' },
@@ -216,7 +216,7 @@ describe('getAdminUserStarHistory', () => {
     ]
     for (const [userId, params, status, code] of cases) {
       const result = await getAdminUserStarHistory(db, userId, query(params), notManager)
-      assert.ok(!result.ok)
+      assert.ok(result.ok === false)
       assert.deepEqual([result.status, result.error.code], [status, code])
     }
   })

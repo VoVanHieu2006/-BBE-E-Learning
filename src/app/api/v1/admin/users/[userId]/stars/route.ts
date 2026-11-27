@@ -14,6 +14,6 @@ export async function GET(request: NextRequest, { params }: { params: { userId: 
   }
 
   const result = await getAdminUserStarHistory(prisma, params.userId, request.nextUrl.searchParams)
-  if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status, headers: noStore })
+  if (result.ok === false) return NextResponse.json({ error: result.error }, { status: result.status, headers: noStore })
   return NextResponse.json(result.body, { headers: noStore })
 }

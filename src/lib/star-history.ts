@@ -207,9 +207,9 @@ export async function getAdminUserStarHistory(
 ): Promise<AdminUserStarHistoryResult> {
   if (!isValidStarUserId(userId)) return invalid('Mã người dùng không hợp lệ.')
   const month = parseStarHistoryMonth(query.get('month'))
-  if (!month.ok) return invalid(month.message)
+  if (month.ok === false) return invalid(month.message)
   const source = parseStarHistorySource(query.get('source'))
-  if (!source.ok) return invalid(source.message)
+  if (source.ok === false) return invalid(source.message)
 
   const user = await db.user.findUnique({ where: { id: userId }, select: { id: true, display_name: true, email: true, role: true, status: true } })
   if (!user) return { ok: false, status: 404, error: { code: 'UserNotFound', message: 'Không tìm thấy người dùng.' } }
