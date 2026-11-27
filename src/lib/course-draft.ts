@@ -1,5 +1,6 @@
 import { normalizeDurationSeconds } from './validation/duration'
 import { isAllowedCoverUrl } from './validation/cover-url'
+import { MAX_LESSON_QUIZ_POOLS, MAX_LESSON_QUIZ_QUESTIONS, validateLessonBankForCounts } from './quiz-schedule-rules'
 
 export const DRAFT_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 export class CourseDraftError extends Error {
@@ -13,7 +14,11 @@ export interface DraftQuestion {
   id?: string; questionText: string; questionType: 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'TRUE_FALSE'; points: number
   explanation?: string | null; poolId?: string | null; sortOrder?: number; options: DraftOption[]
 }
-export interface DraftFinal { id?: string; title: string; description?: string | null; questionCount: number; durationMinutes: number }
+export interface DraftFinal {
+  id?: string; title: string; description?: string | null; questionCount: number; durationMinutes: number
+  scheduledQuestionCount?: number | null; scheduledDurationMinutes?: number | null
+  scheduledEffectiveAt?: string | null; scheduledEffectiveMonthKey?: string | null; cancelSchedule?: boolean
+}
 export interface DraftAssessment extends DraftFinal { pools: { id?: string; name: string }[]; questions: DraftQuestion[] }
 export interface DraftDocument { id?: string; fileName: string; fileSize: number; mimeType: string; storageKey: string }
 export interface DraftLesson {
@@ -31,6 +36,7 @@ export interface CourseDraftContent {
 const invalid = (message: string): never => { throw new CourseDraftError('ValidationError', message) }
 const text = (v: unknown, min = 1, max = 255) => typeof v === 'string' && v.trim().length >= min && v.length <= max
 const integer = (v: unknown, min: number, max: number) => Number.isInteger(v) && Number(v) >= min && Number(v) <= max
+const unset = (v: unknown) => v === undefined || v === null
 
 /** Accept a complete snapshot only: missing collections must never mean delete everything. */
 export function validateDraftContent(value: unknown, before?: CourseDraftContent): CourseDraftContent {
@@ -54,6 +60,10 @@ export function validateDraftContent(value: unknown, before?: CourseDraftContent
     id(a)
     description(a)
     if (!text(a.title, 2) || !integer(a.questionCount, 1, 10000) || !integer(a.durationMinutes, 1, 240)) invalid('Cấu hình bài kiểm tra không hợp lệ: tiêu đề, số câu hoặc thời gian.')
+    if ((!unset(a.scheduledQuestionCount) && !integer(a.scheduledQuestionCount, 1, 10000)) || (!unset(a.scheduledDurationMinutes) && !integer(a.scheduledDurationMinutes, 1, 240))
+      || (!unset(a.scheduledEffectiveAt) && (typeof a.scheduledEffectiveAt !== 'string' || Number.isNaN(Date.parse(a.scheduledEffectiveAt))))
+      || (!unset(a.scheduledEffectiveMonthKey) && (typeof a.scheduledEffectiveMonthKey !== 'string' || !/^\d{4}-(0[1-9]|1[0-2])$/.test(a.scheduledEffectiveMonthKey)))
+      || (a.cancelSchedule !== undefined && typeof a.cancelSchedule !== 'boolean')) invalid('Lịch chuyển cấu hình tháng sau không hợp lệ: số câu (1–10000), thời gian (1–240 phút) hoặc thời điểm áp dụng.')
   }
   for (const s of c.sessions) {
     if (!s || !text(s.title) || !Array.isArray(s.lessons)) invalid('Buổi học trong bản nháp không hợp lệ.')
@@ -79,7 +89,7 @@ export function validateDraftContent(value: unknown, before?: CourseDraftContent
       const a = l.assessment
       if (!a) continue
       config(a)
-      if (!Array.isArray(a.questions) || !a.questions.length || a.questions.length > 100 || !Array.isArray(a.pools) || a.pools.length > 20 || a.questionCount > a.questions.length) invalid('Ngân hàng quiz không đủ câu hoặc không hợp lệ.')
+      if (!Array.isArray(a.questions) || !a.questions.length || a.questions.length > MAX_LESSON_QUIZ_QUESTIONS || !Array.isArray(a.pools) || a.pools.length > MAX_LESSON_QUIZ_POOLS || a.questionCount > a.questions.length) invalid('Ngân hàng quiz không đủ câu hoặc không hợp lệ.')
       const poolCounts = new Map<string, number>()
       for (const p of a.pools) { id(p); if (!p.id || !text(p.name)) invalid('Tên nhóm câu hỏi không hợp lệ.'); poolCounts.set(p.id!, 0) }
       for (const q of a.questions) {
@@ -93,6 +103,11 @@ export function validateDraftContent(value: unknown, before?: CourseDraftContent
         } else if (q.poolId) invalid('Nhóm câu hỏi không thuộc quiz.')
       }
       if (a.pools.length && (a.questionCount < a.pools.length || a.questionCount > a.pools.length * Math.min(...Array.from(poolCounts.values())))) invalid('Ngân hàng nhóm câu hỏi không đủ để phân phối cân bằng.')
+      const bank = validateLessonBankForCounts({
+        questionCount: a.questionCount, scheduledQuestionCount: a.cancelSchedule ? null : a.scheduledQuestionCount,
+        poolCounts: Array.from(poolCounts.values()), totalQuestions: a.questions.length,
+      })
+      if (bank.ok === false) throw new CourseDraftError(bank.code, bank.message)
     }
   }
   if (c.finalAssessment) config(c.finalAssessment)
@@ -120,10 +135,13 @@ export function reconcileDraftIds(existing: { id: string }[], incoming: { id?: s
   return existing.filter(r => !seen.has(r.id)).map(r => r.id)
 }
 
-const grading = (q: DraftQuestion) => JSON.stringify({
-  questionText: q.questionText, questionType: q.questionType, points: q.points, explanation: q.explanation || null,
-  options: q.options.map(o => ({ id: o.id, optionText: o.optionText, isCorrect: o.isCorrect })).sort((a, b) => (a.id || '').localeCompare(b.id || '')),
-})
+export function questionGradingFingerprint(q: DraftQuestion): string {
+  return JSON.stringify({
+    questionText: q.questionText, questionType: q.questionType, points: q.points, explanation: q.explanation || null,
+    options: q.options.map(o => ({ id: o.id, optionText: o.optionText, isCorrect: o.isCorrect })).sort((a, b) => (a.id || '').localeCompare(b.id || '')),
+  })
+}
+const grading = questionGradingFingerprint
 export function assertQuestionEditAllowed(before: DraftQuestion, after: DraftQuestion | null, references: number) {
   if (references && (!after || grading(before) !== grading(after))) throw new CourseDraftError('QuestionHasAttempts', 'Câu hỏi đã có lượt làm; không thể xóa hoặc đổi nội dung/đáp án để bảo toàn lịch sử.', 409)
 }

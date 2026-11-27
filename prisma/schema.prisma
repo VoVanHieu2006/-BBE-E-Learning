@@ -447,6 +447,12 @@ model Assessment {
   description   String?    @db.Text
   question_count Int       @default(10)
   duration_minutes Int     @default(30)
+  scheduled_question_count Int?
+  scheduled_duration_minutes Int?
+  scheduled_effective_at DateTime? @db.Timestamp
+  scheduled_effective_month_key String? @db.VarChar(7)
+  scheduled_by_user_id String? @db.Uuid
+  scheduled_at  DateTime?  @db.Timestamp
   created_by    String     @db.Uuid
   created_at    DateTime   @default(now()) @db.Timestamp
   updated_at    DateTime   @updatedAt @db.Timestamp
@@ -460,6 +466,7 @@ model Assessment {
   final_exam_versions FinalExamVersion[]
 
   @@map("assessments")
+  @@index([scheduled_effective_at])
 }
 
 model FinalExamVersion {
@@ -495,6 +502,7 @@ model Question {
   pool_id         String?        @db.Uuid
   final_exam_version_id String?  @db.Uuid
   source_assessment_id String?   @db.Uuid
+  archived_at     DateTime?      @db.Timestamp
 
   assessment      Assessment     @relation(fields: [assessment_id], references: [id], onDelete: Cascade)
   options         QuestionOption[]
@@ -505,6 +513,7 @@ model Question {
 
   @@map("questions")
   @@index([assessment_id, sort_order])
+  @@index([assessment_id, archived_at, sort_order])
   @@index([pool_id])
   @@index([final_exam_version_id])
 }

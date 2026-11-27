@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { CourseDraftContent, validateDraftContent, reconcileDraftIds, assertQuestionEditAllowed, needsFinalExamVersion, assertDraftVersion, assertDraftIdentity } from '../lib/course-draft'
+import { CourseDraftContent, validateDraftContent, reconcileDraftIds, assertQuestionEditAllowed, needsFinalExamVersion, assertDraftVersion, assertDraftIdentity, questionGradingFingerprint } from '../lib/course-draft'
 
 const id = '00000000-0000-4000-8000-000000000001'
 const question = { id, questionText: 'Câu hỏi', questionType: 'SINGLE_CHOICE' as const, points: 1, durationSeconds: 120, explanation: null, poolId: id, options: [{ id: 'temp-a', optionText: 'Đúng', isCorrect: true }, { id: 'temp-b', optionText: 'Sai', isCorrect: false }] }
@@ -97,5 +97,89 @@ describe('course draft safety', () => {
       const draft = content(); mutate(draft)
       assert.throws(() => validateDraftContent(draft), (error: any) => error.code === 'ValidationError')
     }
+  })
+})
+
+describe('ngân hàng 200 câu và lịch chuyển cấu hình tháng sau trong bản nháp', () => {
+  const bankQuestion = (n: number, poolId?: string) => ({
+    id: `temp-q${n}`, questionText: `Câu ${n}`, questionType: 'SINGLE_CHOICE', points: 1, explanation: null, ...(poolId ? { poolId } : {}),
+    options: [{ id: `temp-q${n}-a`, optionText: 'Đúng', isCorrect: true }, { id: `temp-q${n}-b`, optionText: 'Sai', isCorrect: false }],
+  })
+  const draftWith = (assessment: any, finalAssessment: any = null): any => ({
+    title: 'Khóa học', description: null, visibility: 'PRIVATE', finalAssessment,
+    sessions: [{ id: 'temp-session', title: 'Buổi học', lessons: [{ id: 'temp-lesson', title: 'Bài học', video: null, documents: [], assessment }] }],
+  })
+  const pooledDraft = (poolSizes: number[], config: any = {}, finalAssessment: any = null) => {
+    let n = 0
+    const pools = poolSizes.map((_, i) => ({ id: `temp-pool${i}`, name: `Nhóm ${i + 1}` }))
+    const questions = poolSizes.flatMap((size, i) => Array.from({ length: size }, () => bankQuestion(++n, pools[i].id)))
+    return draftWith({ title: 'Quiz', description: null, questionCount: poolSizes.length, durationMinutes: 30, pools, questions, ...config }, finalAssessment)
+  }
+  const legacyDraft = (total: number, config: any = {}) =>
+    draftWith({ title: 'Quiz', description: null, questionCount: 1, durationMinutes: 30, pools: [], questions: Array.from({ length: total }, (_, i) => bankQuestion(i + 1)), ...config })
+  const final = (config: any = {}) => ({ title: 'Thi cuối khóa', description: null, questionCount: 5, durationMinutes: 30, ...config })
+  const lessonQuiz = (draft: any) => validateDraftContent(draft).sessions[0].lessons[0].assessment
+  const rejects = (draft: any, code: string, message: RegExp) => assert.throws(() => validateDraftContent(draft), (e: any) => e.code === code && message.test(e.message))
+
+  it('ngân hàng nhận tới 200 câu (trước đây 100), 201 câu bị từ chối', () => {
+    assert.equal(lessonQuiz(pooledDraft([101])).questions.length, 101)
+    assert.equal(lessonQuiz(pooledDraft([200])).questions.length, 200)
+    assert.equal(lessonQuiz(legacyDraft(200)).questions.length, 200)
+    rejects(pooledDraft([201]), 'ValidationError', /ngân hàng/i)
+    rejects(legacyDraft(201), 'ValidationError', /ngân hàng/i)
+  })
+  it('vẫn tối đa 20 nhóm câu hỏi', () => {
+    assert.equal(lessonQuiz(pooledDraft(Array(20).fill(1))).pools.length, 20)
+    rejects(pooledDraft(Array(21).fill(1)), 'ValidationError', /ngân hàng/i)
+  })
+  it('bản nháp cũ không có trường lịch tháng sau vẫn hợp lệ và không bị thêm trường', () => {
+    const result = validateDraftContent(pooledDraft([2, 2], {}, final()))
+    assert.deepEqual(Object.keys(result.finalAssessment).sort(), ['description', 'durationMinutes', 'questionCount', 'title'])
+    assert.equal('scheduledQuestionCount' in result.sessions[0].lessons[0].assessment, false)
+  })
+  it('giữ nguyên lịch tháng sau hợp lệ của quiz bài học và bài thi cuối khóa', () => {
+    const schedule = { scheduledQuestionCount: 4, scheduledDurationMinutes: 45, scheduledEffectiveAt: '2026-11-30T17:00:00.000Z', scheduledEffectiveMonthKey: '2026-12', cancelSchedule: false }
+    const result = validateDraftContent(pooledDraft([2, 2], schedule, final({ ...schedule, scheduledQuestionCount: 10000, scheduledDurationMinutes: 240 })))
+    const quiz = result.sessions[0].lessons[0].assessment
+    assert.deepEqual([quiz.scheduledQuestionCount, quiz.scheduledDurationMinutes, quiz.scheduledEffectiveAt, quiz.scheduledEffectiveMonthKey, quiz.cancelSchedule], [4, 45, '2026-11-30T17:00:00.000Z', '2026-12', false])
+    assert.deepEqual([result.finalAssessment.scheduledQuestionCount, result.finalAssessment.scheduledDurationMinutes], [10000, 240])
+    const empty = { scheduledQuestionCount: null, scheduledDurationMinutes: null, scheduledEffectiveAt: null, scheduledEffectiveMonthKey: null }
+    assert.doesNotThrow(() => validateDraftContent(pooledDraft([2, 2], empty, final(empty))))
+  })
+  it('lịch tháng sau sai định dạng bị từ chối: số câu 1–10000, thời gian 1–240 phút', () => {
+    for (const bad of [
+      { scheduledQuestionCount: 0 }, { scheduledQuestionCount: 1.5 }, { scheduledQuestionCount: 10001 }, { scheduledQuestionCount: '4' },
+      { scheduledDurationMinutes: 0 }, { scheduledDurationMinutes: 241 }, { scheduledDurationMinutes: 30.5 },
+      { scheduledEffectiveMonthKey: '2026-13' }, { scheduledEffectiveMonthKey: '12-2026' }, { scheduledEffectiveAt: 'không phải ngày' }, { cancelSchedule: 'yes' },
+    ]) {
+      rejects(pooledDraft([2, 2], bad), 'ValidationError', /tháng sau/i)
+      rejects(pooledDraft([2, 2], {}, final(bad)), 'ValidationError', /tháng sau/i)
+    }
+  })
+  it('ngân hàng phải đủ cho cả số câu đang áp dụng và số câu hẹn tháng sau', () => {
+    assert.doesNotThrow(() => validateDraftContent(pooledDraft([3, 5, 6], { questionCount: 5, scheduledQuestionCount: 9 })))
+    rejects(pooledDraft([3, 5, 6], { questionCount: 5, scheduledQuestionCount: 10 }), 'ScheduledQuestionCountExceedsBank', /không quá 9 câu/)
+    rejects(pooledDraft([3, 5, 6], { questionCount: 5, scheduledQuestionCount: 2 }), 'ScheduledQuestionCountBelowPools', /ít nhất 3 câu/)
+    assert.doesNotThrow(() => validateDraftContent(legacyDraft(5, { questionCount: 3, scheduledQuestionCount: 5 })))
+    rejects(legacyDraft(5, { questionCount: 3, scheduledQuestionCount: 6 }), 'ScheduledQuestionCountExceedsBank', /không quá 5 câu/)
+  })
+  it('xóa bớt câu làm ngân hàng thiếu cho lịch tháng sau thì bị chặn; hủy lịch thì lưu được', () => {
+    const schedule = { questionCount: 3, scheduledQuestionCount: 12 }
+    assert.doesNotThrow(() => validateDraftContent(pooledDraft([4, 4, 4], schedule)))
+    rejects(pooledDraft([4, 4, 3], schedule), 'ScheduledQuestionCountExceedsBank', /tháng sau/)
+    assert.doesNotThrow(() => validateDraftContent(pooledDraft([4, 4, 3], { ...schedule, cancelSchedule: true })))
+  })
+  it('số câu hẹn của bài thi cuối khóa không bị so với ngân hàng của một bài học', () => {
+    assert.doesNotThrow(() => validateDraftContent(pooledDraft([1], {}, final({ scheduledQuestionCount: 500 }))))
+  })
+  it('dấu vân tay chấm điểm chỉ đổi khi đổi nội dung, loại, điểm, giải thích hoặc đáp án', () => {
+    const base = questionGradingFingerprint(question)
+    assert.equal(questionGradingFingerprint({ ...question, sortOrder: 5, poolId: null, options: [...question.options].reverse() }), base)
+    assert.equal(questionGradingFingerprint({ ...question, explanation: '' }), base)
+    for (const changed of [
+      { ...question, questionText: 'Câu hỏi đã sửa' }, { ...question, questionType: 'MULTIPLE_CHOICE' as const }, { ...question, points: 2 }, { ...question, explanation: 'Vì sao' },
+      { ...question, options: question.options.map(o => ({ ...o, isCorrect: !o.isCorrect })) },
+      { ...question, options: question.options.map((o, i) => i ? o : { ...o, optionText: 'Đáp án đã sửa' }) },
+    ]) assert.notEqual(questionGradingFingerprint(changed), base)
   })
 })
