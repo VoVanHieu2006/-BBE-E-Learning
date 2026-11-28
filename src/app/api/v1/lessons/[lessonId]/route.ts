@@ -38,7 +38,7 @@ function loadLessonDetail(lessonId: string) {
 
 export async function GET(request: NextRequest, { params }: { params: { lessonId: string } }) {
   const hasAuthHeader = Boolean(request.headers.get('authorization'))
-  const hasSessionCookie = Boolean(request.cookies.get('token') || request.cookies.get('session') || request.cookies.get('auth'))
+  const hasSessionCookie = Boolean(request.cookies.get('accessToken') || request.cookies.get('refreshToken'))
   const auth = (hasAuthHeader || hasSessionCookie)
     ? await authenticate(request).catch(() => ({ ok: false }))
     : { ok: false }

@@ -8,6 +8,7 @@ import Button from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
 import { apiFetch, getCachedApiData } from '@/lib/api/client';
 import { getUrgencyLevel } from '@/lib/deadline-urgency';
+import { isCourseCompleted } from '@/lib/course-progress-display';
 
 function normalizeVietnamese(str: string): string {
   if (!str) return '';
@@ -179,7 +180,7 @@ export default function StudentCoursesPage() {
       const isMandatory = courseId in deadlines;
       const dueAt = deadlines[courseId] || null;
       const progressPercent = prog?.progressPercentage ?? 0;
-      const isCompleted = Boolean(prog?.isCompleted || progressPercent >= 100);
+      const isCompleted = isCourseCompleted(prog);
       const isStarted = Boolean(prog && (prog.completedLessons > 0 || progressPercent > 0));
       return {
         ...c,

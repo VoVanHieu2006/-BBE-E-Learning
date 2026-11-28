@@ -269,7 +269,7 @@ export async function POST(
       return kept;
     };
 
-    // The target ID is decided under the exam-bank lock: an attempted quiz keeps its row, others are recreated.
+    // Existing quizzes keep their identity and creation date under the exam-bank lock.
     // `kept` rows stay in place; `reusableIds` belong to rows deleted in this transaction, so clients may keep their ids.
     const prepare = (assessmentId: string, kept: Map<string, ExistingQuestion>, reusableIds: Set<string>) => {
     const preparedPools = usesPools ? pools.map((name: string, sortOrder: number) => ({ id: crypto.randomUUID(), assessment_id: assessmentId, name: name.trim(), sort_order: sortOrder })) : [];
@@ -370,15 +370,17 @@ export async function POST(
           await tx.questionPool.deleteMany({ where: { assessment_id: existing.id } });
           await tx.assessment.update({ where: { id: existing.id }, data: { ...settings, ...scheduleColumns(config, actor, now) } });
         } else {
-          assessmentId = crypto.randomUUID();
+          assessmentId = existing?.id || crypto.randomUUID();
           if (existing) {
             (await tx.question.findMany({ where: { assessment_id: existing.id }, select: { id: true } })).forEach((q) => reusableIds.add(q.id));
             await tx.questionOption.deleteMany({ where: { question: { assessment_id: existing.id } } });
             await tx.question.deleteMany({ where: { assessment_id: existing.id } });
             await tx.questionPool.deleteMany({ where: { assessment_id: existing.id } });
-            await tx.assessment.delete({ where: { id: existing.id } });
+            // Preserve created_at: editing an old quiz must not mark it as new/skippable.
+            await tx.assessment.update({ where: { id: existing.id }, data: { ...settings, ...scheduleColumns(config, actor, now) } });
+          } else {
+            await tx.assessment.create({ data: { ...settings, id: assessmentId, lesson_id: lessonId, created_by: actor } });
           }
-          await tx.assessment.create({ data: { ...settings, id: assessmentId, lesson_id: lessonId, created_by: actor } });
         }
 
         const { preparedPools, preparedQuestions } = prepare(assessmentId, kept, reusableIds);

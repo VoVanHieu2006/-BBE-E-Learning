@@ -4,6 +4,10 @@ import { isLeadRole } from '@/lib/roles'
 import { useState } from 'react';
 import Card from '@/components/ui/Card';
 import AdminStarHistoryPanel from '@/components/learner/AdminStarHistoryPanel';
+import { lessonQuizStatus, lessonQuizSummary, scorePercentLabel } from '@/lib/course-progress-display';
+
+const KPI_CARD = 'p-6 rounded-2xl border shadow-sm flex flex-col justify-between gap-1';
+const KPI_LABEL = 'text-[11px] font-bold text-[#6c6f7f] uppercase tracking-wider block';
 
 export interface LearnerProfileCourse {
   courseId: string;
@@ -15,8 +19,15 @@ export interface LearnerProfileCourse {
   isCompleted: boolean;
   allVideosDone?: boolean;
   hasAssessment?: boolean;
+  hasFinalAssessment?: boolean;
+  hasLessonAssessments?: boolean;
+  lessonAssessmentsPassed?: boolean;
+  finalExamPassed?: boolean;
+  totalLessonAssessments?: number;
+  passedLessonAssessments?: number;
   latestAttempt?: {
     score: number | null;
+    scorePercent?: number | null;
     passed: boolean;
     submittedAt?: string | Date | null;
   } | null;
@@ -200,74 +211,63 @@ export default function LearnerProfileView({
 
       {/* 2. KPI Summary Cards */}
       <div className={`grid grid-cols-2 ${starsCount !== null ? 'lg:grid-cols-5' : 'lg:grid-cols-4'} gap-4`}>
-        <Card className="p-4.5 border border-slate-200 bg-white rounded-2xl shadow-2xs">
-          <span className="text-[11px] font-bold text-[#6c6f7f] uppercase tracking-wider block mb-1">
-            Khóa hoàn thành
-          </span>
+        <div className={`${KPI_CARD} border-slate-200 bg-white`}>
+          <span className={KPI_LABEL}>Khóa hoàn thành</span>
           <div className="text-xl font-extrabold text-[#172554]">
             {completedCoursesCount} / {totalCourses}
           </div>
           <span className="text-[11px] text-[#6c6f7f]">khóa học</span>
-        </Card>
+        </div>
 
-        <Card className="p-4.5 border border-slate-200 bg-white rounded-2xl shadow-2xs">
-          <span className="text-[11px] font-bold text-[#6c6f7f] uppercase tracking-wider block mb-1">
-            Bài học đã học
-          </span>
+        <div className={`${KPI_CARD} border-slate-200 bg-white`}>
+          <span className={KPI_LABEL}>Bài học đã học</span>
           <div className="text-xl font-extrabold text-[#2563EB]">
             {completedLessons} / {totalLessons}
           </div>
           <span className="text-[11px] text-[#6c6f7f]">bài hoàn thành</span>
-        </Card>
+        </div>
 
-        <Card className="p-4.5 border border-slate-200 bg-white rounded-2xl shadow-2xs">
-          <span className="text-[11px] font-bold text-[#6c6f7f] uppercase tracking-wider block mb-1">
-            Tiến độ trung bình
-          </span>
+        <div className={`${KPI_CARD} border-slate-200 bg-white`}>
+          <span className={KPI_LABEL}>Tiến độ trung bình</span>
           <div className="text-xl font-extrabold text-indigo-600">
             {avgProgress}%
           </div>
-          <div className="w-full bg-slate-100 h-1.5 rounded-full mt-1.5 overflow-hidden">
+          <div className="w-full bg-slate-100 h-1.5 rounded-full my-[5px] overflow-hidden">
             <div className="bg-indigo-600 h-full rounded-full transition-all" style={{ width: `${avgProgress}%` }} />
           </div>
-        </Card>
+        </div>
 
-        <Card className="p-4.5 border border-slate-200 bg-white rounded-2xl shadow-2xs">
-          <span className="text-[11px] font-bold text-[#6c6f7f] uppercase tracking-wider block mb-1">
-            Điểm kiểm tra TB
-          </span>
+        <div className={`${KPI_CARD} border-slate-200 bg-white`}>
+          <span className={KPI_LABEL}>Điểm kiểm tra TB</span>
           <div className="text-xl font-extrabold text-emerald-600">
             {avgScore !== null ? `${avgScore}%` : 'Chưa thi'}
           </div>
           <span className="text-[11px] text-[#6c6f7f]">ngưỡng đạt: ≥85%</span>
-        </Card>
+        </div>
 
         {starsCount !== null && (
           starHistoryEnabled ? (
             <button
               type="button"
               onClick={() => setStarTabUserId(resolvedUserId)}
-              className="cursor-pointer text-left p-4.5 border border-amber-200 bg-amber-50/40 rounded-2xl shadow-2xs col-span-2 lg:col-span-1 transition hover:ring-2 hover:ring-amber-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
+              className={`${KPI_CARD} border-amber-200 bg-amber-50/40 text-left col-span-2 lg:col-span-1 cursor-pointer transition hover:ring-2 hover:ring-amber-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400`}
             >
-              <span className="text-[11px] font-bold text-amber-800 uppercase tracking-wider block mb-1">
-                ⭐ Sao tích lũy
-              </span>
+              <span className={`${KPI_LABEL} text-amber-800`}>⭐ Sao tích lũy</span>
               <div className="text-xl font-extrabold text-amber-600">
                 {starsCount} <span className="text-sm font-semibold text-amber-700">sao</span>
               </div>
-              <span className="text-[11px] text-amber-800/80">Số dư khả dụng</span>
-              <span className="block text-[11px] font-bold text-amber-700 mt-0.5">Xem lịch sử →</span>
+              <span className="text-[11px] font-bold text-amber-700 whitespace-nowrap">
+                Xem lịch sử sao →
+              </span>
             </button>
           ) : (
-            <Card className="p-4.5 border border-amber-200 bg-amber-50/40 rounded-2xl shadow-2xs col-span-2 lg:col-span-1">
-              <span className="text-[11px] font-bold text-amber-800 uppercase tracking-wider block mb-1">
-                ⭐ Sao tích lũy
-              </span>
+            <div className={`${KPI_CARD} border-amber-200 bg-amber-50/40 col-span-2 lg:col-span-1`}>
+              <span className={`${KPI_LABEL} text-amber-800`}>⭐ Sao tích lũy</span>
               <div className="text-xl font-extrabold text-amber-600">
                 {starsCount} <span className="text-sm font-semibold text-amber-700">sao</span>
               </div>
               <span className="text-[11px] text-amber-800/80">Số dư khả dụng</span>
-            </Card>
+            </div>
           )
         )}
       </div>
@@ -379,6 +379,8 @@ export default function LearnerProfileView({
               const hasAssessment = c.hasAssessment;
               const latestAttempt = c.latestAttempt;
               const testPassed = latestAttempt?.passed;
+              const finalScoreLabel = scorePercentLabel(latestAttempt);
+              const quizSummary = lessonQuizSummary(c);
 
               return (
                 <div key={c.courseId} className="px-6 py-4 hover:bg-slate-50/50 transition">
@@ -414,16 +416,35 @@ export default function LearnerProfileView({
                             <span className="text-blue-700">Đang học ({c.progressPercent}%)</span>
                           )}
                         </span>
+                        {quizSummary && (
+                          <>
+                            <span>•</span>
+                            <span>
+                              📝 Quiz bài học:{' '}
+                              <strong className={quizSummary.allPassed ? 'text-emerald-700' : 'text-amber-700'}>
+                                {quizSummary.label}
+                              </strong>
+                            </span>
+                          </>
+                        )}
                         <span>•</span>
                         <span>
-                          📝 Bài kiểm tra:{' '}
+                          🎯 Thi cuối khóa:{' '}
                           {!hasAssessment ? (
                             <span className="text-slate-400">Không có bài test</span>
                           ) : latestAttempt ? (
                             testPassed ? (
-                              <strong className="text-emerald-700">✓ Đã đạt ({latestAttempt.score}%)</strong>
+                              <strong className="text-emerald-700">
+                                ✓ Đã đạt{finalScoreLabel ? ` (${finalScoreLabel})` : ''}
+                              </strong>
+                            ) : c.finalExamPassed ? (
+                              <strong className="text-teal-700">
+                                ✓ Đã đạt{finalScoreLabel ? ` (lần mới nhất: ${finalScoreLabel})` : ''}
+                              </strong>
                             ) : (
-                              <strong className="text-red-600">✗ Chưa đạt ({latestAttempt.score}%)</strong>
+                              <strong className="text-red-600">
+                                ✗ Chưa đạt{finalScoreLabel ? ` (${finalScoreLabel})` : ''}
+                              </strong>
                             )
                           ) : (
                             <span className="text-amber-700 font-semibold">Chưa làm bài</span>
@@ -554,22 +575,22 @@ export default function LearnerProfileView({
                               </span>
 
                               {/* Quiz */}
-                              {lesson.quiz ? (
-                                <span
-                                  className={`text-[11px] font-medium ${
-                                    lesson.quiz.latestAttempt?.passed
-                                      ? 'text-emerald-700 font-bold'
-                                      : 'text-slate-500'
-                                  }`}
-                                >
-                                  📝{' '}
-                                  {lesson.quiz.latestAttempt
-                                    ? `${lesson.quiz.latestAttempt.scorePercent ?? 0}% (${
-                                        lesson.quiz.latestAttempt.passed ? 'Đạt' : 'Chưa đạt'
-                                      })`
-                                    : 'Chưa thi'}
-                                </span>
-                              ) : (
+                              {lesson.quiz ? (() => {
+                                const status = lessonQuizStatus(lesson.quiz);
+                                const toneClass =
+                                  status.tone === 'passed'
+                                    ? 'text-emerald-700 font-bold'
+                                    : status.tone === 'ever-passed'
+                                    ? 'text-teal-700 font-semibold'
+                                    : status.tone === 'failed'
+                                    ? 'text-red-600 font-semibold'
+                                    : 'text-slate-500';
+                                return (
+                                  <span className={`text-[11px] font-medium ${toneClass}`}>
+                                    📝 {status.label}
+                                  </span>
+                                );
+                              })() : (
                                 <span className="text-[11px] text-slate-400">Không quiz</span>
                               )}
                             </div>

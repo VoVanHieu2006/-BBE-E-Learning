@@ -5,7 +5,10 @@ import { canAccessOrganizationUnitPermission } from '@/lib/authorization'
 import { getOrganizationUnitTreeIds } from '@/lib/learning-assignments'
 import { listChapterMembers } from '@/lib/chapter-members'
 import { isOrganizationId } from '@/lib/organization-admin-rules'
+import type { AttemptStatus } from '@prisma/client'
 import { calculateUserProgress } from '@/lib/progress/calculator'
+import { buildLearningDetail, sumStarsBySource } from '@/lib/progress/learning-detail'
+import { currentCycleAttemptFilter } from '@/lib/learning-periods'
 import { canViewInactiveChapterMember } from '@/lib/inactive-member-access'
 import { getActiveMetricChapterIds, getParentChapterId } from '@/lib/active-chapters'
 
@@ -49,7 +52,13 @@ export async function GET(_request: NextRequest, { params }: { params: { unitId:
   }
   if (!joinedAt) return NextResponse.json({ error: { code: 'MemberNotFound' } }, { status: 404 })
 
-  const [summary, courses, starEntries] = await Promise.all([
+  const [cycleFilter, activeCycle] = await Promise.all([
+    currentCycleAttemptFilter(prisma, target.id),
+    prisma.learningCycle.findFirst({ where: { user_id: target.id, ends_at: null }, select: { id: true } }),
+  ])
+  const attemptWhere = { user_id: target.id, status: { in: ['SUBMITTED', 'AUTO_SUBMITTED'] as AttemptStatus[] }, ...cycleFilter }
+  // Detail follows the active learning cycle, like calculateUserProgress, so the two never disagree.
+  const [summary, courses, starEntries, cycleProgress] = await Promise.all([
     calculateUserProgress(target.id),
     prisma.course.findMany({
       where: { status: 'PUBLISHED' },
@@ -61,7 +70,7 @@ export async function GET(_request: NextRequest, { params }: { params: { unitId:
             id: true,
             title: true,
             attempts: {
-              where: { user_id: target.id, status: { in: ['SUBMITTED', 'AUTO_SUBMITTED'] } },
+              where: attemptWhere,
               orderBy: { submitted_at: 'desc' },
               select: { id: true, attempt_number: true, score: true, passed: true, status: true, submitted_at: true },
             },
@@ -90,7 +99,7 @@ export async function GET(_request: NextRequest, { params }: { params: { unitId:
                     id: true,
                     title: true,
                     attempts: {
-                      where: { user_id: target.id, status: { in: ['SUBMITTED', 'AUTO_SUBMITTED'] } },
+                      where: attemptWhere,
                       orderBy: { submitted_at: 'desc' },
                       select: { id: true, attempt_number: true, score: true, passed: true, status: true, submitted_at: true },
                     },
@@ -103,73 +112,19 @@ export async function GET(_request: NextRequest, { params }: { params: { unitId:
       },
       orderBy: { created_at: 'asc' },
     }),
-    prisma.starLedger.findMany({ where: { user_id: target.id }, select: { amount: true, source_type: true, source_id: true } }),
+    prisma.starLedger.findMany({ where: { user_id: target.id }, select: { amount: true, source_type: true, source_id: true, learning_cycle_id: true } }),
+    activeCycle
+      ? prisma.cycleLessonProgress.findMany({
+          where: { user_id: target.id, learning_cycle_id: activeCycle.id },
+          select: { lesson_id: true, furthest_seconds: true, completed_at: true },
+        })
+      : Promise.resolve(null),
   ])
 
-  const starsBySource = new Map<string, number>()
-  for (const entry of starEntries) {
-    const key = `${entry.source_type}:${entry.source_id}`
-    starsBySource.set(key, (starsBySource.get(key) || 0) + entry.amount)
-  }
-  const learningDetail = courses.map((course) => ({
-    courseId: course.id,
-    title: course.title,
-    finalAssessment: course.final_assessment && {
-      assessmentId: course.final_assessment.id,
-      title: course.final_assessment.title,
-      attemptCount: course.final_assessment.attempts.length,
-      stars: starsBySource.get(`ASSESSMENT:${course.final_assessment.id}`) || 0,
-      latestAttempt: course.final_assessment.attempts[0] && {
-        attemptId: course.final_assessment.attempts[0].id,
-        number: course.final_assessment.attempts[0].attempt_number,
-        scorePercent: course.final_assessment.attempts[0].score === null ? null : Math.round(Number(course.final_assessment.attempts[0].score) * 100),
-        passed: course.final_assessment.attempts[0].passed,
-        status: course.final_assessment.attempts[0].status,
-        submittedAt: course.final_assessment.attempts[0].submitted_at,
-      },
-    },
-    modules: course.sessions.map((session) => ({
-      moduleId: session.id,
-      title: session.title,
-      order: session.sort_order,
-      lessons: session.lessons.map((lesson) => {
-        const progress = lesson.progress[0]
-        const duration = lesson.video?.duration_seconds || 0
-        const watchedSeconds = progress?.furthest_watched_position_seconds || 0
-        const latestAttempt = lesson.assessment?.attempts[0] || null
-        return {
-          lessonId: lesson.id,
-          title: lesson.title,
-          order: lesson.sort_order,
-          video: lesson.video && {
-            videoId: lesson.video.id,
-            title: lesson.video.title,
-            durationSeconds: duration,
-            watchedSeconds,
-            watchedPercent: duration > 0 ? Math.min(100, Math.floor((watchedSeconds / duration) * 100)) : 0,
-            completed: duration > 0 ? watchedSeconds >= duration : Boolean(progress?.completed),
-            stars: starsBySource.get(`VIDEO:${lesson.video.id}`) || 0,
-            completedAt: progress?.completed_at || null,
-            lastWatchedAt: progress?.last_watched_at || null,
-          },
-          quiz: lesson.assessment && {
-            assessmentId: lesson.assessment.id,
-            title: lesson.assessment.title,
-            attemptCount: lesson.assessment.attempts.length,
-            stars: starsBySource.get(`ASSESSMENT:${lesson.assessment.id}`) || 0,
-            latestAttempt: latestAttempt && {
-              attemptId: latestAttempt.id,
-              number: latestAttempt.attempt_number,
-              scorePercent: latestAttempt.score === null ? null : Math.round(Number(latestAttempt.score) * 100),
-              passed: latestAttempt.passed,
-              status: latestAttempt.status,
-              submittedAt: latestAttempt.submitted_at,
-            },
-          },
-        }
-      }),
-    })),
-  }))
+  const cycleStarEntries = activeCycle
+    ? starEntries.filter((entry) => entry.learning_cycle_id === activeCycle.id || entry.learning_cycle_id === null)
+    : starEntries
+  const learningDetail = buildLearningDetail(courses, sumStarsBySource(cycleStarEntries), cycleProgress)
 
   return NextResponse.json({
     user: { userId: target.id, email: target.email, status: target.status, joinedAt },

@@ -1,3 +1,4 @@
+import type { Prisma, PrismaClient } from '@prisma/client'
 import { currentCycleAttemptFilter } from './learning-periods'
 import { prisma } from './prisma'
 import { readCourseLearningStates } from './lesson-learning-state'
@@ -19,8 +20,9 @@ export async function checkCourseFinalProgression(
   userId: string,
   courseId: string,
   isAdmin = false,
+  db: PrismaClient | Prisma.TransactionClient = prisma,
 ): Promise<CourseFinalProgressionDecision> {
-  const course = await prisma.course.findUnique({
+  const course = await db.course.findUnique({
     where: { id: courseId },
     select: {
       id: true,
@@ -48,9 +50,9 @@ export async function checkCourseFinalProgression(
   if (isAdmin) return { ok: true, courseId, canEarnStars: false }
   if (course.status !== 'PUBLISHED') return { ok: false, code: 'NotAssigned', message: 'Khóa học chưa xuất bản.' }
 
-  const cycle = await prisma.learningCycle.findFirst({ where: { user_id: userId, ends_at: null }, select: { id: true } })
-  const cycleFilter = await currentCycleAttemptFilter(prisma, userId)
-  const assignments = await prisma.userLearningAssignment.findMany({
+  const cycle = await db.learningCycle.findFirst({ where: { user_id: userId, ends_at: null }, select: { id: true } })
+  const cycleFilter = await currentCycleAttemptFilter(db, userId)
+  const assignments = await db.userLearningAssignment.findMany({
     where: { user_id: userId, course_id: courseId, ended_at: null },
     select: { can_view: true, can_assess: true, can_earn_stars: true },
   })
@@ -66,13 +68,13 @@ export async function checkCourseFinalProgression(
   const lessonIds = lessons.map((lesson) => lesson.id)
   let watchedByLesson = new Map<string, number>()
   if (cycle && lessonIds.length) {
-    const cycleProgress = await prisma.cycleLessonProgress.findMany({
+    const cycleProgress = await db.cycleLessonProgress.findMany({
       where: { user_id: userId, learning_cycle_id: cycle.id, lesson_id: { in: lessonIds } },
       select: { lesson_id: true, furthest_seconds: true },
     })
     watchedByLesson = new Map(cycleProgress.map((row) => [row.lesson_id, row.furthest_seconds || 0]))
   } else if (lessonIds.length) {
-    const progress = await prisma.lessonProgress.findMany({
+    const progress = await db.lessonProgress.findMany({
       where: { user_id: userId, lesson_id: { in: lessonIds } },
       select: { lesson_id: true, furthest_watched_position_seconds: true },
     })
@@ -80,7 +82,7 @@ export async function checkCourseFinalProgression(
   }
   const passedIds = lessons.flatMap((lesson) => lesson.assessment ? [lesson.assessment.id] : [])
   const passedAttempts = passedIds.length
-    ? await prisma.attempt.findMany({
+    ? await db.attempt.findMany({
         where: {
           user_id: userId,
           assessment_id: { in: passedIds },
@@ -120,8 +122,9 @@ export async function checkLessonProgression(
   lessonId: string,
   action: ProgressionAction,
   isAdmin = false,
+  db: PrismaClient | Prisma.TransactionClient = prisma,
 ): Promise<ProgressionDecision> {
-  const lesson = await prisma.lesson.findUnique({
+  const lesson = await db.lesson.findUnique({
     where: { id: lessonId },
     relationLoadStrategy: 'join',
     select: { id: true, session_id: true, session: { select: { course_id: true, course: { select: { status: true } } } } },
@@ -132,7 +135,7 @@ export async function checkLessonProgression(
   if (isAdmin) return { ok: true, courseId, canEarnStars: false }
   if (lesson.session.course.status !== 'PUBLISHED') return { ok: false, code: 'NotAssigned', message: 'Khóa học chưa xuất bản.' }
 
-  const states = await readCourseLearningStates(prisma, userId, courseId)
+  const states = await readCourseLearningStates(db, userId, courseId)
   const state = states[lessonId]
   if (!state) return { ok: false, code: 'NotAssigned', message: 'Bài học không tồn tại trong khóa học' }
   if (!state.canView) return {

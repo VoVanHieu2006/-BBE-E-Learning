@@ -3,25 +3,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiFetch } from '@/lib/api/client';
 import {
-  STAR_REASON_LABELS,
   STAR_SOURCE_FILTER_OPTIONS,
   buildAdminStarHistoryUrl,
-  formatStarAwardedAt,
   isStaleStarHistoryResponse,
   starHistoryEmptyMessage,
   type AdminStarSourceFilter,
+  type StarHistoryRowInput,
 } from '@/lib/admin-star-history-ui';
+import StarHistoryRow from '@/components/learner/StarHistoryRow';
 
-interface StarEntry {
+interface StarEntry extends StarHistoryRowInput {
   id: string;
-  amount: number;
-  reason: string;
   source_type: string;
-  awarded_at: string;
-  lessonTitle?: string | null;
-  courseTitle?: string | null;
-  quizTitle?: string | null;
-  detail?: string;
 }
 
 interface AdminStarHistoryData {
@@ -216,33 +209,9 @@ export default function AdminStarHistoryPanel({
         </div>
       ) : (
         <ul className={`space-y-2 transition-opacity ${loading ? 'opacity-60' : ''}`}>
-          {items.map((entry) => {
-            const positive = entry.amount > 0;
-            const detail = entry.detail || STAR_REASON_LABELS[entry.reason] || entry.reason;
-            const showCourse = entry.courseTitle && !detail.includes(entry.courseTitle);
-            return (
-              <li key={entry.id} className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                <span className={`w-9 h-9 rounded-xl flex items-center justify-center text-base shrink-0 ${positive ? 'bg-amber-100' : 'bg-slate-100'}`}>
-                  {positive ? '⭐' : '↩'}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-bold text-[#172554] truncate">{detail}</p>
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-0.5 text-[11px] text-slate-500">
-                    <span>{formatStarAwardedAt(entry.awarded_at)}</span>
-                    {showCourse && (
-                      <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-800 border border-blue-100 font-semibold">{entry.courseTitle}</span>
-                    )}
-                    <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-semibold">
-                      {STAR_REASON_LABELS[entry.reason] || entry.reason}
-                    </span>
-                  </div>
-                </div>
-                <span className={`text-sm font-extrabold shrink-0 ${positive ? 'text-emerald-600' : 'text-rose-600'}`}>
-                  {positive ? '+' : ''}{fmt(entry.amount)} ⭐
-                </span>
-              </li>
-            );
-          })}
+          {items.map((entry) => (
+            <StarHistoryRow key={entry.id} entry={entry} className="rounded-2xl border border-slate-200 bg-white px-4 py-3" />
+          ))}
         </ul>
       )}
 

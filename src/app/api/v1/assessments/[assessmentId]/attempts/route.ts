@@ -66,13 +66,14 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
   if (!assessment) return NextResponse.json({ error: { code: 'AssessmentNotFound' } }, { status: 404 })
   const body = await request.json().catch(() => ({}))
   const forceNew = body?.forceNew === true
+  const cycle = await prisma.learningCycle.findFirst({ where: { user_id: userId, ends_at: null }, select: { id: true } })
   const resumableAttempt = !forceNew
-    ? await prisma.attempt.findFirst({ where: { assessment_id: assessmentId, user_id: userId, status: 'IN_PROGRESS', expires_at: { gt: new Date() } }, select: { id: true } })
+    ? await prisma.attempt.findFirst({ where: { assessment_id: assessmentId, user_id: userId, status: 'IN_PROGRESS', ...(cycle ? { learning_cycle_id: cycle.id } : {}), expires_at: { gt: new Date() } }, select: { id: true, learning_cycle_id: true } })
     : null
 
   const isAdmin = (auth as any).context!.role === 'ADMIN'
   const gate = assessment.type === 'COURSE_FINAL' && assessment.course_id
-    ? resumableAttempt ? { ok: true as const, courseId: assessment.course_id, canEarnStars: false } : await checkCourseFinalProgression(userId, assessment.course_id, isAdmin)
+    ? { ok: true as const, courseId: assessment.course_id, canEarnStars: false }
     : assessment.lesson_id
       ? await checkLessonProgression(userId, assessment.lesson_id, 'ASSESS', isAdmin)
       : { ok: false as const, code: 'InvalidAssessmentOwner', message: 'Assessment owner is missing.' }
@@ -132,95 +133,6 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
     }
   }
 
-  // 1. Kiểm tra Cooldown: Mỗi lần làm (dù nộp hay hủy) cần đợi khoảng thời gian quy định
-  const { QUIZ_COOLDOWN_MS, QUIZ_COOLDOWN_MINUTES } = await import('@/lib/config/quiz')
-  if (QUIZ_COOLDOWN_MS > 0 && !resumableAttempt) {
-    const lastAttempt = await prisma.attempt.findFirst({
-      where: {
-        assessment_id: assessmentId,
-        user_id: userId,
-        status: { in: ['SUBMITTED', 'AUTO_SUBMITTED', 'CANCELLED'] },
-      },
-      orderBy: { submitted_at: 'desc' },
-      select: { submitted_at: true, created_at: true },
-    })
-
-    if (lastAttempt) {
-      const lastTime = lastAttempt.submitted_at || lastAttempt.created_at
-      const elapsed = Date.now() - new Date(lastTime).getTime()
-      if (elapsed < QUIZ_COOLDOWN_MS) {
-        const remainingMs = QUIZ_COOLDOWN_MS - elapsed
-        const remainingMins = Math.ceil(remainingMs / (60 * 1000))
-        return NextResponse.json({
-          error: {
-            code: 'CooldownActive',
-            message: `Bạn cần đợi thêm ${remainingMins} phút nữa mới có thể làm lại bài kiểm tra này (quy định giãn cách ${QUIZ_COOLDOWN_MINUTES} phút).`,
-            remainingMs,
-            cooldownUntil: new Date(Date.now() + remainingMs).toISOString(),
-          },
-        }, { status: 429 })
-      }
-    }
-  }
-
-  // 2. Tự động chuyển các bài IN_PROGRESS đã hết hạn sang CANCELLED
-
-
-  // 3. Kiểm tra xem có bài thi nào ĐANG còn trong thời hạn hay không (nếu không forceNew)
-  if (!forceNew) {
-    const active = await prisma.attempt.findFirst({
-      where: { assessment_id: assessmentId, user_id: userId, status: 'IN_PROGRESS' },
-    })
-    if (active) {
-      // If not expired, return active attempt questions
-      if (new Date() < active.expires_at) {
-        const [activeQuestions, existingAnswers] = await Promise.all([
-          prisma.attemptQuestion.findMany({
-            where: { attempt_id: active.id },
-            include: { question: { include: { options: true } } },
-            orderBy: { display_order: 'asc' },
-          }),
-          prisma.attemptAnswer.findMany({
-            where: { attempt_id: active.id },
-            select: { question_id: true, selected_option_id: true },
-          }),
-        ])
-
-        const answersMap: Record<string, string> = {}
-        for (const ans of existingAnswers) {
-          if (ans.selected_option_id) {
-            answersMap[ans.question_id] = ans.selected_option_id
-          }
-        }
-
-        return NextResponse.json({
-          attemptId: active.id,
-          id: active.id,
-          attemptNumber: active.attempt_number,
-          expiresAt: active.expires_at,
-          isResumed: true,
-          questionCount: activeQuestions.length,
-          durationMinutes: Math.max(1, Math.round((active.expires_at.getTime() - active.started_at.getTime()) / 60_000)),
-          passingPercent: 85,
-          existingAnswers: answersMap,
-          questions: activeQuestions.map((aq) => {
-            const snapshot = aq.question_snapshot as any
-            const options = Array.isArray(snapshot?.options) && snapshot.options.length
-              ? snapshot.options.map((o: any) => ({ optionId: o.id, id: o.id, optionText: o.text }))
-              : aq.question.options.map((o) => ({ optionId: o.id, id: o.id, optionText: o.option_text }))
-            return {
-              questionId: aq.question.id,
-              id: aq.question.id,
-              questionText: snapshot?.questionText || aq.question.question_text,
-              points: snapshot?.points ?? aq.question.points,
-              options,
-            }
-          }),
-        }, { status: 200 })
-      }
-    }
-  }
-
   class AttemptStartError extends Error {
     constructor(public status: number, public code: string, message: string) {
       super(message)
@@ -228,7 +140,7 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
     }
   }
 
-  let started: {
+  let started: NextResponse | {
     attempt: { id: string; attempt_number: number; expires_at: Date }
     selectedQuestions: Array<{
       id: string
@@ -241,125 +153,207 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
   }
   try {
     started = await prisma.$transaction(async (tx) => {
-    let now = await lockLearningUser(tx, userId)
-    const lockedGate = assessment.type === 'COURSE_FINAL' && assessment.course_id
-      ? await checkCourseFinalProgression(userId, assessment.course_id, isAdmin)
-      : assessment.lesson_id ? await checkLessonProgression(userId, assessment.lesson_id, 'ASSESS', isAdmin) : null
-    if (!lockedGate || lockedGate.ok === false) throw new Error('ProgressionChanged')
-    const learning = await learningContext(tx, userId, now)
-    now = learning.now
-    await lockCourseExamBank(tx, gate.courseId)
-    await applyDueAssessmentSchedules(tx, { assessmentId, now })
-
-    const lockedAssessment = await tx.assessment.findUnique({
-      where: { id: assessmentId },
-      select: { id: true, type: true, course_id: true, question_count: true, duration_minutes: true },
-    })
-    if (!lockedAssessment) {
-      throw new AttemptStartError(404, 'AssessmentNotFound', 'Bài kiểm tra không tồn tại')
-    }
-
-    const finalVersion = lockedAssessment.type === 'COURSE_FINAL'
-      ? await tx.finalExamVersion.findFirst({ where: { assessment_id: assessmentId, is_active: true }, select: { id: true, question_count: true, duration_minutes: true } })
-      : null
-    if (lockedAssessment.type === 'COURSE_FINAL' && !finalVersion) {
-      throw new AttemptStartError(422, 'FinalExamVersionUnavailable', 'Bài thi cuối khóa chưa có phiên bản đề hợp lệ.')
-    }
-
-    const questions = await tx.question.findMany({
-      where: lockedAssessment.type === 'COURSE_FINAL' && lockedAssessment.course_id
-        ? { final_exam_version_id: finalVersion!.id }
-        : { assessment_id: assessmentId, archived_at: null },
-      include: { options: true },
-      orderBy: { sort_order: 'asc' },
-    })
-    if (questions.length === 0) {
-      throw new AttemptStartError(404, 'AssessmentNotFound', 'Assessment chưa có câu hỏi')
-    }
-
-    // A configured assessment must have valid complete pools, and every
-    // question must belong to one of them. Never silently fall back to a normal quiz.
-    const questionPools = lockedAssessment.type === 'COURSE_FINAL' ? [] : await tx.questionPool.findMany({
-      where: { assessment_id: assessmentId }, select: { id: true }, orderBy: { sort_order: 'asc' },
-    })
-    const poolSelection = lockedAssessment.type === 'COURSE_FINAL'
-      ? (() => {
-          const selected = selectBalancedFinalExamQuestions(questions, finalVersion!.question_count, shuffleSecurely)
-          return selected
-            ? { ok: true as const, questions: selected }
-            : { ok: false as const, code: 'QuestionPoolIncomplete' as const }
-        })()
-      : selectQuizQuestions(
-          questionPools,
-          questions.map((question) => ({ ...question, poolId: question.pool_id })),
-          shuffleSecurely,
-          lockedAssessment.question_count,
-        )
-    if (poolSelection.ok === false) {
-      if (lockedAssessment.type === 'COURSE_FINAL') {
-        throw new AttemptStartError(422, 'FinalExamBankTooSmall', `Bài thi cần ${finalVersion!.question_count} câu nhưng phiên bản đề hiện không đủ câu. Vui lòng báo quản trị viên.`)
+      let now = await lockLearningUser(tx, userId)
+      const learning = await learningContext(tx, userId, now)
+      now = learning.now
+      await lockCourseExamBank(tx, gate.courseId)
+      const course = await tx.course.findUnique({ where: { id: gate.courseId }, select: { status: true } })
+      if (!course || (!isAdmin && course.status !== 'PUBLISHED')) {
+        throw new AttemptStartError(403, 'NotAssigned', 'Khóa học chưa xuất bản.')
       }
-      const messages: Record<string, string> = {
-        QuestionPoolCountInvalid: 'Bài kiểm tra cần từ 1 đến 20 nhóm câu hỏi và số câu thi không thể ít hơn số nhóm.',
-        QuestionPoolQuestionUnassigned: 'Mỗi câu hỏi phải thuộc một nhóm đã cấu hình.',
-        QuestionPoolIncomplete: 'Mỗi nhóm phải có ít nhất một câu hỏi.',
-        QuestionPoolQuotaExceeded: `Số câu cấu hình (${lockedAssessment.question_count} câu) vượt quá giới hạn cân bằng tối đa (${(poolSelection as any).maxAllowed ?? ''} câu). Vui lòng báo quản trị viên.`,
-      }
-      throw new AttemptStartError(422, poolSelection.code, messages[poolSelection.code] || 'Lỗi cấu hình nhóm câu hỏi')
-    }
-    const selectedQuestions = poolSelection.questions.map((question) => ({
-      ...question,
-      // The response and the resume snapshot must use the same option order.
-      responseOptions: shuffleSecurely(question.options),
-    }))
-    const durationMinutes = finalVersion?.duration_minutes || lockedAssessment.duration_minutes
+      await applyDueAssessmentSchedules(tx, { assessmentId, now })
 
-    if (!forceNew && await tx.attempt.count({ where: { assessment_id: assessmentId, user_id: userId, status: 'IN_PROGRESS', expires_at: { gt: now } } })) throw new Error('AttemptAlreadyInProgress')
-    // Do not discard a resumable attempt until every prerequisite and the full
-    // question-pool configuration above have passed validation.
-    if (forceNew) {
-      await tx.attempt.updateMany({
-        where: { assessment_id: assessmentId, user_id: userId, status: 'IN_PROGRESS' },
-        data: { status: 'CANCELLED', submitted_at: now },
+      // Resume under the user/course locks; new quizzes do not block this attempt.
+      if (!forceNew) {
+        const active = await tx.attempt.findFirst({
+        where: { assessment_id: assessmentId, user_id: userId, status: 'IN_PROGRESS', learning_cycle_id: learning.cycle.id, expires_at: { gt: now } },
+        })
+        if (active) {
+          // If not expired, return active attempt questions
+          if (now < active.expires_at) {
+            const [activeQuestions, existingAnswers] = await Promise.all([
+              tx.attemptQuestion.findMany({
+                where: { attempt_id: active.id },
+                include: { question: { include: { options: true } } },
+                orderBy: { display_order: 'asc' },
+              }),
+              tx.attemptAnswer.findMany({
+                where: { attempt_id: active.id },
+                select: { question_id: true, selected_option_id: true },
+              }),
+            ])
+
+            const answersMap: Record<string, string> = {}
+            for (const ans of existingAnswers) {
+              if (ans.selected_option_id) {
+                answersMap[ans.question_id] = ans.selected_option_id
+              }
+            }
+
+            return NextResponse.json({
+              attemptId: active.id,
+              id: active.id,
+              attemptNumber: active.attempt_number,
+              expiresAt: active.expires_at,
+              isResumed: true,
+              questionCount: activeQuestions.length,
+              durationMinutes: Math.max(1, Math.round((active.expires_at.getTime() - active.started_at.getTime()) / 60_000)),
+              passingPercent: 85,
+              existingAnswers: answersMap,
+              questions: activeQuestions.map((aq) => {
+                const snapshot = aq.question_snapshot as any
+                const options = Array.isArray(snapshot?.options) && snapshot.options.length
+                  ? snapshot.options.map((o: any) => ({ optionId: o.id, id: o.id, optionText: o.text }))
+                  : aq.question.options.map((o) => ({ optionId: o.id, id: o.id, optionText: o.option_text }))
+                return {
+                  questionId: aq.question.id,
+                  id: aq.question.id,
+                  questionText: snapshot?.questionText || aq.question.question_text,
+                  points: snapshot?.points ?? aq.question.points,
+                  options,
+                }
+              }),
+            }, { status: 200 })
+          }
+        }
+        // Pre-tx check saw a resumable attempt and skipped monthly replay; if it expired or moved
+        // before acquiring the lock, fail safely instead of creating a new attempt without that check.
+        if (resumableAttempt) throw new Error('ProgressionChanged')
+      }
+
+      // Only a NEW attempt must satisfy the current curriculum, read through this transaction.
+      const lockedGate = assessment.type === 'COURSE_FINAL' && assessment.course_id
+        ? await checkCourseFinalProgression(userId, assessment.course_id, isAdmin, tx)
+        : assessment.lesson_id ? await checkLessonProgression(userId, assessment.lesson_id, 'ASSESS', isAdmin, tx) : null
+      if (!lockedGate) throw new AttemptStartError(403, 'InvalidAssessmentOwner', 'Assessment owner is missing.')
+      if (lockedGate.ok === false) throw new AttemptStartError(403, lockedGate.code, lockedGate.message)
+
+      // A concurrent submit/cancel uses the same user lock and must be visible here.
+      const { QUIZ_COOLDOWN_MS, QUIZ_COOLDOWN_MINUTES } = await import('@/lib/config/quiz')
+      if (QUIZ_COOLDOWN_MS > 0) {
+        const lastAttempt = await tx.attempt.findFirst({
+          where: { assessment_id: assessmentId, user_id: userId, status: { in: ['SUBMITTED', 'AUTO_SUBMITTED', 'CANCELLED'] } },
+          orderBy: { submitted_at: 'desc' }, select: { submitted_at: true, created_at: true },
+        })
+        if (lastAttempt) {
+          const remainingMs = QUIZ_COOLDOWN_MS - (now.getTime() - (lastAttempt.submitted_at || lastAttempt.created_at).getTime())
+          if (remainingMs > 0) return NextResponse.json({ error: {
+            code: 'CooldownActive',
+            message: `Bạn cần đợi thêm ${Math.ceil(remainingMs / 60_000)} phút nữa mới có thể làm lại bài kiểm tra này (quy định giãn cách ${QUIZ_COOLDOWN_MINUTES} phút).`,
+            remainingMs, cooldownUntil: new Date(now.getTime() + remainingMs).toISOString(),
+          } }, { status: 429 })
+        }
+      }
+
+      const lockedAssessment = await tx.assessment.findUnique({
+        where: { id: assessmentId },
+        select: { id: true, type: true, course_id: true, question_count: true, duration_minutes: true },
       })
-    }
+      if (!lockedAssessment) {
+        throw new AttemptStartError(404, 'AssessmentNotFound', 'Bài kiểm tra không tồn tại')
+      }
 
-    // Đếm CHỈ những bài đã nộp thành công để tính lượt làm bài
-    const submittedCount = await tx.attempt.count({
-      where: {
-        assessment_id: assessmentId,
-        user_id: userId,
-        status: { in: ['SUBMITTED', 'AUTO_SUBMITTED'] },
-      },
-    })
+      const finalVersion = lockedAssessment.type === 'COURSE_FINAL'
+        ? await tx.finalExamVersion.findFirst({ where: { assessment_id: assessmentId, is_active: true }, select: { id: true, question_count: true, duration_minutes: true } })
+        : null
+      if (lockedAssessment.type === 'COURSE_FINAL' && !finalVersion) {
+        throw new AttemptStartError(422, 'FinalExamVersionUnavailable', 'Bài thi cuối khóa chưa có phiên bản đề hợp lệ.')
+      }
 
-    const a = await tx.attempt.create({
-      data: {
-        assessment_id: assessmentId,
-        final_exam_version_id: finalVersion?.id || null,
-        user_id: userId,
-        status: 'IN_PROGRESS',
-        learning_cycle_id: learning?.cycle.id,
-        started_at: now,
-        expires_at: new Date(now.getTime() + durationMinutes * 60_000),
-        attempt_number: submittedCount + 1,
-      },
-    })
+      const questions = await tx.question.findMany({
+        where: lockedAssessment.type === 'COURSE_FINAL' && lockedAssessment.course_id
+          ? { final_exam_version_id: finalVersion!.id }
+          : { assessment_id: assessmentId, archived_at: null },
+        include: { options: true },
+        orderBy: { sort_order: 'asc' },
+      })
+      if (questions.length === 0) {
+        throw new AttemptStartError(404, 'AssessmentNotFound', 'Assessment chưa có câu hỏi')
+      }
 
-    await tx.attemptQuestion.createMany({
-      data: selectedQuestions.map((q, idx) => ({
-        attempt_id: a.id,
-        question_id: q.id,
-        display_order: idx,
-        question_snapshot: { id: q.id, questionText: q.question_text, points: q.points, explanation: q.explanation, options: q.responseOptions.map((option) => ({ id: option.id, text: option.option_text, correct: option.is_correct })) },
-      })),
-    })
+      // A configured assessment must have valid complete pools, and every
+      // question must belong to one of them. Never silently fall back to a normal quiz.
+      const questionPools = lockedAssessment.type === 'COURSE_FINAL' ? [] : await tx.questionPool.findMany({
+        where: { assessment_id: assessmentId }, select: { id: true }, orderBy: { sort_order: 'asc' },
+      })
+      const poolSelection = lockedAssessment.type === 'COURSE_FINAL'
+        ? (() => {
+            const selected = selectBalancedFinalExamQuestions(questions, finalVersion!.question_count, shuffleSecurely)
+            return selected
+              ? { ok: true as const, questions: selected }
+              : { ok: false as const, code: 'QuestionPoolIncomplete' as const }
+          })()
+        : selectQuizQuestions(
+            questionPools,
+            questions.map((question) => ({ ...question, poolId: question.pool_id })),
+            shuffleSecurely,
+            lockedAssessment.question_count,
+          )
+      if (poolSelection.ok === false) {
+        if (lockedAssessment.type === 'COURSE_FINAL') {
+          throw new AttemptStartError(422, 'FinalExamBankTooSmall', `Bài thi cần ${finalVersion!.question_count} câu nhưng phiên bản đề hiện không đủ câu. Vui lòng báo quản trị viên.`)
+        }
+        const messages: Record<string, string> = {
+          QuestionPoolCountInvalid: 'Bài kiểm tra cần từ 1 đến 20 nhóm câu hỏi và số câu thi không thể ít hơn số nhóm.',
+          QuestionPoolQuestionUnassigned: 'Mỗi câu hỏi phải thuộc một nhóm đã cấu hình.',
+          QuestionPoolIncomplete: 'Mỗi nhóm phải có ít nhất một câu hỏi.',
+          QuestionPoolQuotaExceeded: `Số câu cấu hình (${lockedAssessment.question_count} câu) vượt quá giới hạn cân bằng tối đa (${(poolSelection as any).maxAllowed ?? ''} câu). Vui lòng báo quản trị viên.`,
+        }
+        throw new AttemptStartError(422, poolSelection.code, messages[poolSelection.code] || 'Lỗi cấu hình nhóm câu hỏi')
+      }
+      const selectedQuestions = poolSelection.questions.map((question) => ({
+        ...question,
+        // The response and the resume snapshot must use the same option order.
+        responseOptions: shuffleSecurely(question.options),
+      }))
+      const durationMinutes = finalVersion?.duration_minutes || lockedAssessment.duration_minutes
 
-    if (learning) await tx.quizRewardHighWaterMark.upsert({
-      where: { user_id_assessment_id_competition_month_id_learning_cycle_id: { user_id: userId, assessment_id: assessmentId, competition_month_id: learning.month.id, learning_cycle_id: learning.cycle.id } },
-      update: {}, create: { user_id: userId, assessment_id: assessmentId, competition_month_id: learning.month.id, learning_cycle_id: learning.cycle.id, reward_question_count: selectedQuestions.length, reward_config: { questions: selectedQuestions.map((q) => ({ id: q.id, points: q.points })) } },
-    })
-    return { attempt: a, selectedQuestions, durationMinutes }
+      if (!forceNew && await tx.attempt.count({ where: { assessment_id: assessmentId, user_id: userId, status: 'IN_PROGRESS', learning_cycle_id: learning.cycle.id, expires_at: { gt: now } } })) throw new Error('AttemptAlreadyInProgress')
+      // Do not discard a resumable attempt until every prerequisite and the full
+      // question-pool configuration above have passed validation.
+      if (forceNew) {
+        await tx.attempt.updateMany({
+          where: { assessment_id: assessmentId, user_id: userId, status: 'IN_PROGRESS' },
+          data: { status: 'CANCELLED', submitted_at: now },
+        })
+      }
+
+      // Đếm CHỈ những bài đã nộp thành công để tính lượt làm bài
+      const submittedCount = await tx.attempt.count({
+        where: {
+          assessment_id: assessmentId,
+          user_id: userId,
+          status: { in: ['SUBMITTED', 'AUTO_SUBMITTED'] },
+        },
+      })
+
+      const a = await tx.attempt.create({
+        data: {
+          assessment_id: assessmentId,
+          final_exam_version_id: finalVersion?.id || null,
+          user_id: userId,
+          status: 'IN_PROGRESS',
+          learning_cycle_id: learning?.cycle.id,
+          started_at: now,
+          expires_at: new Date(now.getTime() + durationMinutes * 60_000),
+          attempt_number: submittedCount + 1,
+        },
+      })
+
+      await tx.attemptQuestion.createMany({
+        data: selectedQuestions.map((q, idx) => ({
+          attempt_id: a.id,
+          question_id: q.id,
+          display_order: idx,
+          question_snapshot: { id: q.id, questionText: q.question_text, points: q.points, explanation: q.explanation, options: q.responseOptions.map((option) => ({ id: option.id, text: option.option_text, correct: option.is_correct })) },
+        })),
+      })
+
+      if (learning) await tx.quizRewardHighWaterMark.upsert({
+        where: { user_id_assessment_id_competition_month_id_learning_cycle_id: { user_id: userId, assessment_id: assessmentId, competition_month_id: learning.month.id, learning_cycle_id: learning.cycle.id } },
+        update: {}, create: { user_id: userId, assessment_id: assessmentId, competition_month_id: learning.month.id, learning_cycle_id: learning.cycle.id, reward_question_count: selectedQuestions.length, reward_config: { questions: selectedQuestions.map((q) => ({ id: q.id, points: q.points })) } },
+      })
+      return { attempt: a, selectedQuestions, durationMinutes }
     }, { timeout: 60_000 })
   } catch (error) {
     if (error instanceof AttemptStartError) {
@@ -373,6 +367,7 @@ export async function POST(request: NextRequest, { params }: { params: { assessm
     throw error
   }
 
+  if (started instanceof NextResponse) return started
   const { attempt, selectedQuestions, durationMinutes } = started
 
   // Reuse precisely the same selection/order stored in AttemptQuestion.

@@ -327,7 +327,7 @@ export default function ProgramCourseTree({ refreshTrigger, onDataLoaded }: Prog
                                                 {lesson.title}
                                               </Link>
                                             )}
-                                            <NewContentChip show={state?.isNew || state?.quizIsNew} />
+                                            <NewContentChip show={state?.isNew} variant="lesson" /> <NewContentChip show={!state?.isNew && state?.quizIsNew} variant="quiz" />
                                           </div>
                                           <div className="shrink-0">
                                             {status === 'done' ? (

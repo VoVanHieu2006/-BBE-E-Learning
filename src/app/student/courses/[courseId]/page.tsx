@@ -198,7 +198,7 @@ export default function CourseDetailPage({ params }: { params: { courseId: strin
                                   </span>
                                   <div>
                                     <h4 className="font-semibold text-sm text-slate-600 flex items-center gap-1.5">
-                                      <span>🔒</span> {lesson.title} <NewContentChip show={lessonProg?.isNew} />
+                                      <span>🔒</span> {lesson.title} <NewContentChip show={lessonProg?.isNew} variant="lesson" />
                                     </h4>
                                     {lesson.description && (
                                       <p className="text-xs text-slate-400 mt-0.5 line-clamp-1">{lesson.description}</p>
@@ -207,7 +207,7 @@ export default function CourseDetailPage({ params }: { params: { courseId: strin
                                       <span>📹 Video bài giảng</span>
                                       {lesson.assessment && (
                                         <span className="inline-flex items-center gap-1 font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md text-[11px]">
-                                          📝 Quiz ({lesson.assessment.questionCount || lesson.assessment._count?.questions || 0} câu) <NewContentChip show={lessonProg?.quizIsNew} />
+                                          📝 Quiz ({lesson.assessment.questionCount || lesson.assessment._count?.questions || 0} câu) <NewContentChip show={lessonProg?.quizIsNew} variant="quiz" />
                                         </span>
                                       )}
                                     </div>
@@ -237,7 +237,7 @@ export default function CourseDetailPage({ params }: { params: { courseId: strin
                                 </span>
                                 <div>
                                   <h4 className="font-semibold text-sm text-[#172554] group-hover:text-[#2563EB] transition">
-                                    {lesson.title} <NewContentChip show={lessonProg?.isNew} />
+                                    {lesson.title} <NewContentChip show={lessonProg?.isNew} variant="lesson" />
                                   </h4>
                                   {lesson.description && (
                                     <p className="text-xs text-[#434655] mt-0.5 line-clamp-1">{lesson.description}</p>
@@ -246,7 +246,7 @@ export default function CourseDetailPage({ params }: { params: { courseId: strin
                                     <span>📹 Video bài giảng</span>
                                     {lesson.assessment && (
                                       <span className="inline-flex items-center gap-1 font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md text-[11px]">
-                                        📝 Quiz ({lesson.assessment.questionCount || lesson.assessment._count?.questions || 0} câu) <NewContentChip show={lessonProg?.quizIsNew} />
+                                        📝 Quiz ({lesson.assessment.questionCount || lesson.assessment._count?.questions || 0} câu) <NewContentChip show={lessonProg?.quizIsNew} variant="quiz" />
                                       </span>
                                     )}
                                     {lesson.documents?.length > 0 && (

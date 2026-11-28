@@ -6,6 +6,7 @@ import Button from '@/components/ui/Button';
 import { apiFetch, getCachedApiData } from '@/lib/api/client';
 import { useRouter } from 'next/navigation';
 import { greetingName } from '@/lib/fun-display-name';
+import { isCourseCompleted } from '@/lib/course-progress-display';
 
 export default function StudentDashboard() {
   const router = useRouter();
@@ -91,12 +92,7 @@ export default function StudentDashboard() {
   }
 
   const totalCourses = courses.length;
-  const completedCourses = courses.filter((c) => {
-    const allVideosDone =
-      (c.totalLessons > 0 && (c.completedLessons || 0) >= c.totalLessons) ||
-      (c.progressPercentage || 0) >= 100;
-    return c.hasAssessment ? allVideosDone && c.latestAttempt?.passed : allVideosDone;
-  }).length;
+  const completedCourses = courses.filter((c) => isCourseCompleted(c)).length;
   const avgProgress = totalCourses > 0
     ? Math.round(courses.reduce((sum, c) => sum + (c.progressPercentage || 0), 0) / totalCourses)
     : 0;

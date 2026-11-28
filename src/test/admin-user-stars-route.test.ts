@@ -89,6 +89,7 @@ describe('GET /api/v1/admin/users/[userId]/stars', () => {
       assert.deepEqual(body.items, [{
         id: id(60), amount: 18, reason: 'MODULE_QUIZ_BONUS', awarded_at: awardedAt.toISOString(), source_type: 'ASSESSMENT',
         lessonTitle: 'Bài mở đầu', courseTitle: 'Khóa Kỹ năng', quizTitle: 'Quiz mở đầu', detail: 'Vượt qua bài kiểm tra: Quiz mở đầu · Bài mở đầu',
+        kind: 'LESSON_QUIZ', displayTitle: 'Bài mở đầu', correctCount: null, totalQuestions: null, attemptNumber: null,
       }])
       assert.deepEqual(lastFilterValues, [user.id, '2026-11', '2026-10-31T17:00:00.000Z', '2026-11-30T17:00:00.000Z', ['MODULE_QUIZ_PASS', 'MODULE_QUIZ_BONUS']])
     }

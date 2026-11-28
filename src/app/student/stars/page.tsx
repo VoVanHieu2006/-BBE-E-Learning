@@ -3,17 +3,12 @@
 import { useEffect, useState, useCallback } from 'react'
 import LearningPeriodSummary from '@/components/learning/LearningPeriodSummary'
 import { apiFetch, getCachedApiData } from '@/lib/api/client'
+import StarHistoryRow from '@/components/learner/StarHistoryRow'
+import type { StarHistoryRowInput } from '@/lib/admin-star-history-ui'
 
-type StarEntry = {
+type StarEntry = StarHistoryRowInput & {
   id: string
-  amount: number
-  reason: string
   source_type: string
-  awarded_at: string
-  lessonTitle?: string | null
-  courseTitle?: string | null
-  quizTitle?: string | null
-  detail?: string
 }
 
 type StarHistoryResponse = {
@@ -26,24 +21,6 @@ type StarHistoryResponse = {
 }
 
 const PAGE_SIZE = 20
-
-const reasonLabels: Record<string, string> = {
-  VIDEO_COMPLETION: 'Hoàn thành video bài học',
-  MODULE_QUIZ_PASS: 'Vượt qua bài kiểm tra',
-  MODULE_QUIZ_BONUS: 'Thưởng kết quả bài kiểm tra',
-  COURSE_FINAL_PASS: 'Hoàn thành bài thi cuối khóa',
-  COURSE_FINAL_BONUS: 'Thưởng kết quả bài thi cuối khóa',
-  ADMIN_ADJUSTMENT: 'Điều chỉnh Star',
-}
-
-function formatAwardedAt(value: string) {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return 'Thời gian không xác định'
-  return new Intl.DateTimeFormat('vi-VN', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(date)
-}
 
 export default function StudentStarsPage() {
   const [page, setPage] = useState(1)
@@ -163,35 +140,9 @@ export default function StudentStarsPage() {
         ) : (
           <>
             <ul className="divide-y divide-slate-100">
-              {history.items.map((entry) => {
-                const positive = entry.amount > 0
-                return (
-                  <li key={entry.id} className="flex items-center justify-between gap-4 px-5 py-4 transition-colors hover:bg-slate-50/80 sm:px-6">
-                    <div className="flex min-w-0 items-center gap-3">
-                      <span aria-hidden="true" className={`grid h-10 w-10 shrink-0 place-items-center rounded-full text-lg ${positive ? 'bg-amber-100 text-amber-600' : 'bg-slate-100 text-slate-600'}`}>
-                        {positive ? '⭐' : '↩'}
-                      </span>
-                      <div className="min-w-0">
-                        <p className="truncate font-semibold text-slate-900">
-                          {entry.detail || reasonLabels[entry.reason] || 'Nhận Star'}
-                        </p>
-                        <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-500">
-                          <span>{formatAwardedAt(entry.awarded_at)}</span>
-                          {entry.courseTitle && entry.detail && !entry.detail.includes(entry.courseTitle) && (
-                            <>
-                              <span>•</span>
-                              <span className="truncate text-blue-700 font-medium">{entry.courseTitle}</span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    <span className={`shrink-0 text-base font-extrabold tabular-nums ${positive ? 'text-emerald-700' : 'text-slate-600'}`}>
-                      {positive ? '+' : ''}{entry.amount} ⭐
-                    </span>
-                  </li>
-                )
-              })}
+              {history.items.map((entry) => (
+                <StarHistoryRow key={entry.id} entry={entry} className="px-5 py-4 transition-colors hover:bg-slate-50/80 sm:px-6" />
+              ))}
             </ul>
 
             {totalPages > 1 && (

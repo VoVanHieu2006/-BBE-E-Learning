@@ -4,7 +4,7 @@ import { Prisma } from '@prisma/client'
 import {
   formatStarMonthLabel, isValidStarUserId, normalizeStarHistoryPagination, parseStarHistoryMonth, parseStarHistorySource, starReasonsForSource, vnMonthBounds,
 } from '../lib/star-history-rules'
-import { StarHistoryEntry, enrichStarHistoryEntries, getAdminUserStarHistory, readStarHistoryPage } from '../lib/star-history'
+import { StarHistoryEntry, attemptScoreFromSnapshot, enrichStarHistoryEntries, getAdminUserStarHistory, readStarHistoryPage } from '../lib/star-history'
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`
 const USER = id(1), VIDEO = id(2), LESSON = id(3), QUIZ = id(4), FINAL = id(5), ATTEMPT = id(6)
@@ -85,12 +85,76 @@ describe('enrichStarHistoryEntries', () => {
       ['Bài mở đầu', 'Khóa Kỹ năng', null, 'Hoàn thành video: Bài mở đầu · Khóa Kỹ năng'],
       ['Bài mở đầu', 'Khóa Kỹ năng', 'Quiz mở đầu', 'Vượt qua bài kiểm tra: Quiz mở đầu · Bài mở đầu'],
       ['Bài mở đầu', 'Khóa Kỹ năng', 'Quiz mở đầu', 'Vượt qua bài kiểm tra: Quiz mở đầu · Bài mở đầu'],
-      [null, 'Khóa Kỹ năng', null, 'Vượt qua bài thi cuối khóa: Khóa Kỹ năng'],
-      [null, 'Khóa Kỹ năng', null, 'Vượt qua bài thi cuối khóa: Khóa Kỹ năng'],
+      [null, 'Khóa Kỹ năng', 'Thi cuối khóa', 'Vượt qua bài thi cuối khóa: Khóa Kỹ năng'],
+      [null, 'Khóa Kỹ năng', 'Thi cuối khóa', 'Vượt qua bài thi cuối khóa: Khóa Kỹ năng'],
       [null, null, null, 'Điều chỉnh Star bởi Ban Quản Trị'],
     ])
-    assert.deepEqual(Object.keys(items[0]), ['id', 'amount', 'reason', 'awarded_at', 'source_type', 'lessonTitle', 'courseTitle', 'quizTitle', 'detail'])
+    assert.deepEqual(Object.keys(items[0]), [
+      'id', 'amount', 'reason', 'awarded_at', 'source_type', 'lessonTitle', 'courseTitle', 'quizTitle', 'detail',
+      'kind', 'displayTitle', 'correctCount', 'totalQuestions', 'attemptNumber',
+    ])
     assert.equal(items[5].amount, -2)
+  })
+  it('gives each row a kind and a primary title: lesson for video and quiz, "Bài thi cuối khóa" for the final', async () => {
+    const items = await enrichStarHistoryEntries(titleDb() as any, history)
+    assert.deepEqual(items.map(i => [i.kind, i.displayTitle]), [
+      ['VIDEO', 'Bài mở đầu'],
+      ['LESSON_QUIZ', 'Bài mở đầu'],
+      ['LESSON_QUIZ', 'Bài mở đầu'],
+      ['COURSE_FINAL', 'Bài thi cuối khóa'],
+      ['COURSE_FINAL', 'Bài thi cuối khóa'],
+      ['OTHER', 'Điều chỉnh sao'],
+    ])
+    assert.equal(items[3].quizTitle, 'Thi cuối khóa', 'final exam keeps its assessment title')
+  })
+  it('deleted sources fall back to generic primary titles', async () => {
+    const items = await enrichStarHistoryEntries(titleDb(false) as any, history)
+    assert.deepEqual(items.map(i => i.displayTitle), ['Video bài học', 'Bài kiểm tra bài học', 'Bài kiểm tra bài học', 'Bài thi cuối khóa', 'Bài thi cuối khóa', 'Điều chỉnh sao'])
+    assert.equal(items[3].quizTitle, null)
+  })
+  it('reads X/Y câu and the attempt number from the grading snapshot in one batched query', async () => {
+    const calls: any[] = []
+    const snapshot = (correct: number, total: number) => ({ results: Array.from({ length: total }, (_, i) => ({ questionId: String(i), isCorrect: i < correct })) })
+    const attempts = [
+      { id: ATTEMPT, attempt_number: 2, grading_snapshot: snapshot(17, 20), _count: { attempt_questions: 20 } },
+      { id: id(8), attempt_number: 1, grading_snapshot: snapshot(5, 5), _count: { attempt_questions: 5 } },
+    ]
+    const db = { ...titleDb(), attempt: { findMany: async (args: any) => { calls.push(args); return attempts.filter(a => args.where.id.in.includes(a.id)) } } }
+    const items = await enrichStarHistoryEntries(db as any, [
+      entry(1, 'MODULE_QUIZ_BONUS', 'ASSESSMENT', QUIZ, { attemptId: ATTEMPT.toUpperCase() }),
+      entry(2, 'COURSE_FINAL_PASS', 'ASSESSMENT', FINAL, { attemptId: id(8) }),
+      entry(3, 'MODULE_QUIZ_PASS', 'ASSESSMENT', QUIZ, null),
+      entry(4, 'VIDEO_COMPLETION', 'VIDEO', VIDEO, { attemptId: ATTEMPT }),
+      entry(5, 'MODULE_QUIZ_PASS', 'ASSESSMENT', QUIZ, { attemptId: 'not-a-uuid' }),
+    ])
+    assert.equal(calls.length, 1)
+    assert.deepEqual(calls[0].where.id.in.sort(), [ATTEMPT, id(8)].sort())
+    assert.deepEqual(calls[0].select, { id: true, attempt_number: true, grading_snapshot: true, _count: { select: { attempt_questions: true } } })
+    assert.deepEqual(items.map(i => [i.correctCount, i.totalQuestions, i.attemptNumber]), [
+      [17, 20, 2], [5, 5, 1], [null, null, null], [null, null, null], [null, null, null],
+    ])
+  })
+  it('never queries attempts when no row carries an attemptId, and tolerates a db without attempt', async () => {
+    let called = false
+    const db = { ...titleDb(), attempt: { findMany: async () => { called = true; return [] } } }
+    await enrichStarHistoryEntries(db as any, history)
+    assert.equal(called, false)
+    const [item] = await enrichStarHistoryEntries(titleDb() as any, [entry(1, 'MODULE_QUIZ_PASS', 'ASSESSMENT', QUIZ, { attemptId: ATTEMPT })])
+    assert.deepEqual([item.correctCount, item.totalQuestions], [null, null])
+  })
+})
+
+describe('attemptScoreFromSnapshot', () => {
+  it('counts valid boolean isCorrect results and rejects malformed snapshots', () => {
+    assert.deepEqual(attemptScoreFromSnapshot({ results: [{ isCorrect: true }, { isCorrect: false }, { isCorrect: true }] }), { correctCount: 2, totalQuestions: 3 })
+    assert.deepEqual(attemptScoreFromSnapshot({ results: [{ isCorrect: true }, { isCorrect: true }] }, 9), { correctCount: 2, totalQuestions: 2 })
+    assert.deepEqual(attemptScoreFromSnapshot({ results: [{ isCorrect: true }, { isCorrect: 'true' }, null] }, 3), { correctCount: null, totalQuestions: 3 })
+    assert.deepEqual(attemptScoreFromSnapshot({ results: [{ questionId: 'q1' }] }), { correctCount: null, totalQuestions: null })
+  })
+  it('without a usable snapshot the correct count is unknown', () => {
+    assert.deepEqual(attemptScoreFromSnapshot(null), { correctCount: null, totalQuestions: null })
+    assert.deepEqual(attemptScoreFromSnapshot({ results: [] }, 0), { correctCount: null, totalQuestions: null })
+    assert.deepEqual(attemptScoreFromSnapshot({ score: 3 }, 20), { correctCount: null, totalQuestions: 20 })
   })
   it('falls back to generic labels when the video, lesson or assessment was deleted', async () => {
     const items = await enrichStarHistoryEntries(titleDb(false) as any, history)

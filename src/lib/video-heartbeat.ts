@@ -52,9 +52,12 @@ export async function recordVideoHeartbeat(
     const lesson = await tx.lesson.findUnique({
       where: { id: lessonId },
       relationLoadStrategy: 'join',
-      include: { video: true, assessment: true, session: true },
+      include: { video: true, assessment: true, session: { include: { course: { select: { status: true } } } } },
     })
     if (!lesson?.video) return null
+    if (!isAdmin && lesson.session.course.status !== 'PUBLISHED') {
+      return { error: { code: 'NotAssigned', message: 'Khóa học chưa xuất bản.' } }
+    }
     const context = await learningContext(tx, userId, now)
     now = context.now
 
@@ -79,7 +82,7 @@ export async function recordVideoHeartbeat(
     // curriculum gate on every heartbeat. The first heartbeat (or a genuinely
     // locked lesson) still receives the authoritative server-side check.
     if (!isAdmin && !existingCycleProgress?.unlocked_at) {
-      const gate = await checkLessonProgression(userId, lessonId, 'WATCH', isAdmin)
+      const gate = await checkLessonProgression(userId, lessonId, 'WATCH', isAdmin, tx)
       if (gate.ok === false) return { error: { code: gate.code, message: gate.message } }
     }
 
@@ -131,7 +134,7 @@ export async function recordVideoHeartbeat(
               user_id: userId,
               assessment_id: lesson.assessment.id,
               passed: true,
-              OR: [{ learning_cycle_id: context.cycle.id }, ...(context.cycle.provenance === 'LEGACY' ? [{ learning_cycle_id: null }] : [])],
+              OR: [{ learning_cycle_id: context.cycle.id }, ...(context.cycle.provenance === 'LEGACY' ? [{ learning_cycle_id: null, started_at: { lt: context.cycle.starts_at } }] : [])],
               status: { in: ['SUBMITTED', 'AUTO_SUBMITTED'] },
             },
           }))

@@ -6,6 +6,7 @@ import Button from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
 import { QUIZ_COOLDOWN_MINUTES } from '@/lib/config/quiz';
 import { clearApiCache } from '@/lib/api/client';
+import { shouldSendCancelBeacon } from '@/lib/quiz-cancel-guard';
 import {
   QuestionNavState,
   countAnswered,
@@ -82,6 +83,7 @@ export default function LessonQuiz({
   const [showMobileNav, setShowMobileNav] = useState(false);
 
   const isSubmittingRef = useRef(false);
+  const submittingOrFinishedRef = useRef(false);
   const deadlineRef = useRef<number | null>(null);
   const asideRef = useRef<HTMLElement | null>(null);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -98,6 +100,8 @@ export default function LessonQuiz({
   }, [assessmentId]);
 
   async function initQuiz() {
+    // Suppress an old attempt's beacon while switching assessments.
+    submittingOrFinishedRef.current = true;
     isSubmittingRef.current = false;
     setLoading(true);
     setError('');
@@ -130,6 +134,7 @@ export default function LessonQuiz({
         return;
       }
 
+      submittingOrFinishedRef.current = false;
       setAttempt(data);
 
       const newAttemptId = data.attemptId || data.id;
@@ -175,7 +180,10 @@ export default function LessonQuiz({
     const tick = () => {
       const left = secondsUntil(deadlineRef.current!, Date.now());
       setTimeLeft(left);
-      if (left <= 0) setTimeUp(true);
+      if (left <= 0) {
+        submittingOrFinishedRef.current = true;
+        setTimeUp(true);
+      }
     };
     tick();
     const timer = setInterval(tick, 1000);
@@ -222,15 +230,24 @@ export default function LessonQuiz({
   useEffect(() => {
     if (!attempt || result) return;
     const currentAttemptId = attempt.attemptId || attempt.id;
+    const canCancelOnExit = () => shouldSendCancelBeacon({
+      attemptId: currentAttemptId,
+      hasResult: Boolean(result),
+      isSubmitting: submittingOrFinishedRef.current,
+      isCancelled: attempt.status === 'CANCELLED',
+      deadlineMs: deadlineRef.current,
+      nowMs: Date.now(),
+    });
 
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (!canCancelOnExit()) return;
       e.preventDefault();
       e.returnValue = 'Bạn đang làm bài kiểm tra. Nếu rời khỏi trang, bài thi sẽ bị hủy.';
       return e.returnValue;
     };
 
     const handlePageHide = () => {
-      if (currentAttemptId && !result) {
+      if (canCancelOnExit()) {
         // Tự động gửi tín hiệu hủy khi đóng tab/trình duyệt
         try {
           navigator.sendBeacon(`/api/v1/attempts/${currentAttemptId}/cancel`, JSON.stringify({ reason: 'TAB_CLOSED' }));
@@ -304,10 +321,11 @@ export default function LessonQuiz({
   const recentLongPress = () => Date.now() - longPressFiredAtRef.current < 900;
 
   const handleSubmit = async () => {
-    if (!attemptId || submitting || result || isSubmittingRef.current) return;
+    if (!attemptId || submitting || cancelling || result || isSubmittingRef.current) return;
 
     // Synchronous mutex to prevent race conditions and double-submits
     isSubmittingRef.current = true;
+    submittingOrFinishedRef.current = true;
     setSubmitting(true);
 
     let isSuccess = false;
@@ -351,13 +369,19 @@ export default function LessonQuiz({
           onToast?.('error', `Bạn đạt ${data.scorePercent}%. Cần đạt từ 85% để vượt qua bài học. Sau thời gian giãn cách ${QUIZ_COOLDOWN_MINUTES} phút bạn có thể làm lại.`, 'Chưa đạt');
         }
       } else {
+        // Re-enable automatic cancellation only when a retryable response explicitly
+        // confirms the attempt is still open. A lost response may already be committed.
+        if ((res.status === 429 || res.status >= 500) && data.status === 'IN_PROGRESS'
+          && !timeUp && (deadlineRef.current === null || deadlineRef.current > Date.now())) {
+          submittingOrFinishedRef.current = false;
+        }
         onToast?.('error', data?.error?.message || 'Lỗi nộp bài kiểm tra.', 'Lỗi');
       }
     } catch (e: any) {
       onToast?.('error', e?.message || 'Lỗi kết nối khi nộp bài.', 'Lỗi');
     } finally {
       setSubmitting(false);
-      // If failed, release mutex so user can try submitting again
+      // Allow submit retries, but keep beacons suppressed when server state is unknown.
       if (!isSuccess) {
         isSubmittingRef.current = false;
       }
@@ -365,9 +389,11 @@ export default function LessonQuiz({
   };
 
   const handleCancelQuiz = async () => {
-    if (!attemptId || cancelling) return;
+    if (!attemptId || cancelling || isSubmittingRef.current || result) return;
 
+    submittingOrFinishedRef.current = true;
     setCancelling(true);
+    let alreadySubmitted = false;
     try {
       const res = await fetch(`/api/v1/attempts/${attemptId}/cancel`, {
         method: 'POST',
@@ -377,6 +403,10 @@ export default function LessonQuiz({
         },
       });
       const data = await res.json();
+      if (!res.ok) {
+        if (data?.error?.code === 'AttemptAlreadySubmitted') alreadySubmitted = true;
+        throw new Error(data?.error?.message || 'Không thể hủy bài kiểm tra.');
+      }
       if (typeof window !== 'undefined') {
         localStorage.removeItem(`quiz_answers_${attemptId}`);
         localStorage.removeItem(`quiz_flags_${attemptId}`);
@@ -385,6 +415,9 @@ export default function LessonQuiz({
       onToast?.('info', data.message || `Đã hủy bài kiểm tra. Cần đợi ${QUIZ_COOLDOWN_MINUTES} phút trước khi làm lại.`, 'Đã hủy bài làm');
       onCancel?.(data);
     } catch (e: any) {
+      if (!alreadySubmitted && !isSubmittingRef.current && (deadlineRef.current === null || deadlineRef.current > Date.now())) {
+        submittingOrFinishedRef.current = false;
+      }
       onToast?.('error', e?.message || 'Lỗi khi hủy bài kiểm tra.', 'Lỗi');
     } finally {
       setCancelling(false);

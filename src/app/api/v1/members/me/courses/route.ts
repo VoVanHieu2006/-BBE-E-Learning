@@ -50,11 +50,16 @@ export async function GET(request: NextRequest) {
     hasFinalAssessment: c.hasFinalAssessment,
     hasLessonAssessments: c.hasLessonAssessments,
     lessonAssessmentsPassed: c.lessonAssessmentsPassed,
+    totalLessonAssessments: c.totalLessonAssessments,
+    passedLessonAssessments: c.passedLessonAssessments,
     assessmentId: c.assessmentId,
+    // Single completion truth: student pages must read this, not progressPercentage >= 100.
     isCompleted: c.isCompleted,
     state: c.state,
     latestAttempt: c.latestAttempt ? {
-      score: c.latestAttempt.score === null ? null : Math.round(Number(c.latestAttempt.score) * 100),
+      // Kept as a whole percent for existing clients; scorePercent is the explicit field.
+      score: c.latestAttempt.scorePercent,
+      scorePercent: c.latestAttempt.scorePercent,
       passed: c.latestAttempt.passed,
       submittedAt: c.latestAttempt.submittedAt,
     } : null,

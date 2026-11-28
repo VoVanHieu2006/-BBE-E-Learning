@@ -1,5 +1,6 @@
 import { Prisma, StarLedger } from '@prisma/client'
 import { isLearningManager } from './manager-learning-access'
+import { type StarHistoryKind, starHistoryKindForReason } from './admin-star-history-ui'
 import {
   StarHistorySourceFilter,
   formatStarMonthLabel,
@@ -94,11 +95,66 @@ export interface StarHistoryItem {
   courseTitle: string | null
   quizTitle: string | null
   detail: string
+  kind: StarHistoryKind
+  displayTitle: string
+  /** Correct answers of the graded attempt; null when the row has no attempt or no grading snapshot. */
+  correctCount: number | null
+  totalQuestions: number | null
+  attemptNumber: number | null
 }
 
-const metadataLessonId = (entry: StarHistoryEntry) => {
+const metadataObject = (entry: StarHistoryEntry) => {
   const metadata = entry.metadata
-  return metadata && typeof metadata === 'object' && !Array.isArray(metadata) && typeof metadata.lessonId === 'string' ? metadata.lessonId : null
+  return metadata && typeof metadata === 'object' && !Array.isArray(metadata) ? metadata : null
+}
+const metadataLessonId = (entry: StarHistoryEntry) => {
+  const metadata = metadataObject(entry)
+  return metadata && typeof metadata.lessonId === 'string' ? metadata.lessonId : null
+}
+/** Lower-cased attempt UUID of an assessment reward row, or null for legacy rows without one. */
+const metadataAttemptId = (entry: StarHistoryEntry) => {
+  if (entry.source_type !== 'ASSESSMENT') return null
+  const metadata = metadataObject(entry)
+  const value = metadata && typeof metadata.attemptId === 'string' ? metadata.attemptId : null
+  return value && isValidStarUserId(value) ? value.toLowerCase() : null
+}
+
+/**
+ * Counts correct answers from a stored grading snapshot ({ results: [{ isCorrect }] }, see gradeQuizAttempt).
+ * Without a usable snapshot the correct count is unknown (null); the total may still come from the attempt questions.
+ */
+export function attemptScoreFromSnapshot(snapshot: unknown, questionCount: number | null = null): { correctCount: number | null; totalQuestions: number | null } {
+  const results = snapshot && typeof snapshot === 'object' ? (snapshot as { results?: unknown }).results : undefined
+  if (
+    Array.isArray(results) &&
+    results.length > 0 &&
+    results.every((r) => Boolean(r) && typeof r === 'object' && typeof (r as { isCorrect?: unknown }).isCorrect === 'boolean')
+  ) {
+    return {
+      correctCount: results.filter((r) => (r as { isCorrect: boolean }).isCorrect === true).length,
+      totalQuestions: results.length,
+    }
+  }
+  return { correctCount: null, totalQuestions: questionCount && questionCount > 0 ? questionCount : null }
+}
+
+type AttemptScoreRow = { id: string; attempt_number: number; grading_snapshot: unknown; _count?: { attempt_questions?: number } }
+
+async function readAttemptScores(tx: Db, attemptIds: string[]) {
+  const scores = new Map<string, { correctCount: number | null; totalQuestions: number | null; attemptNumber: number | null }>()
+  const attemptModel = (tx as { attempt?: { findMany?: (args: unknown) => Promise<AttemptScoreRow[]> } }).attempt
+  if (!attemptIds.length || typeof attemptModel?.findMany !== 'function') return scores
+  const rows = await attemptModel.findMany({
+    where: { id: { in: attemptIds } },
+    select: { id: true, attempt_number: true, grading_snapshot: true, _count: { select: { attempt_questions: true } } },
+  })
+  for (const row of rows) {
+    scores.set(row.id.toLowerCase(), {
+      ...attemptScoreFromSnapshot(row.grading_snapshot, row._count?.attempt_questions ?? null),
+      attemptNumber: typeof row.attempt_number === 'number' ? row.attempt_number : null,
+    })
+  }
+  return scores
 }
 
 /** Adds lesson, course and quiz titles; deleted sources fall back to generic Vietnamese labels. */
@@ -106,9 +162,10 @@ export async function enrichStarHistoryEntries(tx: Db, items: StarHistoryEntry[]
   const videoIds = items.filter((i) => i.source_type === 'VIDEO' && i.source_id).map((i) => i.source_id)
   const assessmentIds = items.filter((i) => i.source_type === 'ASSESSMENT' && i.source_id).map((i) => i.source_id)
   const metadataLessonIds = items.map(metadataLessonId).filter((id): id is string => Boolean(id && isValidStarUserId(id)))
+  const attemptIds = Array.from(new Set(items.map(metadataAttemptId).filter((id): id is string => Boolean(id))))
   const withCourse = { session: { select: { course: { select: { id: true, title: true } } } } } as const
 
-  const [videos, lessons, assessments] = await Promise.all([
+  const [videos, lessons, assessments, attemptScores] = await Promise.all([
     videoIds.length
       ? tx.video.findMany({
           where: { id: { in: videoIds } },
@@ -124,6 +181,7 @@ export async function enrichStarHistoryEntries(tx: Db, items: StarHistoryEntry[]
           select: { id: true, title: true, lesson: { select: { title: true, ...withCourse } }, course: { select: { id: true, title: true } } },
         })
       : Promise.resolve([]),
+    readAttemptScores(tx, attemptIds),
   ])
 
   const videoMap = new Map(videos.map((v) => [v.id, v]))
@@ -135,8 +193,12 @@ export async function enrichStarHistoryEntries(tx: Db, items: StarHistoryEntry[]
     let courseTitle: string | null = null
     let quizTitle: string | null = null
     let detail = ''
+    let displayTitle = ''
+    const kind = starHistoryKindForReason(entry.reason)
+    const attemptId = kind === 'LESSON_QUIZ' || kind === 'COURSE_FINAL' ? metadataAttemptId(entry) : null
+    const score = attemptId ? attemptScores.get(attemptId) : undefined
 
-    if (entry.reason === 'VIDEO_COMPLETION') {
+    if (kind === 'VIDEO') {
       const v = videoMap.get(entry.source_id)
       const lessonId = metadataLessonId(entry)
       const l = v?.lesson || (lessonId ? lessonMap.get(lessonId) : undefined)
@@ -145,22 +207,28 @@ export async function enrichStarHistoryEntries(tx: Db, items: StarHistoryEntry[]
       detail = lessonTitle
         ? `Hoàn thành video: ${lessonTitle}${courseTitle ? ` · ${courseTitle}` : ''}`
         : 'Hoàn thành video bài học'
-    } else if (entry.reason === 'MODULE_QUIZ_PASS' || entry.reason === 'MODULE_QUIZ_BONUS') {
+      displayTitle = lessonTitle || 'Video bài học'
+    } else if (kind === 'LESSON_QUIZ') {
       const a = assessmentMap.get(entry.source_id)
       quizTitle = a?.title || 'Bài kiểm tra'
       lessonTitle = a?.lesson?.title || null
       courseTitle = a?.lesson?.session?.course?.title || null
       detail = `Vượt qua bài kiểm tra: ${quizTitle}${lessonTitle ? ` · ${lessonTitle}` : ''}`
-    } else if (entry.reason === 'COURSE_FINAL_PASS' || entry.reason === 'COURSE_FINAL_BONUS') {
+      displayTitle = lessonTitle || a?.title || 'Bài kiểm tra bài học'
+    } else if (kind === 'COURSE_FINAL') {
       const a = assessmentMap.get(entry.source_id)
+      quizTitle = a?.title || null
       courseTitle = a?.course?.title || null
       detail = courseTitle
         ? `Vượt qua bài thi cuối khóa: ${courseTitle}`
         : 'Vượt qua bài thi cuối khóa'
+      displayTitle = 'Bài thi cuối khóa'
     } else if (entry.reason === 'ADMIN_ADJUSTMENT') {
       detail = 'Điều chỉnh Star bởi Ban Quản Trị'
+      displayTitle = 'Điều chỉnh sao'
     } else {
       detail = 'Phần thưởng tích lũy Star BBE'
+      displayTitle = 'Phần thưởng tích lũy sao'
     }
 
     return {
@@ -173,6 +241,11 @@ export async function enrichStarHistoryEntries(tx: Db, items: StarHistoryEntry[]
       courseTitle,
       quizTitle,
       detail,
+      kind,
+      displayTitle,
+      correctCount: score?.correctCount ?? null,
+      totalQuestions: score?.totalQuestions ?? null,
+      attemptNumber: score?.attemptNumber ?? null,
     }
   })
 }

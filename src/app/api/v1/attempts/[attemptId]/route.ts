@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { lockLearningUser } from '@/lib/learning-periods'
 import { QUIZ_PASS_PERCENT } from '@/lib/config/quiz'
 import { gradeQuizAttempt, GradingQuestion, scoreRatioToPercent } from '@/lib/quiz-attempt-rules'
 
@@ -66,19 +67,25 @@ export async function DELETE(request: NextRequest, { params }: { params: { attem
   const auth = await authenticate(request)
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: 401 })
 
-  const attempt = await prisma.attempt.findUnique({ where: { id: params.attemptId } })
-  if (!attempt) return NextResponse.json({ error: { code: 'AttemptNotFound' } }, { status: 404 })
-  if (attempt.user_id !== (auth as any).context!.userId) return NextResponse.json({ error: { code: 'AccessDenied' } }, { status: 403 })
-  if (attempt.status !== 'IN_PROGRESS') return NextResponse.json({ error: { code: 'AttemptNotInProgress' } }, { status: 400 })
+  const userId = auth.context!.userId
+  return prisma.$transaction(async (tx) => {
+    await lockLearningUser(tx, userId)
+    await tx.$queryRaw`SELECT id FROM attempts WHERE id = ${params.attemptId}::uuid FOR UPDATE`
+    const attempt = await tx.attempt.findUnique({ where: { id: params.attemptId } })
+    if (!attempt) return NextResponse.json({ error: { code: 'AttemptNotFound' } }, { status: 404 })
+    if (attempt.user_id !== (auth as any).context!.userId) return NextResponse.json({ error: { code: 'AccessDenied' } }, { status: 403 })
+    if (attempt.status !== 'IN_PROGRESS') return NextResponse.json({ error: { code: 'AttemptNotInProgress' } }, { status: 400 })
 
-  const updated = await prisma.attempt.update({
-    where: { id: params.attemptId },
-    data: { status: 'CANCELLED', submitted_at: new Date() },
-  })
+    const updated = await tx.attempt.updateMany({
+      where: { id: params.attemptId, user_id: userId, status: 'IN_PROGRESS' },
+      data: { status: 'CANCELLED', submitted_at: new Date() },
+    })
+    if (updated.count === 0) return NextResponse.json({ error: { code: 'AttemptNotInProgress' } }, { status: 409 })
 
-  return NextResponse.json({
-    attemptId: updated.id,
-    status: 'CANCELLED',
-    message: 'Attempt cancelled successfully. Retry is available after 24 hours.',
-  }, { status: 200 })
+    return NextResponse.json({
+      attemptId: attempt.id,
+      status: 'CANCELLED',
+      message: 'Attempt cancelled successfully. Retry is available after 24 hours.',
+    }, { status: 200 })
+  }, { timeout: 30_000 })
 }

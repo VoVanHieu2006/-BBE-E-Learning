@@ -140,7 +140,8 @@ async function learner(page: Page, withLockedNewLesson = false, quizPassed = fal
 test('course shows new quiz on completed lesson and keeps final exam locked', async ({ page, context }, info) => {
   await auth(page, context, 'MEMBER'); await learner(page, true)
   await page.goto(`/student/courses/${courseId}`)
-  await expect(page.getByText('Mới', { exact: true })).toHaveCount(2)
+  await expect(page.getByText('Quiz mới', { exact: true })).toHaveCount(1)
+  await expect(page.getByText('Bài mới', { exact: true })).toHaveCount(1)
   await expect(page.getByText('Bài mới đang khóa', { exact: false })).toBeVisible()
   await expect(page.getByText('Chúc mừng! Bạn đã hoàn thành toàn bộ khóa học này')).toHaveCount(0)
   await expect(page.getByRole('link', { name: /Bắt đầu làm bài thi cuối khóa/ })).toHaveCount(0)
@@ -167,22 +168,22 @@ test('program tree marks a new quiz on a completed video', async ({ page, contex
   await auth(page, context, 'MEMBER'); await learner(page)
   await page.goto('/student/courses')
   await page.getByRole('button', { name: 'Mở tất cả' }).click()
-  const row = page.locator('div').filter({ has: page.getByRole('link', { name: 'Bài đã học', exact: true }) }).filter({ has: page.getByText('Mới', { exact: true }) })
-  await expect(row.last().getByText('Mới', { exact: true })).toBeVisible()
+  const row = page.locator('div').filter({ has: page.getByRole('link', { name: 'Bài đã học', exact: true }) }).filter({ has: page.getByText('Quiz mới', { exact: true }) })
+  await expect(row.last().getByText('Quiz mới', { exact: true })).toBeVisible()
 })
 
 test('lesson sidebar and quiz tab do not pass a newly added quiz', async ({ page, context }) => {
   await auth(page, context, 'MEMBER'); await learner(page)
   await page.goto(`/student/learning/${lessonId}`)
-  await expect(page.getByRole('button', { name: /Bài kiểm tra.*Mới.*Cần làm/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Bài kiểm tra.*Quiz mới.*Cần làm/ })).toBeVisible()
   await expect(page.getByText('✓ Quiz đạt', { exact: true })).toHaveCount(0)
-  await expect(page.getByText('Mới', { exact: true })).toHaveCount(2)
+  await expect(page.getByText('Quiz mới', { exact: true })).toHaveCount(2)
 })
 
 test('quiz page uses assessment pass state and preserves next-lesson navigation gate', async ({ page, context }, info) => {
   await auth(page, context, 'MEMBER'); await learner(page)
   await page.goto(`/student/learning/${lessonId}/quiz`)
-  await expect(page.getByText('Mới', { exact: true })).toBeVisible()
+  await expect(page.getByText('Quiz mới', { exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: /Bắt đầu làm bài/ })).toBeVisible()
   await expect(page.getByRole('button', { name: /Làm lại bài kiểm tra/ })).toHaveCount(0)
   await page.screenshot({ path: `test-results/p02b-quiz-${info.project.name}.png`, fullPage: true })

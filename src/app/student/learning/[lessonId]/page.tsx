@@ -586,7 +586,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
             <p className="text-[11px] text-[#6c6f7f] truncate">
               {lesson?.session?.title && `${lesson.session.title} • `}
               <span className="text-[#2563EB] font-bold">
-                {loadingLesson ? 'Đang tải bài giảng...' : (lesson?.title || 'Bài học')} <NewContentChip show={!loadingLesson && progress?.isNew} />
+                {loadingLesson ? 'Đang tải bài giảng...' : (lesson?.title || 'Bài học')} <NewContentChip show={!loadingLesson && progress?.isNew} variant="lesson" />
               </span>
             </p>
           </div>
@@ -941,7 +941,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                       : 'border-transparent text-[#6c6f7f] hover:text-[#172554]'
                   }`}
                 >
-                  <span>📝 Bài kiểm tra</span> <NewContentChip show={progress?.quizIsNew} />
+                  <span>📝 Bài kiểm tra</span> <NewContentChip show={progress?.quizIsNew} variant="quiz" />
                   <span
                     className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${
                       progress?.assessmentPassed && !monthlyQuiz
@@ -963,7 +963,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
             ) : activeTab === 'desc' ? (
               <Card className="p-6 border border-[#eff4ff] shadow-sm space-y-3">
                 <h2 className="text-xl font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
-                  {lesson?.title} <NewContentChip show={progress?.isNew} />
+                  {lesson?.title} <NewContentChip show={progress?.isNew} variant="lesson" />
                 </h2>
                 <p className="text-sm text-[#434655] leading-relaxed whitespace-pre-line">
                   {lesson?.description || 'Bài học này không có mô tả chi tiết.'}
@@ -1025,7 +1025,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div className="space-y-1">
                     <h3 className="text-base font-bold text-[#172554]" style={{ fontFamily: 'Be Vietnam Pro, sans-serif' }}>
-                      📝 {lesson.assessment.title || 'Bài kiểm tra bài học'} <NewContentChip show={progress?.quizIsNew} />
+                      📝 {lesson.assessment.title || 'Bài kiểm tra bài học'} <NewContentChip show={progress?.quizIsNew} variant="quiz" />
                     </h3>
                     <p className="text-xs text-[#6c6f7f] leading-relaxed max-w-xl">
                       {quizLock === 'MONTHLY_VIDEO_INCOMPLETE'
@@ -1186,7 +1186,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
 
                               <div className="min-w-0 flex-1">
                                 <p className={`font-semibold line-clamp-2 ${isCurrent ? 'text-[#2563EB]' : 'text-[#172554]'}`}>
-                                  Bài {lIdx + 1}: {l.title} <NewContentChip show={displayState?.isNew} />
+                                  Bài {lIdx + 1}: {l.title} <NewContentChip show={displayState?.isNew} variant="lesson" />
                                 </p>
                               <div className="flex items-center gap-2 text-[11px] text-[#6c6f7f] mt-1 font-normal flex-wrap">
                                   <span>📹 {l.video?.durationSeconds ? `${Math.floor(l.video.durationSeconds / 60)}:${(l.video.durationSeconds % 60).toString().padStart(2, '0')}` : 'Video'}</span>
@@ -1196,7 +1196,7 @@ export default function LearningVideoPage({ params }: { params: { lessonId: stri
                                         ? 'bg-emerald-100 text-emerald-700'
                                         : 'bg-amber-100 text-amber-700'
                                     }`}>
-                                      {monthlyQuizPending ? 'Làm lại tháng này' : isQuizPassed ? '✓ Quiz đạt' : '📝 Quiz'} <NewContentChip show={displayState?.quizIsNew} />
+                                      {monthlyQuizPending ? 'Làm lại tháng này' : isQuizPassed ? '✓ Quiz đạt' : '📝 Quiz'} <NewContentChip show={displayState?.quizIsNew} variant="quiz" />
                                     </span>
                                   )}
                                   {l.documents?.length > 0 && <span>• 📎 {l.documents.length} tài liệu</span>}

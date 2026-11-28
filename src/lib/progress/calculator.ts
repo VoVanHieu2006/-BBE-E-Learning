@@ -1,5 +1,6 @@
 import { currentCycleAttemptFilter } from '@/lib/learning-periods'
 import { prisma } from '@/lib/prisma'
+import { attemptScorePercent } from '@/lib/course-progress-display'
 
 export interface PublishedCourseInfo {
   id: string
@@ -30,9 +31,15 @@ export interface UserCourseProgressDetail {
   hasFinalAssessment: boolean
   hasLessonAssessments: boolean
   lessonAssessmentsPassed: boolean
+  finalExamPassed: boolean
+  /** Lesson quizzes in the course and how many of them are passed in the active cycle. */
+  totalLessonAssessments: number
+  passedLessonAssessments: number
   assessmentId: string | null
+  /** Latest final-exam attempt. `score` is the stored 0..1 fraction; `scorePercent` is the whole percent to display. */
   latestAttempt: {
     score: number | null
+    scorePercent: number | null
     passed: boolean
     submittedAt: Date | null
   } | null
@@ -52,7 +59,22 @@ export interface UserProgressSummary {
   courses?: UserCourseProgressDetail[]
 }
 
-let cachedSystemData: { data: PublishedSystemData; timestamp: number } | null = null
+/** Normalizes a raw attempt row (Decimal score, snake_case date) into the API shape. */
+export function toLatestAttemptView(
+  attempt: { score: unknown; passed: boolean; submitted_at: Date | null } | null | undefined,
+): UserCourseProgressDetail['latestAttempt'] {
+  if (!attempt) return null
+  const score = attempt.score === null || attempt.score === undefined ? null : Number(attempt.score)
+  const validScore = score !== null && Number.isFinite(score) ? score : null
+  return {
+    score: validScore,
+    scorePercent: attemptScorePercent(validScore),
+    passed: attempt.passed,
+    submittedAt: attempt.submitted_at,
+  }
+}
+
+let cachedSystemData:{ data: PublishedSystemData; timestamp: number } | null = null
 const SYSTEM_DATA_TTL_MS = 30000 // 30 seconds in-memory cache
 
 export function invalidateSystemDataCache() {
@@ -227,8 +249,11 @@ export async function calculateUserProgress(
       hasFinalAssessment: Boolean(c.finalAssessmentId),
       hasLessonAssessments: c.lessonAssessmentIds.length > 0,
       lessonAssessmentsPassed: lessonQuizzesPassed,
+      finalExamPassed,
+      totalLessonAssessments: c.lessonAssessmentIds.length,
+      passedLessonAssessments: c.lessonAssessmentIds.filter((assessmentId) => passedAssessmentIds.has(assessmentId)).length,
       assessmentId: c.finalAssessmentId,
-      latestAttempt: c.finalAssessmentId ? latestAttemptMap.get(c.finalAssessmentId) || null : null,
+      latestAttempt: toLatestAttemptView(c.finalAssessmentId ? latestAttemptMap.get(c.finalAssessmentId) : undefined),
       isCompleted,
       state,
     }
